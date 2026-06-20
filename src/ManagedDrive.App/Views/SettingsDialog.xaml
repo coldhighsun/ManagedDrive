@@ -1,0 +1,34 @@
+<Window x:Class="ManagedDrive.App.Views.SettingsDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Settings"
+        Width="380" SizeToContent="Height"
+        ResizeMode="NoResize"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False">
+
+    <Grid Margin="16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="16"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="180"/>
+            <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+
+        <!-- Run at startup -->
+        <TextBlock Grid.Row="0" Grid.Column="0" Text="Run at Windows startup:" VerticalAlignment="Center"/>
+        <CheckBox  Grid.Row="0" Grid.Column="1"
+                   x:Name="RunAtStartupBox" VerticalAlignment="Center"
+                   ToolTip="Start ManagedDrive automatically when Windows starts"/>
+
+        <!-- OK / Cancel -->
+        <StackPanel Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="2"
+                    Orientation="Horizontal" HorizontalAlignment="Right">
+            <Button Content="_OK"     Width="80" IsDefault="True"  Click="OK_Click"     Margin="0,0,8,0"/>
+            <Button Content="_Cancel" Width="80" IsCancel="True"/>
+        </StackPanel>
+    </Grid>
+</Window>

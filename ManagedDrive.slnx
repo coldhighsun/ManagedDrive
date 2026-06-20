@@ -1,0 +1,13 @@
+<Solution>
+  <Folder Name="/assets/">
+    <File Path="Directory.Build.props" />
+    <File Path="Directory.Packages.props" />`n    <File Path="README.md" />
+  </Folder>
+  <Folder Name="/src/">
+    <Project Path="src/ManagedDrive.App/ManagedDrive.App.csproj" />
+    <Project Path="src/ManagedDrive.Core/ManagedDrive.Core.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/ManagedDrive.Tests/ManagedDrive.Tests.csproj" />
+  </Folder>
+</Solution>
