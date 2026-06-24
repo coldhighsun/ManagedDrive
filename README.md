@@ -27,7 +27,7 @@ Create, mount and manage in-memory volumes that appear as normal drive letters i
 # 1. Install WinFsp (download from https://winfsp.dev/rel/)
 
 # 2. Clone / open the solution
-git clone https://github.com/your-org/ManagedDrive
+git clone https://github.com/coldhighsun/ManagedDrive
 cd ManagedDrive
 
 # 3. Build
