@@ -69,10 +69,15 @@ ManagedDrive/
 │       ├── MainWindow.xaml(.cs)    #   Main window
 │       └── App.xaml(.cs)           #   Startup, tray icon, auto-mount
 │
-└── tests/
-    └── ManagedDrive.Tests/         # xUnit v3 unit tests (pure-managed code only)
-        ├── FileNodeTests.cs
-        └── FileNodeMapTests.cs
+├── tests/
+│   └── ManagedDrive.Tests/         # xUnit v3 unit tests (pure-managed code only)
+│       ├── FileNodeTests.cs
+│       └── FileNodeMapTests.cs
+│
+└── benchmarks/
+    └── ManagedDrive.Benchmarks/    # BenchmarkDotNet sequential read/write throughput benchmarks
+        ├── Program.cs
+        └── ReadWriteBenchmarks.cs
 ```
 
 ### How It Works
@@ -108,6 +113,42 @@ A little-endian binary format:
 - Logs are written to `{AppPath}\logs\log-.txt` with daily rolling and 7-day retention (Serilog).
 - Version is derived from git tags (`v`-prefixed, e.g. `v0.1.0`) via MinVer.
 
+### Performance
+
+Sequential read/write throughput measured with [BenchmarkDotNet](https://benchmarkdotnet.org/) on:
+
+| | |
+|---|---|
+| **CPU** | Intel Core Ultra 7 255H, 16C/16T, 2.0 GHz base |
+| **RAM** | 32 GB |
+| **Disk** | Samsung MZVLC512HFJD NVMe SSD (512 GB) |
+| **OS** | Windows 11 25H2 (Build 26200.7462) |
+| **Runtime** | .NET 10.0.9 · BenchmarkDotNet 0.15.8 |
+
+Each benchmark creates or reads a single file via `FileStream`. Writes use `FileOptions.WriteThrough` (no OS write-back cache) and reads use `FileOptions.SequentialScan`.
+
+| File Size | Operation | RAM Disk | NVMe SSD | Ratio |
+|---:|---|---:|---:|---:|
+| 4 KB | Write | 1.6 MB/s | 0.9 MB/s | **1.8× faster** |
+| 4 KB | Read | 3.1 MB/s | 6.4 MB/s | 0.5× slower |
+| 1 MB | Write | 424 MB/s | 87 MB/s | **4.8× faster** |
+| 1 MB | Read | 562 MB/s | 1,290 MB/s | 0.4× slower |
+| 64 MB | Write | 3,281 MB/s | 918 MB/s | **3.6× faster** |
+| 64 MB | Read | 1,955 MB/s | 3,224 MB/s | 0.6× slower |
+
+> **Why are RAM disk reads slower?**  
+> Physical disk reads appear fast because the OS page cache keeps recently-written files in DRAM. The RAM disk reads go through WinFsp's kernel–userspace bridge, which adds IPC overhead compared to the direct page-cache path. In workloads where data is written once and read many times from cold cache (e.g. build outputs, temp files that outlive page-cache pressure), the RAM disk will consistently outperform SSD on reads too.
+>
+> **4 KB note:** small-file results are dominated by file-open/close syscall overhead, not transfer speed.
+
+Raw latency (DefaultJob mean):
+
+| File Size | RamDisk Write | RamDisk Read | NVMe Write | NVMe Read |
+|---:|---:|---:|---:|---:|
+| 4 KB | 2,440 μs | 1,259 μs | 4,399 μs | 610 μs |
+| 1 MB | 2,361 μs | 1,779 μs | 11,446 μs | 775 μs |
+| 64 MB | 19,506 μs | 32,746 μs | 69,695 μs | 19,852 μs |
+
 ### Running Tests
 
 ```powershell
@@ -115,6 +156,16 @@ dotnet test tests/ManagedDrive.Tests
 ```
 
 Tests cover `FileNode` (allocation unit alignment, index numbers) and `FileNodeMap` (CRUD, case-insensitive lookup, child pagination, rename, capacity tracking). Mount/unmount integration tests require the WinFsp driver and must be run manually.
+
+### Running Benchmarks
+
+Drive letter `R:` must be free. WinFsp must be installed.
+
+```powershell
+dotnet run --project benchmarks/ManagedDrive.Benchmarks -c Release
+```
+
+Results are written to `BenchmarkDotNet.Artifacts/results/` in the working directory.
 
 ### License
 
@@ -187,10 +238,15 @@ ManagedDrive/
 │       ├── MainWindow.xaml(.cs)    #   主窗口
 │       └── App.xaml(.cs)           #   启动、托盘图标、自动挂载
 │
-└── tests/
-    └── ManagedDrive.Tests/         # xUnit v3 单元测试（仅纯托管代码）
-        ├── FileNodeTests.cs
-        └── FileNodeMapTests.cs
+├── tests/
+│   └── ManagedDrive.Tests/         # xUnit v3 单元测试（仅纯托管代码）
+│       ├── FileNodeTests.cs
+│       └── FileNodeMapTests.cs
+│
+└── benchmarks/
+    └── ManagedDrive.Benchmarks/    # BenchmarkDotNet 顺序读写吞吐量基准测试
+        ├── Program.cs
+        └── ReadWriteBenchmarks.cs
 ```
 
 ### 工作原理
@@ -226,6 +282,42 @@ ManagedDrive 使用 **WinFsp**（Windows 文件系统代理）将内存目录树
 - 日志写入 `{AppPath}\logs\log-.txt`，每日滚动，保留 7 天（Serilog）。
 - 版本号由 MinVer 从 git 标签派生（`v` 前缀，例如 `v0.1.0`）。
 
+### 性能基准
+
+使用 [BenchmarkDotNet](https://benchmarkdotnet.org/) 测量顺序读写吞吐量，测试环境：
+
+| | |
+|---|---|
+| **CPU** | Intel Core Ultra 7 255H，16C/16T，基础频率 2.0 GHz |
+| **内存** | 32 GB |
+| **磁盘** | Samsung MZVLC512HFJD NVMe SSD（512 GB） |
+| **系统** | Windows 11 25H2（Build 26200.7462） |
+| **运行时** | .NET 10.0.9 · BenchmarkDotNet 0.15.8 |
+
+每个 benchmark 通过 `FileStream` 对单个文件进行创建或读取操作。写入使用 `FileOptions.WriteThrough`（禁用操作系统写回缓存），读取使用 `FileOptions.SequentialScan`。
+
+| 文件大小 | 操作 | 内存盘 | NVMe SSD | 倍率 |
+|---:|---|---:|---:|---:|
+| 4 KB | 写入 | 1.6 MB/s | 0.9 MB/s | **快 1.8×** |
+| 4 KB | 读取 | 3.1 MB/s | 6.4 MB/s | 慢 0.5× |
+| 1 MB | 写入 | 424 MB/s | 87 MB/s | **快 4.8×** |
+| 1 MB | 读取 | 562 MB/s | 1,290 MB/s | 慢 0.4× |
+| 64 MB | 写入 | 3,281 MB/s | 918 MB/s | **快 3.6×** |
+| 64 MB | 读取 | 1,955 MB/s | 3,224 MB/s | 慢 0.6× |
+
+> **为何内存盘读取反而更慢？**  
+> 物理磁盘的读取速度之所以快，是因为操作系统页面缓存将最近写入的文件保留在 DRAM 中。内存盘的读取则需要经过 WinFsp 的内核–用户态桥接，引入了额外的 IPC 开销，比直接走页面缓存路径更慢。在数据写入一次、多次读取且页面缓存已失效的场景下（如构建产物、临时文件），内存盘的读取性能同样会超越 SSD。
+>
+> **4 KB 说明：** 小文件结果主要受文件打开/关闭的系统调用开销主导，不反映实际传输速率。
+
+原始延迟（DefaultJob 均值）：
+
+| 文件大小 | 内存盘写入 | 内存盘读取 | NVMe 写入 | NVMe 读取 |
+|---:|---:|---:|---:|---:|
+| 4 KB | 2,440 μs | 1,259 μs | 4,399 μs | 610 μs |
+| 1 MB | 2,361 μs | 1,779 μs | 11,446 μs | 775 μs |
+| 64 MB | 19,506 μs | 32,746 μs | 69,695 μs | 19,852 μs |
+
 ### 运行测试
 
 ```powershell
@@ -233,6 +325,16 @@ dotnet test tests/ManagedDrive.Tests
 ```
 
 测试覆盖 `FileNode`（分配单元对齐、索引编号）和 `FileNodeMap`（增删改查、大小写无关查找、子节点分页、重命名、容量追踪）。挂载/卸载集成测试需要 WinFsp 驱动程序，须手动运行。
+
+### 运行基准测试
+
+驱动器号 `R:` 须处于空闲状态，且已安装 WinFsp。
+
+```powershell
+dotnet run --project benchmarks/ManagedDrive.Benchmarks -c Release
+```
+
+结果将写入工作目录下的 `BenchmarkDotNet.Artifacts/results/`。
 
 ### 许可证
 

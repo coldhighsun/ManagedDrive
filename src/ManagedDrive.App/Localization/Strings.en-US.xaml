@@ -25,12 +25,12 @@
     <sys:String x:Key="CreateDisk.Title">Create RAM Disk</sys:String>
     <sys:String x:Key="CreateDisk.DriveLetter">Drive Letter:</sys:String>
     <sys:String x:Key="CreateDisk.VolumeLabel">Volume Label:</sys:String>
-    <sys:String x:Key="CreateDisk.Capacity">Capacity (MB):</sys:String>
+    <sys:String x:Key="CreateDisk.Capacity">Capacity:</sys:String>
     <sys:String x:Key="CreateDisk.ReadOnly">Read Only:</sys:String>
     <sys:String x:Key="CreateDisk.AutoMount">Auto-mount:</sys:String>
     <sys:String x:Key="CreateDisk.ImageFile">Image File:</sys:String>
     <sys:String x:Key="CreateDisk.DefaultLabel">RAM Disk</sys:String>
-    <sys:String x:Key="Tip.Capacity">Disk size in megabytes (1 – 65535)</sys:String>
+    <sys:String x:Key="Tip.Capacity">Disk size (select unit: MB or GB)</sys:String>
     <sys:String x:Key="Tip.AutoMount">Re-mount this disk automatically on next application start</sys:String>
     <sys:String x:Key="Tip.ImageFile">Optional: path to a .mdr image file for persistence (leave blank for volatile disk)</sys:String>
 
@@ -66,7 +66,7 @@
     <!-- Validation -->
     <sys:String x:Key="Val.Title">Invalid Input</sys:String>
     <sys:String x:Key="Val.NoDriveLetter">Please select a drive letter.</sys:String>
-    <sys:String x:Key="Val.BadCapacity">Capacity must be a positive integer (in MB).</sys:String>
+    <sys:String x:Key="Val.BadCapacity">Capacity must be between 1 and {0} {1}.</sys:String>
 
     <!-- SaveFileDialog -->
     <sys:String x:Key="SaveDlg.Title">Select Image File</sys:String>
