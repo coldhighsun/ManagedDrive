@@ -83,7 +83,12 @@ public partial class SettingsDialog
         var themeValue = string.IsNullOrEmpty(themeTag) ? null : themeTag;
         var paletteHelper = new PaletteHelper();
         var mdTheme = paletteHelper.GetTheme();
-        mdTheme.SetBaseTheme(themeValue == "Dark" ? BaseTheme.Dark : BaseTheme.Light);
+        mdTheme.SetBaseTheme(themeValue switch
+        {
+            "Light" => BaseTheme.Light,
+            "Dark"  => BaseTheme.Dark,
+            _       => BaseTheme.Inherit,
+        });
         paletteHelper.SetTheme(mdTheme);
 
         Result = new AppConfiguration
