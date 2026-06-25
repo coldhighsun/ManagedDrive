@@ -28,31 +28,31 @@
             <DockPanel>
                 <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
                     <Button Style="{StaticResource MaterialDesignToolButton}"
-                            Foreground="{DynamicResource PrimaryHueMidForegroundBrush}"
+
                             Command="{Binding CreateDiskCommand}"
                             ToolTip="{DynamicResource Tip.NewDisk}">
                         <materialDesign:PackIcon Kind="PlusCircle" Width="22" Height="22"/>
                     </Button>
                     <Button Style="{StaticResource MaterialDesignToolButton}"
-                            Foreground="{DynamicResource PrimaryHueMidForegroundBrush}"
+
                             Command="{Binding UnmountCommand}"
                             ToolTip="{DynamicResource Tip.Unmount}">
                         <materialDesign:PackIcon Kind="Eject" Width="22" Height="22"/>
                     </Button>
                     <Button Style="{StaticResource MaterialDesignToolButton}"
-                            Foreground="{DynamicResource PrimaryHueMidForegroundBrush}"
+
                             Command="{Binding SaveImageCommand}"
                             ToolTip="{DynamicResource Tip.SaveImage}">
                         <materialDesign:PackIcon Kind="ContentSave" Width="22" Height="22"/>
                     </Button>
                     <Button Style="{StaticResource MaterialDesignToolButton}"
-                            Foreground="{DynamicResource PrimaryHueMidForegroundBrush}"
+
                             Command="{Binding RefreshCommand}"
                             ToolTip="{DynamicResource Tip.Refresh}">
                         <materialDesign:PackIcon Kind="Refresh" Width="22" Height="22"/>
                     </Button>
                     <Button Style="{StaticResource MaterialDesignToolButton}"
-                            Foreground="{DynamicResource PrimaryHueMidForegroundBrush}"
+
                             Command="{Binding SettingsCommand}"
                             ToolTip="{DynamicResource Tip.Settings}">
                         <materialDesign:PackIcon Kind="Cog" Width="22" Height="22"/>
@@ -70,7 +70,6 @@
                 <TextBlock VerticalAlignment="Center"
                            Margin="12,0,0,0"
                            FontSize="16" FontWeight="Medium"
-                           Foreground="{DynamicResource PrimaryHueMidForegroundBrush}"
                            Text="{DynamicResource Window.Title}"/>
             </DockPanel>
         </materialDesign:ColorZone>
@@ -169,7 +168,7 @@
                                     Background="{DynamicResource PrimaryHueMidBrush}">
                                 <TextBlock Text="{Binding MountPoint}"
                                            FontSize="13" FontWeight="SemiBold"
-                                           Foreground="{DynamicResource PrimaryHueMidForegroundBrush}"
+               
                                            HorizontalAlignment="Center"
                                            VerticalAlignment="Center"/>
                             </Border>

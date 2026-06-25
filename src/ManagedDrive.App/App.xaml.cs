@@ -92,7 +92,12 @@ public partial class App
         LanguageManager.Instance.ApplyDefault(ResolveLanguage(config.Language));
         var paletteHelper = new PaletteHelper();
         var theme = paletteHelper.GetTheme();
-        theme.SetBaseTheme(config.Theme == "Dark" ? BaseTheme.Dark : BaseTheme.Light);
+        theme.SetBaseTheme(config.Theme switch
+        {
+            "Light" => BaseTheme.Light,
+            "Dark"  => BaseTheme.Dark,
+            _       => BaseTheme.Inherit,
+        });
         paletteHelper.SetTheme(theme);
 
         CheckWinFspPrerequisite();
