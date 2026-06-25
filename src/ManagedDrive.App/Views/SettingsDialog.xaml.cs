@@ -1,4 +1,6 @@
 using System.Windows;
+using System.Windows.Controls;
+using ManagedDrive.App.Localization;
 using ManagedDrive.App.Models;
 using ManagedDrive.App.Services;
 
@@ -20,6 +22,19 @@ public partial class SettingsDialog
         InitializeComponent();
         _original = config;
         RunAtStartupBox.IsChecked = config.RunAtStartup;
+
+        foreach (var (tag, displayName) in LanguageManager.SupportedLanguages)
+            LanguageBox.Items.Add(new ComboBoxItem { Content = displayName, Tag = tag });
+
+        var current = LanguageManager.Instance.CurrentLanguage;
+        foreach (ComboBoxItem item in LanguageBox.Items)
+        {
+            if ((string)item.Tag == current)
+            {
+                LanguageBox.SelectedItem = item;
+                break;
+            }
+        }
     }
 
     /// <summary>
@@ -34,12 +49,16 @@ public partial class SettingsDialog
     private void OK_Click(object sender, RoutedEventArgs e)
     {
         var runAtStartup = RunAtStartupBox.IsChecked == true;
-
         StartupManager.SetEnabled(runAtStartup);
+
+        var selectedTag = LanguageBox.SelectedItem is ComboBoxItem { Tag: string tag } ? tag : "en-US";
+        if (selectedTag != LanguageManager.Instance.CurrentLanguage)
+            LanguageManager.Instance.Apply(selectedTag);
 
         Result = new AppConfiguration
         {
             RunAtStartup = runAtStartup,
+            Language = selectedTag,
             Disks = _original.Disks,
         };
 

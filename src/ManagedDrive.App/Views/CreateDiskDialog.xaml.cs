@@ -1,3 +1,4 @@
+using ManagedDrive.App.Localization;
 using ManagedDrive.Core;
 using System.IO;
 using System.Windows;
@@ -18,6 +19,7 @@ public partial class CreateDiskDialog
     {
         InitializeComponent();
         LoadDriveLetters();
+        VolumeLabelBox.Text = Loc.Get("CreateDisk.DefaultLabel");
     }
 
     /// <summary>
@@ -33,8 +35,8 @@ public partial class CreateDiskDialog
     {
         var dlg = new SaveFileDialog
         {
-            Title = "Select Image File",
-            Filter = "ManagedDrive Image (*.mdr)|*.mdr|All Files (*.*)|*.*",
+            Title = Loc.Get("SaveDlg.Title"),
+            Filter = Loc.Get("SaveDlg.Filter"),
             DefaultExt = ".mdr",
             OverwritePrompt = false,
             FileName = ImagePathBox.Text,
@@ -69,7 +71,7 @@ public partial class CreateDiskDialog
     {
         if (!TryBuildOptions(out var options, out var error))
         {
-            MessageBox.Show(error, "Invalid Input", MessageBoxButton.OK, MessageBoxImage.Warning);
+            MessageBox.Show(error, Loc.Get("Val.Title"), MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
 
@@ -83,13 +85,13 @@ public partial class CreateDiskDialog
 
         if (DriveLetterBox.SelectedItem is not string mountPoint)
         {
-            error = "Please select a drive letter.";
+            error = Loc.Get("Val.NoDriveLetter");
             return false;
         }
 
         if (!uint.TryParse(CapacityBox.Text.Trim(), out var capacityMb) || capacityMb == 0)
         {
-            error = "Capacity must be a positive integer (in MB).";
+            error = Loc.Get("Val.BadCapacity");
             return false;
         }
 

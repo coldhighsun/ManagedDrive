@@ -1,4 +1,4 @@
-﻿<Window x:Class="ManagedDrive.App.MainWindow"
+<Window x:Class="ManagedDrive.App.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
@@ -6,7 +6,7 @@
         xmlns:vm="clr-namespace:ManagedDrive.App.ViewModels"
         mc:Ignorable="d"
         Icon="pack://application:,,,/ManagedDrive.ico"
-        Title="ManagedDrive – RAM Disk Manager"
+        Title="{DynamicResource Window.Title}"
         Height="480" Width="760"
         MinHeight="320" MinWidth="520">
 
@@ -14,24 +14,24 @@
 
         <!-- Toolbar -->
         <ToolBar DockPanel.Dock="Top">
-            <Button Content="🖴  New Disk"
+            <Button Content="{DynamicResource Btn.NewDisk}"
                     Command="{Binding CreateDiskCommand}"
-                    Padding="8,2" ToolTip="Create and mount a new RAM disk"/>
+                    Padding="8,2" ToolTip="{DynamicResource Tip.NewDisk}"/>
             <Separator/>
-            <Button Content="⏏  Unmount"
+            <Button Content="{DynamicResource Btn.Unmount}"
                     Command="{Binding UnmountCommand}"
-                    Padding="8,2" ToolTip="Unmount the selected disk"/>
-            <Button Content="💾  Save Image"
+                    Padding="8,2" ToolTip="{DynamicResource Tip.Unmount}"/>
+            <Button Content="{DynamicResource Btn.SaveImage}"
                     Command="{Binding SaveImageCommand}"
-                    Padding="8,2" ToolTip="Save the selected disk's contents to its image file"/>
+                    Padding="8,2" ToolTip="{DynamicResource Tip.SaveImage}"/>
             <Separator/>
-            <Button Content="↻  Refresh"
+            <Button Content="{DynamicResource Btn.Refresh}"
                     Command="{Binding RefreshCommand}"
-                    Padding="8,2" ToolTip="Refresh usage statistics"/>
+                    Padding="8,2" ToolTip="{DynamicResource Tip.Refresh}"/>
             <Separator/>
-            <Button Content="⚙  Settings"
+            <Button Content="{DynamicResource Btn.Settings}"
                     Command="{Binding SettingsCommand}"
-                    Padding="8,2" ToolTip="Application settings"/>
+                    Padding="8,2" ToolTip="{DynamicResource Tip.Settings}"/>
         </ToolBar>
 
         <!-- Status bar -->
@@ -52,12 +52,12 @@
                   RowHeaderWidth="0"
                   Margin="0">
             <DataGrid.Columns>
-                <DataGridTextColumn Header="Mount Point" Binding="{Binding MountPoint}" Width="100"/>
-                <DataGridTextColumn Header="Label"       Binding="{Binding VolumeLabel}" Width="140"/>
-                <DataGridTextColumn Header="Capacity"    Binding="{Binding CapacityFormatted}" Width="90"/>
-                <DataGridTextColumn Header="Used"        Binding="{Binding UsedFormatted}" Width="90"/>
-                <DataGridTextColumn Header="Free"        Binding="{Binding FreeFormatted}" Width="90"/>
-                <DataGridTemplateColumn Header="Usage" Width="*">
+                <DataGridTextColumn x:Name="ColMountPoint" Header="Mount Point" Binding="{Binding MountPoint}" Width="100"/>
+                <DataGridTextColumn x:Name="ColLabel"      Header="Label"       Binding="{Binding VolumeLabel}" Width="140"/>
+                <DataGridTextColumn x:Name="ColCapacity"   Header="Capacity"    Binding="{Binding CapacityFormatted}" Width="90"/>
+                <DataGridTextColumn x:Name="ColUsed"       Header="Used"        Binding="{Binding UsedFormatted}" Width="90"/>
+                <DataGridTextColumn x:Name="ColFree"       Header="Free"        Binding="{Binding FreeFormatted}" Width="90"/>
+                <DataGridTemplateColumn x:Name="ColUsage"  Header="Usage" Width="*">
                     <DataGridTemplateColumn.CellTemplate>
                         <DataTemplate DataType="{x:Type vm:DiskViewModel}">
                             <ProgressBar Minimum="0" Maximum="100"
