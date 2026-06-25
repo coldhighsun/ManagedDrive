@@ -46,13 +46,22 @@ Data flows: `MountManager` → `RamDisk.Create()` → `MemoryFileSystem` + `File
 
 Standard WPF MVVM:
 
-- `App.xaml.cs` — application entry point. Creates `MountManager` + `SettingsStore`, constructs `MainViewModel`, sets up the system-tray `NotifyIcon`, auto-mounts profiles with `AutoMount = true` on startup, saves settings on exit. Enforces single-instance via a named `Mutex`. Serilog logs to `{AppPath}\logs\log-.txt` with 7-day rolling retention.
-- `TrayIconFactory` — generates the 32×32 tray icon entirely in code (System.Drawing); no embedded icon resource.
+- `App.xaml.cs` — application entry point. Creates `MountManager` + `SettingsStore`, constructs `MainViewModel`, sets up the system-tray icon (`H.NotifyIcon.Wpf` / `TaskbarIcon`), auto-mounts profiles with `AutoMount = true` on startup, saves settings on exit. Enforces single-instance via a named `Mutex`. Serilog logs to `{AppPath}\logs\log-.txt` with 7-day rolling retention.
 - `MainViewModel` — owns `ObservableCollection<DiskViewModel>`. Commands: `CreateDiskCommand` (opens `CreateDiskDialog`), `UnmountCommand`, `SaveImageCommand`, `RefreshCommand`, `SettingsCommand`. Mount operations are dispatched to `Task.Run` to keep the UI responsive.
 - `DiskViewModel` — wraps a `RamDisk`; exposes bindable properties (mount point, used/free/total bytes). A `DispatcherTimer` refreshes usage stats every 2 s automatically; `Refresh()` triggers a manual refresh.
-- `MainWindow` — closing the window hides it to the tray rather than exiting; exit is only via the tray context menu.
-- `SettingsStore` — persists `AppConfiguration` (JSON) to `%APPDATA%\ManagedDrive\settings.json`. `AppConfiguration` holds `RunAtStartup` and the list of `DiskProfile` records.
+- `MainWindow` — uses `WindowStyle="None"` + `WindowChrome` (custom Material Design app bar as title bar). Closing the window hides it to the tray; exit is only via the tray menu or the toolbar close button. Any interactive element inside the `WindowChrome` caption area must have `WindowChrome.IsHitTestVisibleInChrome="True"`.
+- `SettingsStore` — persists `AppConfiguration` (JSON) to `%APPDATA%\ManagedDrive\settings.json`. `AppConfiguration` holds `RunAtStartup`, `Language` (BCP-47 tag or `null` for system default), and the list of `DiskProfile` records.
 - `StartupManager` — reads/writes the `HKCU\...\Run` registry key to control Windows startup.
+
+### Localization
+
+Strings live in `Localization/Strings.{tag}.xaml` resource dictionaries. `LanguageManager` swaps the active dictionary at runtime by removing the old one and adding the new one to `Application.Current.Resources.MergedDictionaries`.
+
+- `Loc.Get(key)` / `Loc.Format(key, args)` — retrieve strings from the current resource dictionary.
+- `LanguageManager.Instance.Apply(string? saved)` — `null` or empty means "system default"; the method resolves to a concrete tag via `LanguageManager.Resolve()` (matches system locale against `SupportedLanguages`, falls back to `"en-US"`).
+- `LanguageManager.Instance.SavedLanguage` — the raw persisted choice (`null` = system default). `CurrentLanguage` is always the resolved concrete tag. Always persist `SavedLanguage`, not `CurrentLanguage`.
+- XAML strings use `{DynamicResource Key}` bindings so that a runtime language switch propagates without restart.
+- The app is **light mode only**. `App.xaml` sets `BaseTheme="Light"` on `BundledTheme`; there is no runtime theme switching.
 
 ### Threading model
 
