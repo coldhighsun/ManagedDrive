@@ -1,6 +1,6 @@
 using H.NotifyIcon;
 using ManagedDrive.App.Localization;
-using ModernWpf;
+using MaterialDesignThemes.Wpf;
 using ManagedDrive.App.Models;
 using ManagedDrive.App.Services;
 using ManagedDrive.App.ViewModels;
@@ -90,12 +90,10 @@ public partial class App
         _settings = new SettingsStore();
         var config = _settings.Load();
         LanguageManager.Instance.ApplyDefault(ResolveLanguage(config.Language));
-        ThemeManager.Current.ApplicationTheme = config.Theme switch
-        {
-            "Light" => ApplicationTheme.Light,
-            "Dark" => ApplicationTheme.Dark,
-            _ => null,
-        };
+        var paletteHelper = new PaletteHelper();
+        var theme = paletteHelper.GetTheme();
+        theme.SetBaseTheme(config.Theme == "Dark" ? BaseTheme.Dark : BaseTheme.Light);
+        paletteHelper.SetTheme(theme);
 
         CheckWinFspPrerequisite();
 
