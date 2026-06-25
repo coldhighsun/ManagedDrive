@@ -60,6 +60,8 @@
 
     <!-- MessageBox bodies -->
     <sys:String x:Key="Msg.AlreadyRunning">ManagedDrive 已在运行。</sys:String>
+    <sys:String x:Key="Msg.WinFspMissingTitle">ManagedDrive – 缺少必要组件</sys:String>
+    <sys:String x:Key="Msg.WinFspMissingBody">此程序需要 WinFsp 2.1.x，但未在系统中检测到。&#x0a;&#x0a;点击「是」跳转下载页面，点击「否」退出。</sys:String>
     <sys:String x:Key="Msg.MountFailed">挂载磁盘失败：&#x0a;{0}</sys:String>
     <sys:String x:Key="Msg.SaveImageFailed">保存镜像失败：&#x0a;{0}</sys:String>
 

@@ -61,13 +61,17 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     /// </summary>
     public ObservableCollection<DiskViewModel> Disks { get; } = [];
 
-    /// <summary>Gets the command that refreshes usage statistics.</summary>
+    /// <summary>
+    /// Gets the command that refreshes usage statistics.
+    /// </summary>
     public RelayCommand RefreshCommand
     {
         get;
     }
 
-    /// <summary>Gets the command that saves the selected disk's image to file.</summary>
+    /// <summary>
+    /// Gets the command that saves the selected disk's image to file.
+    /// </summary>
     public RelayCommand SaveImageCommand
     {
         get;
@@ -132,18 +136,15 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     /// </returns>
     public IEnumerable<DiskProfile> GetProfiles()
     {
-        foreach (var vm in Disks)
+        return Disks.Select(vm => new DiskProfile
         {
-            yield return new DiskProfile
-            {
-                MountPoint = vm.Disk.Options.MountPoint,
-                VolumeLabel = vm.Disk.Options.VolumeLabel,
-                CapacityBytes = vm.Disk.Options.CapacityBytes,
-                ReadOnly = vm.Disk.Options.ReadOnly,
-                AutoMount = vm.Disk.Options.AutoMount,
-                PersistImagePath = vm.Disk.Options.PersistImagePath,
-            };
-        }
+            MountPoint = vm.Disk.Options.MountPoint,
+            VolumeLabel = vm.Disk.Options.VolumeLabel,
+            CapacityBytes = vm.Disk.Options.CapacityBytes,
+            ReadOnly = vm.Disk.Options.ReadOnly,
+            AutoMount = vm.Disk.Options.AutoMount,
+            PersistImagePath = vm.Disk.Options.PersistImagePath,
+        });
     }
 
     /// <summary>
@@ -157,7 +158,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         {
             var options = ProfileToOptions(profile);
             var disk = await Task.Run(() => _mountManager.Mount(options));
-            Disks.Add(new DiskViewModel(disk));
+            AddDiskSorted(new DiskViewModel(disk));
             StatusText = Loc.Format("Status.Mounted", disk.MountPoint, profile.VolumeLabel);
             Log.Information("Auto-mounted {MountPoint} ({Label}).", disk.MountPoint, profile.VolumeLabel);
         }
@@ -178,6 +179,17 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         PersistImagePath = p.PersistImagePath,
     };
 
+    private void AddDiskSorted(DiskViewModel vm)
+    {
+        int i = 0;
+        while (i < Disks.Count &&
+               string.Compare(Disks[i].MountPoint, vm.MountPoint, StringComparison.OrdinalIgnoreCase) < 0)
+        {
+            i++;
+        }
+        Disks.Insert(i, vm);
+    }
+
     private async void ExecuteCreateDisk()
     {
         var dialog = new CreateDiskDialog { Owner = Application.Current.MainWindow };
@@ -191,7 +203,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         {
             var options = dialog.Result!;
             var disk = await Task.Run(() => _mountManager.Mount(options));
-            Disks.Add(new DiskViewModel(disk));
+            AddDiskSorted(new DiskViewModel(disk));
             SaveSettings();
             StatusText = Loc.Format("Status.MountedWithCapacity", disk.MountPoint, options.VolumeLabel, options.CapacityBytes / (1024 * 1024));
             Log.Information(
@@ -267,14 +279,6 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         Log.Information("Unmounted {MountPoint}.", mountPoint);
     }
 
-    private void SaveSettings() =>
-        _settingsStore.Save(new AppConfiguration
-        {
-            RunAtStartup = StartupManager.IsEnabled,
-            Language = LanguageManager.Instance.CurrentLanguage,
-            Disks = GetProfiles().ToList(),
-        });
-
     private void OnPropertyChanged(string propertyName) =>
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
 
@@ -285,4 +289,12 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             vm.Refresh();
         }
     }
+
+    private void SaveSettings() =>
+        _settingsStore.Save(new AppConfiguration
+        {
+            RunAtStartup = StartupManager.IsEnabled,
+            Language = LanguageManager.Instance.CurrentLanguage,
+            Disks = GetProfiles().ToList(),
+        });
 }

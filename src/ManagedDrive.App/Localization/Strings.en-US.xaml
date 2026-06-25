@@ -60,6 +60,8 @@
 
     <!-- MessageBox bodies -->
     <sys:String x:Key="Msg.AlreadyRunning">ManagedDrive is already running.</sys:String>
+    <sys:String x:Key="Msg.WinFspMissingTitle">ManagedDrive – Missing Prerequisite</sys:String>
+    <sys:String x:Key="Msg.WinFspMissingBody">WinFsp 2.1.x is required but was not detected on this system.&#x0a;&#x0a;Click Yes to open the download page, or No to exit.</sys:String>
     <sys:String x:Key="Msg.MountFailed">Failed to mount disk:&#x0a;{0}</sys:String>
     <sys:String x:Key="Msg.SaveImageFailed">Failed to save image:&#x0a;{0}</sys:String>
 

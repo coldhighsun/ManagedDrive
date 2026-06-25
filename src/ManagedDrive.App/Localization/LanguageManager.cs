@@ -2,26 +2,45 @@ using System.Windows;
 
 namespace ManagedDrive.App.Localization;
 
+/// <summary>
+/// Provides access to localized strings for the application.
+/// </summary>
 public sealed class LanguageManager
 {
     public static readonly LanguageManager Instance = new();
 
     private ResourceDictionary? _currentDict;
 
-    private LanguageManager() { }
+    private LanguageManager()
+    {
+    }
 
+    /// <summary>
+    /// Sets the current language for the application.
+    /// </summary>
     public event EventHandler? LanguageChanged;
 
-    public string CurrentLanguage { get; private set; } = "en-US";
-
-    public static IReadOnlyList<(string Tag, string DisplayName)> SupportedLanguages { get; } =
+    /// <summary>
+    /// Gets or sets the current language for the application.
+    /// </summary>
+    public static IReadOnlyList<(string Tag, string DisplayName)> SupportedLanguages
+    {
+        get;
+    } =
     [
         ("en-US", "English"),
         ("zh-CN", "中文（简体）"),
     ];
 
-    public void ApplyDefault(string languageTag = "en-US") => Apply(languageTag);
+    /// <summary>
+    /// Gets or sets the current language for the application.
+    /// </summary>
+    public string CurrentLanguage { get; private set; } = "en-US";
 
+    /// <summary>
+    /// Sets the current language for the application.
+    /// </summary>
+    /// <param name="languageTag">The language tag to apply.</param>
     public void Apply(string languageTag)
     {
         ResourceDictionary dict;
@@ -44,7 +63,9 @@ public sealed class LanguageManager
 
         var merged = Application.Current.Resources.MergedDictionaries;
         if (_currentDict != null)
+        {
             merged.Remove(_currentDict);
+        }
 
         merged.Add(dict);
         _currentDict = dict;
@@ -52,4 +73,6 @@ public sealed class LanguageManager
 
         LanguageChanged?.Invoke(this, EventArgs.Empty);
     }
+
+    public void ApplyDefault(string languageTag = "en-US") => Apply(languageTag);
 }
