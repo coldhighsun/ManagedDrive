@@ -1,93 +1,96 @@
 # ManagedDrive
 
+[English](#english) | [中文](#中文)
+
+---
+
+## English
+
 A Windows RAM disk manager built on .NET 10 and [WinFsp](https://winfsp.dev).  
 Create, mount and manage in-memory volumes that appear as normal drive letters in Explorer.
 
-## Features
+### Features
 
 - Mount multiple RAM disks simultaneously, each with its own drive letter
 - Configurable capacity, volume label and read-only flag
 - Optional persistence — save the disk contents to a `.mdr` image file and restore it on next mount
 - Auto-mount saved profiles on application startup
-- System-tray icon for quick access without keeping the main window open
-- Minimize-to-tray on window close
+- System-tray icon for quick access; minimizes to tray on window close
+- Bilingual UI — English and Simplified Chinese, auto-detected from system locale with manual override in Settings
 
-## Prerequisites
+### Prerequisites
 
 | Requirement | Notes |
 |---|---|
 | **Windows 10 / 11 (64-bit)** | ARM64 is not currently tested |
-| **[WinFsp 2.x](https://winfsp.dev/rel/)** | Must be installed before running ManagedDrive. Download the installer from the WinFsp releases page and run it. The managed assembly `winfsp-msil.dll` is installed to `C:\Program Files (x86)\WinFsp\bin\` and is referenced by the project automatically. |
-| **.NET 10 SDK** | Required to build. The runtime is embedded via self-contained publish or must be installed separately. |
-| **Administrator privileges** | Mounting a drive letter requires elevation. The application manifest requests `requireAdministrator`. |
+| **[WinFsp 2.1.25156](https://winfsp.dev/rel/)** | Exactly this version must be installed before running ManagedDrive. Install via winget: `winget install WinFsp.WinFsp -v 2.1.25156`. The managed assembly `winfsp-msil.dll` is installed to `C:\Program Files (x86)\WinFsp\bin\` and is referenced by the project automatically. |
+| **.NET 10 SDK** | Required to build. |
 
-## Getting Started
+### Getting Started
 
 ```powershell
-# 1. Install WinFsp (download from https://winfsp.dev/rel/)
+# 1. Install WinFsp 2.1.25156
+winget install WinFsp.WinFsp -v 2.1.25156
 
-# 2. Clone / open the solution
+# 2. Clone the repository
 git clone https://github.com/coldhighsun/ManagedDrive
 cd ManagedDrive
 
 # 3. Build
 dotnet build
 
-# 4. Run (must be run as Administrator)
-dotnet run --project ManagedDrive.App
+# 4. Run
+dotnet run --project src/ManagedDrive.App
 ```
 
-Alternatively open `ManagedDrive.slnx` in Visual Studio 2026+ and press **F5**
-(Visual Studio will prompt to elevate when the manifest is detected).
+Alternatively open `ManagedDrive.slnx` in Visual Studio 2022+ and press **F5**.
 
-## Solution Structure
+### Solution Structure
 
 ```
 ManagedDrive/
-├── ManagedDrive.Core/          # In-memory file system engine (WinFsp)
-│   ├── FileNode.cs             #   One file or directory node
-│   ├── FileNodeMap.cs          #   Thread-safe path→node dictionary
-│   ├── MemoryFileSystem.cs     #   FileSystemBase implementation
-│   ├── DiskOptions.cs          #   Immutable mount configuration record
-│   ├── RamDisk.cs              #   Mount/unmount lifecycle wrapper
-│   ├── MountManager.cs         #   Multi-disk manager
-│   └── DiskImageSerializer.cs  #   Binary persistence (*.mdr format)
+├── src/
+│   ├── ManagedDrive.Core/          # In-memory file system engine (WinFsp)
+│   │   ├── DiskOptions.cs          #   Immutable mount configuration record
+│   │   ├── FileNode.cs             #   Single file or directory node
+│   │   ├── FileNodeMap.cs          #   Thread-safe path→node dictionary
+│   │   ├── MemoryFileSystem.cs     #   FileSystemBase implementation (all WinFsp callbacks)
+│   │   ├── RamDisk.cs              #   Mount/unmount lifecycle wrapper
+│   │   ├── MountManager.cs         #   Multi-disk manager
+│   │   └── DiskImageSerializer.cs  #   Binary persistence (.mdr format)
+│   │
+│   └── ManagedDrive.App/           # WPF desktop application
+│       ├── Localization/           #   ResourceDictionary strings (en-US, zh-CN)
+│       ├── Infrastructure/         #   RelayCommand
+│       ├── Models/                 #   AppConfiguration, DiskProfile
+│       ├── Services/               #   SettingsStore, StartupManager
+│       ├── ViewModels/             #   MainViewModel, DiskViewModel
+│       ├── Views/                  #   CreateDiskDialog, SettingsDialog
+│       ├── MainWindow.xaml(.cs)    #   Main window
+│       └── App.xaml(.cs)           #   Startup, tray icon, auto-mount
 │
-├── ManagedDrive.App/           # WPF desktop application
-│   ├── Infrastructure/         #   RelayCommand
-│   ├── Models/                 #   DiskProfile (JSON settings model)
-│   ├── Services/               #   SettingsStore (%APPDATA%\ManagedDrive)
-│   ├── ViewModels/             #   MainViewModel, DiskViewModel
-│   ├── Views/                  #   CreateDiskDialog
-│   ├── MainWindow.xaml(.cs)    #   Main window
-│   └── App.xaml(.cs)           #   Startup, tray icon, auto-mount
-│
-└── ManagedDrive.Tests/         # xUnit unit tests (pure-managed code only)
-	├── FileNodeTests.cs
-	└── FileNodeMapTests.cs
+└── tests/
+    └── ManagedDrive.Tests/         # xUnit v3 unit tests (pure-managed code only)
+        ├── FileNodeTests.cs
+        └── FileNodeMapTests.cs
 ```
 
-## How It Works
+### How It Works
 
-ManagedDrive uses **WinFsp** (Windows File System Proxy) to present an in-memory
-directory tree as a real Windows volume. WinFsp ships a signed kernel driver that
-acts as a bridge; all file I/O is forwarded to `MemoryFileSystem` which stores data
-in .NET byte arrays.
+ManagedDrive uses **WinFsp** (Windows File System Proxy) to present an in-memory directory tree as a real Windows volume. WinFsp ships a signed kernel driver that acts as a bridge; all file I/O is forwarded to `MemoryFileSystem`, which stores data in .NET byte arrays.
 
 Key classes:
 
-- **`FileNode`** — holds `Fsp.Interop.FileInfo` metadata plus a `byte[]` data buffer.
-- **`FileNodeMap`** — a `SortedDictionary<string, FileNode>` (case-insensitive) that maps
-  full paths to nodes and supports efficient child enumeration.
-- **`MemoryFileSystem : FileSystemBase`** — overrides all required WinFsp callbacks
-  (`Create`, `Open`, `Read`, `Write`, `Rename`, `CanDelete`, `ReadDirectoryEntry`, etc.)
-  and enforces a configurable capacity ceiling, returning `STATUS_DISK_FULL` when exceeded.
-- **`RamDisk`** — wraps a `FileSystemHost` and drives the mount/unmount lifecycle. It
-  optionally loads from / saves to a `.mdr` image file.
+- **`FileNode`** — holds `Fsp.Interop.FileInfo` metadata, a `byte[]` data buffer, and a security descriptor.
+- **`FileNodeMap`** — a case-insensitive `SortedDictionary<string, FileNode>` that maps full paths to nodes, supports paginated child enumeration, and tracks total allocated bytes. Thread-safe via the C# 13 `Lock` type.
+- **`MemoryFileSystem : FileSystemBase`** — overrides all 21 required WinFsp callbacks (`Create`, `Open`, `Read`, `Write`, `Rename`, `CanDelete`, `ReadDirectoryEntry`, etc.) and enforces a configurable capacity ceiling, returning `STATUS_DISK_FULL` when exceeded.
+- **`RamDisk`** — composes `MemoryFileSystem` with a `FileSystemHost`. The static `Create()` factory mounts the volume and polls until the drive letter is visible in the OS (up to 2.5 s), then broadcasts `SHCNE_DRIVEADD` to refresh Explorer. `Dispose()` unmounts.
+- **`MountManager`** — thread-safe registry of active `RamDisk` instances. Fires `DiskMounted` / `DiskUnmounted` events.
+- **`DiskImageSerializer`** — reads/writes `.mdr` files (full FS state including metadata, ACLs, and file data).
 
-## Disk Image Format (`.mdr`)
+### Disk Image Format (`.mdr`)
 
-A simple little-endian binary format:
+A little-endian binary format:
 
 | Field | Type | Description |
 |---|---|---|
@@ -96,17 +99,141 @@ A simple little-endian binary format:
 | Capacity | `uint64` | Configured capacity in bytes |
 | VolumeLabel | `string` | Length-prefixed UTF-8 |
 | NodeCount | `int32` | Number of nodes that follow |
-| *Node entries* | — | Path, metadata, security descriptor, file data |
+| *Node entries* | — | Path, metadata (10 fields), security descriptor, file data |
 
-## Running Tests
+### Settings & Persistence
+
+- Settings are stored as JSON at `%APPDATA%\ManagedDrive\settings.json`.
+- Windows startup registration uses `HKCU\SOFTWARE\Microsoft\Windows\CurrentVersion\Run` (no elevation required).
+- Logs are written to `{AppPath}\logs\log-.txt` with daily rolling and 7-day retention (Serilog).
+- Version is derived from git tags (`v`-prefixed, e.g. `v0.1.0`) via MinVer.
+
+### Running Tests
 
 ```powershell
-dotnet test ManagedDrive.Tests
+dotnet test tests/ManagedDrive.Tests
 ```
 
-Tests cover the pure-managed model (`FileNode`, `FileNodeMap`, capacity arithmetic).
-Mount/unmount integration tests require the WinFsp driver and must be run manually.
+Tests cover `FileNode` (allocation unit alignment, index numbers) and `FileNodeMap` (CRUD, case-insensitive lookup, child pagination, rename, capacity tracking). Mount/unmount integration tests require the WinFsp driver and must be run manually.
 
-## License
+### License
+
+MIT
+
+---
+
+## 中文
+
+基于 .NET 10 和 [WinFsp](https://winfsp.dev) 构建的 Windows RAM 虚拟磁盘管理器。  
+创建、挂载并管理内存盘，它们在文件资源管理器中以普通驱动器号的形式呈现。
+
+### 功能特性
+
+- 同时挂载多个 RAM 磁盘，每个磁盘拥有独立的驱动器号
+- 可配置容量、卷标和只读标志
+- 可选持久化——将磁盘内容保存为 `.mdr` 镜像文件，下次挂载时自动还原
+- 应用启动时自动挂载已保存的磁盘配置
+- 系统托盘图标，关闭窗口时最小化到托盘
+- 双语界面——中文与英文，根据系统语言自动切换，也可在设置中手动更改
+
+### 环境要求
+
+| 要求 | 说明 |
+|---|---|
+| **Windows 10 / 11（64 位）** | 暂未测试 ARM64 |
+| **[WinFsp 2.1.25156](https://winfsp.dev/rel/)** | 必须安装此特定版本。可使用 winget 安装：`winget install WinFsp.WinFsp -v 2.1.25156`。托管程序集 `winfsp-msil.dll` 将安装至 `C:\Program Files (x86)\WinFsp\bin\`，项目会自动引用。 |
+| **.NET 10 SDK** | 编译所需。 |
+
+### 快速开始
+
+```powershell
+# 1. 安装 WinFsp 2.1.25156
+winget install WinFsp.WinFsp -v 2.1.25156
+
+# 2. 克隆仓库
+git clone https://github.com/coldhighsun/ManagedDrive
+cd ManagedDrive
+
+# 3. 编译
+dotnet build
+
+# 4. 运行
+dotnet run --project src/ManagedDrive.App
+```
+
+或者在 Visual Studio 2022+ 中打开 `ManagedDrive.slnx` 并按 **F5**。
+
+### 解决方案结构
+
+```
+ManagedDrive/
+├── src/
+│   ├── ManagedDrive.Core/          # 内存文件系统引擎（WinFsp）
+│   │   ├── DiskOptions.cs          #   不可变挂载配置记录
+│   │   ├── FileNode.cs             #   单个文件或目录节点
+│   │   ├── FileNodeMap.cs          #   线程安全的路径→节点字典
+│   │   ├── MemoryFileSystem.cs     #   FileSystemBase 实现（所有 WinFsp 回调）
+│   │   ├── RamDisk.cs              #   挂载/卸载生命周期封装
+│   │   ├── MountManager.cs         #   多磁盘管理器
+│   │   └── DiskImageSerializer.cs  #   二进制持久化（.mdr 格式）
+│   │
+│   └── ManagedDrive.App/           # WPF 桌面应用程序
+│       ├── Localization/           #   ResourceDictionary 字符串（en-US、zh-CN）
+│       ├── Infrastructure/         #   RelayCommand
+│       ├── Models/                 #   AppConfiguration、DiskProfile
+│       ├── Services/               #   SettingsStore、StartupManager
+│       ├── ViewModels/             #   MainViewModel、DiskViewModel
+│       ├── Views/                  #   CreateDiskDialog、SettingsDialog
+│       ├── MainWindow.xaml(.cs)    #   主窗口
+│       └── App.xaml(.cs)           #   启动、托盘图标、自动挂载
+│
+└── tests/
+    └── ManagedDrive.Tests/         # xUnit v3 单元测试（仅纯托管代码）
+        ├── FileNodeTests.cs
+        └── FileNodeMapTests.cs
+```
+
+### 工作原理
+
+ManagedDrive 使用 **WinFsp**（Windows 文件系统代理）将内存目录树呈现为真实的 Windows 卷。WinFsp 附带一个已签名的内核驱动程序作为桥接层；所有文件 I/O 均转发至 `MemoryFileSystem`，后者将数据存储在 .NET 字节数组中。
+
+核心类：
+
+- **`FileNode`** — 持有 `Fsp.Interop.FileInfo` 元数据、`byte[]` 数据缓冲区及安全描述符。
+- **`FileNodeMap`** — 不区分大小写的 `SortedDictionary<string, FileNode>`，将完整路径映射到节点，支持分页子节点枚举，并追踪已分配字节总量。通过 C# 13 `Lock` 类型保证线程安全。
+- **`MemoryFileSystem : FileSystemBase`** — 覆写全部 21 个所需的 WinFsp 回调（`Create`、`Open`、`Read`、`Write`、`Rename`、`CanDelete`、`ReadDirectoryEntry` 等），并强制执行可配置的容量上限，超出时返回 `STATUS_DISK_FULL`。
+- **`RamDisk`** — 组合 `MemoryFileSystem` 与 `FileSystemHost`。静态工厂方法 `Create()` 挂载卷，并轮询直至驱动器号在系统中可见（最长 2.5 秒），随后向资源管理器广播 `SHCNE_DRIVEADD`。`Dispose()` 执行卸载。
+- **`MountManager`** — 线程安全的活动 `RamDisk` 实例注册表，提供 `DiskMounted` / `DiskUnmounted` 事件。
+- **`DiskImageSerializer`** — 读写 `.mdr` 文件（保存完整文件系统状态，包含元数据、ACL 和文件数据）。
+
+### 磁盘镜像格式（`.mdr`）
+
+小端序二进制格式：
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| 魔数 | `byte[4]` | `MDRD` |
+| 版本 | `int32` | 当前为 `1` |
+| 容量 | `uint64` | 配置的容量（字节） |
+| 卷标 | `string` | 长度前缀 UTF-8 |
+| 节点数 | `int32` | 后续节点数量 |
+| *节点条目* | — | 路径、元数据（10 个字段）、安全描述符、文件数据 |
+
+### 配置与持久化
+
+- 配置以 JSON 格式存储于 `%APPDATA%\ManagedDrive\settings.json`。
+- 开机自启通过 `HKCU\SOFTWARE\Microsoft\Windows\CurrentVersion\Run` 注册表项实现（无需提升权限）。
+- 日志写入 `{AppPath}\logs\log-.txt`，每日滚动，保留 7 天（Serilog）。
+- 版本号由 MinVer 从 git 标签派生（`v` 前缀，例如 `v0.1.0`）。
+
+### 运行测试
+
+```powershell
+dotnet test tests/ManagedDrive.Tests
+```
+
+测试覆盖 `FileNode`（分配单元对齐、索引编号）和 `FileNodeMap`（增删改查、大小写无关查找、子节点分页、重命名、容量追踪）。挂载/卸载集成测试需要 WinFsp 驱动程序，须手动运行。
+
+### 许可证
 
 MIT

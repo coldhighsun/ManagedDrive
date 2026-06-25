@@ -1,4 +1,5 @@
 using ManagedDrive.App.Infrastructure;
+using ManagedDrive.App.Localization;
 using ManagedDrive.App.Models;
 using ManagedDrive.App.Services;
 using ManagedDrive.App.Views;
@@ -30,6 +31,8 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     {
         _mountManager = mountManager;
         _settingsStore = settingsStore;
+
+        StatusText = Loc.Get("Status.Ready");
 
         CreateDiskCommand = new RelayCommand(_ => ExecuteCreateDisk());
         UnmountCommand = new RelayCommand(
@@ -102,7 +105,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             field = value;
             OnPropertyChanged(nameof(StatusText));
         }
-    } = "Ready.";
+    }
 
     /// <summary>
     /// Gets the command that unmounts the selected disk.
@@ -155,12 +158,12 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             var options = ProfileToOptions(profile);
             var disk = await Task.Run(() => _mountManager.Mount(options));
             Disks.Add(new DiskViewModel(disk));
-            StatusText = $"Mounted {disk.MountPoint} ({profile.VolumeLabel}).";
+            StatusText = Loc.Format("Status.Mounted", disk.MountPoint, profile.VolumeLabel);
             Log.Information("Auto-mounted {MountPoint} ({Label}).", disk.MountPoint, profile.VolumeLabel);
         }
         catch (Exception ex)
         {
-            StatusText = $"Auto-mount '{profile.MountPoint}' failed: {ex.Message}";
+            StatusText = Loc.Format("Status.AutoMountFailed", profile.MountPoint, ex.Message);
             Log.Error(ex, "Auto-mount {MountPoint} failed.", profile.MountPoint);
         }
     }
@@ -190,8 +193,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             var disk = await Task.Run(() => _mountManager.Mount(options));
             Disks.Add(new DiskViewModel(disk));
             SaveSettings();
-            StatusText = $"Mounted {disk.MountPoint} ({options.VolumeLabel}, " +
-                         $"{options.CapacityBytes / (1024 * 1024)} MB).";
+            StatusText = Loc.Format("Status.MountedWithCapacity", disk.MountPoint, options.VolumeLabel, options.CapacityBytes / (1024 * 1024));
             Log.Information(
                 "Mounted {MountPoint} ({Label}, {CapacityMb} MB).",
                 disk.MountPoint,
@@ -201,11 +203,11 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         catch (Exception ex)
         {
             MessageBox.Show(
-                $"Failed to mount disk:\n{ex.Message}",
+                Loc.Format("Msg.MountFailed", ex.Message),
                 "ManagedDrive",
                 MessageBoxButton.OK,
                 MessageBoxImage.Error);
-            StatusText = "Mount failed.";
+            StatusText = Loc.Get("Status.MountFailed");
             Log.Error(ex, "Failed to mount disk.");
         }
     }
@@ -221,13 +223,13 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         try
         {
             vm.Disk.SaveToImage();
-            StatusText = $"Image saved for {vm.MountPoint}.";
+            StatusText = Loc.Format("Status.ImageSaved", vm.MountPoint);
             Log.Information("Saved image for {MountPoint}.", vm.MountPoint);
         }
         catch (Exception ex)
         {
             MessageBox.Show(
-                $"Failed to save image:\n{ex.Message}",
+                Loc.Format("Msg.SaveImageFailed", ex.Message),
                 "ManagedDrive",
                 MessageBoxButton.OK,
                 MessageBoxImage.Error);
@@ -261,7 +263,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         Disks.Remove(vm);
         _mountManager.Unmount(mountPoint);
         SaveSettings();
-        StatusText = $"Unmounted {mountPoint}.";
+        StatusText = Loc.Format("Status.Unmounted", mountPoint);
         Log.Information("Unmounted {MountPoint}.", mountPoint);
     }
 
@@ -269,6 +271,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         _settingsStore.Save(new AppConfiguration
         {
             RunAtStartup = StartupManager.IsEnabled,
+            Language = LanguageManager.Instance.CurrentLanguage,
             Disks = GetProfiles().ToList(),
         });
 
