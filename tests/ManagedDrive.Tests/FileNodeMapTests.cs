@@ -57,9 +57,6 @@ public sealed class FileNodeMapTests
         Assert.Contains(children, kvp => kvp.Key == "\\B");
     }
 
-    // -------------------------------------------------------------------------
-    // GetChildren
-    // -------------------------------------------------------------------------
     [Fact]
     public void GetChildren_SubDir_ReturnsOnlyDirectChildren()
     {
@@ -150,9 +147,6 @@ public sealed class FileNodeMapTests
         Assert.False(map.TryGet("\\Old\\Sub", out _));
     }
 
-    // -------------------------------------------------------------------------
-    // RenameDescendants
-    // -------------------------------------------------------------------------
     [Fact]
     public void RenameDescendants_UpdatesFilePathProperty()
     {
