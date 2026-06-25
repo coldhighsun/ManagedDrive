@@ -1,10 +1,14 @@
-﻿using ManagedDrive.App.Models;
+using H.NotifyIcon;
+using ManagedDrive.App.Models;
 using ManagedDrive.App.Services;
 using ManagedDrive.App.ViewModels;
 using ManagedDrive.Core;
 using Serilog;
+using System.ComponentModel;
 using System.IO;
 using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Media.Imaging;
 
 namespace ManagedDrive.App;
 
@@ -16,12 +20,13 @@ public partial class App
 {
     private const string SingleInstanceMutexName = "Global\\ManagedDrive-4A7C2E1B-9F3D-4B8A-A1C5-3E6D2F0B8C9A";
 
+    private bool _isExiting;
     private MainViewModel? _mainViewModel;
     private MainWindow? _mainWindow;
     private MountManager? _mountManager;
     private SettingsStore? _settings;
     private Mutex? _singleInstanceMutex;
-    private NotifyIcon? _trayIcon;
+    private TaskbarIcon? _trayIcon;
 
     private void App_Exit(object sender, ExitEventArgs e)
     {
@@ -45,7 +50,7 @@ public partial class App
         {
             _singleInstanceMutex.Dispose();
             _singleInstanceMutex = null;
-            System.Windows.MessageBox.Show(
+            MessageBox.Show(
                 "ManagedDrive is already running.",
                 "ManagedDrive",
                 MessageBoxButton.OK,
@@ -57,7 +62,7 @@ public partial class App
         Log.Logger = new LoggerConfiguration()
             .MinimumLevel.Debug()
             .WriteTo.File(
-                Path.Combine(System.Windows.Forms.Application.StartupPath, "logs", "log-.txt"),
+                Path.Combine(AppContext.BaseDirectory, "logs", "log-.txt"),
                 rollingInterval: RollingInterval.Day,
                 retainedFileCountLimit: 7,
                 outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz} [{Level:u3}] {Message:lj}{NewLine}{Exception}")
@@ -74,11 +79,23 @@ public partial class App
         _settings = new SettingsStore();
         _mainViewModel = new MainViewModel(_mountManager, _settings);
         _mainWindow = new MainWindow(_mainViewModel);
+        _mainWindow.Closing += MainWindow_Closing;
 
         SetupTrayIcon();
         AutoMountDisks();
 
         _mainWindow.Show();
+    }
+
+    private void MainWindow_Closing(object? sender, CancelEventArgs e)
+    {
+        if (_isExiting)
+            return;
+
+        e.Cancel = true;
+        _mainWindow!.Hide();
+        if (_trayIcon != null)
+            _trayIcon.Visibility = Visibility.Visible;
     }
 
     private void AutoMountDisks()
@@ -99,7 +116,7 @@ public partial class App
 
     private void ExitApplication()
     {
-        _mainWindow!.Closing -= null;
+        _isExiting = true;
         SaveSettings();
         _trayIcon?.Dispose();
         _mainViewModel?.Dispose();
@@ -123,27 +140,36 @@ public partial class App
 
     private void SetupTrayIcon()
     {
-        _trayIcon = new NotifyIcon
+        var showItem = new MenuItem { Header = "Show" };
+        showItem.Click += (_, _) => ShowMainWindow();
+        var newDiskItem = new MenuItem { Header = "New Disk" };
+        newDiskItem.Click += (_, _) => ShowMainWindowAndCreate();
+        var exitItem = new MenuItem { Header = "Exit" };
+        exitItem.Click += (_, _) => ExitApplication();
+
+        var menu = new ContextMenu();
+        menu.Items.Add(showItem);
+        menu.Items.Add(newDiskItem);
+        menu.Items.Add(new Separator());
+        menu.Items.Add(exitItem);
+
+        _trayIcon = new TaskbarIcon
         {
-            Text = "ManagedDrive",
-            Icon = SystemIcons.Information,
-            Visible = true,
+            ToolTipText = "ManagedDrive",
+            IconSource = new BitmapImage(new Uri("pack://application:,,,/ManagedDrive.ico")),
+            ContextMenu = menu,
+            Visibility = Visibility.Hidden,
         };
-
-        var menu = new ContextMenuStrip();
-        menu.Items.Add("Show", null, (_, _) => ShowMainWindow());
-        menu.Items.Add("New Disk", null, (_, _) => ShowMainWindowAndCreate());
-        menu.Items.Add(new ToolStripSeparator());
-        menu.Items.Add("Exit", null, (_, _) => ExitApplication());
-
-        _trayIcon.ContextMenuStrip = menu;
-        _trayIcon.DoubleClick += (_, _) => ShowMainWindow();
+        _trayIcon.TrayMouseDoubleClick += (_, _) => ShowMainWindow();
+        _trayIcon.ForceCreate();
     }
 
     private void ShowMainWindow()
     {
         _mainWindow?.Show();
         _mainWindow?.Activate();
+        if (_trayIcon != null)
+            _trayIcon.Visibility = Visibility.Hidden;
     }
 
     private void ShowMainWindowAndCreate()

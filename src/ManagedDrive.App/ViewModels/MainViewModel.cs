@@ -189,6 +189,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             var options = dialog.Result!;
             var disk = await Task.Run(() => _mountManager.Mount(options));
             Disks.Add(new DiskViewModel(disk));
+            SaveSettings();
             StatusText = $"Mounted {disk.MountPoint} ({options.VolumeLabel}, " +
                          $"{options.CapacityBytes / (1024 * 1024)} MB).";
             Log.Information(
@@ -259,9 +260,17 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         vm.Dispose();
         Disks.Remove(vm);
         _mountManager.Unmount(mountPoint);
+        SaveSettings();
         StatusText = $"Unmounted {mountPoint}.";
         Log.Information("Unmounted {MountPoint}.", mountPoint);
     }
+
+    private void SaveSettings() =>
+        _settingsStore.Save(new AppConfiguration
+        {
+            RunAtStartup = StartupManager.IsEnabled,
+            Disks = GetProfiles().ToList(),
+        });
 
     private void OnPropertyChanged(string propertyName) =>
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));

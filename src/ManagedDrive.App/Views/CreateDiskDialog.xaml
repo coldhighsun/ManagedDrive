@@ -4,7 +4,7 @@
         Title="Create RAM Disk"
         Width="420" SizeToContent="Height"
         ResizeMode="NoResize"
-        WindowStartupLocation="CenterOwner"
+        WindowStartupLocation="CenterOwner"        
         ShowInTaskbar="False">
 
     <Grid Margin="16">
