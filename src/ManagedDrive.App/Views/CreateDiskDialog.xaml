@@ -42,9 +42,13 @@
 
         <!-- Capacity -->
         <TextBlock Grid.Row="4" Grid.Column="0" Text="{DynamicResource CreateDisk.Capacity}" VerticalAlignment="Center"/>
-        <TextBox   Grid.Row="4" Grid.Column="1" Grid.ColumnSpan="3"
-                   x:Name="CapacityBox" Text="256"
+        <TextBox   Grid.Row="4" Grid.Column="1"
+                   x:Name="CapacityBox" Text="2"
+                   TextAlignment="Right"
+                   PreviewTextInput="CapacityBox_PreviewTextInput"
                    ToolTip="{DynamicResource Tip.Capacity}"/>
+        <ComboBox  Grid.Row="4" Grid.Column="3"
+                   x:Name="CapacityUnitBox" IsEditable="False" Width="56"/>
 
         <!-- Read Only -->
         <TextBlock Grid.Row="6" Grid.Column="0" Text="{DynamicResource CreateDisk.ReadOnly}" VerticalAlignment="Center"/>
