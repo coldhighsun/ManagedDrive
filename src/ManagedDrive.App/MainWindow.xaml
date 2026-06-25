@@ -3,11 +3,12 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:vm="clr-namespace:ManagedDrive.App.ViewModels"
         mc:Ignorable="d"
+        Icon="pack://application:,,,/ManagedDrive.ico"
         Title="ManagedDrive – RAM Disk Manager"
         Height="480" Width="760"
-        MinHeight="320" MinWidth="520"
-        Closing="Window_Closing">
+        MinHeight="320" MinWidth="520">
 
     <DockPanel>
 
@@ -58,7 +59,7 @@
                 <DataGridTextColumn Header="Free"        Binding="{Binding FreeFormatted}" Width="90"/>
                 <DataGridTemplateColumn Header="Usage" Width="*">
                     <DataGridTemplateColumn.CellTemplate>
-                        <DataTemplate>
+                        <DataTemplate DataType="{x:Type vm:DiskViewModel}">
                             <ProgressBar Minimum="0" Maximum="100"
                                          Value="{Binding UsedPercent, Mode=OneWay}"
                                          Height="12" Margin="4,0"/>
