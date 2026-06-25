@@ -1,4 +1,6 @@
+using System.Globalization;
 using H.NotifyIcon;
+using ManagedDrive.App.Localization;
 using ManagedDrive.App.Models;
 using ManagedDrive.App.Services;
 using ManagedDrive.App.ViewModels;
@@ -77,6 +79,7 @@ public partial class App
 
         _mountManager = new MountManager();
         _settings = new SettingsStore();
+        LanguageManager.Instance.ApplyDefault(ResolveLanguage(_settings.Load().Language));
         _mainViewModel = new MainViewModel(_mountManager, _settings);
         _mainWindow = new MainWindow(_mainViewModel);
         _mainWindow.Closing += MainWindow_Closing;
@@ -134,17 +137,18 @@ public partial class App
         _settings.Save(new AppConfiguration
         {
             RunAtStartup = StartupManager.IsEnabled,
+            Language = LanguageManager.Instance.CurrentLanguage,
             Disks = _mainViewModel.GetProfiles().ToList(),
         });
     }
 
     private void SetupTrayIcon()
     {
-        var showItem = new MenuItem { Header = "Show" };
+        var showItem = new MenuItem { Header = Loc.Get("Tray.Show") };
         showItem.Click += (_, _) => ShowMainWindow();
-        var newDiskItem = new MenuItem { Header = "New Disk" };
+        var newDiskItem = new MenuItem { Header = Loc.Get("Tray.NewDisk") };
         newDiskItem.Click += (_, _) => ShowMainWindowAndCreate();
-        var exitItem = new MenuItem { Header = "Exit" };
+        var exitItem = new MenuItem { Header = Loc.Get("Tray.Exit") };
         exitItem.Click += (_, _) => ExitApplication();
 
         var menu = new ContextMenu();
@@ -162,6 +166,24 @@ public partial class App
         };
         _trayIcon.TrayMouseDoubleClick += (_, _) => ShowMainWindow();
         _trayIcon.ForceCreate();
+
+        LanguageManager.Instance.LanguageChanged += (_, _) => UpdateTrayMenuHeaders();
+    }
+
+    private static string ResolveLanguage(string? saved)
+    {
+        if (!string.IsNullOrEmpty(saved))
+            return saved;
+        return CultureInfo.CurrentUICulture.TwoLetterISOLanguageName == "zh" ? "zh-CN" : "en-US";
+    }
+
+    private void UpdateTrayMenuHeaders()
+    {
+        if (_trayIcon?.ContextMenu is not { } menu)
+            return;
+        ((MenuItem)menu.Items[0]!).Header = Loc.Get("Tray.Show");
+        ((MenuItem)menu.Items[1]!).Header = Loc.Get("Tray.NewDisk");
+        ((MenuItem)menu.Items[3]!).Header = Loc.Get("Tray.Exit");
     }
 
     private void ShowMainWindow()

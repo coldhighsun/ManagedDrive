@@ -20,4 +20,10 @@ public sealed record AppConfiguration
     {
         get; init;
     }
+
+    /// <summary>
+    /// BCP-47 language tag for the UI language, e.g. "en-US" or "zh-CN".
+    /// Null means no explicit choice has been made — the app will auto-detect from the system locale.
+    /// </summary>
+    public string? Language { get; init; }
 }

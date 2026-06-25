@@ -1,0 +1,75 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:sys="clr-namespace:System;assembly=mscorlib">
+
+    <!-- MainWindow -->
+    <sys:String x:Key="Window.Title">ManagedDrive – RAM Disk Manager</sys:String>
+    <sys:String x:Key="Btn.NewDisk">🖴  New Disk</sys:String>
+    <sys:String x:Key="Btn.Unmount">⏏  Unmount</sys:String>
+    <sys:String x:Key="Btn.SaveImage">💾  Save Image</sys:String>
+    <sys:String x:Key="Btn.Refresh">↻  Refresh</sys:String>
+    <sys:String x:Key="Btn.Settings">⚙  Settings</sys:String>
+    <sys:String x:Key="Tip.NewDisk">Create and mount a new RAM disk</sys:String>
+    <sys:String x:Key="Tip.Unmount">Unmount the selected disk</sys:String>
+    <sys:String x:Key="Tip.SaveImage">Save the selected disk's contents to its image file</sys:String>
+    <sys:String x:Key="Tip.Refresh">Refresh usage statistics</sys:String>
+    <sys:String x:Key="Tip.Settings">Application settings</sys:String>
+    <sys:String x:Key="Col.MountPoint">Mount Point</sys:String>
+    <sys:String x:Key="Col.Label">Label</sys:String>
+    <sys:String x:Key="Col.Capacity">Capacity</sys:String>
+    <sys:String x:Key="Col.Used">Used</sys:String>
+    <sys:String x:Key="Col.Free">Free</sys:String>
+    <sys:String x:Key="Col.Usage">Usage</sys:String>
+
+    <!-- CreateDiskDialog -->
+    <sys:String x:Key="CreateDisk.Title">Create RAM Disk</sys:String>
+    <sys:String x:Key="CreateDisk.DriveLetter">Drive Letter:</sys:String>
+    <sys:String x:Key="CreateDisk.VolumeLabel">Volume Label:</sys:String>
+    <sys:String x:Key="CreateDisk.Capacity">Capacity (MB):</sys:String>
+    <sys:String x:Key="CreateDisk.ReadOnly">Read Only:</sys:String>
+    <sys:String x:Key="CreateDisk.AutoMount">Auto-mount:</sys:String>
+    <sys:String x:Key="CreateDisk.ImageFile">Image File:</sys:String>
+    <sys:String x:Key="CreateDisk.DefaultLabel">RAM Disk</sys:String>
+    <sys:String x:Key="Tip.Capacity">Disk size in megabytes (1 – 65535)</sys:String>
+    <sys:String x:Key="Tip.AutoMount">Re-mount this disk automatically on next application start</sys:String>
+    <sys:String x:Key="Tip.ImageFile">Optional: path to a .mdr image file for persistence (leave blank for volatile disk)</sys:String>
+
+    <!-- SettingsDialog -->
+    <sys:String x:Key="Settings.Title">Settings</sys:String>
+    <sys:String x:Key="Settings.RunAtStartup">Run at Windows startup:</sys:String>
+    <sys:String x:Key="Settings.Language">Language:</sys:String>
+    <sys:String x:Key="Tip.RunAtStartup">Start ManagedDrive automatically when Windows starts</sys:String>
+
+    <!-- Shared buttons -->
+    <sys:String x:Key="Btn.Ok">_OK</sys:String>
+    <sys:String x:Key="Btn.Cancel">_Cancel</sys:String>
+
+    <!-- Tray menu -->
+    <sys:String x:Key="Tray.Show">Show</sys:String>
+    <sys:String x:Key="Tray.NewDisk">New Disk</sys:String>
+    <sys:String x:Key="Tray.Exit">Exit</sys:String>
+
+    <!-- Status bar -->
+    <sys:String x:Key="Status.Ready">Ready.</sys:String>
+    <sys:String x:Key="Status.Mounted">Mounted {0} ({1}).</sys:String>
+    <sys:String x:Key="Status.MountedWithCapacity">Mounted {0} ({1}, {2} MB).</sys:String>
+    <sys:String x:Key="Status.AutoMountFailed">Auto-mount '{0}' failed: {1}</sys:String>
+    <sys:String x:Key="Status.MountFailed">Mount failed.</sys:String>
+    <sys:String x:Key="Status.ImageSaved">Image saved for {0}.</sys:String>
+    <sys:String x:Key="Status.Unmounted">Unmounted {0}.</sys:String>
+
+    <!-- MessageBox bodies -->
+    <sys:String x:Key="Msg.AlreadyRunning">ManagedDrive is already running.</sys:String>
+    <sys:String x:Key="Msg.MountFailed">Failed to mount disk:&#x0a;{0}</sys:String>
+    <sys:String x:Key="Msg.SaveImageFailed">Failed to save image:&#x0a;{0}</sys:String>
+
+    <!-- Validation -->
+    <sys:String x:Key="Val.Title">Invalid Input</sys:String>
+    <sys:String x:Key="Val.NoDriveLetter">Please select a drive letter.</sys:String>
+    <sys:String x:Key="Val.BadCapacity">Capacity must be a positive integer (in MB).</sys:String>
+
+    <!-- SaveFileDialog -->
+    <sys:String x:Key="SaveDlg.Title">Select Image File</sys:String>
+    <sys:String x:Key="SaveDlg.Filter">ManagedDrive Image (*.mdr)|*.mdr|All Files (*.*)|*.*</sys:String>
+
+</ResourceDictionary>
