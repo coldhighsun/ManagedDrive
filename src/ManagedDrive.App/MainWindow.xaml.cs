@@ -1,4 +1,4 @@
-﻿using ManagedDrive.App.ViewModels;
+using ManagedDrive.App.ViewModels;
 
 namespace ManagedDrive.App;
 
@@ -15,12 +15,5 @@ public partial class MainWindow
     {
         InitializeComponent();
         DataContext = viewModel;
-    }
-
-    private void Window_Closing(object sender, System.ComponentModel.CancelEventArgs e)
-    {
-        // Minimize to tray instead of closing when the user clicks X.
-        e.Cancel = true;
-        Hide();
     }
 }
