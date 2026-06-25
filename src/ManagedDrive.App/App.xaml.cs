@@ -1,6 +1,5 @@
 using H.NotifyIcon;
 using ManagedDrive.App.Localization;
-using MaterialDesignThemes.Wpf;
 using ManagedDrive.App.Models;
 using ManagedDrive.App.Services;
 using ManagedDrive.App.ViewModels;
@@ -9,7 +8,6 @@ using Microsoft.Win32;
 using Serilog;
 using System.ComponentModel;
 using System.Diagnostics;
-using System.Globalization;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
@@ -32,13 +30,6 @@ public partial class App
     private SettingsStore? _settings;
     private Mutex? _singleInstanceMutex;
     private TaskbarIcon? _trayIcon;
-
-    private static string ResolveLanguage(string? saved)
-    {
-        if (!string.IsNullOrEmpty(saved))
-            return saved;
-        return CultureInfo.CurrentUICulture.TwoLetterISOLanguageName == "zh" ? "zh-CN" : "en-US";
-    }
 
     private void App_Exit(object sender, ExitEventArgs e)
     {
@@ -89,16 +80,7 @@ public partial class App
 
         _settings = new SettingsStore();
         var config = _settings.Load();
-        LanguageManager.Instance.ApplyDefault(ResolveLanguage(config.Language));
-        var paletteHelper = new PaletteHelper();
-        var theme = paletteHelper.GetTheme();
-        theme.SetBaseTheme(config.Theme switch
-        {
-            "Light" => BaseTheme.Light,
-            "Dark"  => BaseTheme.Dark,
-            _       => BaseTheme.Inherit,
-        });
-        paletteHelper.SetTheme(theme);
+        LanguageManager.Instance.ApplyDefault(config.Language);
 
         CheckWinFspPrerequisite();
 
@@ -191,12 +173,10 @@ public partial class App
             return;
         }
 
-        var current = _settings.Load();
         _settings.Save(new AppConfiguration
         {
             RunAtStartup = StartupManager.IsEnabled,
-            Language = LanguageManager.Instance.CurrentLanguage,
-            Theme = current.Theme,
+            Language = LanguageManager.Instance.SavedLanguage,
             Disks = _mainViewModel.GetProfiles().ToList(),
         });
     }

@@ -3,7 +3,6 @@ using System.Windows.Controls;
 using ManagedDrive.App.Localization;
 using ManagedDrive.App.Models;
 using ManagedDrive.App.Services;
-using MaterialDesignThemes.Wpf;
 
 namespace ManagedDrive.App.Views;
 
@@ -24,38 +23,25 @@ public partial class SettingsDialog
         _original = config;
         RunAtStartupBox.IsChecked = config.RunAtStartup;
 
+        LanguageBox.Items.Add(new ComboBoxItem { Content = Loc.Get("Lang.System"), Tag = "" });
         foreach (var (tag, displayName) in LanguageManager.SupportedLanguages)
         {
             LanguageBox.Items.Add(new ComboBoxItem { Content = displayName, Tag = tag });
         }
 
-        var current = LanguageManager.Instance.CurrentLanguage;
+        var savedLang = config.Language ?? "";
         foreach (ComboBoxItem item in LanguageBox.Items)
         {
-            if ((string)item.Tag == current)
+            if ((string)item.Tag == savedLang)
             {
                 LanguageBox.SelectedItem = item;
                 break;
             }
         }
 
-        ThemeBox.Items.Add(new ComboBoxItem { Content = Loc.Get("Theme.System"), Tag = "" });
-        ThemeBox.Items.Add(new ComboBoxItem { Content = Loc.Get("Theme.Light"), Tag = "Light" });
-        ThemeBox.Items.Add(new ComboBoxItem { Content = Loc.Get("Theme.Dark"), Tag = "Dark" });
-
-        var currentTheme = config.Theme ?? "";
-        foreach (ComboBoxItem item in ThemeBox.Items)
+        if (LanguageBox.SelectedItem == null)
         {
-            if ((string)item.Tag == currentTheme)
-            {
-                ThemeBox.SelectedItem = item;
-                break;
-            }
-        }
-
-        if (ThemeBox.SelectedItem == null)
-        {
-            ThemeBox.SelectedIndex = 0;
+            LanguageBox.SelectedIndex = 0;
         }
     }
 
@@ -73,29 +59,13 @@ public partial class SettingsDialog
         var runAtStartup = RunAtStartupBox.IsChecked == true;
         StartupManager.SetEnabled(runAtStartup);
 
-        var selectedTag = LanguageBox.SelectedItem is ComboBoxItem { Tag: string tag } ? tag : "en-US";
-        if (selectedTag != LanguageManager.Instance.CurrentLanguage)
-        {
-            LanguageManager.Instance.Apply(selectedTag);
-        }
-
-        var themeTag = ThemeBox.SelectedItem is ComboBoxItem { Tag: string t } ? t : "";
-        var themeValue = string.IsNullOrEmpty(themeTag) ? null : themeTag;
-        var paletteHelper = new PaletteHelper();
-        var mdTheme = paletteHelper.GetTheme();
-        mdTheme.SetBaseTheme(themeValue switch
-        {
-            "Light" => BaseTheme.Light,
-            "Dark"  => BaseTheme.Dark,
-            _       => BaseTheme.Inherit,
-        });
-        paletteHelper.SetTheme(mdTheme);
+        var selectedTag = LanguageBox.SelectedItem is ComboBoxItem { Tag: string t } && !string.IsNullOrEmpty(t) ? t : null;
+        LanguageManager.Instance.Apply(selectedTag);
 
         Result = new AppConfiguration
         {
             RunAtStartup = runAtStartup,
             Language = selectedTag,
-            Theme = themeValue,
             Disks = _original.Disks,
         };
 
