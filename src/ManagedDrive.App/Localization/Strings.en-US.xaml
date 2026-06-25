@@ -4,11 +4,15 @@
 
     <!-- MainWindow -->
     <sys:String x:Key="Window.Title">ManagedDrive – RAM Disk Manager</sys:String>
-    <sys:String x:Key="Btn.NewDisk">🖴  New Disk</sys:String>
-    <sys:String x:Key="Btn.Unmount">⏏  Unmount</sys:String>
-    <sys:String x:Key="Btn.SaveImage">💾  Save Image</sys:String>
-    <sys:String x:Key="Btn.Refresh">↻  Refresh</sys:String>
-    <sys:String x:Key="Btn.Settings">⚙  Settings</sys:String>
+    <sys:String x:Key="Menu.File">_File</sys:String>
+    <sys:String x:Key="Menu.Tools">_Tools</sys:String>
+    <sys:String x:Key="Menu.Exit">E_xit</sys:String>
+    <sys:String x:Key="Btn.NewDisk">New Disk</sys:String>
+    <sys:String x:Key="Btn.OpenInExplorer">Open in Explorer</sys:String>
+    <sys:String x:Key="Btn.Unmount">Unmount</sys:String>
+    <sys:String x:Key="Btn.SaveImage">Save Image</sys:String>
+    <sys:String x:Key="Btn.Refresh">Refresh</sys:String>
+    <sys:String x:Key="Btn.Settings">Settings</sys:String>
     <sys:String x:Key="Tip.NewDisk">Create and mount a new RAM disk</sys:String>
     <sys:String x:Key="Tip.Unmount">Unmount the selected disk</sys:String>
     <sys:String x:Key="Tip.SaveImage">Save the selected disk's contents to its image file</sys:String>
@@ -38,6 +42,10 @@
     <sys:String x:Key="Settings.Title">Settings</sys:String>
     <sys:String x:Key="Settings.RunAtStartup">Run at Windows startup:</sys:String>
     <sys:String x:Key="Settings.Language">Language:</sys:String>
+    <sys:String x:Key="Settings.Theme">Theme:</sys:String>
+    <sys:String x:Key="Theme.System">System Default</sys:String>
+    <sys:String x:Key="Theme.Light">Light</sys:String>
+    <sys:String x:Key="Theme.Dark">Dark</sys:String>
     <sys:String x:Key="Tip.RunAtStartup">Start ManagedDrive automatically when Windows starts</sys:String>
 
     <!-- Shared buttons -->
@@ -62,6 +70,8 @@
     <sys:String x:Key="Msg.AlreadyRunning">ManagedDrive is already running.</sys:String>
     <sys:String x:Key="Msg.WinFspMissingTitle">ManagedDrive – Missing Prerequisite</sys:String>
     <sys:String x:Key="Msg.WinFspMissingBody">WinFsp 2.1.x is required but was not detected on this system.&#x0a;&#x0a;Click Yes to open the download page, or No to exit.</sys:String>
+    <sys:String x:Key="Msg.ExitConfirmTitle">ManagedDrive</sys:String>
+    <sys:String x:Key="Msg.ExitConfirmBody">All mounted RAM disks will be unmounted and their contents lost.&#x0a;&#x0a;Exit anyway?</sys:String>
     <sys:String x:Key="Msg.MountFailed">Failed to mount disk:&#x0a;{0}</sys:String>
     <sys:String x:Key="Msg.SaveImageFailed">Failed to save image:&#x0a;{0}</sys:String>
 

@@ -35,12 +35,14 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         StatusText = Loc.Get("Status.Ready");
 
         CreateDiskCommand = new RelayCommand(_ => ExecuteCreateDisk());
+        ExitCommand = new RelayCommand(_ => ExecuteExit());
         UnmountCommand = new RelayCommand(
-            _ => ExecuteUnmount(),
-            _ => SelectedDisk != null);
+            p => ExecuteUnmount(p as DiskViewModel ?? SelectedDisk),
+            p => p is DiskViewModel || SelectedDisk != null);
         SaveImageCommand = new RelayCommand(
-            _ => ExecuteSaveImage(),
-            _ => SelectedDisk?.Disk.Options.PersistImagePath != null);
+            p => ExecuteSaveImage(p as DiskViewModel ?? SelectedDisk),
+            p => p is DiskViewModel vm ? vm.Disk.Options.PersistImagePath != null
+                                       : SelectedDisk?.Disk.Options.PersistImagePath != null);
         RefreshCommand = new RelayCommand(_ => RefreshAll());
         SettingsCommand = new RelayCommand(_ => ExecuteSettings());
     }
@@ -52,6 +54,14 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     /// Gets the command that opens the "Create Disk" dialog.
     /// </summary>
     public RelayCommand CreateDiskCommand
+    {
+        get;
+    }
+
+    /// <summary>
+    /// Gets the command that exits the application.
+    /// </summary>
+    public RelayCommand ExitCommand
     {
         get;
     }
@@ -224,9 +234,8 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         }
     }
 
-    private void ExecuteSaveImage()
+    private void ExecuteSaveImage(DiskViewModel? vm)
     {
-        var vm = SelectedDisk;
         if (vm == null)
         {
             return;
@@ -249,6 +258,27 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         }
     }
 
+    private void ExecuteExit()
+    {
+        if (Disks.Count == 0)
+        {
+            Application.Current.Shutdown();
+            return;
+        }
+
+        var result = MessageBox.Show(
+            Loc.Get("Msg.ExitConfirmBody"),
+            Loc.Get("Msg.ExitConfirmTitle"),
+            MessageBoxButton.OKCancel,
+            MessageBoxImage.Warning,
+            MessageBoxResult.Cancel);
+
+        if (result == MessageBoxResult.OK)
+        {
+            Application.Current.Shutdown();
+        }
+    }
+
     private void ExecuteSettings()
     {
         var config = _settingsStore.Load();
@@ -262,9 +292,8 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         }
     }
 
-    private void ExecuteUnmount()
+    private void ExecuteUnmount(DiskViewModel? vm)
     {
-        var vm = SelectedDisk;
         if (vm == null)
         {
             return;
@@ -290,11 +319,15 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         }
     }
 
-    private void SaveSettings() =>
+    private void SaveSettings()
+    {
+        var current = _settingsStore.Load();
         _settingsStore.Save(new AppConfiguration
         {
             RunAtStartup = StartupManager.IsEnabled,
             Language = LanguageManager.Instance.CurrentLanguage,
+            Theme = current.Theme,
             Disks = GetProfiles().ToList(),
         });
+    }
 }

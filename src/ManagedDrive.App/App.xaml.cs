@@ -1,5 +1,6 @@
 using H.NotifyIcon;
 using ManagedDrive.App.Localization;
+using ModernWpf;
 using ManagedDrive.App.Models;
 using ManagedDrive.App.Services;
 using ManagedDrive.App.ViewModels;
@@ -87,7 +88,14 @@ public partial class App
         Log.Information("ManagedDrive starting.");
 
         _settings = new SettingsStore();
-        LanguageManager.Instance.ApplyDefault(ResolveLanguage(_settings.Load().Language));
+        var config = _settings.Load();
+        LanguageManager.Instance.ApplyDefault(ResolveLanguage(config.Language));
+        ThemeManager.Current.ApplicationTheme = config.Theme switch
+        {
+            "Light" => ApplicationTheme.Light,
+            "Dark" => ApplicationTheme.Dark,
+            _ => null,
+        };
 
         CheckWinFspPrerequisite();
 
@@ -180,10 +188,12 @@ public partial class App
             return;
         }
 
+        var current = _settings.Load();
         _settings.Save(new AppConfiguration
         {
             RunAtStartup = StartupManager.IsEnabled,
             Language = LanguageManager.Instance.CurrentLanguage,
+            Theme = current.Theme,
             Disks = _mainViewModel.GetProfiles().ToList(),
         });
     }

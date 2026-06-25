@@ -4,11 +4,15 @@
 
     <!-- MainWindow -->
     <sys:String x:Key="Window.Title">ManagedDrive – RAM 虚拟磁盘管理器</sys:String>
-    <sys:String x:Key="Btn.NewDisk">🖴  新建磁盘</sys:String>
-    <sys:String x:Key="Btn.Unmount">⏏  卸载</sys:String>
-    <sys:String x:Key="Btn.SaveImage">💾  保存镜像</sys:String>
-    <sys:String x:Key="Btn.Refresh">↻  刷新</sys:String>
-    <sys:String x:Key="Btn.Settings">⚙  设置</sys:String>
+    <sys:String x:Key="Menu.File">文件(_F)</sys:String>
+    <sys:String x:Key="Menu.Tools">工具(_T)</sys:String>
+    <sys:String x:Key="Menu.Exit">退出(_X)</sys:String>
+    <sys:String x:Key="Btn.NewDisk">新建磁盘</sys:String>
+    <sys:String x:Key="Btn.OpenInExplorer">在资源管理器中打开</sys:String>
+    <sys:String x:Key="Btn.Unmount">卸载</sys:String>
+    <sys:String x:Key="Btn.SaveImage">保存镜像</sys:String>
+    <sys:String x:Key="Btn.Refresh">刷新</sys:String>
+    <sys:String x:Key="Btn.Settings">设置</sys:String>
     <sys:String x:Key="Tip.NewDisk">创建并挂载新的 RAM 磁盘</sys:String>
     <sys:String x:Key="Tip.Unmount">卸载所选磁盘</sys:String>
     <sys:String x:Key="Tip.SaveImage">将所选磁盘内容保存到镜像文件</sys:String>
@@ -38,6 +42,10 @@
     <sys:String x:Key="Settings.Title">设置</sys:String>
     <sys:String x:Key="Settings.RunAtStartup">开机自动启动：</sys:String>
     <sys:String x:Key="Settings.Language">语言：</sys:String>
+    <sys:String x:Key="Settings.Theme">主题：</sys:String>
+    <sys:String x:Key="Theme.System">跟随系统</sys:String>
+    <sys:String x:Key="Theme.Light">浅色</sys:String>
+    <sys:String x:Key="Theme.Dark">深色</sys:String>
     <sys:String x:Key="Tip.RunAtStartup">Windows 启动时自动运行 ManagedDrive</sys:String>
 
     <!-- Shared buttons -->
@@ -62,6 +70,8 @@
     <sys:String x:Key="Msg.AlreadyRunning">ManagedDrive 已在运行。</sys:String>
     <sys:String x:Key="Msg.WinFspMissingTitle">ManagedDrive – 缺少必要组件</sys:String>
     <sys:String x:Key="Msg.WinFspMissingBody">此程序需要 WinFsp 2.1.x，但未在系统中检测到。&#x0a;&#x0a;点击「是」跳转下载页面，点击「否」退出。</sys:String>
+    <sys:String x:Key="Msg.ExitConfirmTitle">ManagedDrive</sys:String>
+    <sys:String x:Key="Msg.ExitConfirmBody">所有已挂载的 RAM 磁盘将被卸载，其中的数据将丢失。&#x0a;&#x0a;确认退出？</sys:String>
     <sys:String x:Key="Msg.MountFailed">挂载磁盘失败：&#x0a;{0}</sys:String>
     <sys:String x:Key="Msg.SaveImageFailed">保存镜像失败：&#x0a;{0}</sys:String>
 
