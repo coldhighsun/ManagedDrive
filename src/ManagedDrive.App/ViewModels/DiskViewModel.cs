@@ -1,5 +1,7 @@
+using ManagedDrive.App.Infrastructure;
 using ManagedDrive.Core;
 using System.ComponentModel;
+using System.Diagnostics;
 using System.Windows.Threading;
 
 namespace ManagedDrive.App.ViewModels;
@@ -27,6 +29,8 @@ public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
         _usedBytes = disk.UsedBytes;
         _freeBytes = disk.FreeBytes;
 
+        OpenInExplorerCommand = new RelayCommand(_ => Process.Start("explorer.exe", MountPoint));
+
         _refreshTimer = new DispatcherTimer
         {
             Interval = TimeSpan.FromSeconds(2)
@@ -37,6 +41,11 @@ public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
 
     /// <inheritdoc />
     public event PropertyChangedEventHandler? PropertyChanged;
+
+    /// <summary>
+    /// Gets the command that opens this disk's mount point in Windows Explorer.
+    /// </summary>
+    public RelayCommand OpenInExplorerCommand { get; }
 
     /// <summary>
     /// Gets the total capacity formatted as a human-readable string.

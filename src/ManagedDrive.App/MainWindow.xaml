@@ -3,8 +3,10 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:ui="http://schemas.modernwpf.com/2019"
         xmlns:vm="clr-namespace:ManagedDrive.App.ViewModels"
         mc:Ignorable="d"
+        ui:WindowHelper.UseModernWindowStyle="True"
         Icon="pack://application:,,,/ManagedDrive.ico"
         Title="{DynamicResource Window.Title}"
         Height="480" Width="760"
@@ -12,27 +14,57 @@
 
     <DockPanel>
 
-        <!-- Toolbar -->
-        <ToolBar DockPanel.Dock="Top">
-            <Button Content="{DynamicResource Btn.NewDisk}"
-                    Command="{Binding CreateDiskCommand}"
-                    Padding="8,2" ToolTip="{DynamicResource Tip.NewDisk}"/>
-            <Separator/>
-            <Button Content="{DynamicResource Btn.Unmount}"
-                    Command="{Binding UnmountCommand}"
-                    Padding="8,2" ToolTip="{DynamicResource Tip.Unmount}"/>
-            <Button Content="{DynamicResource Btn.SaveImage}"
-                    Command="{Binding SaveImageCommand}"
-                    Padding="8,2" ToolTip="{DynamicResource Tip.SaveImage}"/>
-            <Separator/>
-            <Button Content="{DynamicResource Btn.Refresh}"
-                    Command="{Binding RefreshCommand}"
-                    Padding="8,2" ToolTip="{DynamicResource Tip.Refresh}"/>
-            <Separator/>
-            <Button Content="{DynamicResource Btn.Settings}"
-                    Command="{Binding SettingsCommand}"
-                    Padding="8,2" ToolTip="{DynamicResource Tip.Settings}"/>
-        </ToolBar>
+        <!-- Menu bar -->
+        <Menu DockPanel.Dock="Top">
+            <MenuItem Header="{DynamicResource Menu.File}">
+                <MenuItem Header="{DynamicResource Btn.NewDisk}"
+                          Command="{Binding CreateDiskCommand}"
+                          ToolTip="{DynamicResource Tip.NewDisk}">
+                    <MenuItem.Icon>
+                        <TextBlock FontFamily="Segoe Fluent Icons" Text="&#xE710;" FontSize="14"/>
+                    </MenuItem.Icon>
+                </MenuItem>
+                <Separator/>
+                <MenuItem Header="{DynamicResource Btn.Unmount}"
+                          Command="{Binding UnmountCommand}"
+                          ToolTip="{DynamicResource Tip.Unmount}">
+                    <MenuItem.Icon>
+                        <TextBlock FontFamily="Segoe Fluent Icons" Text="&#xE8BB;" FontSize="14"/>
+                    </MenuItem.Icon>
+                </MenuItem>
+                <MenuItem Header="{DynamicResource Btn.SaveImage}"
+                          Command="{Binding SaveImageCommand}"
+                          ToolTip="{DynamicResource Tip.SaveImage}">
+                    <MenuItem.Icon>
+                        <TextBlock FontFamily="Segoe Fluent Icons" Text="&#xE74E;" FontSize="14"/>
+                    </MenuItem.Icon>
+                </MenuItem>
+                <Separator/>
+                <MenuItem Header="{DynamicResource Btn.Refresh}"
+                          Command="{Binding RefreshCommand}"
+                          ToolTip="{DynamicResource Tip.Refresh}">
+                    <MenuItem.Icon>
+                        <TextBlock FontFamily="Segoe Fluent Icons" Text="&#xE72C;" FontSize="14"/>
+                    </MenuItem.Icon>
+                </MenuItem>
+                <Separator/>
+                <MenuItem Header="{DynamicResource Menu.Exit}"
+                          Command="{Binding ExitCommand}">
+                    <MenuItem.Icon>
+                        <TextBlock FontFamily="Segoe Fluent Icons" Text="&#xE7E8;" FontSize="14"/>
+                    </MenuItem.Icon>
+                </MenuItem>
+            </MenuItem>
+            <MenuItem Header="{DynamicResource Menu.Tools}">
+                <MenuItem Header="{DynamicResource Btn.Settings}"
+                          Command="{Binding SettingsCommand}"
+                          ToolTip="{DynamicResource Tip.Settings}">
+                    <MenuItem.Icon>
+                        <TextBlock FontFamily="Segoe Fluent Icons" Text="&#xE713;" FontSize="14"/>
+                    </MenuItem.Icon>
+                </MenuItem>
+            </MenuItem>
+        </Menu>
 
         <!-- Status bar -->
         <StatusBar DockPanel.Dock="Bottom">
@@ -41,33 +73,141 @@
             </StatusBarItem>
         </StatusBar>
 
-        <!-- Disk list -->
-        <DataGrid ItemsSource="{Binding Disks}"
-                  SelectedItem="{Binding SelectedDisk}"
-                  AutoGenerateColumns="False"
-                  IsReadOnly="True"
-                  SelectionMode="Single"
-                  GridLinesVisibility="Horizontal"
-                  HeadersVisibility="Column"
-                  RowHeaderWidth="0"
-                  Margin="0">
-            <DataGrid.Columns>
-                <DataGridTextColumn x:Name="ColMountPoint" Header="Mount Point" Binding="{Binding MountPoint}" Width="100"/>
-                <DataGridTextColumn x:Name="ColLabel"      Header="Label"       Binding="{Binding VolumeLabel}" Width="140"/>
-                <DataGridTextColumn x:Name="ColCapacity"   Header="Capacity"    Binding="{Binding CapacityFormatted}" Width="90"/>
-                <DataGridTextColumn x:Name="ColUsed"       Header="Used"        Binding="{Binding UsedFormatted}" Width="90"/>
-                <DataGridTextColumn x:Name="ColFree"       Header="Free"        Binding="{Binding FreeFormatted}" Width="90"/>
-                <DataGridTemplateColumn x:Name="ColUsage"  Header="Usage" Width="*">
-                    <DataGridTemplateColumn.CellTemplate>
-                        <DataTemplate DataType="{x:Type vm:DiskViewModel}">
-                            <ProgressBar Minimum="0" Maximum="100"
-                                         Value="{Binding UsedPercent, Mode=OneWay}"
-                                         Height="12" Margin="4,0"/>
-                        </DataTemplate>
-                    </DataGridTemplateColumn.CellTemplate>
-                </DataGridTemplateColumn>
-            </DataGrid.Columns>
-        </DataGrid>
+        <!-- Disk card list -->
+        <ListBox ItemsSource="{Binding Disks}"
+                 SelectedItem="{Binding SelectedDisk}"
+                 ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                 Background="Transparent"
+                 BorderThickness="0"
+                 Padding="0,4"
+                 Tag="{Binding}">
+            <ListBox.ContextMenu>
+                <ContextMenu>
+                    <MenuItem Header="{DynamicResource Btn.NewDisk}"
+                              Command="{Binding PlacementTarget.Tag.CreateDiskCommand,
+                                        RelativeSource={RelativeSource AncestorType=ContextMenu}}">
+                        <MenuItem.Icon>
+                            <TextBlock FontFamily="Segoe Fluent Icons" Text="&#xE710;" FontSize="14"/>
+                        </MenuItem.Icon>
+                    </MenuItem>
+                </ContextMenu>
+            </ListBox.ContextMenu>
+            <ListBox.ItemContainerStyle>
+                <Style TargetType="ListBoxItem">
+                    <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                    <Setter Property="Padding" Value="0"/>
+                    <Setter Property="Margin" Value="12,4"/>
+                    <Setter Property="Template">
+                        <Setter.Value>
+                            <ControlTemplate TargetType="ListBoxItem">
+                                <ContentPresenter/>
+                            </ControlTemplate>
+                        </Setter.Value>
+                    </Setter>
+                </Style>
+            </ListBox.ItemContainerStyle>
+            <ListBox.ItemTemplate>
+                <DataTemplate DataType="{x:Type vm:DiskViewModel}">
+                    <Border x:Name="CardBorder"
+                            Padding="16,12" CornerRadius="8"
+                            Background="{DynamicResource SystemControlBackgroundAltHighBrush}"
+                            BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}"
+                            BorderThickness="1"
+                            Cursor="Hand"
+                            Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=Window}}">
+                        <Border.ContextMenu>
+                            <ContextMenu>
+                                <MenuItem Header="{DynamicResource Btn.OpenInExplorer}"
+                                          Command="{Binding PlacementTarget.DataContext.OpenInExplorerCommand,
+                                                    RelativeSource={RelativeSource AncestorType=ContextMenu}}">
+                                    <MenuItem.Icon>
+                                        <TextBlock FontFamily="Segoe Fluent Icons" Text="&#xEC50;" FontSize="14"/>
+                                    </MenuItem.Icon>
+                                </MenuItem>
+                                <Separator/>
+                                <MenuItem Header="{DynamicResource Btn.Unmount}"
+                                          Command="{Binding PlacementTarget.Tag.UnmountCommand,
+                                                    RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                          CommandParameter="{Binding PlacementTarget.DataContext,
+                                                    RelativeSource={RelativeSource AncestorType=ContextMenu}}">
+                                    <MenuItem.Icon>
+                                        <TextBlock FontFamily="Segoe Fluent Icons" Text="&#xE8BB;" FontSize="14"/>
+                                    </MenuItem.Icon>
+                                </MenuItem>
+                                <MenuItem Header="{DynamicResource Btn.SaveImage}"
+                                          Command="{Binding PlacementTarget.Tag.SaveImageCommand,
+                                                    RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                          CommandParameter="{Binding PlacementTarget.DataContext,
+                                                    RelativeSource={RelativeSource AncestorType=ContextMenu}}">
+                                    <MenuItem.Icon>
+                                        <TextBlock FontFamily="Segoe Fluent Icons" Text="&#xE74E;" FontSize="14"/>
+                                    </MenuItem.Icon>
+                                </MenuItem>
+                            </ContextMenu>
+                        </Border.ContextMenu>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="52"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+
+                            <!-- Drive letter badge -->
+                            <Border Width="44" Height="44" CornerRadius="8"
+                                    Background="{DynamicResource SystemControlHighlightAccentBrush}">
+                                <TextBlock Text="{Binding MountPoint}"
+                                           FontSize="13" FontWeight="SemiBold"
+                                           Foreground="White"
+                                           HorizontalAlignment="Center"
+                                           VerticalAlignment="Center"/>
+                            </Border>
+
+                            <!-- Label + progress bar + used/capacity -->
+                            <StackPanel Grid.Column="1" Margin="12,0,16,0" VerticalAlignment="Center">
+                                <TextBlock Text="{Binding VolumeLabel}"
+                                           FontSize="14" FontWeight="SemiBold"/>
+                                <ProgressBar Minimum="0" Maximum="100"
+                                             Value="{Binding UsedPercent, Mode=OneWay}"
+                                             Height="6" Margin="0,6,0,4"/>
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="{Binding UsedFormatted}" FontSize="12"
+                                               Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"/>
+                                    <TextBlock Text=" / " FontSize="12"
+                                               Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"/>
+                                    <TextBlock Text="{Binding CapacityFormatted}" FontSize="12"
+                                               Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"/>
+                                </StackPanel>
+                            </StackPanel>
+
+                            <!-- Free space -->
+                            <StackPanel Grid.Column="2" VerticalAlignment="Center" HorizontalAlignment="Right">
+                                <TextBlock Text="{Binding FreeFormatted}"
+                                           FontSize="14" FontWeight="SemiBold"
+                                           HorizontalAlignment="Right"/>
+                                <TextBlock Text="{DynamicResource Col.Free}" FontSize="11"
+                                           Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"
+                                           HorizontalAlignment="Right"/>
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+                    <DataTemplate.Triggers>
+                        <Trigger SourceName="CardBorder" Property="IsMouseOver" Value="True">
+                            <Setter TargetName="CardBorder" Property="Background"
+                                    Value="{DynamicResource SystemControlBackgroundAltMediumHighBrush}"/>
+                        </Trigger>
+                        <DataTrigger Value="True">
+                            <DataTrigger.Binding>
+                                <Binding Path="IsSelected"
+                                         RelativeSource="{RelativeSource AncestorType=ListBoxItem}"/>
+                            </DataTrigger.Binding>
+                            <Setter TargetName="CardBorder" Property="BorderBrush"
+                                    Value="{DynamicResource SystemControlHighlightAccentBrush}"/>
+                            <Setter TargetName="CardBorder" Property="BorderThickness" Value="2"/>
+                        </DataTrigger>
+                    </DataTemplate.Triggers>
+                </DataTemplate>
+            </ListBox.ItemTemplate>
+        </ListBox>
 
     </DockPanel>
 </Window>

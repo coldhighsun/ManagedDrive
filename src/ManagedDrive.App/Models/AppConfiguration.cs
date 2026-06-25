@@ -26,4 +26,9 @@ public sealed record AppConfiguration
     /// Null means no explicit choice has been made — the app will auto-detect from the system locale.
     /// </summary>
     public string? Language { get; init; }
+
+    /// <summary>
+    /// UI theme: "Light", "Dark", or null to follow the system setting.
+    /// </summary>
+    public string? Theme { get; init; }
 }

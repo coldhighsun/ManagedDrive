@@ -4,6 +4,7 @@
         <UseArtifactsOutput>true</UseArtifactsOutput>
         <Nullable>enable</Nullable>
         <ImplicitUsings>enable</ImplicitUsings>
+        <SatelliteResourceLanguages>en;zh-CN</SatelliteResourceLanguages>
     </PropertyGroup>
 
     <PropertyGroup>
