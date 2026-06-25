@@ -59,17 +59,17 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     }
 
     /// <summary>
+    /// Gets the observable list of active disk view models displayed in the main grid.
+    /// </summary>
+    public ObservableCollection<DiskViewModel> Disks { get; } = [];
+
+    /// <summary>
     /// Gets the command that exits the application.
     /// </summary>
     public RelayCommand ExitCommand
     {
         get;
     }
-
-    /// <summary>
-    /// Gets the observable list of active disk view models displayed in the main grid.
-    /// </summary>
-    public ObservableCollection<DiskViewModel> Disks { get; } = [];
 
     /// <summary>
     /// Gets the command that refreshes usage statistics.
@@ -234,6 +234,27 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         }
     }
 
+    private void ExecuteExit()
+    {
+        if (Disks.Count == 0)
+        {
+            Application.Current.Shutdown();
+            return;
+        }
+
+        var dialog = new ConfirmDialog(
+            Loc.Get("Msg.ExitConfirmTitle"),
+            Loc.Get("Msg.ExitConfirmBody"))
+        {
+            Owner = Application.Current.MainWindow
+        };
+
+        if (dialog.ShowDialog() == true)
+        {
+            Application.Current.Shutdown();
+        }
+    }
+
     private void ExecuteSaveImage(DiskViewModel? vm)
     {
         if (vm == null)
@@ -255,27 +276,6 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
                 MessageBoxButton.OK,
                 MessageBoxImage.Error);
             Log.Error(ex, "Failed to save image for {MountPoint}.", vm.MountPoint);
-        }
-    }
-
-    private void ExecuteExit()
-    {
-        if (Disks.Count == 0)
-        {
-            Application.Current.Shutdown();
-            return;
-        }
-
-        var result = MessageBox.Show(
-            Loc.Get("Msg.ExitConfirmBody"),
-            Loc.Get("Msg.ExitConfirmTitle"),
-            MessageBoxButton.OKCancel,
-            MessageBoxImage.Warning,
-            MessageBoxResult.Cancel);
-
-        if (result == MessageBoxResult.OK)
-        {
-            Application.Current.Shutdown();
         }
     }
 
@@ -321,12 +321,10 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 
     private void SaveSettings()
     {
-        var current = _settingsStore.Load();
         _settingsStore.Save(new AppConfiguration
         {
             RunAtStartup = StartupManager.IsEnabled,
-            Language = LanguageManager.Instance.CurrentLanguage,
-            Theme = current.Theme,
+            Language = LanguageManager.Instance.SavedLanguage,
             Disks = GetProfiles().ToList(),
         });
     }

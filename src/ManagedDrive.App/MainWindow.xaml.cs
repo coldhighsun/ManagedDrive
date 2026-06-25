@@ -1,3 +1,4 @@
+using System.Windows;
 using ManagedDrive.App.ViewModels;
 
 namespace ManagedDrive.App;
@@ -16,4 +17,10 @@ public partial class MainWindow
         InitializeComponent();
         DataContext = viewModel;
     }
+
+    private void CloseButton_Click(object sender, RoutedEventArgs e) =>
+        Close();
+
+    private void MinimizeButton_Click(object sender, RoutedEventArgs e) =>
+            WindowState = WindowState.Minimized;
 }

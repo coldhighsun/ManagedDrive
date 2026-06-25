@@ -18,6 +18,8 @@
     <sys:String x:Key="Tip.SaveImage">Save the selected disk's contents to its image file</sys:String>
     <sys:String x:Key="Tip.Refresh">Refresh usage statistics</sys:String>
     <sys:String x:Key="Tip.Settings">Application settings</sys:String>
+    <sys:String x:Key="Tip.Minimize">Minimize</sys:String>
+    <sys:String x:Key="Tip.Close">Hide to tray</sys:String>
     <sys:String x:Key="Col.MountPoint">Mount Point</sys:String>
     <sys:String x:Key="Col.Label">Label</sys:String>
     <sys:String x:Key="Col.Capacity">Capacity</sys:String>
@@ -40,12 +42,9 @@
 
     <!-- SettingsDialog -->
     <sys:String x:Key="Settings.Title">Settings</sys:String>
-    <sys:String x:Key="Settings.RunAtStartup">Run at Windows startup:</sys:String>
+    <sys:String x:Key="Settings.RunAtStartup">Run at Windows startup</sys:String>
     <sys:String x:Key="Settings.Language">Language:</sys:String>
-    <sys:String x:Key="Settings.Theme">Theme:</sys:String>
-    <sys:String x:Key="Theme.System">System Default</sys:String>
-    <sys:String x:Key="Theme.Light">Light</sys:String>
-    <sys:String x:Key="Theme.Dark">Dark</sys:String>
+    <sys:String x:Key="Lang.System">System Default</sys:String>
     <sys:String x:Key="Tip.RunAtStartup">Start ManagedDrive automatically when Windows starts</sys:String>
 
     <!-- Shared buttons -->
@@ -71,7 +70,7 @@
     <sys:String x:Key="Msg.WinFspMissingTitle">ManagedDrive – Missing Prerequisite</sys:String>
     <sys:String x:Key="Msg.WinFspMissingBody">WinFsp 2.1.x is required but was not detected on this system.&#x0a;&#x0a;Click Yes to open the download page, or No to exit.</sys:String>
     <sys:String x:Key="Msg.ExitConfirmTitle">ManagedDrive</sys:String>
-    <sys:String x:Key="Msg.ExitConfirmBody">All mounted RAM disks will be unmounted and their contents lost.&#x0a;&#x0a;Exit anyway?</sys:String>
+    <sys:String x:Key="Msg.ExitConfirmBody">All mounted RAM disks will be unmounted and any unimaged data will be lost.&#x0a;&#x0a;Exit anyway?</sys:String>
     <sys:String x:Key="Msg.MountFailed">Failed to mount disk:&#x0a;{0}</sys:String>
     <sys:String x:Key="Msg.SaveImageFailed">Failed to save image:&#x0a;{0}</sys:String>
 

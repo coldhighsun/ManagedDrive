@@ -7,6 +7,7 @@
         xmlns:vm="clr-namespace:ManagedDrive.App.ViewModels"
         mc:Ignorable="d"
         Style="{StaticResource MaterialDesignWindow}"
+        WindowStyle="None"
         Icon="pack://application:,,,/ManagedDrive.ico"
         Title="{DynamicResource Window.Title}"
         Height="480" Width="760"
@@ -19,6 +20,13 @@
         TextOptions.TextRenderingMode="Auto"
         FontFamily="{materialDesign:MaterialDesignFont}">
 
+    <WindowChrome.WindowChrome>
+        <WindowChrome CaptionHeight="48"
+                      ResizeBorderThickness="4"
+                      GlassFrameThickness="0"
+                      NonClientFrameEdges="None"/>
+    </WindowChrome.WindowChrome>
+
     <DockPanel>
 
         <!-- App bar -->
@@ -26,7 +34,8 @@
                                    Padding="4,4,4,4"
                                    materialDesign:ElevationAssist.Elevation="Dp4">
             <DockPanel>
-                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal"
+                            WindowChrome.IsHitTestVisibleInChrome="True">
                     <Button Style="{StaticResource MaterialDesignIconForegroundButton}"
 
                             Command="{Binding CreateDiskCommand}"
@@ -66,6 +75,16 @@
                                     Style="{StaticResource MaterialDesignFlatButton}"/>
                         </StackPanel>
                     </materialDesign:PopupBox>
+                    <Button Style="{StaticResource MaterialDesignIconForegroundButton}"
+                            Click="MinimizeButton_Click"
+                            ToolTip="{DynamicResource Tip.Minimize}">
+                        <materialDesign:PackIcon Kind="WindowMinimize" Width="18" Height="18"/>
+                    </Button>
+                    <Button Style="{StaticResource MaterialDesignIconForegroundButton}"
+                            Click="CloseButton_Click"
+                            ToolTip="{DynamicResource Tip.Close}">
+                        <materialDesign:PackIcon Kind="Close" Width="18" Height="18"/>
+                    </Button>
                 </StackPanel>
                 <TextBlock VerticalAlignment="Center"
                            Margin="12,0,0,0"

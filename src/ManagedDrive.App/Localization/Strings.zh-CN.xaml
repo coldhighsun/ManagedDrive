@@ -18,6 +18,8 @@
     <sys:String x:Key="Tip.SaveImage">将所选磁盘内容保存到镜像文件</sys:String>
     <sys:String x:Key="Tip.Refresh">刷新使用情况统计</sys:String>
     <sys:String x:Key="Tip.Settings">应用程序设置</sys:String>
+    <sys:String x:Key="Tip.Minimize">最小化</sys:String>
+    <sys:String x:Key="Tip.Close">最小化到系统托盘</sys:String>
     <sys:String x:Key="Col.MountPoint">挂载点</sys:String>
     <sys:String x:Key="Col.Label">卷标</sys:String>
     <sys:String x:Key="Col.Capacity">容量</sys:String>
@@ -40,12 +42,9 @@
 
     <!-- SettingsDialog -->
     <sys:String x:Key="Settings.Title">设置</sys:String>
-    <sys:String x:Key="Settings.RunAtStartup">开机自动启动：</sys:String>
+    <sys:String x:Key="Settings.RunAtStartup">开机自动启动</sys:String>
     <sys:String x:Key="Settings.Language">语言：</sys:String>
-    <sys:String x:Key="Settings.Theme">主题：</sys:String>
-    <sys:String x:Key="Theme.System">跟随系统</sys:String>
-    <sys:String x:Key="Theme.Light">浅色</sys:String>
-    <sys:String x:Key="Theme.Dark">深色</sys:String>
+    <sys:String x:Key="Lang.System">系统默认</sys:String>
     <sys:String x:Key="Tip.RunAtStartup">Windows 启动时自动运行 ManagedDrive</sys:String>
 
     <!-- Shared buttons -->
@@ -71,7 +70,7 @@
     <sys:String x:Key="Msg.WinFspMissingTitle">ManagedDrive – 缺少必要组件</sys:String>
     <sys:String x:Key="Msg.WinFspMissingBody">此程序需要 WinFsp 2.1.x，但未在系统中检测到。&#x0a;&#x0a;点击「是」跳转下载页面，点击「否」退出。</sys:String>
     <sys:String x:Key="Msg.ExitConfirmTitle">ManagedDrive</sys:String>
-    <sys:String x:Key="Msg.ExitConfirmBody">所有已挂载的 RAM 磁盘将被卸载，其中的数据将丢失。&#x0a;&#x0a;确认退出？</sys:String>
+    <sys:String x:Key="Msg.ExitConfirmBody">所有已挂载的 RAM 磁盘将被卸载，其中未挂载镜像的数据将丢失。&#x0a;&#x0a;确认退出？</sys:String>
     <sys:String x:Key="Msg.MountFailed">挂载磁盘失败：&#x0a;{0}</sys:String>
     <sys:String x:Key="Msg.SaveImageFailed">保存镜像失败：&#x0a;{0}</sys:String>
 
