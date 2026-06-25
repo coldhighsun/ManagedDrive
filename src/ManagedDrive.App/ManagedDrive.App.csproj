@@ -20,7 +20,7 @@
     <PackageReference Include="Serilog" />
     <PackageReference Include="Serilog.Sinks.File" />
     <PackageReference Include="H.NotifyIcon.Wpf" />
-    <PackageReference Include="ModernWpfUI" />
+    <PackageReference Include="MaterialDesignThemes" />
   </ItemGroup>
 
 </Project>

@@ -3,7 +3,7 @@ using System.Windows.Controls;
 using ManagedDrive.App.Localization;
 using ManagedDrive.App.Models;
 using ManagedDrive.App.Services;
-using ModernWpf;
+using MaterialDesignThemes.Wpf;
 
 namespace ManagedDrive.App.Views;
 
@@ -81,12 +81,10 @@ public partial class SettingsDialog
 
         var themeTag = ThemeBox.SelectedItem is ComboBoxItem { Tag: string t } ? t : "";
         var themeValue = string.IsNullOrEmpty(themeTag) ? null : themeTag;
-        ThemeManager.Current.ApplicationTheme = themeValue switch
-        {
-            "Light" => ApplicationTheme.Light,
-            "Dark" => ApplicationTheme.Dark,
-            _ => null,
-        };
+        var paletteHelper = new PaletteHelper();
+        var mdTheme = paletteHelper.GetTheme();
+        mdTheme.SetBaseTheme(themeValue == "Dark" ? BaseTheme.Dark : BaseTheme.Light);
+        paletteHelper.SetTheme(mdTheme);
 
         Result = new AppConfiguration
         {
