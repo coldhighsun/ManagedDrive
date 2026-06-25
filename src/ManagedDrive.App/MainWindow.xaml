@@ -27,31 +27,31 @@
                                    materialDesign:ElevationAssist.Elevation="Dp4">
             <DockPanel>
                 <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
-                    <Button Style="{StaticResource MaterialDesignToolButton}"
+                    <Button Style="{StaticResource MaterialDesignIconForegroundButton}"
 
                             Command="{Binding CreateDiskCommand}"
                             ToolTip="{DynamicResource Tip.NewDisk}">
                         <materialDesign:PackIcon Kind="PlusCircle" Width="22" Height="22"/>
                     </Button>
-                    <Button Style="{StaticResource MaterialDesignToolButton}"
+                    <Button Style="{StaticResource MaterialDesignIconForegroundButton}"
 
                             Command="{Binding UnmountCommand}"
                             ToolTip="{DynamicResource Tip.Unmount}">
                         <materialDesign:PackIcon Kind="Eject" Width="22" Height="22"/>
                     </Button>
-                    <Button Style="{StaticResource MaterialDesignToolButton}"
+                    <Button Style="{StaticResource MaterialDesignIconForegroundButton}"
 
                             Command="{Binding SaveImageCommand}"
                             ToolTip="{DynamicResource Tip.SaveImage}">
                         <materialDesign:PackIcon Kind="ContentSave" Width="22" Height="22"/>
                     </Button>
-                    <Button Style="{StaticResource MaterialDesignToolButton}"
+                    <Button Style="{StaticResource MaterialDesignIconForegroundButton}"
 
                             Command="{Binding RefreshCommand}"
                             ToolTip="{DynamicResource Tip.Refresh}">
                         <materialDesign:PackIcon Kind="Refresh" Width="22" Height="22"/>
                     </Button>
-                    <Button Style="{StaticResource MaterialDesignToolButton}"
+                    <Button Style="{StaticResource MaterialDesignIconForegroundButton}"
 
                             Command="{Binding SettingsCommand}"
                             ToolTip="{DynamicResource Tip.Settings}">
