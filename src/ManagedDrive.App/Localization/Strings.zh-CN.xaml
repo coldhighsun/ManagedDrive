@@ -25,12 +25,12 @@
     <sys:String x:Key="CreateDisk.Title">创建 RAM 磁盘</sys:String>
     <sys:String x:Key="CreateDisk.DriveLetter">驱动器号：</sys:String>
     <sys:String x:Key="CreateDisk.VolumeLabel">卷标：</sys:String>
-    <sys:String x:Key="CreateDisk.Capacity">容量 (MB)：</sys:String>
+    <sys:String x:Key="CreateDisk.Capacity">容量：</sys:String>
     <sys:String x:Key="CreateDisk.ReadOnly">只读：</sys:String>
     <sys:String x:Key="CreateDisk.AutoMount">自动挂载：</sys:String>
     <sys:String x:Key="CreateDisk.ImageFile">镜像文件：</sys:String>
     <sys:String x:Key="CreateDisk.DefaultLabel">RAM 磁盘</sys:String>
-    <sys:String x:Key="Tip.Capacity">磁盘大小，单位 MB（1 – 65535）</sys:String>
+    <sys:String x:Key="Tip.Capacity">磁盘大小（选择单位：MB 或 GB）</sys:String>
     <sys:String x:Key="Tip.AutoMount">下次启动时自动重新挂载此磁盘</sys:String>
     <sys:String x:Key="Tip.ImageFile">可选：.mdr 镜像文件路径，用于持久化存储（留空则为临时磁盘）</sys:String>
 
@@ -66,7 +66,7 @@
     <!-- Validation -->
     <sys:String x:Key="Val.Title">输入无效</sys:String>
     <sys:String x:Key="Val.NoDriveLetter">请选择驱动器号。</sys:String>
-    <sys:String x:Key="Val.BadCapacity">容量必须为正整数（单位 MB）。</sys:String>
+    <sys:String x:Key="Val.BadCapacity">容量必须在 1 到 {0} {1} 之间。</sys:String>
 
     <!-- SaveFileDialog -->
     <sys:String x:Key="SaveDlg.Title">选择镜像文件</sys:String>
