@@ -57,9 +57,9 @@
                             ToolTip="{DynamicResource Tip.Settings}">
                         <materialDesign:PackIcon Kind="Cog" Width="22" Height="22"/>
                     </Button>
-                    <materialDesign:PopupBox PlacementMode="BottomAndAlignRightEdges"
-                                             Foreground="{DynamicResource PrimaryHueMidForegroundBrush}">
-                        <StackPanel MinWidth="140" Margin="4">
+                    <materialDesign:PopupBox PlacementMode="BottomAndAlignRightEdges">
+                        <StackPanel MinWidth="140" Margin="4"
+                                    TextElement.Foreground="{DynamicResource MaterialDesignBody}">
                             <Button Content="{DynamicResource Menu.Exit}"
                                     Command="{Binding ExitCommand}"
                                     HorizontalAlignment="Stretch"
@@ -124,6 +124,8 @@
                                          Margin="12,4"
                                          Padding="16"
                                          materialDesign:ElevationAssist.Elevation="Dp2"
+                                         BorderThickness="1"
+                                         BorderBrush="{DynamicResource MaterialDesignDivider}"
                                          Cursor="Hand"
                                          Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=Window}}">
                         <materialDesign:Card.ContextMenu>
