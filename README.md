@@ -65,7 +65,7 @@ ManagedDrive/
 │       ├── Models/                 #   AppConfiguration, DiskProfile
 │       ├── Services/               #   SettingsStore, StartupManager
 │       ├── ViewModels/             #   MainViewModel, DiskViewModel
-│       ├── Views/                  #   CreateDiskDialog, SettingsDialog
+│       ├── Views/                  #   CreateDiskDialog, SettingsDialog, ConfirmDialog
 │       ├── MainWindow.xaml(.cs)    #   Main window
 │       └── App.xaml(.cs)           #   Startup, tray icon, auto-mount
 │
@@ -234,7 +234,7 @@ ManagedDrive/
 │       ├── Models/                 #   AppConfiguration、DiskProfile
 │       ├── Services/               #   SettingsStore、StartupManager
 │       ├── ViewModels/             #   MainViewModel、DiskViewModel
-│       ├── Views/                  #   CreateDiskDialog、SettingsDialog
+│       ├── Views/                  #   CreateDiskDialog、SettingsDialog、ConfirmDialog
 │       ├── MainWindow.xaml(.cs)    #   主窗口
 │       └── App.xaml(.cs)           #   启动、托盘图标、自动挂载
 │
