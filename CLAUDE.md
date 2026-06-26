@@ -50,9 +50,10 @@ Standard WPF MVVM:
 - `MainViewModel` — owns `ObservableCollection<DiskViewModel>`. Commands: `CreateDiskCommand` (opens `CreateDiskDialog`), `UnmountCommand`, `SaveImageCommand`, `RefreshCommand`, `SettingsCommand`, `ResetTempDirsCommand` (resets TEMP/TMP to Windows defaults), `ToggleTempDirCommand` (toggles TEMP/TMP between the selected disk's `Temp` folder and the Windows default). Mount operations are dispatched to `Task.Run` to keep the UI responsive.
 - `DiskViewModel` — wraps a `RamDisk`; exposes bindable properties (mount point, used/free/total bytes, `IsCurrentTempDir`). A `DispatcherTimer` refreshes usage stats every 2 s automatically; `Refresh()` triggers a manual refresh. Fires `HighUsageWarning` when usage first crosses 90 %; the warning resets when usage drops below 85 %.
 - `MainWindow` — uses `WindowStyle="None"` + `WindowChrome` (custom Material Design app bar as title bar). Closing the window hides it to the tray; exit is only via the tray menu or the toolbar close button. Any interactive element inside the `WindowChrome` caption area must have `WindowChrome.IsHitTestVisibleInChrome="True"`.
-- `SettingsStore` — persists `AppConfiguration` (JSON) to `%APPDATA%\ManagedDrive\settings.json`. `AppConfiguration` holds `RunAtStartup`, `Language` (BCP-47 tag or `null` for system default), and the list of `DiskProfile` records.
+- `SettingsStore` — persists `AppConfiguration` (JSON) to `%APPDATA%\ManagedDrive\settings.json`. `AppConfiguration` holds `RunAtStartup`, `StartMinimized`, `Language` (BCP-47 tag or `null` for system default), and the list of `DiskProfile` records. `DiskProfile` is the serializable counterpart of `DiskOptions`.
 - `StartupManager` — reads/writes the `HKCU\...\Run` registry key to control Windows startup.
 - `TempDirResetService` — static helper that reads/writes `HKCU\Environment` (TEMP and TMP) and broadcasts `WM_SETTINGCHANGE` so running processes pick up the change immediately. `Set(path)` points both variables at an absolute path (creating the directory first); `Reset()` restores the default `%USERPROFILE%\AppData\Local\Temp` as an `ExpandString` value.
+- **Dialogs** (`Views/`) — `CreateDiskDialog` collects drive letter, capacity, label, read-only, auto-mount, and optional image path (validates against available memory and active drives). `SettingsDialog` handles language and startup preferences. `ConfirmDialog` is a generic title + body confirmation. All dialogs are shown with `ShowDialog()` from their respective ViewModel commands.
 
 ### Localization
 
@@ -65,6 +66,10 @@ Strings live in `Localization/Strings.{tag}.xaml` resource dictionaries. `Langua
 - The app is **light mode only**. `App.xaml` sets `BaseTheme="Light"` on `BundledTheme`; there is no runtime theme switching.
 
 **Adding a new language:** create `Localization/Strings.{tag}.xaml` (copy an existing one), add the BCP-47 tag to `LanguageManager.SupportedLanguages`, and add the tag to `<SatelliteResourceLanguages>` in `Directory.Build.props`.
+
+### Tests (`ManagedDrive.Tests`)
+
+Tests are synchronous xUnit v3 unit tests for pure-managed code (no WinFsp driver required). `FileNodeTests` covers `FileNode` metadata; `FileNodeMapTests` covers all map operations. Both use two local helpers — `MakeDir()` and `MakeFile()` — to construct test nodes with appropriate `FileAttributes`.
 
 ### Threading model
 

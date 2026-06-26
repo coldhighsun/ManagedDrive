@@ -101,14 +101,37 @@ jobs:
           echo "version=$ver" >> $env:GITHUB_OUTPUT
         shell: pwsh
 
-      - name: Build MSI
+      - name: Build MSI (en-US base)
         run: |
           wix build installer/ManagedDrive.wxs `
             -ext WixToolset.UI.wixext `
             -arch x64 `
+            -culture en-US `
+            -loc installer/en-US.wxl `
             -d "PublishDir=publish\" `
             -d "ProductVersion=${{ steps.version.outputs.version }}" `
-            -o "ManagedDrive-${{ steps.version.outputs.tag }}-win-x64.msi"
+            -o "base-en-US.msi"
+        shell: pwsh
+
+      - name: Build MSI (zh-CN)
+        run: |
+          wix build installer/ManagedDrive.wxs `
+            -ext WixToolset.UI.wixext `
+            -arch x64 `
+            -culture zh-CN `
+            -loc installer/zh-CN.wxl `
+            -d "PublishDir=publish\" `
+            -d "ProductVersion=${{ steps.version.outputs.version }}" `
+            -o "base-zh-CN.msi"
+        shell: pwsh
+
+      - name: Build multilingual MSI (embed zh-CN transform)
+        run: |
+          $tag = "${{ steps.version.outputs.tag }}"
+          $out = "ManagedDrive-$tag-win-x64.msi"
+          Copy-Item base-en-US.msi $out
+          wix msi transform base-en-US.msi base-zh-CN.msi -t language -o zh-CN.mst
+          cscript //NoLogo installer/EmbedTransform.vbs $out zh-CN.mst 2052
         shell: pwsh
 
       - name: Create GitHub Release

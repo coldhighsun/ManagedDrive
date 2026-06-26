@@ -24,6 +24,12 @@ Create, mount and manage in-memory volumes that appear as normal drive letters i
 - Temp directory redirection — right-click a disk to set it as the Windows TEMP/TMP directory; reset to the system default from the toolbar or context menu
 - Bilingual UI — English and Simplified Chinese, auto-detected from system locale with manual override in Settings
 
+### Installation
+
+Download the latest MSI from the [Releases](https://github.com/coldhighsun/ManagedDrive/releases) page and run it. The installer automatically installs WinFsp if it is not already present, and selects the UI language based on your Windows locale (English or Simplified Chinese).
+
+> **Before repairing or uninstalling:** if you have redirected your Windows user temporary directory (TEMP/TMP) to a ManagedDrive RAM disk, reset it to the Windows default first — either from inside the app using **Reset to Default Temp Directory**, or manually via System Properties → Advanced → Environment Variables. The installer will remind you of this during repair and uninstall.
+
 ### Prerequisites
 
 | Requirement | Notes |
@@ -196,6 +202,12 @@ MIT
 - 可选最小化启动——直接启动到托盘，不显示主窗口
 - 临时目录重定向——右键单击磁盘可将其设为 Windows TEMP/TMP 目录；通过工具栏或右键菜单恢复系统默认值
 - 双语界面——中文与英文，根据系统语言自动切换，也可在设置中手动更改
+
+### 安装
+
+从 [Releases](https://github.com/coldhighsun/ManagedDrive/releases) 页面下载最新的 MSI 安装包并运行。安装程序会在 WinFsp 未安装时自动安装，并根据 Windows 系统语言自动选择界面语言（中文或英文）。
+
+> **修复或卸载前请注意：** 如果您已将 Windows 用户临时目录（TEMP/TMP）重定向到 ManagedDrive 内存盘，请先将其恢复为系统默认值——在应用内使用**恢复默认用户临时文件夹**功能，或手动在「系统属性」→「高级」→「环境变量」中修改。安装程序在执行修复和卸载时会提示您完成此操作。
 
 ### 环境要求
 

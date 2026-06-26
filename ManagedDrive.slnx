@@ -6,8 +6,12 @@
     <File Path="README.md" />
   </Folder>
   <Folder Name="/installer/">
+    <File Path="installer/License.zh-CN.rtf" />
     <File Path="installer/ManagedDrive.wxs" />
+    <File Path="installer/EmbedTransform.vbs" />
+    <File Path="installer/en-US.wxl" />
     <File Path="installer/License.rtf" />
+    <File Path="installer/zh-CN.wxl" />
   </Folder>
   <Folder Name="/.github/">
     <File Path=".github/workflows/ci.yml" />
