@@ -15,7 +15,7 @@ public sealed class MemoryFileSystem : FileSystemBase
 {
     private const uint InvalidFileAttributes = FileNode.InvalidFileAttributes;
 
-    private readonly ulong _maxCapacity;
+    private ulong _maxCapacity;
     private readonly FileNodeMap _nodeMap;
     private readonly bool _readOnly;
     private string _volumeLabel;
@@ -54,6 +54,26 @@ public sealed class MemoryFileSystem : FileSystemBase
     /// Exposes the underlying node map for serialization and capacity queries.
     /// </summary>
     internal FileNodeMap NodeMap => _nodeMap;
+
+    /// <summary>
+    /// Updates the volume label reported by <see cref="GetVolumeInfo"/>.
+    /// </summary>
+    internal void UpdateVolumeLabel(string label) => _volumeLabel = label;
+
+    /// <summary>
+    /// Attempts to update the capacity ceiling.
+    /// Returns <c>false</c> if the new capacity is smaller than the bytes currently allocated.
+    /// </summary>
+    internal bool TryUpdateCapacity(ulong newCapacity)
+    {
+        if (_nodeMap.GetTotalAllocated() > newCapacity)
+        {
+            return false;
+        }
+
+        _maxCapacity = newCapacity;
+        return true;
+    }
 
     /// <summary>
     /// Checks whether a file or directory can be deleted.

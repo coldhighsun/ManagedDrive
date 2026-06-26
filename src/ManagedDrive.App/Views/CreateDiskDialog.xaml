@@ -46,11 +46,11 @@
                 <ColumnDefinition Width="8"/>
                 <ColumnDefinition Width="100"/>
             </Grid.ColumnDefinitions>
-            <TextBox x:Name="CapacityBox" Text="2" TextAlignment="Right"
-                     PreviewTextInput="CapacityBox_PreviewTextInput"
+            <materialDesign:NumericUpDown x:Name="CapacityBox"
+                     Value="2" Minimum="1" ValueStep="1"
                      materialDesign:HintAssist.Hint="{DynamicResource CreateDisk.Capacity}"
                      ToolTip="{DynamicResource Tip.Capacity}"
-                     Style="{StaticResource MaterialDesignOutlinedTextBox}"/>
+                     Style="{StaticResource MaterialDesignOutlinedNumericUpDown}"/>
             <ComboBox Grid.Column="2" x:Name="CapacityUnitBox" IsEditable="False"
                       Style="{StaticResource MaterialDesignOutlinedComboBox}"/>
         </Grid>
@@ -70,12 +70,18 @@
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="8"/>
                 <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="4"/>
+                <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
             <TextBox x:Name="ImagePathBox"
                      materialDesign:HintAssist.Hint="{DynamicResource CreateDisk.ImageFile}"
                      ToolTip="{DynamicResource Tip.ImageFile}"
                      Style="{StaticResource MaterialDesignOutlinedTextBox}"/>
-            <Button Grid.Column="2" Content="…" Width="40"
+            <Button Grid.Column="2" Content="×" Width="40"
+                    ToolTip="{DynamicResource Tip.ClearImagePath}"
+                    Click="ClearImagePath_Click"
+                    Style="{StaticResource MaterialDesignOutlinedButton}"/>
+            <Button Grid.Column="4" Content="…" Width="40"
                     Click="BrowseImagePath_Click"
                     Style="{StaticResource MaterialDesignOutlinedButton}"/>
         </Grid>

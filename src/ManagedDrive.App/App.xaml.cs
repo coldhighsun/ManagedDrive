@@ -99,6 +99,7 @@ public partial class App
 
         SetupTrayIcon();
         SetupUsageWarnings();
+        CheckTempDirectoryOnStartup(config);
         AutoMountDisks();
 
         if (config.StartMinimized)
@@ -109,6 +110,40 @@ public partial class App
         {
             _mainWindow.Show();
         }
+    }
+
+    private void CheckTempDirectoryOnStartup(AppConfiguration config)
+    {
+        var userTemp = Environment.GetEnvironmentVariable("TEMP", EnvironmentVariableTarget.User);
+        if (string.IsNullOrEmpty(userTemp))
+        {
+            return;
+        }
+
+        var expanded = Environment.ExpandEnvironmentVariables(userTemp);
+        if (expanded.Length < 2 || !char.IsLetter(expanded[0]) || expanded[1] != ':')
+        {
+            return;
+        }
+
+        var mountPoint = char.ToUpperInvariant(expanded[0]) + ":";
+        var matchingProfile = config.Disks.FirstOrDefault(d =>
+            string.Equals(d.MountPoint, mountPoint, StringComparison.OrdinalIgnoreCase));
+
+        if (matchingProfile == null || matchingProfile.AutoMount)
+        {
+            return;
+        }
+
+        // Disk is in profiles but not set to auto-mount — TEMP will be dangling after startup.
+        Log.Warning("TEMP points to {TempPath} on RAM disk {MountPoint} which is not set to auto-mount. Resetting to default.", expanded, mountPoint);
+        TempDirResetService.Reset();
+
+        MessageBox.Show(
+            Loc.Format("Msg.StartupTempReset", expanded),
+            "ManagedDrive",
+            MessageBoxButton.OK,
+            MessageBoxImage.Warning);
     }
 
     private void AutoMountDisks()

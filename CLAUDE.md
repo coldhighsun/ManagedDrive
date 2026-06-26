@@ -8,8 +8,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 # Build all projects
 dotnet build
 
-# Run the app
-dotnet run --project src/ManagedDrive.App
+# Run the app (Release avoids debug-build overhead)
+dotnet run --project src/ManagedDrive.App -c Release
 
 # Run tests
 dotnet test tests/ManagedDrive.Tests
@@ -20,7 +20,7 @@ dotnet test tests/ManagedDrive.Tests --filter "FullyQualifiedName~FileNodeTests"
 
 The solution file is `ManagedDrive.slnx` (Visual Studio 2022+ format).
 
-**WinFsp prerequisite:** `winfsp-msil.dll` must be present at `C:\Program Files (x86)\WinFsp\bin\`. Install WinFsp 2.x before building or running.
+**WinFsp prerequisite:** `winfsp-msil.dll` must be present at `C:\Program Files (x86)\WinFsp\bin\`. Install exactly WinFsp **2.1.25156** before building or running: `winget install WinFsp.WinFsp -v 2.1.25156`.
 
 ## Architecture
 
@@ -37,8 +37,8 @@ Data flows: `MountManager` → `RamDisk.Create()` → `MemoryFileSystem` + `File
 - `DiskOptions` — immutable `record` carrying mount configuration (mount point, capacity, label, read-only, auto-mount, optional `.mdr` image path).
 - `FileNode` — a single file or directory node: `Fsp.Interop.FileInfo` metadata + `byte[]` data buffer.
 - `FileNodeMap` — `SortedDictionary<string, FileNode>` (case-insensitive) mapping full paths to nodes; supports child enumeration and tracks total allocated bytes.
-- `MemoryFileSystem : FileSystemBase` — implements all WinFsp callbacks (`Create`, `Open`, `Read`, `Write`, `Rename`, `CanDelete`, `ReadDirectoryEntry`, etc.). Enforces capacity ceiling; returns `STATUS_DISK_FULL` when exceeded.
-- `RamDisk` — wraps `MemoryFileSystem` + `FileSystemHost`. `RamDisk.Create(options)` mounts the volume; `Dispose()` unmounts. After mounting, polls until the drive letter is visible in the OS (up to 2.5 s), then broadcasts `SHCNE_DRIVEADD` to Explorer.
+- `MemoryFileSystem : FileSystemBase` — implements all WinFsp callbacks (`Create`, `Open`, `Read`, `Write`, `Rename`, `CanDelete`, `ReadDirectoryEntry`, etc.). Enforces capacity ceiling; returns `STATUS_DISK_FULL` when exceeded. In read-only mode, all mutating operations return `STATUS_MEDIA_WRITE_PROTECTED`. `ReadDirectoryEntry` builds a snapshot list on the first call (including `.` and `..`), then iterates it statelessly on subsequent calls. `Init()` auto-creates the root directory `\` with a standard security descriptor. `FileSystemHost` is configured with 4 KB sector/allocation size, `FileInfoTimeout=1000 ms`, `CasePreservedNames=true`, `CaseSensitiveSearch=false`, and a randomized `VolumeSerialNumber`.
+- `RamDisk` — wraps `MemoryFileSystem` + `FileSystemHost`. `RamDisk.Create(options)` mounts the volume; `Dispose()` unmounts. After mounting, polls `DriveInfo.GetDrives()` up to 25 × 100 ms (2.5 s total) until the drive letter appears, then broadcasts `SHCNE_DRIVEADD` via `SHChangeNotify` so Explorer refreshes immediately.
 - `DiskImageSerializer` — reads/writes the `.mdr` binary format (magic `MDRD`, little-endian; stores capacity, label, and all file nodes including security descriptors).
 - `MountManager` — thread-safe registry of active `RamDisk` instances. `Mount(options)` calls `RamDisk.Create`; `Unmount(mountPoint)` disposes the disk.
 
@@ -46,14 +46,14 @@ Data flows: `MountManager` → `RamDisk.Create()` → `MemoryFileSystem` + `File
 
 Standard WPF MVVM:
 
-- `App.xaml.cs` — application entry point. Creates `MountManager` + `SettingsStore`, constructs `MainViewModel`, sets up the system-tray icon (`H.NotifyIcon.Wpf` / `TaskbarIcon`), auto-mounts profiles with `AutoMount = true` on startup, saves settings on exit. Enforces single-instance via a named `Mutex`. Serilog logs to `{AppPath}\logs\log-.txt` with 7-day rolling retention.
-- `MainViewModel` — owns `ObservableCollection<DiskViewModel>`. Commands: `CreateDiskCommand` (opens `CreateDiskDialog`), `UnmountCommand`, `SaveImageCommand`, `RefreshCommand`, `SettingsCommand`, `ResetTempDirsCommand` (resets TEMP/TMP to Windows defaults), `ToggleTempDirCommand` (toggles TEMP/TMP between the selected disk's `Temp` folder and the Windows default). Mount operations are dispatched to `Task.Run` to keep the UI responsive.
-- `DiskViewModel` — wraps a `RamDisk`; exposes bindable properties (mount point, used/free/total bytes, `IsCurrentTempDir`). A `DispatcherTimer` refreshes usage stats every 2 s automatically; `Refresh()` triggers a manual refresh. Fires `HighUsageWarning` when usage first crosses 90 %; the warning resets when usage drops below 85 %.
-- `MainWindow` — uses `WindowStyle="None"` + `WindowChrome` (custom Material Design app bar as title bar). Closing the window hides it to the tray; exit is only via the tray menu or the toolbar close button. Any interactive element inside the `WindowChrome` caption area must have `WindowChrome.IsHitTestVisibleInChrome="True"`.
+- `App.xaml.cs` — application entry point. Creates `MountManager` + `SettingsStore`, constructs `MainViewModel`, sets up the system-tray icon (`H.NotifyIcon.Wpf` / `TaskbarIcon`), auto-mounts profiles with `AutoMount = true` on startup, saves settings on exit. Enforces single-instance via a named `Mutex` (GUID `Global\ManagedDrive-4A7C2E1B-…`; bypassed when `DOTNET_ENVIRONMENT="Development"`). Serilog logs to `{AppPath}\logs\log-.txt` with 7-day rolling retention. On startup, validates WinFsp 2.1.x is installed (checks registry + DLL file version) and shows an install prompt if missing. Also checks if TEMP/TMP points to a non-auto-mount RAM disk drive; if so, resets TEMP to Windows defaults and warns the user.
+- `MainViewModel` — owns `ObservableCollection<DiskViewModel>` sorted by mount point. Commands: `CreateDiskCommand` (opens `CreateDiskDialog`), `EditDiskCommand` (edit label/capacity/flags; non-destructive changes apply live via `RamDisk.TryApplyOptions()`; mount-point or read-only changes trigger full remount), `UnmountCommand` (auto-resets TEMP if it points to the disk before unmounting), `SaveImageCommand`, `RefreshCommand`, `SettingsCommand`, `ResetTempDirsCommand` (resets TEMP/TMP to Windows defaults), `ToggleTempDirCommand` (toggles TEMP/TMP between the selected disk's `Temp` folder and the Windows default). Mount operations are dispatched to `Task.Run` to keep the UI responsive.
+- `DiskViewModel` — wraps a `RamDisk`; exposes bindable properties (mount point, used/free/total bytes, `IsCurrentTempDir`). A `DispatcherTimer` refreshes usage stats every 2 s automatically; `Refresh()` triggers a manual refresh. Fires `HighUsageWarning` when usage first crosses 90 %; the warning resets when usage drops below 85 % (hysteresis to prevent rapid flip-flopping). `IsCurrentTempDir` compares `[MountPoint]\Temp` against the user-level TEMP variable (case-insensitive).
+- `MainWindow` — uses `WindowStyle="None"` + `WindowChrome` (custom Material Design app bar as title bar). Closing the window hides it to the tray; exit is only via the tray menu or the toolbar close button. Any interactive element inside the `WindowChrome` caption area must have `WindowChrome.IsHitTestVisibleInChrome="True"`. A `TrayTooltipView` popup appears on tray icon hover and auto-hides after 3 s.
 - `SettingsStore` — persists `AppConfiguration` (JSON) to `%APPDATA%\ManagedDrive\settings.json`. `AppConfiguration` holds `RunAtStartup`, `StartMinimized`, `Language` (BCP-47 tag or `null` for system default), and the list of `DiskProfile` records. `DiskProfile` is the serializable counterpart of `DiskOptions`.
 - `StartupManager` — reads/writes the `HKCU\...\Run` registry key to control Windows startup.
-- `TempDirResetService` — static helper that reads/writes `HKCU\Environment` (TEMP and TMP) and broadcasts `WM_SETTINGCHANGE` so running processes pick up the change immediately. `Set(path)` points both variables at an absolute path (creating the directory first); `Reset()` restores the default `%USERPROFILE%\AppData\Local\Temp` as an `ExpandString` value.
-- **Dialogs** (`Views/`) — `CreateDiskDialog` collects drive letter, capacity, label, read-only, auto-mount, and optional image path (validates against available memory and active drives). `SettingsDialog` handles language and startup preferences. `ConfirmDialog` is a generic title + body confirmation. All dialogs are shown with `ShowDialog()` from their respective ViewModel commands.
+- `TempDirResetService` — static helper that reads/writes `HKCU\Environment` (TEMP and TMP) and broadcasts `WM_SETTINGCHANGE` so running processes pick up the change immediately. `Set(path)` writes `String` values (absolute paths); `Reset()` writes `ExpandString` values (unexpanded `%USERPROFILE%\AppData\Local\Temp`) for portability. Uses `SendMessageTimeoutAbortIfHung` with a 5 s timeout.
+- **Dialogs** (`Views/`) — `CreateDiskDialog` collects drive letter, capacity, label, read-only, auto-mount, and optional image path. Capacity maximum is derived from `GC.GetGCMemoryInfo().TotalAvailableMemoryBytes` at open time; switching MB/GB units recalculates the slider maximum. The dialog has an edit-mode constructor overload that pre-populates all fields (the in-use drive letter is excluded from the unavailable-drives check). `SettingsDialog` handles language and startup preferences. `ConfirmDialog` is a generic title + body confirmation. All dialogs are shown with `ShowDialog()` from their respective ViewModel commands.
 
 ### Localization
 
@@ -90,7 +90,7 @@ Package versions are pinned in `Directory.Packages.props` (Central Package Manag
 
 ### Benchmarks
 
-`ManagedDrive.Benchmarks` (separate project, not in the solution) uses BenchmarkDotNet to compare RamDisk vs physical disk for sequential read/write at 4 KB, 1 MB, and 64 MB. Run in Release mode: `dotnet run --project benchmarks/ManagedDrive.Benchmarks -c Release`.
+`ManagedDrive.Benchmarks` (separate project, not in the solution) uses BenchmarkDotNet to compare RamDisk vs physical disk for sequential read/write at 4 KB, 1 MB, and 64 MB. Drive letter `R:` must be free. Run in Release mode: `dotnet run --project benchmarks/ManagedDrive.Benchmarks -c Release`.
 
 ### Release pipeline
 
