@@ -4,6 +4,13 @@
     <File Path="Directory.Packages.props" />
     <File Path="README.md" />
   </Folder>
+  <Folder Name="/installer/">
+    <File Path="installer/ManagedDrive.wxs" />
+    <File Path="installer/License.rtf" />
+  </Folder>
+  <Folder Name="/.github/">
+    <File Path=".github/workflows/ci.yml" />
+  </Folder>
   <Folder Name="/src/">
     <Project Path="src/ManagedDrive.App/ManagedDrive.App.csproj" />
     <Project Path="src/ManagedDrive.Core/ManagedDrive.Core.csproj" />

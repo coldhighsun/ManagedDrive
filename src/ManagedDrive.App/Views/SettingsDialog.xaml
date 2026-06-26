@@ -15,7 +15,9 @@
     <Grid Margin="24">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
-            <RowDefinition Height="16"/>
+            <RowDefinition Height="12"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="24"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="24"/>
             <RowDefinition Height="Auto"/>
@@ -31,16 +33,22 @@
                   Content="{DynamicResource Settings.RunAtStartup}"
                   ToolTip="{DynamicResource Tip.RunAtStartup}"/>
 
+        <!-- Start minimized -->
+        <CheckBox Grid.Row="2" Grid.ColumnSpan="2" Grid.Column="0"
+                  x:Name="StartMinimizedBox"
+                  Content="{DynamicResource Settings.StartMinimized}"
+                  ToolTip="{DynamicResource Tip.StartMinimized}"/>
+
         <!-- Language -->
-        <TextBlock Grid.Row="2" Grid.Column="0"
+        <TextBlock Grid.Row="4" Grid.Column="0"
                    Text="{DynamicResource Settings.Language}"
                    VerticalAlignment="Center"/>
-        <ComboBox Grid.Row="2" Grid.Column="1"
+        <ComboBox Grid.Row="4" Grid.Column="1"
                   x:Name="LanguageBox"
                   Style="{StaticResource MaterialDesignOutlinedComboBox}"/>
 
         <!-- OK / Cancel -->
-        <StackPanel Grid.Row="4" Grid.ColumnSpan="2"
+        <StackPanel Grid.Row="6" Grid.ColumnSpan="2" Grid.Column="0"
                     Orientation="Horizontal" HorizontalAlignment="Right">
             <Button Content="{DynamicResource Btn.Cancel}" Width="80" IsCancel="True"
                     Style="{StaticResource MaterialDesignFlatButton}"

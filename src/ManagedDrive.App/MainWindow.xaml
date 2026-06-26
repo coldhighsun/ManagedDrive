@@ -188,8 +188,7 @@
                             <Border Width="44" Height="44" CornerRadius="8"
                                     Background="{DynamicResource PrimaryHueMidBrush}">
                                 <TextBlock Text="{Binding MountPoint}"
-                                           FontSize="13" FontWeight="SemiBold"
-               
+                                           FontSize="13" FontWeight="SemiBold"               
                                            HorizontalAlignment="Center"
                                            VerticalAlignment="Center"/>
                             </Border>

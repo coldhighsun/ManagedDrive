@@ -1,5 +1,7 @@
 # ManagedDrive
 
+[![CI / Release](https://github.com/coldhighsun/ManagedDrive/actions/workflows/ci.yml/badge.svg)](https://github.com/coldhighsun/ManagedDrive/actions/workflows/ci.yml)
+
 [English](#english) | [中文](#中文)
 
 ---
