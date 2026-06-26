@@ -10,6 +10,7 @@ using System.ComponentModel;
 using System.Windows;
 using Application = System.Windows.Application;
 using MessageBox = System.Windows.MessageBox;
+using SaveFileDialog = Microsoft.Win32.SaveFileDialog;
 
 namespace ManagedDrive.App.ViewModels;
 
@@ -35,14 +36,16 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         StatusText = Loc.Get("Status.Ready");
 
         CreateDiskCommand = new RelayCommand(_ => ExecuteCreateDisk());
+        EditDiskCommand = new RelayCommand(
+            p => ExecuteEditDisk(p as DiskViewModel ?? SelectedDisk),
+            p => p is DiskViewModel || SelectedDisk != null);
         ExitCommand = new RelayCommand(_ => ExecuteExit());
         UnmountCommand = new RelayCommand(
             p => ExecuteUnmount(p as DiskViewModel ?? SelectedDisk),
             p => p is DiskViewModel || SelectedDisk != null);
         SaveImageCommand = new RelayCommand(
             p => ExecuteSaveImage(p as DiskViewModel ?? SelectedDisk),
-            p => p is DiskViewModel vm ? vm.Disk.Options.PersistImagePath != null
-                                       : SelectedDisk?.Disk.Options.PersistImagePath != null);
+            p => p is DiskViewModel || SelectedDisk != null);
         RefreshCommand = new RelayCommand(_ => RefreshAll());
         ResetTempDirsCommand = new RelayCommand(_ => ExecuteResetTempDirs());
         ToggleTempDirCommand = new RelayCommand(
@@ -58,6 +61,14 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     /// Gets the command that opens the "Create Disk" dialog.
     /// </summary>
     public RelayCommand CreateDiskCommand
+    {
+        get;
+    }
+
+    /// <summary>
+    /// Gets the command that opens the "Edit Disk" dialog for the selected disk.
+    /// </summary>
+    public RelayCommand EditDiskCommand
     {
         get;
     }
@@ -197,6 +208,17 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         {
             StatusText = Loc.Format("Status.AutoMountFailed", profile.MountPoint, ex.Message);
             Log.Error(ex, "Auto-mount {MountPoint} failed.", profile.MountPoint);
+
+            var userTemp = Environment.GetEnvironmentVariable("TEMP", EnvironmentVariableTarget.User);
+            if (!string.IsNullOrEmpty(userTemp))
+            {
+                var expanded = Environment.ExpandEnvironmentVariables(userTemp);
+                if (expanded.StartsWith(profile.MountPoint, StringComparison.OrdinalIgnoreCase))
+                {
+                    TempDirResetService.Reset();
+                    Log.Warning("Auto-reset TEMP to default because auto-mount of {MountPoint} failed.", profile.MountPoint);
+                }
+            }
         }
     }
 
@@ -255,6 +277,99 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         }
     }
 
+    private async void ExecuteEditDisk(DiskViewModel? vm)
+    {
+        if (vm == null)
+        {
+            return;
+        }
+
+        var dialog = new CreateDiskDialog(vm.Disk.Options) { Owner = Application.Current.MainWindow };
+
+        if (dialog.ShowDialog() != true)
+        {
+            return;
+        }
+
+        var newOptions = dialog.Result!;
+        var old = vm.Disk.Options;
+        var needsRemount = newOptions.MountPoint != old.MountPoint || newOptions.ReadOnly != old.ReadOnly;
+
+        if (needsRemount)
+        {
+            var body = Loc.Format("Msg.EditDiskConfirmBody", vm.MountPoint, vm.VolumeLabel);
+            if (vm.IsCurrentTempDir)
+            {
+                body += "\n\n" + Loc.Get("Msg.TempDirWillBeReset");
+            }
+
+            var confirm = new ConfirmDialog(Loc.Get("Msg.EditDiskConfirmTitle"), body)
+            {
+                Owner = Application.Current.MainWindow
+            };
+
+            if (confirm.ShowDialog() != true)
+            {
+                return;
+            }
+
+            if (vm.IsCurrentTempDir)
+            {
+                await Task.Run(TempDirResetService.Reset);
+                Log.Information("Auto-reset temp directory before editing {MountPoint}.", vm.MountPoint);
+            }
+
+            var oldMountPoint = old.MountPoint;
+            vm.Dispose();
+            Disks.Remove(vm);
+            _mountManager.Unmount(oldMountPoint);
+
+            try
+            {
+                var disk = await Task.Run(() => _mountManager.Mount(newOptions));
+                AddDiskSorted(new DiskViewModel(disk));
+                SaveSettings();
+                StatusText = Loc.Format("Status.MountedWithCapacity", disk.MountPoint, newOptions.VolumeLabel, newOptions.CapacityBytes / (1024 * 1024));
+                Log.Information(
+                    "Edited disk: remounted {MountPoint} ({Label}, {CapacityMb} MB).",
+                    disk.MountPoint,
+                    newOptions.VolumeLabel,
+                    newOptions.CapacityBytes / (1024 * 1024));
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(
+                    Loc.Format("Msg.MountFailed", ex.Message),
+                    "ManagedDrive",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Error);
+                StatusText = Loc.Get("Status.MountFailed");
+                Log.Error(ex, "Failed to remount disk after edit.");
+            }
+        }
+        else
+        {
+            if (!vm.Disk.TryApplyOptions(newOptions, out var error))
+            {
+                MessageBox.Show(
+                    error,
+                    Loc.Get("Msg.EditDiskConfirmTitle"),
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Warning);
+                return;
+            }
+
+            vm.Refresh();
+            SaveSettings();
+            StatusText = Loc.Format("Status.MountedWithCapacity", vm.MountPoint, newOptions.VolumeLabel, newOptions.CapacityBytes / (1024 * 1024));
+            Log.Information(
+                "Edited disk: hot-updated {MountPoint} ({Label}, {CapacityMb} MB).",
+                vm.MountPoint,
+                newOptions.VolumeLabel,
+                newOptions.CapacityBytes / (1024 * 1024));
+        }
+    }
+
     private void ExecuteExit()
     {
         if (Disks.Count == 0)
@@ -283,10 +398,34 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             return;
         }
 
+        if (vm.Disk.Options.PersistImagePath == null)
+        {
+            var dlg = new SaveFileDialog
+            {
+                Title = Loc.Get("SaveDlg.Title"),
+                Filter = Loc.Get("SaveDlg.Filter"),
+                DefaultExt = ".mdr",
+                OverwritePrompt = true,
+            };
+
+            if (dlg.ShowDialog() != true)
+            {
+                return;
+            }
+
+            vm.Disk.TryApplyOptions(vm.Disk.Options with { PersistImagePath = dlg.FileName }, out _);
+            SaveSettings();
+        }
+
         try
         {
             vm.Disk.SaveToImage();
             StatusText = Loc.Format("Status.ImageSaved", vm.MountPoint);
+            MessageBox.Show(
+                Loc.Format("Msg.SaveImageSuccess", vm.Disk.Options.PersistImagePath),
+                "ManagedDrive",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
             Log.Information("Saved image for {MountPoint}.", vm.MountPoint);
         }
         catch (Exception ex)
@@ -408,16 +547,20 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         }
     }
 
-    private void ExecuteUnmount(DiskViewModel? vm)
+    private async void ExecuteUnmount(DiskViewModel? vm)
     {
         if (vm == null)
         {
             return;
         }
 
-        var confirm = new ConfirmDialog(
-            Loc.Get("Msg.UnmountConfirmTitle"),
-            Loc.Format("Msg.UnmountConfirmBody", vm.MountPoint, vm.VolumeLabel))
+        var body = Loc.Format("Msg.UnmountConfirmBody", vm.MountPoint, vm.VolumeLabel);
+        if (vm.IsCurrentTempDir)
+        {
+            body += "\n\n" + Loc.Get("Msg.TempDirWillBeReset");
+        }
+
+        var confirm = new ConfirmDialog(Loc.Get("Msg.UnmountConfirmTitle"), body)
         {
             Owner = Application.Current.MainWindow
         };
@@ -425,6 +568,12 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         if (confirm.ShowDialog() != true)
         {
             return;
+        }
+
+        if (vm.IsCurrentTempDir)
+        {
+            await Task.Run(TempDirResetService.Reset);
+            Log.Information("Auto-reset temp directory before unmounting {MountPoint}.", vm.MountPoint);
         }
 
         var mountPoint = vm.Disk.Options.MountPoint;
