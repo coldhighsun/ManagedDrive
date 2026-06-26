@@ -22,6 +22,7 @@ public partial class SettingsDialog
         InitializeComponent();
         _original = config;
         RunAtStartupBox.IsChecked = config.RunAtStartup;
+        StartMinimizedBox.IsChecked = config.StartMinimized;
 
         LanguageBox.Items.Add(new ComboBoxItem { Content = Loc.Get("Lang.System"), Tag = "" });
         foreach (var (tag, displayName) in LanguageManager.SupportedLanguages)
@@ -65,6 +66,7 @@ public partial class SettingsDialog
         Result = new AppConfiguration
         {
             RunAtStartup = runAtStartup,
+            StartMinimized = StartMinimizedBox.IsChecked == true,
             Language = selectedTag,
             Disks = _original.Disks,
         };

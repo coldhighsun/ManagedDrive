@@ -29,4 +29,13 @@ public sealed record AppConfiguration
     {
         get; init;
     }
+
+    /// <summary>
+    /// Gets or sets a value indicating whether the main window should be hidden on startup,
+    /// showing only the system tray icon. Defaults to <c>false</c>.
+    /// </summary>
+    public bool StartMinimized
+    {
+        get; init;
+    }
 }

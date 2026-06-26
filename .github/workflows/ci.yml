@@ -1,0 +1,120 @@
+name: CI / Release
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - 'v*'
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  # ── Build & Test ─────────────────────────────────────────────────────────────
+  build-and-test:
+    name: Build & Test
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0          # MinVer needs full git history for tag resolution
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Install WinFsp (required to build winfsp.net)
+        run: |
+          $url = "https://github.com/winfsp/winfsp/releases/download/v2.1/winfsp-2.1.25156.msi"
+          Invoke-WebRequest $url -OutFile winfsp.msi
+          Start-Process msiexec.exe -Wait -ArgumentList '/i winfsp.msi /quiet'
+        shell: pwsh
+
+      - name: Restore
+        run: dotnet restore
+
+      - name: Build
+        run: dotnet build --no-restore -c Release
+
+      - name: Test
+        run: dotnet test --no-build -c Release --logger "trx;LogFileName=results.trx"
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: '**/results.trx'
+
+  # ── Publish MSI Release ───────────────────────────────────────────────────────
+  release:
+    name: Publish MSI
+    needs: build-and-test
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: windows-latest
+
+    permissions:
+      contents: write         # needed to create GitHub Releases
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Install WinFsp
+        run: |
+          $url = "https://github.com/winfsp/winfsp/releases/download/v2.1/winfsp-2.1.25156.msi"
+          Invoke-WebRequest $url -OutFile winfsp.msi
+          Start-Process msiexec.exe -Wait -ArgumentList '/i winfsp.msi /quiet'
+        shell: pwsh
+
+      - name: Install WiX v4 toolset
+        run: dotnet tool install --global wix --version 4.0.5
+
+      - name: Add WiX UI extension
+        run: wix extension add WixToolset.UI.wixext/4.0.5
+
+      - name: Restore & Publish app (self-contained, win-x64)
+        run: |
+          dotnet publish src/ManagedDrive.App/ManagedDrive.App.csproj `
+            -c Release `
+            -r win-x64 `
+            -o publish/
+        shell: pwsh
+
+      - name: Resolve version from tag
+        id: version
+        run: |
+          $tag = "${{ github.ref_name }}"          # e.g. v1.2.3
+          $ver = $tag.TrimStart('v')                # e.g. 1.2.3
+          echo "tag=$tag"   >> $env:GITHUB_OUTPUT
+          echo "version=$ver" >> $env:GITHUB_OUTPUT
+        shell: pwsh
+
+      - name: Build MSI
+        run: |
+          wix build installer/ManagedDrive.wxs `
+            -ext WixToolset.UI.wixext `
+            -arch x64 `
+            -d "PublishDir=publish\" `
+            -d "ProductVersion=${{ steps.version.outputs.version }}" `
+            -o "ManagedDrive-${{ steps.version.outputs.tag }}-win-x64.msi"
+        shell: pwsh
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: ManagedDrive ${{ github.ref_name }}
+          generate_release_notes: true
+          files: ManagedDrive-${{ steps.version.outputs.tag }}-win-x64.msi

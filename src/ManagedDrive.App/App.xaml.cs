@@ -92,7 +92,14 @@ public partial class App
         SetupTrayIcon();
         AutoMountDisks();
 
-        _mainWindow.Show();
+        if (config.StartMinimized)
+        {
+            _trayIcon!.Visibility = Visibility.Visible;
+        }
+        else
+        {
+            _mainWindow.Show();
+        }
     }
 
     private void AutoMountDisks()
@@ -176,6 +183,7 @@ public partial class App
         _settings.Save(new AppConfiguration
         {
             RunAtStartup = StartupManager.IsEnabled,
+            StartMinimized = _settings.Load().StartMinimized,
             Language = LanguageManager.Instance.SavedLanguage,
             Disks = _mainViewModel.GetProfiles().ToList(),
         });

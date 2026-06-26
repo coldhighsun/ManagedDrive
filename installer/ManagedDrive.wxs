@@ -1,0 +1,138 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  WiX v4 installer for ManagedDrive.
+  Build command (from repo root):
+    wix build installer/ManagedDrive.wxs
+        -arch x64
+        -ext WixToolset.UI.wixext
+        -d "PublishDir=publish\"
+        -d "ProductVersion=1.0.0"
+        -o ManagedDrive-v1.0.0-win-x64.msi
+
+  Variables injected at build time:
+    PublishDir      — path to the dotnet publish output folder (trailing backslash required)
+    ProductVersion  — semver string derived from the git tag, e.g. 1.2.3
+-->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
+
+
+  <Package
+    Name="ManagedDrive"
+    Manufacturer="ManagedDrive"
+    Version="$(ProductVersion)"
+    UpgradeCode="4A7E1234-BEEF-4C9D-A012-000000000001"
+    Scope="perMachine">
+
+    <!-- Allow in-place upgrades; remove older versions automatically -->
+    <MajorUpgrade DowngradeErrorMessage="A newer version of ManagedDrive is already installed." />
+
+    <!-- Standard WiX UI with install-dir picker (requires WixToolset.UI.wixext) -->
+    <ui:WixUI Id="WixUI_InstallDir" />
+    <Property Id="WIXUI_INSTALLDIR" Value="INSTALLFOLDER" />
+    <WixVariable Id="WixUILicenseRtf" Value="installer\License.rtf" />
+
+    <MediaTemplate EmbedCab="yes" />
+
+    <Feature Id="ProductFeature" Title="ManagedDrive" Level="1">
+      <ComponentGroupRef Id="ProductComponents" />
+      <ComponentRef Id="ApplicationShortcut" />
+    </Feature>
+
+
+  </Package>
+
+  <!-- Installation directory: C:\Program Files\ManagedDrive -->
+  <Fragment>
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALLFOLDER" Name="ManagedDrive" />
+    </StandardDirectory>
+    <StandardDirectory Id="ProgramMenuFolder">
+      <Directory Id="ApplicationProgramsFolder" Name="ManagedDrive" />
+    </StandardDirectory>
+  </Fragment>
+
+  <!-- Files from the publish output directory -->
+  <Fragment>
+    <ComponentGroup Id="ProductComponents" Directory="INSTALLFOLDER">
+      <!-- Main executable -->
+      <Component Id="MainExecutable">
+        <File Id="ManagedDriveExe"
+              Source="$(PublishDir)ManagedDrive.exe"
+              KeyPath="yes" />
+      </Component>
+
+      <!-- App assembly & runtime config -->
+      <Component Id="ManagedDriveDll">
+        <File Source="$(PublishDir)ManagedDrive.dll" KeyPath="yes" />
+      </Component>
+      <Component Id="ManagedDriveCore">
+        <File Source="$(PublishDir)ManagedDrive.Core.dll" KeyPath="yes" />
+      </Component>
+      <Component Id="DepsJson">
+        <File Source="$(PublishDir)ManagedDrive.deps.json" KeyPath="yes" />
+      </Component>
+      <Component Id="RuntimeConfig">
+        <File Source="$(PublishDir)ManagedDrive.runtimeconfig.json" KeyPath="yes" />
+      </Component>
+
+      <!-- WinFsp managed assembly -->
+      <Component Id="WinFspMsil">
+        <File Source="$(PublishDir)winfsp-msil.dll" KeyPath="yes" />
+      </Component>
+
+      <!-- Material Design -->
+      <Component Id="MaterialDesignThemes">
+        <File Source="$(PublishDir)MaterialDesignThemes.Wpf.dll" KeyPath="yes" />
+      </Component>
+      <Component Id="MaterialDesignColors">
+        <File Source="$(PublishDir)MaterialDesignColors.dll" KeyPath="yes" />
+      </Component>
+      <Component Id="XamlBehaviors">
+        <File Source="$(PublishDir)Microsoft.Xaml.Behaviors.dll" KeyPath="yes" />
+      </Component>
+
+      <!-- Notify icon -->
+      <Component Id="HNotifyIconWpf">
+        <File Source="$(PublishDir)H.NotifyIcon.Wpf.dll" KeyPath="yes" />
+      </Component>
+      <Component Id="HNotifyIcon">
+        <File Source="$(PublishDir)H.NotifyIcon.dll" KeyPath="yes" />
+      </Component>
+      <Component Id="HGeneratedIcons">
+        <File Source="$(PublishDir)H.GeneratedIcons.System.Drawing.dll" KeyPath="yes" />
+      </Component>
+
+      <!-- Serilog -->
+      <Component Id="Serilog">
+        <File Source="$(PublishDir)Serilog.dll" KeyPath="yes" />
+      </Component>
+      <Component Id="SerilogSinksFile">
+        <File Source="$(PublishDir)Serilog.Sinks.File.dll" KeyPath="yes" />
+      </Component>
+    </ComponentGroup>
+  </Fragment>
+
+  <!-- Start-menu shortcut -->
+  <Fragment>
+    <Icon Id="AppIcon.ico" SourceFile="$(PublishDir)ManagedDrive.exe" />
+
+    <Component Id="ApplicationShortcut" Directory="ApplicationProgramsFolder">
+      <Shortcut Id="AppStartMenuShortcut"
+                Name="ManagedDrive"
+                Description="ManagedDrive RAM disk manager"
+                Target="[INSTALLFOLDER]ManagedDrive.exe"
+                WorkingDirectory="INSTALLFOLDER"
+                Icon="AppIcon.ico" />
+      <RemoveFolder Id="CleanUpShortCut" Directory="ApplicationProgramsFolder" On="uninstall" />
+      <RegistryValue Root="HKCU"
+                     Key="Software\ManagedDrive"
+                     Name="installed"
+                     Type="integer"
+                     Value="1"
+                     KeyPath="yes" />
+    </Component>
+  </Fragment>
+
+
+</Wix>
