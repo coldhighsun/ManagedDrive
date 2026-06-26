@@ -21,6 +21,7 @@ Create, mount and manage in-memory volumes that appear as normal drive letters i
 - Tray icon tooltip — hover to see all mounted disks with live usage percentages
 - High-usage warning — system tray notification when a disk exceeds 90% capacity
 - Optional start-minimized mode — launch directly to tray without showing the main window
+- Temp directory redirection — right-click a disk to set it as the Windows TEMP/TMP directory; reset to the system default from the toolbar or context menu
 - Bilingual UI — English and Simplified Chinese, auto-detected from system locale with manual override in Settings
 
 ### Prerequisites
@@ -68,7 +69,7 @@ ManagedDrive/
 │       ├── Localization/           #   ResourceDictionary strings (en-US, zh-CN)
 │       ├── Infrastructure/         #   RelayCommand
 │       ├── Models/                 #   AppConfiguration, DiskProfile
-│       ├── Services/               #   SettingsStore, StartupManager
+│       ├── Services/               #   SettingsStore, StartupManager, TempDirResetService
 │       ├── ViewModels/             #   MainViewModel, DiskViewModel
 │       ├── Views/                  #   CreateDiskDialog, SettingsDialog, ConfirmDialog, TrayTooltipView
 │       ├── MainWindow.xaml(.cs)    #   Main window
@@ -193,6 +194,7 @@ MIT
 - 托盘图标悬浮提示——鼠标悬停时显示所有已挂载磁盘及其实时使用率
 - 高用量警告——磁盘使用率超过 90% 时通过系统托盘发出通知
 - 可选最小化启动——直接启动到托盘，不显示主窗口
+- 临时目录重定向——右键单击磁盘可将其设为 Windows TEMP/TMP 目录；通过工具栏或右键菜单恢复系统默认值
 - 双语界面——中文与英文，根据系统语言自动切换，也可在设置中手动更改
 
 ### 环境要求
@@ -240,7 +242,7 @@ ManagedDrive/
 │       ├── Localization/           #   ResourceDictionary 字符串（en-US、zh-CN）
 │       ├── Infrastructure/         #   RelayCommand
 │       ├── Models/                 #   AppConfiguration、DiskProfile
-│       ├── Services/               #   SettingsStore、StartupManager
+│       ├── Services/               #   SettingsStore、StartupManager、TempDirResetService
 │       ├── ViewModels/             #   MainViewModel、DiskViewModel
 │       ├── Views/                  #   CreateDiskDialog、SettingsDialog、ConfirmDialog、TrayTooltipView
 │       ├── MainWindow.xaml(.cs)    #   主窗口

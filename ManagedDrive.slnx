@@ -2,6 +2,7 @@
   <Folder Name="/assets/">
     <File Path="Directory.Build.props" />
     <File Path="Directory.Packages.props" />
+    <File Path="nuget.config" />
     <File Path="README.md" />
   </Folder>
   <Folder Name="/installer/">
