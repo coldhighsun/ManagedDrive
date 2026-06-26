@@ -44,6 +44,10 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             p => p is DiskViewModel vm ? vm.Disk.Options.PersistImagePath != null
                                        : SelectedDisk?.Disk.Options.PersistImagePath != null);
         RefreshCommand = new RelayCommand(_ => RefreshAll());
+        ResetTempDirsCommand = new RelayCommand(_ => ExecuteResetTempDirs());
+        ToggleTempDirCommand = new RelayCommand(
+            p => ExecuteToggleTempDir(p as DiskViewModel ?? SelectedDisk),
+            p => p is DiskViewModel || SelectedDisk != null);
         SettingsCommand = new RelayCommand(_ => ExecuteSettings());
     }
 
@@ -98,6 +102,23 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             field = value;
             OnPropertyChanged(nameof(SelectedDisk));
         }
+    }
+
+    /// <summary>
+    /// Gets the command that resets Windows TEMP and TMP directories to their OS defaults.
+    /// </summary>
+    public RelayCommand ResetTempDirsCommand
+    {
+        get;
+    }
+
+    /// <summary>
+    /// Gets the command that toggles the user's TEMP/TMP between the selected disk's
+    /// Temp folder and the Windows default, depending on the current state.
+    /// </summary>
+    public RelayCommand ToggleTempDirCommand
+    {
+        get;
     }
 
     /// <summary>
@@ -279,6 +300,101 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         }
     }
 
+    private async void ExecuteResetTempDirs()
+    {
+        var confirm = new ConfirmDialog(
+            Loc.Get("Msg.ResetTempConfirmTitle"),
+            Loc.Get("Msg.ResetTempConfirmBody"))
+        {
+            Owner = Application.Current.MainWindow
+        };
+
+        if (confirm.ShowDialog() != true)
+        {
+            return;
+        }
+
+        var success = await Task.Run(TempDirResetService.Reset);
+
+        if (success)
+        {
+            MessageBox.Show(
+                Loc.Get("Msg.ResetTempSuccess"),
+                "ManagedDrive",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
+            Log.Information("User temp directories reset to defaults.");
+        }
+        else
+        {
+            MessageBox.Show(
+                Loc.Get("Msg.ResetTempFailed"),
+                "ManagedDrive",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+            Log.Warning("Failed to reset user temp directories.");
+        }
+    }
+
+    private async void ExecuteToggleTempDir(DiskViewModel? vm)
+    {
+        if (vm == null)
+        {
+            return;
+        }
+
+        if (vm.IsCurrentTempDir)
+        {
+            var success = await Task.Run(TempDirResetService.Reset);
+
+            if (success)
+            {
+                MessageBox.Show(
+                    Loc.Get("Msg.ResetTempSuccess"),
+                    "ManagedDrive",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Information);
+                vm.Refresh();
+                Log.Information("User temp directories reset to defaults from {MountPoint}.", vm.MountPoint);
+            }
+            else
+            {
+                MessageBox.Show(
+                    Loc.Get("Msg.ResetTempFailed"),
+                    "ManagedDrive",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Error);
+                Log.Warning("Failed to reset user temp directories.");
+            }
+        }
+        else
+        {
+            var tempPath = System.IO.Path.Combine(vm.MountPoint, "Temp");
+            var success = await Task.Run(() => TempDirResetService.Set(tempPath));
+
+            if (success)
+            {
+                MessageBox.Show(
+                    Loc.Format("Msg.SetTempDirSuccess", tempPath),
+                    "ManagedDrive",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Information);
+                StatusText = Loc.Format("Status.TempDirSet", tempPath);
+                vm.Refresh();
+                Log.Information("User temp directory set to {TempPath}.", tempPath);
+            }
+            else
+            {
+                MessageBox.Show(
+                    Loc.Get("Msg.SetTempDirFailed"),
+                    "ManagedDrive",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Error);
+                Log.Warning("Failed to set user temp directory to {TempPath}.", tempPath);
+            }
+        }
+    }
+
     private void ExecuteSettings()
     {
         var config = _settingsStore.Load();
@@ -295,6 +411,18 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     private void ExecuteUnmount(DiskViewModel? vm)
     {
         if (vm == null)
+        {
+            return;
+        }
+
+        var confirm = new ConfirmDialog(
+            Loc.Get("Msg.UnmountConfirmTitle"),
+            Loc.Format("Msg.UnmountConfirmBody", vm.MountPoint, vm.VolumeLabel))
+        {
+            Owner = Application.Current.MainWindow
+        };
+
+        if (confirm.ShowDialog() != true)
         {
             return;
         }
