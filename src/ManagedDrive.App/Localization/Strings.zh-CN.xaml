@@ -57,6 +57,9 @@
     <sys:String x:Key="Tray.Show">显示</sys:String>
     <sys:String x:Key="Tray.NewDisk">新建磁盘</sys:String>
     <sys:String x:Key="Tray.Exit">退出</sys:String>
+    <sys:String x:Key="Tray.NoDisksMounted">暂无已挂载的磁盘</sys:String>
+    <sys:String x:Key="Tray.HighUsageTitle">RAM 磁盘空间不足</sys:String>
+    <sys:String x:Key="Tray.HighUsageBody">{0}（{1}）已使用 {2:F0}%。</sys:String>
 
     <!-- Status bar -->
     <sys:String x:Key="Status.Ready">就绪。</sys:String>

@@ -3,6 +3,7 @@ using ManagedDrive.App.Localization;
 using ManagedDrive.App.Models;
 using ManagedDrive.App.Services;
 using ManagedDrive.App.ViewModels;
+using ManagedDrive.App.Views;
 using ManagedDrive.Core;
 using Microsoft.Win32;
 using Serilog;
@@ -11,7 +12,9 @@ using System.Diagnostics;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Media.Imaging;
+using System.Windows.Threading;
 
 namespace ManagedDrive.App;
 
@@ -22,7 +25,8 @@ namespace ManagedDrive.App;
 public partial class App
 {
     private const string SingleInstanceMutexName = "Global\\ManagedDrive-4A7C2E1B-9F3D-4B8A-A1C5-3E6D2F0B8C9A";
-
+    private readonly TimeSpan _showTrayInfoPopup = TimeSpan.FromSeconds(3);
+    private readonly DispatcherTimer _timerHiddenTrayInfoPopup = new();
     private bool _isExiting;
     private MainViewModel? _mainViewModel;
     private MainWindow? _mainWindow;
@@ -30,6 +34,7 @@ public partial class App
     private SettingsStore? _settings;
     private Mutex? _singleInstanceMutex;
     private TaskbarIcon? _trayIcon;
+    private Popup? _trayInfoPopup;
 
     private void App_Exit(object sender, ExitEventArgs e)
     {
@@ -48,18 +53,21 @@ public partial class App
 
     private void App_Startup(object sender, StartupEventArgs e)
     {
-        _singleInstanceMutex = new Mutex(true, SingleInstanceMutexName, out var createdNew);
-        if (!createdNew)
+        if (Environment.GetEnvironmentVariable("DOTNET_ENVIRONMENT") != "Development")
         {
-            _singleInstanceMutex.Dispose();
-            _singleInstanceMutex = null;
-            MessageBox.Show(
-                "ManagedDrive is already running.",
-                "ManagedDrive",
-                MessageBoxButton.OK,
-                MessageBoxImage.Information);
-            Shutdown();
-            return;
+            _singleInstanceMutex = new Mutex(true, SingleInstanceMutexName, out var createdNew);
+            if (!createdNew)
+            {
+                _singleInstanceMutex.Dispose();
+                _singleInstanceMutex = null;
+                MessageBox.Show(
+                    "ManagedDrive is already running.",
+                    "ManagedDrive",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Information);
+                Shutdown();
+                return;
+            }
         }
 
         Log.Logger = new LoggerConfiguration()
@@ -90,6 +98,7 @@ public partial class App
         _mainWindow.Closing += MainWindow_Closing;
 
         SetupTrayIcon();
+        SetupUsageWarnings();
         AutoMountDisks();
 
         if (config.StartMinimized)
@@ -173,6 +182,19 @@ public partial class App
         _trayIcon?.Visibility = Visibility.Visible;
     }
 
+    private void OnDiskHighUsageWarning(object? sender, EventArgs e)
+    {
+        if (sender is not DiskViewModel vm || _trayIcon == null)
+        {
+            return;
+        }
+
+        var title = Loc.Get("Tray.HighUsageTitle");
+        var body = Loc.Format("Tray.HighUsageBody", vm.VolumeLabel, vm.MountPoint, vm.UsedPercent);
+        _trayIcon.ShowNotification(title, body, H.NotifyIcon.Core.NotificationIcon.Warning);
+        Log.Warning("High disk usage on {MountPoint}: {UsedPercent:F1}%.", vm.MountPoint, vm.UsedPercent);
+    }
+
     private void SaveSettings()
     {
         if (_settings == null || _mainViewModel == null)
@@ -206,15 +228,67 @@ public partial class App
 
         _trayIcon = new TaskbarIcon
         {
-            ToolTipText = "ManagedDrive",
             IconSource = new BitmapImage(new Uri("pack://application:,,,/ManagedDrive.ico")),
             ContextMenu = menu,
+            ToolTipText = "ManagedDrive",
             Visibility = Visibility.Hidden,
         };
         _trayIcon.TrayMouseDoubleClick += (_, _) => ShowMainWindow();
         _trayIcon.ForceCreate();
 
+        _trayInfoPopup = new Popup
+        {
+            Child = new TrayTooltipView { DataContext = _mainViewModel },
+            Placement = PlacementMode.Mouse,
+            AllowsTransparency = true,
+            StaysOpen = true,
+        };
+
+        _timerHiddenTrayInfoPopup.Interval = _showTrayInfoPopup;
+        _timerHiddenTrayInfoPopup.Tick += (_, _) =>
+        {
+            if (_trayInfoPopup is { IsOpen: true })
+            {
+                _trayInfoPopup.IsOpen = false;
+            }
+
+            _timerHiddenTrayInfoPopup.Stop();
+        };
+
+        _trayIcon.TrayMouseMove += (_, _) =>
+        {
+            _trayInfoPopup.IsOpen = true;
+            _timerHiddenTrayInfoPopup.Start();
+        };
+
         LanguageManager.Instance.LanguageChanged += (_, _) => UpdateTrayMenuHeaders();
+    }
+
+    private void SetupUsageWarnings()
+    {
+        if (_mainViewModel == null)
+        {
+            return;
+        }
+
+        _mainViewModel.Disks.CollectionChanged += (_, e) =>
+        {
+            if (e.NewItems != null)
+            {
+                foreach (DiskViewModel vm in e.NewItems)
+                {
+                    vm.HighUsageWarning += OnDiskHighUsageWarning;
+                }
+            }
+
+            if (e.OldItems != null)
+            {
+                foreach (DiskViewModel vm in e.OldItems)
+                {
+                    vm.HighUsageWarning -= OnDiskHighUsageWarning;
+                }
+            }
+        };
     }
 
     private void ShowMainWindow()

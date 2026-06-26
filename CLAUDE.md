@@ -63,6 +63,8 @@ Strings live in `Localization/Strings.{tag}.xaml` resource dictionaries. `Langua
 - XAML strings use `{DynamicResource Key}` bindings so that a runtime language switch propagates without restart.
 - The app is **light mode only**. `App.xaml` sets `BaseTheme="Light"` on `BundledTheme`; there is no runtime theme switching.
 
+**Adding a new language:** create `Localization/Strings.{tag}.xaml` (copy an existing one), add the BCP-47 tag to `LanguageManager.SupportedLanguages`, and add the tag to `<SatelliteResourceLanguages>` in `Directory.Build.props`.
+
 ### Threading model
 
 - `FileNodeMap` and `MountManager` use the C# 13 `Lock` type (not the older `lock` statement) for thread safety.
@@ -79,3 +81,11 @@ Package versions are pinned in `Directory.Packages.props` (Central Package Manag
 ### Output layout
 
 `<UseArtifactsOutput>true</UseArtifactsOutput>` in `Directory.Build.props` routes all build outputs to the `artifacts/` directory (SDK-style artifacts layout) rather than `bin/` and `obj/` per project.
+
+### Benchmarks
+
+`ManagedDrive.Benchmarks` (separate project, not in the solution) uses BenchmarkDotNet to compare RamDisk vs physical disk for sequential read/write at 4 KB, 1 MB, and 64 MB. Run in Release mode: `dotnet run --project benchmarks/ManagedDrive.Benchmarks -c Release`.
+
+### Release pipeline
+
+`.github/workflows/ci.yml` builds and runs tests on every push. Pushing a `v*` tag additionally publishes a self-contained Windows executable and builds an MSI installer via WiX v4 (`installer/ManagedDrive.wxs`), then creates a GitHub Release with both artifacts attached. The MSI uses a fixed `UpgradeCode` GUID and `MajorUpgrade` to support in-place updates. `MinVer` derives the version from the tag, so the tag must match the `v{major}.{minor}.{patch}` pattern.

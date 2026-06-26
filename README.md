@@ -18,6 +18,9 @@ Create, mount and manage in-memory volumes that appear as normal drive letters i
 - Optional persistence — save the disk contents to a `.mdr` image file and restore it on next mount
 - Auto-mount saved profiles on application startup
 - System-tray icon for quick access; minimizes to tray on window close
+- Tray icon tooltip — hover to see all mounted disks with live usage percentages
+- High-usage warning — system tray notification when a disk exceeds 90% capacity
+- Optional start-minimized mode — launch directly to tray without showing the main window
 - Bilingual UI — English and Simplified Chinese, auto-detected from system locale with manual override in Settings
 
 ### Prerequisites
@@ -42,7 +45,7 @@ cd ManagedDrive
 dotnet build
 
 # 4. Run
-dotnet run --project src/ManagedDrive.App
+dotnet run --project src/ManagedDrive.App -c Release
 ```
 
 Alternatively open `ManagedDrive.slnx` in Visual Studio 2022+ and press **F5**.
@@ -67,7 +70,7 @@ ManagedDrive/
 │       ├── Models/                 #   AppConfiguration, DiskProfile
 │       ├── Services/               #   SettingsStore, StartupManager
 │       ├── ViewModels/             #   MainViewModel, DiskViewModel
-│       ├── Views/                  #   CreateDiskDialog, SettingsDialog, ConfirmDialog
+│       ├── Views/                  #   CreateDiskDialog, SettingsDialog, ConfirmDialog, TrayTooltipView
 │       ├── MainWindow.xaml(.cs)    #   Main window
 │       └── App.xaml(.cs)           #   Startup, tray icon, auto-mount
 │
@@ -187,6 +190,9 @@ MIT
 - 可选持久化——将磁盘内容保存为 `.mdr` 镜像文件，下次挂载时自动还原
 - 应用启动时自动挂载已保存的磁盘配置
 - 系统托盘图标，关闭窗口时最小化到托盘
+- 托盘图标悬浮提示——鼠标悬停时显示所有已挂载磁盘及其实时使用率
+- 高用量警告——磁盘使用率超过 90% 时通过系统托盘发出通知
+- 可选最小化启动——直接启动到托盘，不显示主窗口
 - 双语界面——中文与英文，根据系统语言自动切换，也可在设置中手动更改
 
 ### 环境要求
@@ -211,7 +217,7 @@ cd ManagedDrive
 dotnet build
 
 # 4. 运行
-dotnet run --project src/ManagedDrive.App
+dotnet run --project src/ManagedDrive.App -c Release
 ```
 
 或者在 Visual Studio 2022+ 中打开 `ManagedDrive.slnx` 并按 **F5**。
@@ -236,7 +242,7 @@ ManagedDrive/
 │       ├── Models/                 #   AppConfiguration、DiskProfile
 │       ├── Services/               #   SettingsStore、StartupManager
 │       ├── ViewModels/             #   MainViewModel、DiskViewModel
-│       ├── Views/                  #   CreateDiskDialog、SettingsDialog、ConfirmDialog
+│       ├── Views/                  #   CreateDiskDialog、SettingsDialog、ConfirmDialog、TrayTooltipView
 │       ├── MainWindow.xaml(.cs)    #   主窗口
 │       └── App.xaml(.cs)           #   启动、托盘图标、自动挂载
 │
