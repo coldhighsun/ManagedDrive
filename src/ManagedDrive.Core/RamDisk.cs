@@ -39,6 +39,7 @@ public sealed class RamDisk : IDisposable
     public DiskOptions Options
     {
         get;
+        private set;
     }
 
     /// <summary>
@@ -145,6 +146,40 @@ public sealed class RamDisk : IDisposable
             Options.CapacityBytes,
             Options.VolumeLabel,
             Options.PersistImagePath);
+    }
+
+    /// <summary>
+    /// Applies <paramref name="newOptions"/> to the live disk without unmounting.
+    /// Only <see cref="DiskOptions.VolumeLabel"/>, <see cref="DiskOptions.CapacityBytes"/>,
+    /// <see cref="DiskOptions.AutoMount"/>, and <see cref="DiskOptions.PersistImagePath"/> may
+    /// be changed this way. <see cref="DiskOptions.MountPoint"/> and
+    /// <see cref="DiskOptions.ReadOnly"/> require a full unmount/remount.
+    /// </summary>
+    /// <param name="newOptions">The updated options to apply.</param>
+    /// <param name="error">
+    /// Set to a human-readable message when the method returns <c>false</c>.
+    /// </param>
+    /// <returns>
+    /// <c>true</c> on success; <c>false</c> when the capacity reduction is rejected because
+    /// current usage exceeds <paramref name="newOptions"/>.<see cref="DiskOptions.CapacityBytes"/>.
+    /// </returns>
+    public bool TryApplyOptions(DiskOptions newOptions, out string? error)
+    {
+        if (newOptions.CapacityBytes != Options.CapacityBytes &&
+            !_fs.TryUpdateCapacity(newOptions.CapacityBytes))
+        {
+            error = $"Cannot reduce capacity: current usage ({UsedBytes:N0} bytes) exceeds the requested capacity ({newOptions.CapacityBytes:N0} bytes).";
+            return false;
+        }
+
+        if (newOptions.VolumeLabel != Options.VolumeLabel)
+        {
+            _fs.UpdateVolumeLabel(newOptions.VolumeLabel);
+        }
+
+        Options = newOptions;
+        error = null;
+        return true;
     }
 
     private static void ConfigureHost(FileSystemHost host)

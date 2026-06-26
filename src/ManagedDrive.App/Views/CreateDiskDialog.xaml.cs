@@ -3,7 +3,6 @@ using ManagedDrive.Core;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Input;
 using MessageBox = System.Windows.MessageBox;
 using SaveFileDialog = Microsoft.Win32.SaveFileDialog;
 
@@ -17,19 +16,52 @@ public partial class CreateDiskDialog
     private readonly ulong _maxCapacityBytes;
 
     /// <summary>
-    /// Initializes the dialog.
+    /// Initializes the dialog in create mode.
     /// </summary>
     public CreateDiskDialog()
     {
         InitializeComponent();
-        LoadDriveLetters();
-        VolumeLabelBox.Text = Loc.Get("CreateDisk.DefaultLabel");
         _maxCapacityBytes = (ulong)GC.GetGCMemoryInfo().TotalAvailableMemoryBytes;
+        LoadDriveLetters(reservedLetter: null);
+        VolumeLabelBox.Text = Loc.Get("CreateDisk.DefaultLabel");
         CapacityUnitBox.Items.Add("MB");
         CapacityUnitBox.Items.Add("GB");
         CapacityUnitBox.SelectedIndex = 1; // default: GB — attach SelectionChanged after to avoid firing during init
         CapacityUnitBox.SelectionChanged += CapacityUnitBox_SelectionChanged;
-        DataObject.AddPastingHandler(CapacityBox, CapacityBox_Pasting);
+        CapacityBox.Maximum = GetMaxCapacityValue();
+    }
+
+    /// <summary>
+    /// Initializes the dialog in edit mode, pre-populating all fields from <paramref name="existing"/>.
+    /// </summary>
+    /// <param name="existing">The options of the disk being edited.</param>
+    public CreateDiskDialog(DiskOptions existing) : this()
+    {
+        Title = Loc.Get("CreateDisk.TitleEdit");
+
+        // Re-populate drive letters including the one currently in use.
+        DriveLetterBox.Items.Clear();
+        LoadDriveLetters(reservedLetter: existing.MountPoint[0]);
+        DriveLetterBox.SelectedItem = existing.MountPoint;
+
+        VolumeLabelBox.Text = existing.VolumeLabel;
+
+        var capacityMb = existing.CapacityBytes / (1024UL * 1024);
+        var capacityGb = existing.CapacityBytes / (1024UL * 1024 * 1024);
+        if (capacityGb > 0 && existing.CapacityBytes % (1024UL * 1024 * 1024) == 0)
+        {
+            CapacityUnitBox.SelectedItem = "GB";
+            CapacityBox.Value = (int)capacityGb;
+        }
+        else
+        {
+            CapacityUnitBox.SelectedItem = "MB";
+            CapacityBox.Value = (int)capacityMb;
+        }
+
+        ReadOnlyBox.IsChecked = existing.ReadOnly;
+        AutoMountBox.IsChecked = existing.AutoMount;
+        ImagePathBox.Text = existing.PersistImagePath ?? string.Empty;
     }
 
     /// <summary>
@@ -41,37 +73,26 @@ public partial class CreateDiskDialog
         get; private set;
     }
 
-    private uint GetMaxCapacityValue()
+    private int GetMaxCapacityValue()
     {
         var isGb = CapacityUnitBox.SelectedItem as string == "GB";
         var divisor = isGb ? 1024UL * 1024 * 1024 : 1024UL * 1024;
-        return (uint)Math.Max(1, Math.Min(_maxCapacityBytes / divisor, uint.MaxValue));
-    }
-
-    private void CapacityBox_PreviewTextInput(object sender, TextCompositionEventArgs e)
-    {
-        e.Handled = !e.Text.All(char.IsDigit);
-    }
-
-    private void CapacityBox_Pasting(object sender, DataObjectPastingEventArgs e)
-    {
-        if (e.DataObject.GetDataPresent(typeof(string)))
-        {
-            var text = (string)e.DataObject.GetData(typeof(string))!;
-            if (!text.All(char.IsDigit))
-                e.CancelCommand();
-        }
-        else
-        {
-            e.CancelCommand();
-        }
+        return (int)Math.Max(1, Math.Min(_maxCapacityBytes / divisor, int.MaxValue));
     }
 
     private void CapacityUnitBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         var max = GetMaxCapacityValue();
-        if (uint.TryParse(CapacityBox.Text.Trim(), out var current) && current > max)
-            CapacityBox.Text = max.ToString();
+        CapacityBox.Maximum = max;
+        if (CapacityBox.Value > max)
+        {
+            CapacityBox.Value = max;
+        }
+    }
+
+    private void ClearImagePath_Click(object sender, RoutedEventArgs e)
+    {
+        ImagePathBox.Text = string.Empty;
     }
 
     private void BrowseImagePath_Click(object sender, RoutedEventArgs e)
@@ -91,14 +112,14 @@ public partial class CreateDiskDialog
         }
     }
 
-    private void LoadDriveLetters()
+    private void LoadDriveLetters(char? reservedLetter)
     {
         var usedLetters = new HashSet<char>(
             DriveInfo.GetDrives().Select(d => char.ToUpperInvariant(d.Name[0])));
 
         for (var c = 'C'; c <= 'Z'; c++)
         {
-            if (!usedLetters.Contains(c))
+            if (!usedLetters.Contains(c) || c == reservedLetter)
             {
                 DriveLetterBox.Items.Add(c + ":");
             }
@@ -133,9 +154,8 @@ public partial class CreateDiskDialog
         }
 
         var maxCapacity = GetMaxCapacityValue();
-        if (!uint.TryParse(CapacityBox.Text.Trim(), out var capacityValue)
-            || capacityValue == 0
-            || capacityValue > maxCapacity)
+        var capacityValue = CapacityBox.Value;
+        if (capacityValue <= 0 || capacityValue > maxCapacity)
         {
             error = string.Format(Loc.Get("Val.BadCapacity"), maxCapacity, CapacityUnitBox.SelectedItem);
             return false;

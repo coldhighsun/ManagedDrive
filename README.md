@@ -15,13 +15,14 @@ Create, mount and manage in-memory volumes that appear as normal drive letters i
 
 - Mount multiple RAM disks simultaneously, each with its own drive letter
 - Configurable capacity, volume label and read-only flag
-- Optional persistence — save the disk contents to a `.mdr` image file and restore it on next mount
+- Edit a mounted disk — change label, capacity, auto-mount, and image path live without data loss; changing the drive letter or read-only flag remounts the disk
+- Optional persistence — save the disk contents to a `.mdr` image file and restore it on next mount; Save Image is always available and prompts for a file path if none is set
 - Auto-mount saved profiles on application startup
 - System-tray icon for quick access; minimizes to tray on window close
 - Tray icon tooltip — hover to see all mounted disks with live usage percentages
 - High-usage warning — system tray notification when a disk exceeds 90% capacity
 - Optional start-minimized mode — launch directly to tray without showing the main window
-- Temp directory redirection — right-click a disk to set it as the Windows TEMP/TMP directory; reset to the system default from the toolbar or context menu
+- Temp directory redirection — right-click a disk to set it as the Windows TEMP/TMP directory; reset to the system default from the toolbar or context menu; automatically resets to the system default when the disk is unmounted or remounted; on startup, if TEMP/TMP points to a disk that is not set to auto-mount, it is automatically reset to the system default with a warning
 - Bilingual UI — English and Simplified Chinese, auto-detected from system locale with manual override in Settings
 
 ### Installation
@@ -194,13 +195,14 @@ MIT
 
 - 同时挂载多个 RAM 磁盘，每个磁盘拥有独立的驱动器号
 - 可配置容量、卷标和只读标志
-- 可选持久化——将磁盘内容保存为 `.mdr` 镜像文件，下次挂载时自动还原
+- 编辑已挂载磁盘——修改卷标、容量、自动挂载和镜像路径无需重挂即可实时生效；更改盘符或只读标志时自动重挂
+- 可选持久化——将磁盘内容保存为 `.mdr` 镜像文件，下次挂载时自动还原；保存镜像功能始终可用，未设置镜像路径时自动弹出选择对话框
 - 应用启动时自动挂载已保存的磁盘配置
 - 系统托盘图标，关闭窗口时最小化到托盘
 - 托盘图标悬浮提示——鼠标悬停时显示所有已挂载磁盘及其实时使用率
 - 高用量警告——磁盘使用率超过 90% 时通过系统托盘发出通知
 - 可选最小化启动——直接启动到托盘，不显示主窗口
-- 临时目录重定向——右键单击磁盘可将其设为 Windows TEMP/TMP 目录；通过工具栏或右键菜单恢复系统默认值
+- 临时目录重定向——右键单击磁盘可将其设为 Windows TEMP/TMP 目录；通过工具栏或右键菜单恢复系统默认值；卸载或重挂时自动恢复为系统默认临时目录；启动时若 TEMP/TMP 指向未设置自动挂载的磁盘，将自动恢复为系统默认并显示警告
 - 双语界面——中文与英文，根据系统语言自动切换，也可在设置中手动更改
 
 ### 安装

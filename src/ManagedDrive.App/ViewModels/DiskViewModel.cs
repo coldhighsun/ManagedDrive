@@ -139,7 +139,7 @@ public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
     }
 
     /// <summary>
-    /// Refreshes usage statistics immediately.
+    /// Refreshes usage statistics, volume label, and capacity immediately.
     /// </summary>
     public void Refresh()
     {
@@ -149,6 +149,8 @@ public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
         OnPropertyChanged(nameof(FreeFormatted));
         OnPropertyChanged(nameof(FreePercent));
         OnPropertyChanged(nameof(UsedPercent));
+        OnPropertyChanged(nameof(CapacityFormatted));
+        OnPropertyChanged(nameof(VolumeLabel));
 
         IsCurrentTempDir = CheckIsCurrentTempDir();
 

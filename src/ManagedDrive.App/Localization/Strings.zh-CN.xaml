@@ -9,6 +9,7 @@
     <sys:String x:Key="Menu.Exit">退出(_X)</sys:String>
     <sys:String x:Key="Btn.NewDisk">新建磁盘</sys:String>
     <sys:String x:Key="Btn.OpenInExplorer">在资源管理器中打开</sys:String>
+    <sys:String x:Key="Btn.EditDisk">编辑磁盘…</sys:String>
     <sys:String x:Key="Btn.Unmount">卸载</sys:String>
     <sys:String x:Key="Btn.SaveImage">保存镜像</sys:String>
     <sys:String x:Key="Btn.SetAsTempDir">设为临时文件夹</sys:String>
@@ -32,6 +33,7 @@
 
     <!-- CreateDiskDialog -->
     <sys:String x:Key="CreateDisk.Title">创建 RAM 磁盘</sys:String>
+    <sys:String x:Key="CreateDisk.TitleEdit">编辑 RAM 磁盘</sys:String>
     <sys:String x:Key="CreateDisk.DriveLetter">驱动器号：</sys:String>
     <sys:String x:Key="CreateDisk.VolumeLabel">卷标：</sys:String>
     <sys:String x:Key="CreateDisk.Capacity">容量：</sys:String>
@@ -42,6 +44,7 @@
     <sys:String x:Key="Tip.Capacity">磁盘大小（选择单位：MB 或 GB）</sys:String>
     <sys:String x:Key="Tip.AutoMount">下次启动时自动重新挂载此磁盘</sys:String>
     <sys:String x:Key="Tip.ImageFile">可选：.mdr 镜像文件路径，用于持久化存储（留空则为临时磁盘）</sys:String>
+    <sys:String x:Key="Tip.ClearImagePath">清空镜像文件路径</sys:String>
 
     <!-- SettingsDialog -->
     <sys:String x:Key="Settings.Title">设置</sys:String>
@@ -76,14 +79,19 @@
 
     <!-- MessageBox bodies -->
     <sys:String x:Key="Msg.AlreadyRunning">ManagedDrive 已在运行。</sys:String>
+    <sys:String x:Key="Msg.StartupTempReset">您的 Windows 临时目录指向了：&#x0a;&#x0a;  {0}&#x0a;&#x0a;该内存盘未配置自动挂载，临时目录将无法访问，已自动重置为系统默认临时目录。</sys:String>
     <sys:String x:Key="Msg.WinFspMissingTitle">ManagedDrive – 缺少必要组件</sys:String>
     <sys:String x:Key="Msg.WinFspMissingBody">此程序需要 WinFsp 2.1.x，但未在系统中检测到。&#x0a;&#x0a;点击「是」跳转下载页面，点击「否」退出。</sys:String>
     <sys:String x:Key="Msg.ExitConfirmTitle">ManagedDrive</sys:String>
     <sys:String x:Key="Msg.ExitConfirmBody">所有已挂载的 RAM 磁盘将被卸载，其中未挂载镜像的数据将丢失。&#x0a;&#x0a;确认退出？</sys:String>
     <sys:String x:Key="Msg.MountFailed">挂载磁盘失败：&#x0a;{0}</sys:String>
+    <sys:String x:Key="Msg.SaveImageSuccess">镜像已成功保存至：&#x0a;{0}</sys:String>
     <sys:String x:Key="Msg.SaveImageFailed">保存镜像失败：&#x0a;{0}</sys:String>
     <sys:String x:Key="Msg.UnmountConfirmTitle">卸载磁盘</sys:String>
     <sys:String x:Key="Msg.UnmountConfirmBody">确认卸载 {0}（{1}）？&#x0a;&#x0a;未保存到镜像文件的数据将会丢失。</sys:String>
+    <sys:String x:Key="Msg.EditDiskConfirmTitle">编辑磁盘</sys:String>
+    <sys:String x:Key="Msg.EditDiskConfirmBody">确认编辑 {0}（{1}）？&#x0a;&#x0a;磁盘将以新参数重新挂载，内存中的所有数据将丢失。</sys:String>
+    <sys:String x:Key="Msg.TempDirWillBeReset">此磁盘当前是您的 Windows 临时文件夹。卸载前将自动恢复为系统默认临时目录。</sys:String>
     <sys:String x:Key="Msg.ResetTempConfirmTitle">重置临时目录</sys:String>
     <sys:String x:Key="Msg.ResetTempConfirmBody">此操作将把 TEMP 和 TMP 恢复为 Windows 默认值：&#x0a;&#x0a;  %USERPROFILE%\AppData\Local\Temp&#x0a;&#x0a;是否继续？</sys:String>
     <sys:String x:Key="Msg.ResetTempSuccess">TEMP 和 TMP 已成功重置为 Windows 默认值。</sys:String>

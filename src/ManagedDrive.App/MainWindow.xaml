@@ -154,6 +154,15 @@
                                         <materialDesign:PackIcon Kind="FolderOpen"/>
                                     </MenuItem.Icon>
                                 </MenuItem>
+                                <MenuItem Header="{DynamicResource Btn.EditDisk}"
+                                          Command="{Binding PlacementTarget.Tag.EditDiskCommand,
+                                                    RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                          CommandParameter="{Binding PlacementTarget.DataContext,
+                                                    RelativeSource={RelativeSource AncestorType=ContextMenu}}">
+                                    <MenuItem.Icon>
+                                        <materialDesign:PackIcon Kind="Pencil"/>
+                                    </MenuItem.Icon>
+                                </MenuItem>
                                 <MenuItem Header="{DynamicResource Btn.SetAsTempDir}"
                                           Visibility="{Binding PlacementTarget.DataContext.IsNotCurrentTempDir,
                                                         RelativeSource={RelativeSource AncestorType=ContextMenu},
@@ -201,16 +210,16 @@
                         </materialDesign:Card.ContextMenu>
                         <Grid>
                             <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="52"/>
+                                <ColumnDefinition Width="56"/>
                                 <ColumnDefinition Width="*"/>
                                 <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
 
                             <!-- Drive letter badge -->
-                            <Border Width="44" Height="44" CornerRadius="8"
+                            <Border Width="48" Height="48" CornerRadius="8"
                                     Background="{DynamicResource PrimaryHueMidBrush}">
                                 <TextBlock Text="{Binding MountPoint}"
-                                           FontSize="13" FontWeight="SemiBold"               
+                                           FontSize="18" FontWeight="SemiBold"
                                            HorizontalAlignment="Center"
                                            VerticalAlignment="Center"/>
                             </Border>
