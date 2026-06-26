@@ -13,10 +13,13 @@ namespace ManagedDrive.App.ViewModels;
 /// </summary>
 public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
 {
+    private const double HighUsageResetThreshold = 85.0;
+    private const double HighUsageThreshold = 90.0;
     private readonly RamDisk _disk;
     private readonly DispatcherTimer _refreshTimer;
 
     private ulong _freeBytes;
+    private bool _highUsageWarned;
     private ulong _usedBytes;
 
     /// <summary>
@@ -39,13 +42,14 @@ public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
         _refreshTimer.Start();
     }
 
+    /// <summary>
+    /// Raised when disk usage first crosses the 90% threshold.
+    /// Resets (and can re-fire) only after usage drops below 85%.
+    /// </summary>
+    public event EventHandler? HighUsageWarning;
+
     /// <inheritdoc />
     public event PropertyChangedEventHandler? PropertyChanged;
-
-    /// <summary>
-    /// Gets the command that opens this disk's mount point in Windows Explorer.
-    /// </summary>
-    public RelayCommand OpenInExplorerCommand { get; }
 
     /// <summary>
     /// Gets the total capacity formatted as a human-readable string.
@@ -63,9 +67,25 @@ public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
     public string FreeFormatted => FormatBytes(_freeBytes);
 
     /// <summary>
+    /// Gets the free-space percentage (0–100) for display.
+    /// </summary>
+    public double FreePercent =>
+        _disk.TotalBytes > 0
+            ? Math.Round((double)_freeBytes / _disk.TotalBytes * 100.0, 1)
+            : 100.0;
+
+    /// <summary>
     /// Gets the mount point string (e.g., <c>Z:</c>).
     /// </summary>
     public string MountPoint => _disk.MountPoint;
+
+    /// <summary>
+    /// Gets the command that opens this disk's mount point in Windows Explorer.
+    /// </summary>
+    public RelayCommand OpenInExplorerCommand
+    {
+        get;
+    }
 
     /// <summary>
     /// Gets the amount of used space formatted as a human-readable string.
@@ -101,7 +121,19 @@ public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
         _freeBytes = _disk.FreeBytes;
         OnPropertyChanged(nameof(UsedFormatted));
         OnPropertyChanged(nameof(FreeFormatted));
+        OnPropertyChanged(nameof(FreePercent));
         OnPropertyChanged(nameof(UsedPercent));
+
+        var used = UsedPercent;
+        if (!_highUsageWarned && used >= HighUsageThreshold)
+        {
+            _highUsageWarned = true;
+            HighUsageWarning?.Invoke(this, EventArgs.Empty);
+        }
+        else if (_highUsageWarned && used < HighUsageResetThreshold)
+        {
+            _highUsageWarned = false;
+        }
     }
 
     private static string FormatBytes(ulong bytes)
