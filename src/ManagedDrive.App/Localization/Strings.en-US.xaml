@@ -11,6 +11,8 @@
     <sys:String x:Key="Btn.OpenInExplorer">Open in Explorer</sys:String>
     <sys:String x:Key="Btn.Unmount">Unmount</sys:String>
     <sys:String x:Key="Btn.SaveImage">Save Image</sys:String>
+    <sys:String x:Key="Btn.SetAsTempDir">Set as Temp Directory</sys:String>
+    <sys:String x:Key="Btn.RestoreDefaultTemp">Restore Default Temp Directory</sys:String>
     <sys:String x:Key="Btn.Refresh">Refresh</sys:String>
     <sys:String x:Key="Btn.Settings">Settings</sys:String>
     <sys:String x:Key="Tip.NewDisk">Create and mount a new RAM disk</sys:String>
@@ -18,6 +20,7 @@
     <sys:String x:Key="Tip.SaveImage">Save the selected disk's contents to its image file</sys:String>
     <sys:String x:Key="Tip.Refresh">Refresh usage statistics</sys:String>
     <sys:String x:Key="Tip.Settings">Application settings</sys:String>
+    <sys:String x:Key="Tip.ResetTempDirs">Reset Windows Temp Directories to defaults</sys:String>
     <sys:String x:Key="Tip.Minimize">Minimize</sys:String>
     <sys:String x:Key="Tip.Close">Hide to tray</sys:String>
     <sys:String x:Key="Col.MountPoint">Mount Point</sys:String>
@@ -69,6 +72,7 @@
     <sys:String x:Key="Status.MountFailed">Mount failed.</sys:String>
     <sys:String x:Key="Status.ImageSaved">Image saved for {0}.</sys:String>
     <sys:String x:Key="Status.Unmounted">Unmounted {0}.</sys:String>
+    <sys:String x:Key="Status.TempDirSet">Temp directory set to {0}.</sys:String>
 
     <!-- MessageBox bodies -->
     <sys:String x:Key="Msg.AlreadyRunning">ManagedDrive is already running.</sys:String>
@@ -78,6 +82,14 @@
     <sys:String x:Key="Msg.ExitConfirmBody">All mounted RAM disks will be unmounted and any unimaged data will be lost.&#x0a;&#x0a;Exit anyway?</sys:String>
     <sys:String x:Key="Msg.MountFailed">Failed to mount disk:&#x0a;{0}</sys:String>
     <sys:String x:Key="Msg.SaveImageFailed">Failed to save image:&#x0a;{0}</sys:String>
+    <sys:String x:Key="Msg.UnmountConfirmTitle">Unmount Disk</sys:String>
+    <sys:String x:Key="Msg.UnmountConfirmBody">Unmount {0} ({1})?&#x0a;&#x0a;Any data not saved to an image file will be lost.</sys:String>
+    <sys:String x:Key="Msg.ResetTempConfirmTitle">Reset Temp Directories</sys:String>
+    <sys:String x:Key="Msg.ResetTempConfirmBody">This will restore TEMP and TMP to their Windows default:&#x0a;&#x0a;  %USERPROFILE%\AppData\Local\Temp&#x0a;&#x0a;Continue?</sys:String>
+    <sys:String x:Key="Msg.ResetTempSuccess">TEMP and TMP have been reset to their Windows defaults.</sys:String>
+    <sys:String x:Key="Msg.ResetTempFailed">Failed to reset temp directories.</sys:String>
+    <sys:String x:Key="Msg.SetTempDirSuccess">TEMP and TMP have been set to:&#x0a;&#x0a;  {0}</sys:String>
+    <sys:String x:Key="Msg.SetTempDirFailed">Failed to set temp directory.</sys:String>
 
     <!-- Validation -->
     <sys:String x:Key="Val.Title">Invalid Input</sys:String>

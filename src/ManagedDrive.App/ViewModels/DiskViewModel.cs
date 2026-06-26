@@ -20,6 +20,7 @@ public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
 
     private ulong _freeBytes;
     private bool _highUsageWarned;
+    private bool _isCurrentTempDir;
     private ulong _usedBytes;
 
     /// <summary>
@@ -31,6 +32,7 @@ public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
         _disk = disk;
         _usedBytes = disk.UsedBytes;
         _freeBytes = disk.FreeBytes;
+        _isCurrentTempDir = CheckIsCurrentTempDir();
 
         OpenInExplorerCommand = new RelayCommand(_ => Process.Start("explorer.exe", MountPoint));
 
@@ -80,6 +82,30 @@ public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
     public string MountPoint => _disk.MountPoint;
 
     /// <summary>
+    /// Gets whether the user's TEMP and TMP currently point to this disk's Temp folder.
+    /// </summary>
+    public bool IsCurrentTempDir
+    {
+        get => _isCurrentTempDir;
+        private set
+        {
+            if (_isCurrentTempDir == value)
+            {
+                return;
+            }
+
+            _isCurrentTempDir = value;
+            OnPropertyChanged(nameof(IsCurrentTempDir));
+            OnPropertyChanged(nameof(IsNotCurrentTempDir));
+        }
+    }
+
+    /// <summary>
+    /// Gets the inverse of <see cref="IsCurrentTempDir"/> for visibility binding.
+    /// </summary>
+    public bool IsNotCurrentTempDir => !_isCurrentTempDir;
+
+    /// <summary>
     /// Gets the command that opens this disk's mount point in Windows Explorer.
     /// </summary>
     public RelayCommand OpenInExplorerCommand
@@ -124,6 +150,8 @@ public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
         OnPropertyChanged(nameof(FreePercent));
         OnPropertyChanged(nameof(UsedPercent));
 
+        IsCurrentTempDir = CheckIsCurrentTempDir();
+
         var used = UsedPercent;
         if (!_highUsageWarned && used >= HighUsageThreshold)
         {
@@ -134,6 +162,13 @@ public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
         {
             _highUsageWarned = false;
         }
+    }
+
+    private bool CheckIsCurrentTempDir()
+    {
+        var userTemp = Environment.GetEnvironmentVariable("TEMP", EnvironmentVariableTarget.User);
+        var diskTemp = System.IO.Path.Combine(MountPoint, "Temp");
+        return string.Equals(userTemp, diskTemp, StringComparison.OrdinalIgnoreCase);
     }
 
     private static string FormatBytes(ulong bytes)

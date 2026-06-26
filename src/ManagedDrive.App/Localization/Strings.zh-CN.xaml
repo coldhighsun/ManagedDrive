@@ -11,6 +11,8 @@
     <sys:String x:Key="Btn.OpenInExplorer">在资源管理器中打开</sys:String>
     <sys:String x:Key="Btn.Unmount">卸载</sys:String>
     <sys:String x:Key="Btn.SaveImage">保存镜像</sys:String>
+    <sys:String x:Key="Btn.SetAsTempDir">设为临时文件夹</sys:String>
+    <sys:String x:Key="Btn.RestoreDefaultTemp">恢复默认临时文件夹</sys:String>
     <sys:String x:Key="Btn.Refresh">刷新</sys:String>
     <sys:String x:Key="Btn.Settings">设置</sys:String>
     <sys:String x:Key="Tip.NewDisk">创建并挂载新的 RAM 磁盘</sys:String>
@@ -18,6 +20,7 @@
     <sys:String x:Key="Tip.SaveImage">将所选磁盘内容保存到镜像文件</sys:String>
     <sys:String x:Key="Tip.Refresh">刷新使用情况统计</sys:String>
     <sys:String x:Key="Tip.Settings">应用程序设置</sys:String>
+    <sys:String x:Key="Tip.ResetTempDirs">将 Windows 临时目录重置为默认值</sys:String>
     <sys:String x:Key="Tip.Minimize">最小化</sys:String>
     <sys:String x:Key="Tip.Close">最小化到系统托盘</sys:String>
     <sys:String x:Key="Col.MountPoint">挂载点</sys:String>
@@ -69,6 +72,7 @@
     <sys:String x:Key="Status.MountFailed">挂载失败。</sys:String>
     <sys:String x:Key="Status.ImageSaved">已保存 {0} 的镜像。</sys:String>
     <sys:String x:Key="Status.Unmounted">已卸载 {0}。</sys:String>
+    <sys:String x:Key="Status.TempDirSet">临时文件夹已设置为 {0}。</sys:String>
 
     <!-- MessageBox bodies -->
     <sys:String x:Key="Msg.AlreadyRunning">ManagedDrive 已在运行。</sys:String>
@@ -78,6 +82,14 @@
     <sys:String x:Key="Msg.ExitConfirmBody">所有已挂载的 RAM 磁盘将被卸载，其中未挂载镜像的数据将丢失。&#x0a;&#x0a;确认退出？</sys:String>
     <sys:String x:Key="Msg.MountFailed">挂载磁盘失败：&#x0a;{0}</sys:String>
     <sys:String x:Key="Msg.SaveImageFailed">保存镜像失败：&#x0a;{0}</sys:String>
+    <sys:String x:Key="Msg.UnmountConfirmTitle">卸载磁盘</sys:String>
+    <sys:String x:Key="Msg.UnmountConfirmBody">确认卸载 {0}（{1}）？&#x0a;&#x0a;未保存到镜像文件的数据将会丢失。</sys:String>
+    <sys:String x:Key="Msg.ResetTempConfirmTitle">重置临时目录</sys:String>
+    <sys:String x:Key="Msg.ResetTempConfirmBody">此操作将把 TEMP 和 TMP 恢复为 Windows 默认值：&#x0a;&#x0a;  %USERPROFILE%\AppData\Local\Temp&#x0a;&#x0a;是否继续？</sys:String>
+    <sys:String x:Key="Msg.ResetTempSuccess">TEMP 和 TMP 已成功重置为 Windows 默认值。</sys:String>
+    <sys:String x:Key="Msg.ResetTempFailed">重置临时目录失败。</sys:String>
+    <sys:String x:Key="Msg.SetTempDirSuccess">TEMP 和 TMP 已成功设置为：&#x0a;&#x0a;  {0}</sys:String>
+    <sys:String x:Key="Msg.SetTempDirFailed">设置临时文件夹失败。</sys:String>
 
     <!-- Validation -->
     <sys:String x:Key="Val.Title">输入无效</sys:String>

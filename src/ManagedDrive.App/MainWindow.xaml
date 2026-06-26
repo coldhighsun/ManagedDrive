@@ -20,6 +20,10 @@
         TextOptions.TextRenderingMode="Auto"
         FontFamily="{materialDesign:MaterialDesignFont}">
 
+    <Window.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVis"/>
+    </Window.Resources>
+
     <WindowChrome.WindowChrome>
         <WindowChrome CaptionHeight="48"
                       ResizeBorderThickness="4"
@@ -44,21 +48,15 @@
                     </Button>
                     <Button Style="{StaticResource MaterialDesignIconForegroundButton}"
 
-                            Command="{Binding UnmountCommand}"
-                            ToolTip="{DynamicResource Tip.Unmount}">
-                        <materialDesign:PackIcon Kind="Eject" Width="22" Height="22"/>
-                    </Button>
-                    <Button Style="{StaticResource MaterialDesignIconForegroundButton}"
-
-                            Command="{Binding SaveImageCommand}"
-                            ToolTip="{DynamicResource Tip.SaveImage}">
-                        <materialDesign:PackIcon Kind="ContentSave" Width="22" Height="22"/>
-                    </Button>
-                    <Button Style="{StaticResource MaterialDesignIconForegroundButton}"
-
                             Command="{Binding RefreshCommand}"
                             ToolTip="{DynamicResource Tip.Refresh}">
                         <materialDesign:PackIcon Kind="Refresh" Width="22" Height="22"/>
+                    </Button>
+                    <Button Style="{StaticResource MaterialDesignIconForegroundButton}"
+
+                            Command="{Binding ResetTempDirsCommand}"
+                            ToolTip="{DynamicResource Tip.ResetTempDirs}">
+                        <materialDesign:PackIcon Kind="FolderRefresh" Width="22" Height="22"/>
                     </Button>
                     <Button Style="{StaticResource MaterialDesignIconForegroundButton}"
 
@@ -154,6 +152,30 @@
                                                     RelativeSource={RelativeSource AncestorType=ContextMenu}}">
                                     <MenuItem.Icon>
                                         <materialDesign:PackIcon Kind="FolderOpen"/>
+                                    </MenuItem.Icon>
+                                </MenuItem>
+                                <MenuItem Header="{DynamicResource Btn.SetAsTempDir}"
+                                          Visibility="{Binding PlacementTarget.DataContext.IsNotCurrentTempDir,
+                                                        RelativeSource={RelativeSource AncestorType=ContextMenu},
+                                                        Converter={StaticResource BoolToVis}}"
+                                          Command="{Binding PlacementTarget.Tag.ToggleTempDirCommand,
+                                                    RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                          CommandParameter="{Binding PlacementTarget.DataContext,
+                                                    RelativeSource={RelativeSource AncestorType=ContextMenu}}">
+                                    <MenuItem.Icon>
+                                        <materialDesign:PackIcon Kind="FolderSwap"/>
+                                    </MenuItem.Icon>
+                                </MenuItem>
+                                <MenuItem Header="{DynamicResource Btn.RestoreDefaultTemp}"
+                                          Visibility="{Binding PlacementTarget.DataContext.IsCurrentTempDir,
+                                                        RelativeSource={RelativeSource AncestorType=ContextMenu},
+                                                        Converter={StaticResource BoolToVis}}"
+                                          Command="{Binding PlacementTarget.Tag.ToggleTempDirCommand,
+                                                    RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                          CommandParameter="{Binding PlacementTarget.DataContext,
+                                                    RelativeSource={RelativeSource AncestorType=ContextMenu}}">
+                                    <MenuItem.Icon>
+                                        <materialDesign:PackIcon Kind="FolderRefresh"/>
                                     </MenuItem.Icon>
                                 </MenuItem>
                                 <Separator/>

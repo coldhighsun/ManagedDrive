@@ -47,11 +47,12 @@ Data flows: `MountManager` → `RamDisk.Create()` → `MemoryFileSystem` + `File
 Standard WPF MVVM:
 
 - `App.xaml.cs` — application entry point. Creates `MountManager` + `SettingsStore`, constructs `MainViewModel`, sets up the system-tray icon (`H.NotifyIcon.Wpf` / `TaskbarIcon`), auto-mounts profiles with `AutoMount = true` on startup, saves settings on exit. Enforces single-instance via a named `Mutex`. Serilog logs to `{AppPath}\logs\log-.txt` with 7-day rolling retention.
-- `MainViewModel` — owns `ObservableCollection<DiskViewModel>`. Commands: `CreateDiskCommand` (opens `CreateDiskDialog`), `UnmountCommand`, `SaveImageCommand`, `RefreshCommand`, `SettingsCommand`. Mount operations are dispatched to `Task.Run` to keep the UI responsive.
-- `DiskViewModel` — wraps a `RamDisk`; exposes bindable properties (mount point, used/free/total bytes). A `DispatcherTimer` refreshes usage stats every 2 s automatically; `Refresh()` triggers a manual refresh.
+- `MainViewModel` — owns `ObservableCollection<DiskViewModel>`. Commands: `CreateDiskCommand` (opens `CreateDiskDialog`), `UnmountCommand`, `SaveImageCommand`, `RefreshCommand`, `SettingsCommand`, `ResetTempDirsCommand` (resets TEMP/TMP to Windows defaults), `ToggleTempDirCommand` (toggles TEMP/TMP between the selected disk's `Temp` folder and the Windows default). Mount operations are dispatched to `Task.Run` to keep the UI responsive.
+- `DiskViewModel` — wraps a `RamDisk`; exposes bindable properties (mount point, used/free/total bytes, `IsCurrentTempDir`). A `DispatcherTimer` refreshes usage stats every 2 s automatically; `Refresh()` triggers a manual refresh. Fires `HighUsageWarning` when usage first crosses 90 %; the warning resets when usage drops below 85 %.
 - `MainWindow` — uses `WindowStyle="None"` + `WindowChrome` (custom Material Design app bar as title bar). Closing the window hides it to the tray; exit is only via the tray menu or the toolbar close button. Any interactive element inside the `WindowChrome` caption area must have `WindowChrome.IsHitTestVisibleInChrome="True"`.
 - `SettingsStore` — persists `AppConfiguration` (JSON) to `%APPDATA%\ManagedDrive\settings.json`. `AppConfiguration` holds `RunAtStartup`, `Language` (BCP-47 tag or `null` for system default), and the list of `DiskProfile` records.
 - `StartupManager` — reads/writes the `HKCU\...\Run` registry key to control Windows startup.
+- `TempDirResetService` — static helper that reads/writes `HKCU\Environment` (TEMP and TMP) and broadcasts `WM_SETTINGCHANGE` so running processes pick up the change immediately. `Set(path)` points both variables at an absolute path (creating the directory first); `Reset()` restores the default `%USERPROFILE%\AppData\Local\Temp` as an `ExpandString` value.
 
 ### Localization
 
