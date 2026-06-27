@@ -55,6 +55,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             p => ExecuteToggleTempDir(p as DiskViewModel ?? SelectedDisk),
             p => p is DiskViewModel || SelectedDisk != null);
         SettingsCommand = new RelayCommand(_ => ExecuteSettings());
+        AboutCommand = new RelayCommand(_ => ExecuteAbout());
     }
 
     /// <inheritdoc />
@@ -147,6 +148,14 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     /// Gets the command that opens the Settings dialog.
     /// </summary>
     public RelayCommand SettingsCommand
+    {
+        get;
+    }
+
+    /// <summary>
+    /// Gets the command that opens the About dialog.
+    /// </summary>
+    public RelayCommand AboutCommand
     {
         get;
     }
@@ -590,6 +599,11 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             updated.Disks = config.Disks;
             _settingsStore.Save(updated);
         }
+    }
+
+    private void ExecuteAbout()
+    {
+        new AboutDialog { Owner = Application.Current.MainWindow }.ShowDialog();
     }
 
     private async void ExecuteUnmount(DiskViewModel? vm)
