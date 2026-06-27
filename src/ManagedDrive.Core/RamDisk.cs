@@ -205,7 +205,7 @@ public sealed class RamDisk : IDisposable
         host.SectorSize = (ushort)FileNode.AllocationUnit;
         host.SectorsPerAllocationUnit = 1;
         host.MaxComponentLength = 255;
-        host.FileSystemName = "MemFS";
+        host.FileSystemName = "NTFS";
         host.CasePreservedNames = true;
         host.CaseSensitiveSearch = false;
         host.UnicodeOnDisk = true;

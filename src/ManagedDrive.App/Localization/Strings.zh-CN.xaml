@@ -94,12 +94,16 @@
     <sys:String x:Key="Msg.FormatDiskConfirmTitle">格式化磁盘</sys:String>
     <sys:String x:Key="Msg.FormatDiskConfirmBody">确认格式化 {0}（{1}）？&#x0a;&#x0a;该磁盘上的所有文件和文件夹将被永久删除。</sys:String>
     <sys:String x:Key="Msg.FormatDiskReadOnly">只读磁盘无法格式化。</sys:String>
+    <sys:String x:Key="Msg.FormatDiskSuccess">{0} 已完成格式化，所有文件和文件夹已删除。</sys:String>
     <sys:String x:Key="Status.FormatDisk">已格式化 {0}。</sys:String>
     <sys:String x:Key="Msg.UnmountConfirmTitle">卸载磁盘</sys:String>
     <sys:String x:Key="Msg.UnmountConfirmBody">确认卸载 {0}（{1}）？&#x0a;&#x0a;未保存到镜像文件的数据将会丢失。</sys:String>
     <sys:String x:Key="Msg.EditDiskConfirmTitle">编辑磁盘</sys:String>
     <sys:String x:Key="Msg.EditDiskConfirmBody">确认编辑 {0}（{1}）？&#x0a;&#x0a;磁盘将以新参数重新挂载，内存中的所有数据将丢失。</sys:String>
     <sys:String x:Key="Msg.TempDirWillBeReset">此磁盘当前是您的 Windows 临时文件夹。卸载前将自动恢复为系统默认临时目录。</sys:String>
+    <sys:String x:Key="Msg.ExitTempDirWillBeReset">您的 Windows 临时文件夹当前设置在内存盘上，退出前将自动重置为系统默认值。</sys:String>
+    <sys:String x:Key="Msg.TrayExitTempResetTitle">用户临时文件夹在内存盘</sys:String>
+    <sys:String x:Key="Msg.TrayExitTempResetBody">您的 Windows 临时文件夹设置在内存盘上，内存盘卸载后将无法访问。&#x0a;&#x0a;是否将临时文件夹重置为系统默认值并退出？</sys:String>
     <sys:String x:Key="Msg.ResetTempConfirmTitle">重置临时目录</sys:String>
     <sys:String x:Key="Msg.ResetTempConfirmBody">此操作将把 TEMP 和 TMP 恢复为 Windows 默认值：&#x0a;&#x0a;  %USERPROFILE%\AppData\Local\Temp&#x0a;&#x0a;是否继续？</sys:String>
     <sys:String x:Key="Msg.ResetTempSuccess">TEMP 和 TMP 已成功重置为 Windows 默认值。</sys:String>
