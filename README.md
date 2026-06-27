@@ -1,6 +1,7 @@
 # ManagedDrive
 
 [![CI / Release](https://github.com/coldhighsun/ManagedDrive/actions/workflows/ci.yml/badge.svg)](https://github.com/coldhighsun/ManagedDrive/actions/workflows/ci.yml)
+[![Latest Release](https://img.shields.io/github/v/release/coldhighsun/ManagedDrive)](https://github.com/coldhighsun/ManagedDrive/releases/latest)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 [English](#english) | [中文](#中文)
@@ -16,6 +17,7 @@ Create, mount and manage in-memory volumes that appear as normal drive letters i
 
 - Mount multiple RAM disks simultaneously, each with its own drive letter
 - Configurable capacity, volume label and read-only flag
+- Dynamic memory allocation — disk capacity is a ceiling, not a reservation; memory is consumed only as files are written and released when files are deleted
 - Edit a mounted disk — change label, capacity, auto-mount, and image path live without data loss; changing the drive letter or read-only flag remounts the disk
 - Optional persistence — save the disk contents to a `.mdr` image file and restore it on next mount; Save Image is always available and prompts for a file path if none is set
 - Auto-mount saved profiles on application startup
@@ -23,7 +25,7 @@ Create, mount and manage in-memory volumes that appear as normal drive letters i
 - Tray icon tooltip — hover to see all mounted disks with live usage percentages
 - High-usage warning — system tray notification when a disk exceeds 90% capacity
 - Optional start-minimized mode — launch directly to tray without showing the main window
-- Temp directory redirection — right-click a disk to set it as the Windows TEMP/TMP directory; reset to the system default from the toolbar, context menu, or tray menu; automatically resets to the system default when the disk is unmounted or remounted; on startup, if TEMP/TMP points to a disk that is not set to auto-mount, it is automatically reset to the system default with a warning; on user-initiated exit (menu button or tray menu), if TEMP/TMP points to any mounted RAM disk the app interrupts the exit, brings the main window to the foreground, and asks for confirmation before resetting and exiting — system-initiated shutdown bypasses this prompt
+- Temp directory redirection — right-click a disk to set it as the Windows TEMP/TMP directory; reset to the system default from the toolbar, context menu, or tray menu; automatically resets to the system default when the disk is unmounted or remounted; on startup, if TEMP/TMP points to any RAM disk profile a warning is shown — if the disk is not set to auto-mount, TEMP is also automatically reset to the system default; on user-initiated exit (menu button or tray menu), if TEMP/TMP points to any mounted RAM disk the app interrupts the exit, brings the main window to the foreground, and asks for confirmation before resetting and exiting — system-initiated shutdown bypasses this prompt
 - NTFS-compatible volume identity — the RAM disk reports its filesystem type as NTFS, making it fully usable as a destination for tools that require an NTFS volume (e.g. WinGet, Windows Update staging, BITS downloads)
 - Format disk — right-click a disk and choose **Format** to delete all files and folders instantly (read-only disks are protected); the context menu is organized into three groups: navigation, configuration, and destructive operations
 - System tray menu — quick access to **Reset Temp Directory** (executes silently with a notification bubble result) and **Settings** in addition to Show, New Disk, and Exit
@@ -107,7 +109,7 @@ Key classes:
 
 - **`FileNode`** — holds `Fsp.Interop.FileInfo` metadata, a `byte[]` data buffer, and a security descriptor.
 - **`FileNodeMap`** — a case-insensitive `SortedDictionary<string, FileNode>` that maps full paths to nodes, supports paginated child enumeration, and tracks total allocated bytes. Thread-safe via the C# 13 `Lock` type.
-- **`MemoryFileSystem : FileSystemBase`** — overrides all 21 required WinFsp callbacks (`Create`, `Open`, `Read`, `Write`, `Rename`, `CanDelete`, `ReadDirectoryEntry`, etc.) and enforces a configurable capacity ceiling, returning `STATUS_DISK_FULL` when exceeded.
+- **`MemoryFileSystem : FileSystemBase`** — overrides all 21 required WinFsp callbacks (`Create`, `Open`, `Read`, `Write`, `Rename`, `CanDelete`, `ReadDirectoryEntry`, etc.) and enforces a configurable capacity ceiling, returning `STATUS_DISK_FULL` when exceeded; memory is not pre-allocated — each `FileNode` holds only the bytes actually written.
 - **`RamDisk`** — composes `MemoryFileSystem` with a `FileSystemHost`. The static `Create()` factory mounts the volume and polls until the drive letter is visible in the OS (up to 2.5 s), then broadcasts `SHCNE_DRIVEADD` to refresh Explorer. `Dispose()` unmounts.
 - **`MountManager`** — thread-safe registry of active `RamDisk` instances. Fires `DiskMounted` / `DiskUnmounted` events.
 - **`DiskImageSerializer`** — reads/writes `.mdr` files (full FS state including metadata, ACLs, and file data).
@@ -186,6 +188,20 @@ dotnet run --project benchmarks/ManagedDrive.Benchmarks -c Release
 
 Results are written to `BenchmarkDotNet.Artifacts/results/` in the working directory.
 
+### Known Issues
+
+#### Certain installers may fail when TEMP is set to a RAM disk
+
+WinFsp mounts drives in the **current user's session device namespace**. If an installer is extracted to TEMP and then launched by a system-level process — such as the Windows Package Manager service used by winget — that process operates in the global device namespace and cannot resolve user-session drive letters. Attempting to execute such an installer from a path like `Z:\Temp\WinGet\...\setup.exe` fails with:
+
+> `0x800704b3` — The network path was not found / 网络路径键入不正确
+
+Known affected packages include **WeChatWin_\*.exe** (WeChat installer). Not all winget packages are affected — many install without issue.
+
+This is an architectural limitation of WinFsp user-mode file systems and cannot be worked around in user space.
+
+**Recommendation:** If you encounter installation errors, restore TEMP to the Windows default using the toolbar button in ManagedDrive. ManagedDrive will warn you when you attempt to set a RAM disk as TEMP. On every subsequent startup, if TEMP still points to a RAM disk, a warning is shown again — reset TEMP to the Windows default to stop the recurring prompt.
+
 ### License
 
 MIT
@@ -201,6 +217,7 @@ MIT
 
 - 同时挂载多个 RAM 磁盘，每个磁盘拥有独立的驱动器号
 - 可配置容量、卷标和只读标志
+- 动态内存分配——磁盘容量为上限而非预分配；内存随文件写入而占用，随文件删除而释放
 - 编辑已挂载磁盘——修改卷标、容量、自动挂载和镜像路径无需重挂即可实时生效；更改盘符或只读标志时自动重挂
 - 可选持久化——将磁盘内容保存为 `.mdr` 镜像文件，下次挂载时自动还原；保存镜像功能始终可用，未设置镜像路径时自动弹出选择对话框
 - 应用启动时自动挂载已保存的磁盘配置
@@ -208,7 +225,7 @@ MIT
 - 托盘图标悬浮提示——鼠标悬停时显示所有已挂载磁盘及其实时使用率
 - 高用量警告——磁盘使用率超过 90% 时通过系统托盘发出通知
 - 可选最小化启动——直接启动到托盘，不显示主窗口
-- 临时目录重定向——右键单击磁盘可将其设为 Windows TEMP/TMP 目录；通过工具栏、右键菜单或托盘菜单恢复系统默认值；卸载或重挂时自动恢复为系统默认临时目录；启动时若 TEMP/TMP 指向未设置自动挂载的磁盘，将自动恢复为系统默认并显示警告；用户主动退出（菜单按钮或托盘菜单）时，若 TEMP/TMP 指向任一已挂载内存盘，程序将中断退出、将主窗口带到前台，并由用户确认重置后再退出——系统发送关闭信号时不触发此流程
+- 临时目录重定向——右键单击磁盘可将其设为 Windows TEMP/TMP 目录；通过工具栏、右键菜单或托盘菜单恢复系统默认值；卸载或重挂时自动恢复为系统默认临时目录；启动时若 TEMP/TMP 指向任一内存盘配置，均会显示警告——若该磁盘未设置自动挂载，还会自动将 TEMP 恢复为系统默认值；用户主动退出（菜单按钮或托盘菜单）时，若 TEMP/TMP 指向任一已挂载内存盘，程序将中断退出、将主窗口带到前台，并由用户确认重置后再退出——系统发送关闭信号时不触发此流程
 - NTFS 兼容卷标识——内存盘以 NTFS 文件系统类型上报，可作为需要 NTFS 卷的工具（如 WinGet、Windows Update 暂存、BITS 下载）的目标路径
 - 磁盘格式化——右键单击磁盘并选择**格式化**可立即删除所有文件和文件夹（只读磁盘受保护）；右键菜单按导航、配置、破坏性操作三个分组排列
 - 系统托盘菜单——在显示、新建磁盘、退出之外，新增**重置临时文件夹**（静默执行，结果通过气泡通知反馈）和**设置**快捷入口
@@ -292,7 +309,7 @@ ManagedDrive 使用 **WinFsp**（Windows 文件系统代理）将内存目录树
 
 - **`FileNode`** — 持有 `Fsp.Interop.FileInfo` 元数据、`byte[]` 数据缓冲区及安全描述符。
 - **`FileNodeMap`** — 不区分大小写的 `SortedDictionary<string, FileNode>`，将完整路径映射到节点，支持分页子节点枚举，并追踪已分配字节总量。通过 C# 13 `Lock` 类型保证线程安全。
-- **`MemoryFileSystem : FileSystemBase`** — 覆写全部 21 个所需的 WinFsp 回调（`Create`、`Open`、`Read`、`Write`、`Rename`、`CanDelete`、`ReadDirectoryEntry` 等），并强制执行可配置的容量上限，超出时返回 `STATUS_DISK_FULL`。
+- **`MemoryFileSystem : FileSystemBase`** — 覆写全部 21 个所需的 WinFsp 回调（`Create`、`Open`、`Read`、`Write`、`Rename`、`CanDelete`、`ReadDirectoryEntry` 等），并强制执行可配置的容量上限，超出时返回 `STATUS_DISK_FULL`；内存不预分配——每个 `FileNode` 仅保留实际写入的字节数。
 - **`RamDisk`** — 组合 `MemoryFileSystem` 与 `FileSystemHost`。静态工厂方法 `Create()` 挂载卷，并轮询直至驱动器号在系统中可见（最长 2.5 秒），随后向资源管理器广播 `SHCNE_DRIVEADD`。`Dispose()` 执行卸载。
 - **`MountManager`** — 线程安全的活动 `RamDisk` 实例注册表，提供 `DiskMounted` / `DiskUnmounted` 事件。
 - **`DiskImageSerializer`** — 读写 `.mdr` 文件（保存完整文件系统状态，包含元数据、ACL 和文件数据）。
@@ -370,6 +387,20 @@ dotnet run --project benchmarks/ManagedDrive.Benchmarks -c Release
 ```
 
 结果将写入工作目录下的 `BenchmarkDotNet.Artifacts/results/`。
+
+### 已知问题
+
+#### 将 TEMP 设为内存盘后，某些安装包可能报错
+
+WinFsp 将驱动器挂载在**当前用户的会话设备命名空间**中。若安装包被解压到 TEMP 后由系统级进程启动（例如 winget 所使用的 Windows 软件包管理器服务），该进程运行于全局设备命名空间，无法解析用户会话级别的驱动器号。尝试从 `Z:\Temp\WinGet\...\setup.exe` 之类的路径执行安装程序时，会报错：
+
+> `0x800704b3` — 网络路径键入不正确 / The network path was not found
+
+已知受影响的安装包包括 **WeChatWin\_\*.exe**（微信安装程序）。并非所有 winget 包都受影响——大多数包可正常安装。
+
+这是 WinFsp 用户态文件系统的架构性限制，无法在用户空间层面绕过。
+
+**建议：** 如遇安装报错，可通过 ManagedDrive 工具栏的按钮将 TEMP 恢复为 Windows 默认值。每次将内存盘设置为临时目录时，ManagedDrive 均会弹出警告提示。此后每次启动，只要 TEMP 仍指向内存盘，警告便会再次弹出——将 TEMP 恢复为 Windows 默认值后即可停止重复提示。
 
 ### 许可证
 

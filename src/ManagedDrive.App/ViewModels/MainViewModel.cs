@@ -22,16 +22,19 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 {
     private readonly MountManager _mountManager;
     private readonly SettingsStore _settingsStore;
+    private bool _tempDirCompatWarningShown;
 
     /// <summary>
     /// Initializes a new <see cref="MainViewModel"/> using the supplied mount manager and settings store.
     /// </summary>
     /// <param name="mountManager">The application-wide mount manager.</param>
     /// <param name="settingsStore">The settings store used by the Settings dialog.</param>
-    public MainViewModel(MountManager mountManager, SettingsStore settingsStore)
+    /// <param name="initialConfig">The configuration loaded at startup.</param>
+    public MainViewModel(MountManager mountManager, SettingsStore settingsStore, AppConfiguration initialConfig)
     {
         _mountManager = mountManager;
         _settingsStore = settingsStore;
+        _tempDirCompatWarningShown = initialConfig.TempDirCompatWarningShown;
 
         StatusText = Loc.Get("Status.Ready");
 
@@ -591,6 +594,21 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         }
         else
         {
+            if (!_tempDirCompatWarningShown)
+            {
+                var warn = new Views.ConfirmDialog(
+                    Loc.Get("Msg.SetTempDirWarningTitle"),
+                    Loc.Get("Msg.SetTempDirWarningBody"))
+                { Owner = Application.Current.MainWindow };
+                if (warn.ShowDialog() != true)
+                {
+                    return;
+                }
+
+                _tempDirCompatWarningShown = true;
+                SaveSettings();
+            }
+
             var tempPath = System.IO.Path.Combine(vm.MountPoint, "Temp");
             var success = await Task.Run(() => TempDirResetService.Set(tempPath));
 
@@ -691,6 +709,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             RunAtStartup = StartupManager.IsEnabled,
             Language = LanguageManager.Instance.SavedLanguage,
             Disks = GetProfiles().ToList(),
+            TempDirCompatWarningShown = _tempDirCompatWarningShown,
         });
     }
 }
