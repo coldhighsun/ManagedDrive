@@ -94,4 +94,17 @@ Package versions are pinned in `Directory.Packages.props` (Central Package Manag
 
 ### Release pipeline
 
-`.github/workflows/ci.yml` builds and runs tests on every push. Pushing a `v*` tag additionally publishes a self-contained Windows executable and builds an MSI installer via WiX v4 (`installer/ManagedDrive.wxs`), then creates a GitHub Release with both artifacts attached. The MSI uses a fixed `UpgradeCode` GUID and `MajorUpgrade` to support in-place updates. `MinVer` derives the version from the tag, so the tag must match the `v{major}.{minor}.{patch}` pattern.
+`.github/workflows/ci.yml` builds and runs tests on every push. Pushing a `v*` tag additionally publishes a self-contained Windows executable (`-r win-x64`) and builds a **multilingual MSI** via WiX v4 (`installer/ManagedDrive.wxs`), then creates a GitHub Release with both artifacts attached.
+
+The multilingual MSI requires two WiX builds followed by transform embedding:
+1. Build the base MSI (`-culture en-US -loc installer/en-US.wxl`) → `ManagedDrive-en-US.msi`
+2. Build a second MSI (`-culture zh-CN -loc installer/zh-CN.wxl`) → `ManagedDrive-zh-CN.msi`
+3. Generate a language transform: `wix msi transform ManagedDrive-en-US.msi ManagedDrive-zh-CN.msi -out zh-CN.mst`
+4. Embed the transform into the base MSI using `installer/EmbedTransform.vbs` (Windows Installer API via VBScript), which injects `zh-CN.mst` as a substorage and updates the SummaryInformation `Languages` property
+
+The MSI uses a fixed `UpgradeCode` GUID and `MajorUpgrade` to support in-place updates. `MinVer` derives the version from the tag, so the tag must match the `v{major}.{minor}.{patch}` pattern.
+
+The installer also includes:
+- `util:CloseApplication` to terminate the running app before file operations (5 s timeout)
+- A `TempDirWarningUI` custom dialog injected into the maintenance sequence (between `MaintenanceWelcomeDlg` and `MaintenanceTypeDlg`) to warn if TEMP/TMP points to the RAM disk
+- A launch-after-install checkbox on the exit dialog (shown on install/repair, not uninstall)

@@ -149,6 +149,24 @@ public sealed class RamDisk : IDisposable
     }
 
     /// <summary>
+    /// Removes all files and directories from the disk, leaving it empty.
+    /// Does nothing and returns <c>false</c> when the disk is read-only.
+    /// </summary>
+    /// <returns>
+    /// <c>true</c> if the format succeeded; <c>false</c> if the disk is read-only.
+    /// </returns>
+    public bool Format()
+    {
+        if (Options.ReadOnly)
+        {
+            return false;
+        }
+
+        _fs.NodeMap.ClearAll();
+        return true;
+    }
+
+    /// <summary>
     /// Applies <paramref name="newOptions"/> to the live disk without unmounting.
     /// Only <see cref="DiskOptions.VolumeLabel"/>, <see cref="DiskOptions.CapacityBytes"/>,
     /// <see cref="DiskOptions.AutoMount"/>, and <see cref="DiskOptions.PersistImagePath"/> may
