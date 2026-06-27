@@ -23,7 +23,8 @@ Create, mount and manage in-memory volumes that appear as normal drive letters i
 - Tray icon tooltip — hover to see all mounted disks with live usage percentages
 - High-usage warning — system tray notification when a disk exceeds 90% capacity
 - Optional start-minimized mode — launch directly to tray without showing the main window
-- Temp directory redirection — right-click a disk to set it as the Windows TEMP/TMP directory; reset to the system default from the toolbar, context menu, or tray menu; automatically resets to the system default when the disk is unmounted or remounted; on startup, if TEMP/TMP points to a disk that is not set to auto-mount, it is automatically reset to the system default with a warning
+- Temp directory redirection — right-click a disk to set it as the Windows TEMP/TMP directory; reset to the system default from the toolbar, context menu, or tray menu; automatically resets to the system default when the disk is unmounted or remounted; on startup, if TEMP/TMP points to a disk that is not set to auto-mount, it is automatically reset to the system default with a warning; on user-initiated exit (menu button or tray menu), if TEMP/TMP points to any mounted RAM disk the app interrupts the exit, brings the main window to the foreground, and asks for confirmation before resetting and exiting — system-initiated shutdown bypasses this prompt
+- NTFS-compatible volume identity — the RAM disk reports its filesystem type as NTFS, making it fully usable as a destination for tools that require an NTFS volume (e.g. WinGet, Windows Update staging, BITS downloads)
 - Format disk — right-click a disk and choose **Format** to delete all files and folders instantly (read-only disks are protected); the context menu is organized into three groups: navigation, configuration, and destructive operations
 - System tray menu — quick access to **Reset Temp Directory** (executes silently with a notification bubble result) and **Settings** in addition to Show, New Disk, and Exit
 - Main window opens centered on the primary screen and is brought to the foreground on startup
@@ -207,7 +208,8 @@ MIT
 - 托盘图标悬浮提示——鼠标悬停时显示所有已挂载磁盘及其实时使用率
 - 高用量警告——磁盘使用率超过 90% 时通过系统托盘发出通知
 - 可选最小化启动——直接启动到托盘，不显示主窗口
-- 临时目录重定向——右键单击磁盘可将其设为 Windows TEMP/TMP 目录；通过工具栏、右键菜单或托盘菜单恢复系统默认值；卸载或重挂时自动恢复为系统默认临时目录；启动时若 TEMP/TMP 指向未设置自动挂载的磁盘，将自动恢复为系统默认并显示警告
+- 临时目录重定向——右键单击磁盘可将其设为 Windows TEMP/TMP 目录；通过工具栏、右键菜单或托盘菜单恢复系统默认值；卸载或重挂时自动恢复为系统默认临时目录；启动时若 TEMP/TMP 指向未设置自动挂载的磁盘，将自动恢复为系统默认并显示警告；用户主动退出（菜单按钮或托盘菜单）时，若 TEMP/TMP 指向任一已挂载内存盘，程序将中断退出、将主窗口带到前台，并由用户确认重置后再退出——系统发送关闭信号时不触发此流程
+- NTFS 兼容卷标识——内存盘以 NTFS 文件系统类型上报，可作为需要 NTFS 卷的工具（如 WinGet、Windows Update 暂存、BITS 下载）的目标路径
 - 磁盘格式化——右键单击磁盘并选择**格式化**可立即删除所有文件和文件夹（只读磁盘受保护）；右键菜单按导航、配置、破坏性操作三个分组排列
 - 系统托盘菜单——在显示、新建磁盘、退出之外，新增**重置临时文件夹**（静默执行，结果通过气泡通知反馈）和**设置**快捷入口
 - 主窗口启动时居中显示于主屏幕并置于前台

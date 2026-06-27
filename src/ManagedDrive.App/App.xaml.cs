@@ -200,12 +200,44 @@ public partial class App
 
     private void ExitApplication()
     {
+        if (_mainViewModel != null && IsTempOnAnyDisk(_mainViewModel.Disks))
+        {
+            ShowMainWindow();
+
+            var dialog = new ConfirmDialog(
+                Loc.Get("Msg.TrayExitTempResetTitle"),
+                Loc.Get("Msg.TrayExitTempResetBody"))
+            {
+                Owner = _mainWindow
+            };
+
+            if (dialog.ShowDialog() != true)
+            {
+                return;
+            }
+
+            TempDirResetService.Reset();
+            Log.Information("Auto-reset temp directory before exiting (tray).");
+        }
+
         _isExiting = true;
         SaveSettings();
         _trayIcon?.Dispose();
         _mainViewModel?.Dispose();
         _mountManager?.Dispose();
         Shutdown();
+    }
+
+    private static bool IsTempOnAnyDisk(IEnumerable<DiskViewModel> disks)
+    {
+        var userTemp = Environment.GetEnvironmentVariable("TEMP", EnvironmentVariableTarget.User);
+        if (string.IsNullOrEmpty(userTemp))
+        {
+            return false;
+        }
+
+        var expanded = Environment.ExpandEnvironmentVariables(userTemp);
+        return disks.Any(d => expanded.StartsWith(d.MountPoint, StringComparison.OrdinalIgnoreCase));
     }
 
     private void MainWindow_Closing(object? sender, CancelEventArgs e)
