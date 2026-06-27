@@ -12,6 +12,7 @@
         Title="{DynamicResource Window.Title}"
         Height="480" Width="760"
         MinHeight="320" MinWidth="520"
+        WindowStartupLocation="CenterScreen"
         TextElement.Foreground="{DynamicResource MaterialDesignBody}"
         Background="{DynamicResource MaterialDesignBackground}"
         TextElement.FontWeight="Regular"
@@ -147,6 +148,7 @@
                                          Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=Window}}">
                         <materialDesign:Card.ContextMenu>
                             <ContextMenu>
+                                <!-- Navigation -->
                                 <MenuItem Header="{DynamicResource Btn.OpenInExplorer}"
                                           Command="{Binding PlacementTarget.DataContext.OpenInExplorerCommand,
                                                     RelativeSource={RelativeSource AncestorType=ContextMenu}}">
@@ -154,6 +156,8 @@
                                         <materialDesign:PackIcon Kind="FolderOpen"/>
                                     </MenuItem.Icon>
                                 </MenuItem>
+                                <Separator/>
+                                <!-- Configuration -->
                                 <MenuItem Header="{DynamicResource Btn.EditDisk}"
                                           Command="{Binding PlacementTarget.Tag.EditDiskCommand,
                                                     RelativeSource={RelativeSource AncestorType=ContextMenu}}"
@@ -188,15 +192,7 @@
                                     </MenuItem.Icon>
                                 </MenuItem>
                                 <Separator/>
-                                <MenuItem Header="{DynamicResource Btn.Unmount}"
-                                          Command="{Binding PlacementTarget.Tag.UnmountCommand,
-                                                    RelativeSource={RelativeSource AncestorType=ContextMenu}}"
-                                          CommandParameter="{Binding PlacementTarget.DataContext,
-                                                    RelativeSource={RelativeSource AncestorType=ContextMenu}}">
-                                    <MenuItem.Icon>
-                                        <materialDesign:PackIcon Kind="Eject"/>
-                                    </MenuItem.Icon>
-                                </MenuItem>
+                                <!-- Destructive operations -->
                                 <MenuItem Header="{DynamicResource Btn.SaveImage}"
                                           Command="{Binding PlacementTarget.Tag.SaveImageCommand,
                                                     RelativeSource={RelativeSource AncestorType=ContextMenu}}"
@@ -204,6 +200,24 @@
                                                     RelativeSource={RelativeSource AncestorType=ContextMenu}}">
                                     <MenuItem.Icon>
                                         <materialDesign:PackIcon Kind="ContentSave"/>
+                                    </MenuItem.Icon>
+                                </MenuItem>
+                                <MenuItem Header="{DynamicResource Btn.FormatDisk}"
+                                          Command="{Binding PlacementTarget.Tag.FormatDiskCommand,
+                                                    RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                          CommandParameter="{Binding PlacementTarget.DataContext,
+                                                    RelativeSource={RelativeSource AncestorType=ContextMenu}}">
+                                    <MenuItem.Icon>
+                                        <materialDesign:PackIcon Kind="Eraser"/>
+                                    </MenuItem.Icon>
+                                </MenuItem>
+                                <MenuItem Header="{DynamicResource Btn.Unmount}"
+                                          Command="{Binding PlacementTarget.Tag.UnmountCommand,
+                                                    RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                          CommandParameter="{Binding PlacementTarget.DataContext,
+                                                    RelativeSource={RelativeSource AncestorType=ContextMenu}}">
+                                    <MenuItem.Icon>
+                                        <materialDesign:PackIcon Kind="Eject"/>
                                     </MenuItem.Icon>
                                 </MenuItem>
                             </ContextMenu>

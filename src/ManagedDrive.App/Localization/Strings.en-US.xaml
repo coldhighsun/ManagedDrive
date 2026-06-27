@@ -14,6 +14,7 @@
     <sys:String x:Key="Btn.SaveImage">Save Image</sys:String>
     <sys:String x:Key="Btn.SetAsTempDir">Set as Temp Directory</sys:String>
     <sys:String x:Key="Btn.RestoreDefaultTemp">Restore Default Temp Directory</sys:String>
+    <sys:String x:Key="Btn.FormatDisk">Format…</sys:String>
     <sys:String x:Key="Btn.Refresh">Refresh</sys:String>
     <sys:String x:Key="Btn.Settings">Settings</sys:String>
     <sys:String x:Key="Tip.NewDisk">Create and mount a new RAM disk</sys:String>
@@ -62,6 +63,8 @@
     <!-- Tray menu -->
     <sys:String x:Key="Tray.Show">Show</sys:String>
     <sys:String x:Key="Tray.NewDisk">New Disk</sys:String>
+    <sys:String x:Key="Tray.ResetTempDirs">Reset Temp Directory</sys:String>
+    <sys:String x:Key="Tray.Settings">Settings…</sys:String>
     <sys:String x:Key="Tray.Exit">Exit</sys:String>
     <sys:String x:Key="Tray.NoDisksMounted">No disks mounted</sys:String>
     <sys:String x:Key="Tray.HighUsageTitle">RAM Disk Nearly Full</sys:String>
@@ -87,6 +90,10 @@
     <sys:String x:Key="Msg.MountFailed">Failed to mount disk:&#x0a;{0}</sys:String>
     <sys:String x:Key="Msg.SaveImageSuccess">Image saved successfully to:&#x0a;{0}</sys:String>
     <sys:String x:Key="Msg.SaveImageFailed">Failed to save image:&#x0a;{0}</sys:String>
+    <sys:String x:Key="Msg.FormatDiskConfirmTitle">Format Disk</sys:String>
+    <sys:String x:Key="Msg.FormatDiskConfirmBody">Format {0} ({1})?&#x0a;&#x0a;All files and folders on this disk will be permanently deleted.</sys:String>
+    <sys:String x:Key="Msg.FormatDiskReadOnly">Cannot format a read-only disk.</sys:String>
+    <sys:String x:Key="Status.FormatDisk">Formatted {0}.</sys:String>
     <sys:String x:Key="Msg.UnmountConfirmTitle">Unmount Disk</sys:String>
     <sys:String x:Key="Msg.UnmountConfirmBody">Unmount {0} ({1})?&#x0a;&#x0a;Any data not saved to an image file will be lost.</sys:String>
     <sys:String x:Key="Msg.EditDiskConfirmTitle">Edit Disk</sys:String>
