@@ -94,12 +94,16 @@
     <sys:String x:Key="Msg.FormatDiskConfirmTitle">Format Disk</sys:String>
     <sys:String x:Key="Msg.FormatDiskConfirmBody">Format {0} ({1})?&#x0a;&#x0a;All files and folders on this disk will be permanently deleted.</sys:String>
     <sys:String x:Key="Msg.FormatDiskReadOnly">Cannot format a read-only disk.</sys:String>
+    <sys:String x:Key="Msg.FormatDiskSuccess">{0} has been formatted. All files and folders have been deleted.</sys:String>
     <sys:String x:Key="Status.FormatDisk">Formatted {0}.</sys:String>
     <sys:String x:Key="Msg.UnmountConfirmTitle">Unmount Disk</sys:String>
     <sys:String x:Key="Msg.UnmountConfirmBody">Unmount {0} ({1})?&#x0a;&#x0a;Any data not saved to an image file will be lost.</sys:String>
     <sys:String x:Key="Msg.EditDiskConfirmTitle">Edit Disk</sys:String>
     <sys:String x:Key="Msg.EditDiskConfirmBody">Edit {0} ({1})?&#x0a;&#x0a;The disk will be unmounted and remounted with the new settings. All data currently in memory will be lost.</sys:String>
     <sys:String x:Key="Msg.TempDirWillBeReset">This disk is currently your Windows Temp directory. It will be automatically reset to the system default before unmounting.</sys:String>
+    <sys:String x:Key="Msg.ExitTempDirWillBeReset">Your Windows Temp directory is currently set to a RAM disk. It will be automatically reset to the system default before exiting.</sys:String>
+    <sys:String x:Key="Msg.TrayExitTempResetTitle">Temp Directory on RAM Disk</sys:String>
+    <sys:String x:Key="Msg.TrayExitTempResetBody">Your Windows Temp directory is set to a RAM disk. It will become inaccessible after the disk is unmounted.&#x0a;&#x0a;Reset Temp to the system default and exit?</sys:String>
     <sys:String x:Key="Msg.ResetTempConfirmTitle">Reset Temp Directories</sys:String>
     <sys:String x:Key="Msg.ResetTempConfirmBody">This will restore TEMP and TMP to their Windows default:&#x0a;&#x0a;  %USERPROFILE%\AppData\Local\Temp&#x0a;&#x0a;Continue?</sys:String>
     <sys:String x:Key="Msg.ResetTempSuccess">TEMP and TMP have been reset to their Windows defaults.</sys:String>

@@ -48,12 +48,20 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             p => p is DiskViewModel || SelectedDisk != null);
         FormatDiskCommand = new RelayCommand(
             p => ExecuteFormatDisk(p as DiskViewModel ?? SelectedDisk),
-            p => p is DiskViewModel || SelectedDisk != null);
+            p =>
+            {
+                var vm = p as DiskViewModel ?? SelectedDisk;
+                return vm != null && !vm.Disk.Options.ReadOnly;
+            });
         RefreshCommand = new RelayCommand(_ => RefreshAll());
         ResetTempDirsCommand = new RelayCommand(_ => ExecuteResetTempDirs());
         ToggleTempDirCommand = new RelayCommand(
             p => ExecuteToggleTempDir(p as DiskViewModel ?? SelectedDisk),
-            p => p is DiskViewModel || SelectedDisk != null);
+            p =>
+            {
+                var vm = p as DiskViewModel ?? SelectedDisk;
+                return vm != null && !vm.Disk.Options.ReadOnly;
+            });
         SettingsCommand = new RelayCommand(_ => ExecuteSettings());
         AboutCommand = new RelayCommand(_ => ExecuteAbout());
     }
@@ -422,6 +430,11 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         vm.Refresh();
         StatusText = Loc.Format("Status.FormatDisk", vm.MountPoint);
         Log.Information("Formatted disk {MountPoint}.", vm.MountPoint);
+        MessageBox.Show(
+            Loc.Format("Msg.FormatDiskSuccess", vm.MountPoint),
+            "ManagedDrive",
+            MessageBoxButton.OK,
+            MessageBoxImage.Information);
     }
 
     private void ExecuteExit()
@@ -432,15 +445,31 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             return;
         }
 
+        var userTemp = Environment.GetEnvironmentVariable("TEMP", EnvironmentVariableTarget.User);
+        var expandedTemp = string.IsNullOrEmpty(userTemp) ? null : Environment.ExpandEnvironmentVariables(userTemp);
+        var tempOnRamDisk = expandedTemp != null &&
+            Disks.Any(d => expandedTemp.StartsWith(d.MountPoint, StringComparison.OrdinalIgnoreCase));
+
+        var body = Loc.Get("Msg.ExitConfirmBody");
+        if (tempOnRamDisk)
+        {
+            body = body + "\n\n" + Loc.Get("Msg.ExitTempDirWillBeReset");
+        }
+
         var dialog = new ConfirmDialog(
             Loc.Get("Msg.ExitConfirmTitle"),
-            Loc.Get("Msg.ExitConfirmBody"))
+            body)
         {
             Owner = Application.Current.MainWindow
         };
 
         if (dialog.ShowDialog() == true)
         {
+            if (tempOnRamDisk)
+            {
+                TempDirResetService.Reset();
+                Log.Information("Auto-reset temp directory before exiting.");
+            }
             Application.Current.Shutdown();
         }
     }

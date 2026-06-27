@@ -78,7 +78,7 @@ jobs:
       - name: Add WiX Util extension
         run: wix extension add WixToolset.Util.wixext/4.0.5
 
-      - name: Restore & Publish app (self-contained, win-x64)
+      - name: Restore & Publish app (win-x64)
         run: |
           dotnet publish src/ManagedDrive.App/ManagedDrive.App.csproj `
             -c Release `
