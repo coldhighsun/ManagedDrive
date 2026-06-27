@@ -46,6 +46,9 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         SaveImageCommand = new RelayCommand(
             p => ExecuteSaveImage(p as DiskViewModel ?? SelectedDisk),
             p => p is DiskViewModel || SelectedDisk != null);
+        FormatDiskCommand = new RelayCommand(
+            p => ExecuteFormatDisk(p as DiskViewModel ?? SelectedDisk),
+            p => p is DiskViewModel || SelectedDisk != null);
         RefreshCommand = new RelayCommand(_ => RefreshAll());
         ResetTempDirsCommand = new RelayCommand(_ => ExecuteResetTempDirs());
         ToggleTempDirCommand = new RelayCommand(
@@ -82,6 +85,14 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     /// Gets the command that exits the application.
     /// </summary>
     public RelayCommand ExitCommand
+    {
+        get;
+    }
+
+    /// <summary>
+    /// Gets the command that formats (clears all content from) the selected disk.
+    /// </summary>
+    public RelayCommand FormatDiskCommand
     {
         get;
     }
@@ -368,6 +379,40 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
                 newOptions.VolumeLabel,
                 newOptions.CapacityBytes / (1024 * 1024));
         }
+    }
+
+    private void ExecuteFormatDisk(DiskViewModel? vm)
+    {
+        if (vm == null)
+        {
+            return;
+        }
+
+        var confirm = new ConfirmDialog(
+            Loc.Get("Msg.FormatDiskConfirmTitle"),
+            Loc.Format("Msg.FormatDiskConfirmBody", vm.MountPoint, vm.VolumeLabel))
+        {
+            Owner = Application.Current.MainWindow
+        };
+
+        if (confirm.ShowDialog() != true)
+        {
+            return;
+        }
+
+        if (!vm.Disk.Format())
+        {
+            MessageBox.Show(
+                Loc.Get("Msg.FormatDiskReadOnly"),
+                "ManagedDrive",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+            return;
+        }
+
+        vm.Refresh();
+        StatusText = Loc.Format("Status.FormatDisk", vm.MountPoint);
+        Log.Information("Formatted disk {MountPoint}.", vm.MountPoint);
     }
 
     private void ExecuteExit()

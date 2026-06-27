@@ -108,7 +108,10 @@ public partial class App
         }
         else
         {
+            _mainWindow.Topmost = true;
             _mainWindow.Show();
+            _mainWindow.Activate();
+            _mainWindow.Topmost = false;
         }
     }
 
@@ -252,12 +255,19 @@ public partial class App
         showItem.Click += (_, _) => ShowMainWindow();
         var newDiskItem = new MenuItem { Header = Loc.Get("Tray.NewDisk") };
         newDiskItem.Click += (_, _) => ShowMainWindowAndCreate();
+        var resetTempItem = new MenuItem { Header = Loc.Get("Tray.ResetTempDirs") };
+        resetTempItem.Click += async (_, _) => await ExecuteResetTempDirsFromTray();
+        var settingsItem = new MenuItem { Header = Loc.Get("Tray.Settings") };
+        settingsItem.Click += (_, _) => ShowMainWindowAndSettings();
         var exitItem = new MenuItem { Header = Loc.Get("Tray.Exit") };
         exitItem.Click += (_, _) => ExitApplication();
 
         var menu = new ContextMenu();
         menu.Items.Add(showItem);
         menu.Items.Add(newDiskItem);
+        menu.Items.Add(new Separator());
+        menu.Items.Add(resetTempItem);
+        menu.Items.Add(settingsItem);
         menu.Items.Add(new Separator());
         menu.Items.Add(exitItem);
 
@@ -348,6 +358,26 @@ public partial class App
 
         ((MenuItem)menu.Items[0]!).Header = Loc.Get("Tray.Show");
         ((MenuItem)menu.Items[1]!).Header = Loc.Get("Tray.NewDisk");
-        ((MenuItem)menu.Items[3]!).Header = Loc.Get("Tray.Exit");
+        // index 2 is Separator
+        ((MenuItem)menu.Items[3]!).Header = Loc.Get("Tray.ResetTempDirs");
+        ((MenuItem)menu.Items[4]!).Header = Loc.Get("Tray.Settings");
+        // index 5 is Separator
+        ((MenuItem)menu.Items[6]!).Header = Loc.Get("Tray.Exit");
+    }
+
+    private async Task ExecuteResetTempDirsFromTray()
+    {
+        var success = await Task.Run(TempDirResetService.Reset);
+        _trayIcon?.ShowNotification(
+            "ManagedDrive",
+            success ? Loc.Get("Msg.ResetTempSuccess") : Loc.Get("Msg.ResetTempFailed"),
+            success ? H.NotifyIcon.Core.NotificationIcon.Info : H.NotifyIcon.Core.NotificationIcon.Warning);
+        Log.Information("Tray: reset temp directories, success={Success}.", success);
+    }
+
+    private void ShowMainWindowAndSettings()
+    {
+        ShowMainWindow();
+        _mainViewModel?.SettingsCommand.Execute(null);
     }
 }

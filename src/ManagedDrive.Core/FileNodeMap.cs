@@ -128,6 +128,29 @@ public sealed class FileNodeMap
     }
 
     /// <summary>
+    /// Removes all nodes except the root directory entry (<c>\</c>).
+    /// </summary>
+    public void ClearAll()
+    {
+        lock (_syncRoot)
+        {
+            var toRemove = new List<string>();
+            foreach (var key in _map.Keys)
+            {
+                if (key != "\\")
+                {
+                    toRemove.Add(key);
+                }
+            }
+
+            foreach (var key in toRemove)
+            {
+                _map.Remove(key);
+            }
+        }
+    }
+
+    /// <summary>
     /// Removes the node at <paramref name="filePath"/>, if present.
     /// </summary>
     /// <param name="filePath">Absolute file-system path.</param>
