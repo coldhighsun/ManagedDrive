@@ -28,6 +28,7 @@ Create, mount and manage in-memory volumes that appear as normal drive letters i
 - System tray menu — quick access to **Reset Temp Directory** (executes silently with a notification bubble result) and **Settings** in addition to Show, New Disk, and Exit
 - Main window opens centered on the primary screen and is brought to the foreground on startup
 - Bilingual UI — English and Simplified Chinese, auto-detected from system locale with manual override in Settings
+- About dialog — accessible from the overflow menu; shows the app version and a link to the GitHub repository
 
 ### Installation
 
@@ -82,7 +83,7 @@ ManagedDrive/
 │       ├── Models/                 #   AppConfiguration, DiskProfile
 │       ├── Services/               #   SettingsStore, StartupManager, TempDirResetService
 │       ├── ViewModels/             #   MainViewModel, DiskViewModel
-│       ├── Views/                  #   CreateDiskDialog, SettingsDialog, ConfirmDialog, TrayTooltipView
+│       ├── Views/                  #   CreateDiskDialog, SettingsDialog, ConfirmDialog, AboutDialog, TrayTooltipView
 │       ├── MainWindow.xaml(.cs)    #   Main window
 │       └── App.xaml(.cs)           #   Startup, tray icon, auto-mount
 │
@@ -211,6 +212,7 @@ MIT
 - 系统托盘菜单——在显示、新建磁盘、退出之外，新增**重置临时文件夹**（静默执行，结果通过气泡通知反馈）和**设置**快捷入口
 - 主窗口启动时居中显示于主屏幕并置于前台
 - 双语界面——中文与英文，根据系统语言自动切换，也可在设置中手动更改
+- 关于对话框——可从溢出菜单打开，显示应用版本及 GitHub 仓库链接
 
 ### 安装
 
@@ -265,7 +267,7 @@ ManagedDrive/
 │       ├── Models/                 #   AppConfiguration、DiskProfile
 │       ├── Services/               #   SettingsStore、StartupManager、TempDirResetService
 │       ├── ViewModels/             #   MainViewModel、DiskViewModel
-│       ├── Views/                  #   CreateDiskDialog、SettingsDialog、ConfirmDialog、TrayTooltipView
+│       ├── Views/                  #   CreateDiskDialog、SettingsDialog、ConfirmDialog、AboutDialog、TrayTooltipView
 │       ├── MainWindow.xaml(.cs)    #   主窗口
 │       └── App.xaml(.cs)           #   启动、托盘图标、自动挂载
 │

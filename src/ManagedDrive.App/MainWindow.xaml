@@ -68,9 +68,15 @@
                     <materialDesign:PopupBox PlacementMode="BottomAndAlignRightEdges">
                         <StackPanel MinWidth="140" Margin="4"
                                     TextElement.Foreground="{DynamicResource MaterialDesignBody}">
+                            <Button Content="{DynamicResource Menu.About}"
+                                    Command="{Binding AboutCommand}"
+                                    HorizontalAlignment="Stretch"
+                                    HorizontalContentAlignment="Left"
+                                    Style="{StaticResource MaterialDesignFlatButton}"/>
                             <Button Content="{DynamicResource Menu.Exit}"
                                     Command="{Binding ExitCommand}"
                                     HorizontalAlignment="Stretch"
+                                    HorizontalContentAlignment="Left"
                                     Style="{StaticResource MaterialDesignFlatButton}"/>
                         </StackPanel>
                     </materialDesign:PopupBox>

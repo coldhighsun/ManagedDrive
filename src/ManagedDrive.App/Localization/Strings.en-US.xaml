@@ -7,6 +7,7 @@
     <sys:String x:Key="Menu.File">_File</sys:String>
     <sys:String x:Key="Menu.Tools">_Tools</sys:String>
     <sys:String x:Key="Menu.Exit">E_xit</sys:String>
+    <sys:String x:Key="Menu.About">About</sys:String>
     <sys:String x:Key="Btn.NewDisk">New Disk</sys:String>
     <sys:String x:Key="Btn.OpenInExplorer">Open in Explorer</sys:String>
     <sys:String x:Key="Btn.EditDisk">Edit Disk…</sys:String>
@@ -110,6 +111,11 @@
     <sys:String x:Key="Val.Title">Invalid Input</sys:String>
     <sys:String x:Key="Val.NoDriveLetter">Please select a drive letter.</sys:String>
     <sys:String x:Key="Val.BadCapacity">Capacity must be between 1 and {0} {1}.</sys:String>
+
+    <!-- AboutDialog -->
+    <sys:String x:Key="About.Description">An in-memory RAM disk for Windows.</sys:String>
+    <sys:String x:Key="About.Copyright">© 2026 ManagedDrive Contributors</sys:String>
+    <sys:String x:Key="About.ViewOnGitHub">View on GitHub</sys:String>
 
     <!-- SaveFileDialog -->
     <sys:String x:Key="SaveDlg.Title">Select Image File</sys:String>

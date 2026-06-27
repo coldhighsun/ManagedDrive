@@ -7,6 +7,7 @@
     <sys:String x:Key="Menu.File">文件(_F)</sys:String>
     <sys:String x:Key="Menu.Tools">工具(_T)</sys:String>
     <sys:String x:Key="Menu.Exit">退出(_X)</sys:String>
+    <sys:String x:Key="Menu.About">关于</sys:String>
     <sys:String x:Key="Btn.NewDisk">新建磁盘</sys:String>
     <sys:String x:Key="Btn.OpenInExplorer">在资源管理器中打开</sys:String>
     <sys:String x:Key="Btn.EditDisk">编辑磁盘…</sys:String>
@@ -110,6 +111,11 @@
     <sys:String x:Key="Val.Title">输入无效</sys:String>
     <sys:String x:Key="Val.NoDriveLetter">请选择驱动器号。</sys:String>
     <sys:String x:Key="Val.BadCapacity">容量必须在 1 到 {0} {1} 之间。</sys:String>
+
+    <!-- AboutDialog -->
+    <sys:String x:Key="About.Description">Windows 内存虚拟磁盘工具。</sys:String>
+    <sys:String x:Key="About.Copyright">© 2026 ManagedDrive 贡献者</sys:String>
+    <sys:String x:Key="About.ViewOnGitHub">在 GitHub 上查看</sys:String>
 
     <!-- SaveFileDialog -->
     <sys:String x:Key="SaveDlg.Title">选择镜像文件</sys:String>
