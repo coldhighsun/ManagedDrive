@@ -5,6 +5,7 @@
     wix build installer/ManagedDrive.wxs
         -arch x64
         -ext WixToolset.UI.wixext
+        -ext WixToolset.Util.wixext
         -d "PublishDir=publish\"
         -d "ProductVersion=1.0.0"
         -o ManagedDrive-v1.0.0-win-x64.msi
@@ -14,7 +15,8 @@
     ProductVersion  — semver string derived from the git tag, e.g. 1.2.3
 -->
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
-     xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
+     xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui"
+     xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util">
 
 
   <Package
@@ -35,6 +37,14 @@
     <WixVariable Id="WixUILicenseRtf" Value="!(loc.LicenseRtfPath)" />
 
     <MediaTemplate EmbedCab="yes" />
+
+    <!-- Close any running instance before file operations begin on install/upgrade/uninstall -->
+    <util:CloseApplication
+      Id="CloseRunningManagedDrive"
+      Target="ManagedDrive.exe"
+      CloseMessage="yes"
+      RebootPrompt="no"
+      TerminateProcess="5" />
 
     <Feature Id="ProductFeature" Title="ManagedDrive" Level="1">
       <ComponentGroupRef Id="ProductComponents" />

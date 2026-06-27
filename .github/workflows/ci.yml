@@ -32,13 +32,6 @@ jobs:
         with:
           dotnet-version: '10.0.x'
 
-      - name: Install WinFsp (required to build winfsp.net)
-        run: |
-          $url = "https://github.com/winfsp/winfsp/releases/download/v2.1/winfsp-2.1.25156.msi"
-          Invoke-WebRequest $url -OutFile winfsp.msi
-          Start-Process msiexec.exe -Wait -ArgumentList '/i winfsp.msi /quiet'
-        shell: pwsh
-
       - name: Restore
         run: dotnet restore
 
@@ -76,18 +69,14 @@ jobs:
         with:
           dotnet-version: '10.0.x'
 
-      - name: Install WinFsp
-        run: |
-          $url = "https://github.com/winfsp/winfsp/releases/download/v2.1/winfsp-2.1.25156.msi"
-          Invoke-WebRequest $url -OutFile winfsp.msi
-          Start-Process msiexec.exe -Wait -ArgumentList '/i winfsp.msi /quiet'
-        shell: pwsh
-
       - name: Install WiX v4 toolset
         run: dotnet tool install --global wix --version 4.0.5
 
       - name: Add WiX UI extension
         run: wix extension add WixToolset.UI.wixext/4.0.5
+
+      - name: Add WiX Util extension
+        run: wix extension add WixToolset.Util.wixext/4.0.5
 
       - name: Restore & Publish app (self-contained, win-x64)
         run: |
@@ -110,6 +99,7 @@ jobs:
         run: |
           wix build installer/ManagedDrive.wxs `
             -ext WixToolset.UI.wixext `
+            -ext WixToolset.Util.wixext `
             -arch x64 `
             -culture en-US `
             -loc installer/en-US.wxl `
@@ -122,6 +112,7 @@ jobs:
         run: |
           wix build installer/ManagedDrive.wxs `
             -ext WixToolset.UI.wixext `
+            -ext WixToolset.Util.wixext `
             -arch x64 `
             -culture zh-CN `
             -loc installer/zh-CN.wxl `
