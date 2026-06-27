@@ -38,4 +38,14 @@ public sealed record AppConfiguration
     {
         get; init;
     }
+
+    /// <summary>
+    /// Gets or sets a value indicating whether the RAM-disk-as-temp compatibility warning has
+    /// already been shown to the user. When <c>true</c> the warning is suppressed on subsequent
+    /// "Set as Temp" actions.
+    /// </summary>
+    public bool TempDirCompatWarningShown
+    {
+        get; init;
+    }
 }
