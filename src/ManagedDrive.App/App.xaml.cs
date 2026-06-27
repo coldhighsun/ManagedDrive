@@ -156,11 +156,16 @@ public partial class App
             // cannot access user-session WinFsp drives. Warn once so the user is aware.
             Log.Warning("TEMP points to auto-mount RAM disk {MountPoint}; elevated processes may not access it.", mountPoint);
 
-            MessageBox.Show(
-                Loc.Format("Msg.StartupTempAutoMountWarning", expanded),
-                Loc.Get("Msg.SetTempDirWarningTitle"),
-                MessageBoxButton.OK,
-                MessageBoxImage.Warning);
+            if (!config.TempDirCompatWarningShown)
+            {
+                MessageBox.Show(
+                    Loc.Format("Msg.StartupTempAutoMountWarning", expanded),
+                    Loc.Get("Msg.SetTempDirWarningTitle"),
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Warning);
+
+                _settings!.Save(config with { TempDirCompatWarningShown = true });
+            }
         }
     }
 
