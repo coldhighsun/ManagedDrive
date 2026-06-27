@@ -69,6 +69,7 @@ public partial class SettingsDialog
             StartMinimized = StartMinimizedBox.IsChecked == true,
             Language = selectedTag,
             Disks = _original.Disks,
+            TempDirCompatWarningShown = _original.TempDirCompatWarningShown,
         };
 
         DialogResult = true;

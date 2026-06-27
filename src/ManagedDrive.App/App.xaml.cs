@@ -93,7 +93,7 @@ public partial class App
         CheckWinFspPrerequisite();
 
         _mountManager = new MountManager();
-        _mainViewModel = new MainViewModel(_mountManager, _settings);
+        _mainViewModel = new MainViewModel(_mountManager, _settings, config);
         _mainWindow = new MainWindow(_mainViewModel);
         _mainWindow.Closing += MainWindow_Closing;
 
@@ -133,20 +133,35 @@ public partial class App
         var matchingProfile = config.Disks.FirstOrDefault(d =>
             string.Equals(d.MountPoint, mountPoint, StringComparison.OrdinalIgnoreCase));
 
-        if (matchingProfile == null || matchingProfile.AutoMount)
+        if (matchingProfile == null)
         {
             return;
         }
 
-        // Disk is in profiles but not set to auto-mount — TEMP will be dangling after startup.
-        Log.Warning("TEMP points to {TempPath} on RAM disk {MountPoint} which is not set to auto-mount. Resetting to default.", expanded, mountPoint);
-        TempDirResetService.Reset();
+        if (!matchingProfile.AutoMount)
+        {
+            // Disk is in profiles but not set to auto-mount — TEMP will be dangling after startup.
+            Log.Warning("TEMP points to {TempPath} on RAM disk {MountPoint} which is not set to auto-mount. Resetting to default.", expanded, mountPoint);
+            TempDirResetService.Reset();
 
-        MessageBox.Show(
-            Loc.Format("Msg.StartupTempReset", expanded),
-            "ManagedDrive",
-            MessageBoxButton.OK,
-            MessageBoxImage.Warning);
+            MessageBox.Show(
+                Loc.Format("Msg.StartupTempReset", expanded),
+                "ManagedDrive",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+        }
+        else
+        {
+            // Disk is auto-mount and will be available, but elevated processes (e.g. winget) still
+            // cannot access user-session WinFsp drives. Warn once so the user is aware.
+            Log.Warning("TEMP points to auto-mount RAM disk {MountPoint}; elevated processes may not access it.", mountPoint);
+
+            MessageBox.Show(
+                Loc.Format("Msg.StartupTempAutoMountWarning", expanded),
+                Loc.Get("Msg.SetTempDirWarningTitle"),
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+        }
     }
 
     private void AutoMountDisks()
