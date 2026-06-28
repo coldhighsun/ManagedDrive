@@ -152,6 +152,9 @@
                                          BorderBrush="{DynamicResource MaterialDesignDivider}"
                                          Cursor="Hand"
                                          Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=Window}}">
+                        <materialDesign:Card.InputBindings>
+                            <MouseBinding MouseAction="LeftDoubleClick" Command="{Binding OpenInExplorerCommand}"/>
+                        </materialDesign:Card.InputBindings>
                         <materialDesign:Card.ContextMenu>
                             <ContextMenu>
                                 <!-- Navigation -->
