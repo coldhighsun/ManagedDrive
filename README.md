@@ -21,6 +21,7 @@ Create, mount and manage in-memory volumes that appear as normal drive letters i
 - Edit a mounted disk — change label, capacity, auto-mount, and image path live without data loss; changing the drive letter or read-only flag remounts the disk
 - Optional persistence — save the disk contents to a `.mdr` image file and restore it on next mount; Save Image is always available and prompts for a file path if none is set
 - Auto-mount saved profiles on application startup
+- Double-click a disk card to open it in Explorer
 - System-tray icon for quick access; minimizes to tray on window close
 - Tray icon tooltip — hover to see all mounted disks with live usage percentages
 - High-usage warning — system tray notification when a disk exceeds 90% capacity
@@ -221,6 +222,7 @@ MIT
 - 编辑已挂载磁盘——修改卷标、容量、自动挂载和镜像路径无需重挂即可实时生效；更改盘符或只读标志时自动重挂
 - 可选持久化——将磁盘内容保存为 `.mdr` 镜像文件，下次挂载时自动还原；保存镜像功能始终可用，未设置镜像路径时自动弹出选择对话框
 - 应用启动时自动挂载已保存的磁盘配置
+- 双击磁盘卡片可在资源管理器中打开对应盘符
 - 系统托盘图标，关闭窗口时最小化到托盘
 - 托盘图标悬浮提示——鼠标悬停时显示所有已挂载磁盘及其实时使用率
 - 高用量警告——磁盘使用率超过 90% 时通过系统托盘发出通知
