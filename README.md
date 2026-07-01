@@ -196,13 +196,17 @@ Results are written to `BenchmarkDotNet.Artifacts/results/` in the working direc
 
 WinFsp mounts drives in the **current user's session device namespace**. If an installer is extracted to TEMP and then launched by a system-level process — such as the Windows Package Manager service used by winget — that process operates in the global device namespace and cannot resolve user-session drive letters. Attempting to execute such an installer from a path like `Z:\Temp\WinGet\...\setup.exe` fails with:
 
-> `0x800704b3` — The network path was not found / 网络路径键入不正确
+> `0x800704b3` — The network path was not found
 
-Known affected packages include **WeChatWin_\*.exe** (WeChat installer). Not all winget packages are affected — many install without issue.
+Known affected packages include **WeChatWin_\*.exe** (WeChat installer) and **7z\*.exe** (7-Zip installer). Not all winget packages are affected — many install without issue.
 
 This is an architectural limitation of WinFsp user-mode file systems and cannot be worked around in user space.
 
-**Recommendation:** If you encounter installation errors, restore TEMP to the Windows default using the toolbar button in ManagedDrive. ManagedDrive will warn you when you attempt to set a RAM disk as TEMP. On every subsequent startup, if TEMP still points to a RAM disk, a warning is shown again — reset TEMP to the Windows default to stop the recurring prompt.
+**Recommendation:** If you encounter installation errors, you have two options:
+- Restore TEMP to the Windows default using the toolbar button in ManagedDrive, then retry the installation.
+- Download the installer directly from the software's official website and run it manually, bypassing winget entirely.
+
+ManagedDrive will warn you when you attempt to set a RAM disk as TEMP. On every subsequent startup, if TEMP still points to a RAM disk, a warning is shown again — reset TEMP to the Windows default to stop the recurring prompt.
 
 ### License
 
@@ -399,11 +403,15 @@ WinFsp 将驱动器挂载在**当前用户的会话设备命名空间**中。若
 
 > `0x800704b3` — 网络路径键入不正确 / The network path was not found
 
-已知受影响的安装包包括 **WeChatWin\_\*.exe**（微信安装程序）。并非所有 winget 包都受影响——大多数包可正常安装。
+已知受影响的安装包包括 **WeChatWin\_\*.exe**（微信安装程序）和 **7z\*.exe**（7-Zip 安装程序）。并非所有 winget 包都受影响——大多数包可正常安装。
 
 这是 WinFsp 用户态文件系统的架构性限制，无法在用户空间层面绕过。
 
-**建议：** 如遇安装报错，可通过 ManagedDrive 工具栏的按钮将 TEMP 恢复为 Windows 默认值。每次将内存盘设置为临时目录时，ManagedDrive 均会弹出警告提示。此后每次启动，只要 TEMP 仍指向内存盘，警告便会再次弹出——将 TEMP 恢复为 Windows 默认值后即可停止重复提示。
+**建议：** 如遇安装报错，可采用以下任一方式解决：
+- 通过 ManagedDrive 工具栏的按钮将 TEMP 恢复为 Windows 默认值，再重试安装。
+- 直接前往软件官网下载安装包手动安装，绕过 winget。
+
+每次将内存盘设置为临时目录时，ManagedDrive 均会弹出警告提示。此后每次启动，只要 TEMP 仍指向内存盘，警告便会再次弹出——将 TEMP 恢复为 Windows 默认值后即可停止重复提示。
 
 ### 许可证
 
