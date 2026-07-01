@@ -40,7 +40,8 @@ Data flows: `MountManager` → `RamDisk.Create()` → `MemoryFileSystem` + `File
 - `MemoryFileSystem : FileSystemBase` — implements all WinFsp callbacks (`Create`, `Open`, `Read`, `Write`, `Rename`, `CanDelete`, `ReadDirectoryEntry`, etc.). Enforces capacity ceiling; returns `STATUS_DISK_FULL` when exceeded. In read-only mode, all mutating operations return `STATUS_MEDIA_WRITE_PROTECTED`. `ReadDirectoryEntry` builds a snapshot list on the first call (including `.` and `..`), then iterates it statelessly on subsequent calls. `Init()` auto-creates the root directory `\` with a standard security descriptor. `FileSystemHost` is configured with 4 KB sector/allocation size, `FileInfoTimeout=1000 ms`, `CasePreservedNames=true`, `CaseSensitiveSearch=false`, and a randomized `VolumeSerialNumber`.
 - `RamDisk` — wraps `MemoryFileSystem` + `FileSystemHost`. `RamDisk.Create(options)` mounts the volume; `Dispose()` unmounts. After mounting, polls `DriveInfo.GetDrives()` up to 25 × 100 ms (2.5 s total) until the drive letter appears, then broadcasts `SHCNE_DRIVEADD` via `SHChangeNotify` so Explorer refreshes immediately.
 - `DiskImageSerializer` — reads/writes the `.mdr` binary format (magic `MDRD`, little-endian; stores capacity, label, and all file nodes including security descriptors).
-- `MountManager` — thread-safe registry of active `RamDisk` instances. `Mount(options)` calls `RamDisk.Create`; `Unmount(mountPoint)` disposes the disk.
+- `MountManager` — thread-safe registry of active `RamDisk` instances. `Mount(options)` calls `RamDisk.Create`; `Unmount(mountPoint)` disposes the disk. Fires `DiskMounted` / `DiskUnmounted` events consumed by the App layer to update the UI.
+- `RamDisk.TryApplyOptions(options)` — applies non-destructive changes (label, capacity, auto-mount, image path) to a live disk without unmounting; returns `false` if the change requires a full remount (drive letter or read-only flag changed).
 
 ### App layer (`ManagedDrive.App`)
 
