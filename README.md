@@ -198,7 +198,7 @@ WinFsp mounts drives in the **current user's session device namespace**. If an i
 
 > `0x800704b3` — The network path was not found
 
-Known affected packages include **WeChatWin_\*.exe** (WeChat installer) and **7z\*.exe** (7-Zip installer). Not all winget packages are affected — many install without issue.
+Known affected packages include **WeChatWin_\*.exe** (WeChat installer), **7z\*.exe** (7-Zip installer), and **Git-\*.exe** (Git installer). Not all winget packages are affected — many install without issue.
 
 This is an architectural limitation of WinFsp user-mode file systems and cannot be worked around in user space.
 
@@ -403,7 +403,7 @@ WinFsp 将驱动器挂载在**当前用户的会话设备命名空间**中。若
 
 > `0x800704b3` — 网络路径键入不正确 / The network path was not found
 
-已知受影响的安装包包括 **WeChatWin\_\*.exe**（微信安装程序）和 **7z\*.exe**（7-Zip 安装程序）。并非所有 winget 包都受影响——大多数包可正常安装。
+已知受影响的安装包包括 **WeChatWin\_\*.exe**（微信安装程序）、**7z\*.exe**（7-Zip 安装程序）和 **Git-\*.exe**（Git 安装程序）。并非所有 winget 包都受影响——大多数包可正常安装。
 
 这是 WinFsp 用户态文件系统的架构性限制，无法在用户空间层面绕过。
 
