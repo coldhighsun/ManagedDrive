@@ -99,15 +99,6 @@
       <Component Id="WinFspMsil">
         <File Source="$(PublishDir)winfsp-msil.dll" KeyPath="yes" />
       </Component>
-
-
-      <!-- Serilog -->
-      <Component Id="Serilog">
-        <File Source="$(PublishDir)Serilog.dll" KeyPath="yes" />
-      </Component>
-      <Component Id="SerilogSinksFile">
-        <File Source="$(PublishDir)Serilog.Sinks.File.dll" KeyPath="yes" />
-      </Component>
     </ComponentGroup>
   </Fragment>
 

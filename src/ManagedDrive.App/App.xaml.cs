@@ -5,7 +5,6 @@ using ManagedDrive.App.ViewModels;
 using ManagedDrive.App.Views;
 using ManagedDrive.Core;
 using Microsoft.Win32;
-using Serilog;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
@@ -51,12 +50,10 @@ public partial class App
 
     private void App_Exit(object sender, ExitEventArgs e)
     {
-        Log.Information("ManagedDrive shutting down.");
         SaveSettings();
         _trayIcon?.Dispose();
         _mainViewModel?.Dispose();
         _mountManager?.Dispose();
-        Log.CloseAndFlush();
         if (_singleInstanceMutex != null)
         {
             _singleInstanceMutex.ReleaseMutex();
@@ -82,22 +79,6 @@ public partial class App
                 return;
             }
         }
-
-        Log.Logger = new LoggerConfiguration()
-            .MinimumLevel.Debug()
-            .WriteTo.File(
-                Path.Combine(AppContext.BaseDirectory, "logs", "log-.txt"),
-                rollingInterval: RollingInterval.Day,
-                retainedFileCountLimit: 7,
-                outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz} [{Level:u3}] {Message:lj}{NewLine}{Exception}")
-            .CreateLogger();
-
-        DispatcherUnhandledException += (_, args) =>
-        {
-            Log.Fatal(args.Exception, "Unhandled exception.");
-        };
-
-        Log.Information("ManagedDrive starting.");
 
         _settings = new SettingsStore();
         var config = _settings.Load();
@@ -170,7 +151,6 @@ public partial class App
         if (!matchingProfile.AutoMount)
         {
             // Disk is in profiles but not set to auto-mount — TEMP will be dangling after startup.
-            Log.Warning("TEMP points to {TempPath} on RAM disk {MountPoint} which is not set to auto-mount. Resetting to default.", expanded, mountPoint);
             TempDirResetService.Reset();
 
             MessageBox.Show(
@@ -183,8 +163,6 @@ public partial class App
         {
             // Disk is auto-mount and will be available, but elevated processes (e.g. winget) still
             // cannot access user-session WinFsp drives. Warn once so the user is aware.
-            Log.Warning("TEMP points to auto-mount RAM disk {MountPoint}; elevated processes may not access it.", mountPoint);
-
             if (!config.TempDirCompatWarningShown)
             {
                 MessageBox.Show(
@@ -218,8 +196,6 @@ public partial class App
             return;
         }
 
-        Log.Warning("WinFsp 2.2.x not detected. InstallDir={InstallDir}", installDir ?? "<none>");
-
         var result = MessageBox.Show(
             Loc.Get("Msg.WinFspMissingBody"),
             Loc.Get("Msg.WinFspMissingTitle"),
@@ -228,7 +204,7 @@ public partial class App
 
         if (result == MessageBoxResult.Yes)
         {
-            Process.Start(new ProcessStartInfo("https://winfsp.dev/rel/") { UseShellExecute = true });
+            Process.Start(new ProcessStartInfo("https://github.com/winfsp/winfsp/releases/tag/v2.2B2") { UseShellExecute = true });
         }
 
         Shutdown();
@@ -256,7 +232,6 @@ public partial class App
             "ManagedDrive",
             success ? Loc.Get("Msg.ResetTempSuccess") : Loc.Get("Msg.ResetTempFailed"),
             success ? System.Windows.Forms.ToolTipIcon.Info : System.Windows.Forms.ToolTipIcon.Warning);
-        Log.Information("Tray: reset temp directories, success={Success}.", success);
     }
 
     private void ShowAboutDialog()
@@ -289,7 +264,6 @@ public partial class App
             }
 
             TempDirResetService.Reset();
-            Log.Information("Auto-reset temp directory before exiting (tray).");
         }
 
         _isExiting = true;
@@ -325,7 +299,6 @@ public partial class App
         var title = Loc.Get("Tray.HighUsageTitle");
         var body = Loc.Format("Tray.HighUsageBody", vm.VolumeLabel, vm.MountPoint, vm.UsedPercent);
         _trayIcon.ShowBalloonTip(5000, title, body, System.Windows.Forms.ToolTipIcon.Warning);
-        Log.Warning("High disk usage on {MountPoint}: {UsedPercent:F1}%.", vm.MountPoint, vm.UsedPercent);
     }
 
     private void SaveSettings()

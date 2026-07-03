@@ -4,7 +4,6 @@ using ManagedDrive.App.Models;
 using ManagedDrive.App.Services;
 using ManagedDrive.App.Views;
 using ManagedDrive.Core;
-using Serilog;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Windows;
@@ -233,12 +232,10 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             var disk = await Task.Run(() => _mountManager.Mount(options));
             AddDiskSorted(new DiskViewModel(disk));
             StatusText = Loc.Format("Status.Mounted", disk.MountPoint, profile.VolumeLabel);
-            Log.Information("Auto-mounted {MountPoint} ({Label}).", disk.MountPoint, profile.VolumeLabel);
         }
         catch (Exception ex)
         {
             StatusText = Loc.Format("Status.AutoMountFailed", profile.MountPoint, ex.Message);
-            Log.Error(ex, "Auto-mount {MountPoint} failed.", profile.MountPoint);
 
             var userTemp = Environment.GetEnvironmentVariable("TEMP", EnvironmentVariableTarget.User);
             if (!string.IsNullOrEmpty(userTemp))
@@ -247,7 +244,6 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
                 if (expanded.StartsWith(profile.MountPoint, StringComparison.OrdinalIgnoreCase))
                 {
                     TempDirResetService.Reset();
-                    Log.Warning("Auto-reset TEMP to default because auto-mount of {MountPoint} failed.", profile.MountPoint);
                 }
             }
         }
@@ -301,11 +297,6 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             AddDiskSorted(new DiskViewModel(disk));
             SaveSettings();
             StatusText = Loc.Format("Status.MountedWithCapacity", disk.MountPoint, options.VolumeLabel, options.CapacityBytes / (1024 * 1024));
-            Log.Information(
-                "Mounted {MountPoint} ({Label}, {CapacityMb} MB).",
-                disk.MountPoint,
-                options.VolumeLabel,
-                options.CapacityBytes / (1024 * 1024));
         }
         catch (Exception ex)
         {
@@ -315,7 +306,6 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
                 MessageBoxButton.OK,
                 MessageBoxImage.Error);
             StatusText = Loc.Get("Status.MountFailed");
-            Log.Error(ex, "Failed to mount disk.");
         }
     }
 
@@ -358,7 +348,6 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             if (vm.IsCurrentTempDir)
             {
                 await Task.Run(TempDirResetService.Reset);
-                Log.Information("Auto-reset temp directory before editing {MountPoint}.", vm.MountPoint);
             }
 
             var oldMountPoint = old.MountPoint;
@@ -372,11 +361,6 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
                 AddDiskSorted(new DiskViewModel(disk));
                 SaveSettings();
                 StatusText = Loc.Format("Status.MountedWithCapacity", disk.MountPoint, newOptions.VolumeLabel, newOptions.CapacityBytes / (1024 * 1024));
-                Log.Information(
-                    "Edited disk: remounted {MountPoint} ({Label}, {CapacityMb} MB).",
-                    disk.MountPoint,
-                    newOptions.VolumeLabel,
-                    newOptions.CapacityBytes / (1024 * 1024));
             }
             catch (Exception ex)
             {
@@ -386,7 +370,6 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
                     MessageBoxButton.OK,
                     MessageBoxImage.Error);
                 StatusText = Loc.Get("Status.MountFailed");
-                Log.Error(ex, "Failed to remount disk after edit.");
             }
         }
         else
@@ -404,11 +387,6 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             vm.Refresh();
             SaveSettings();
             StatusText = Loc.Format("Status.MountedWithCapacity", vm.MountPoint, newOptions.VolumeLabel, newOptions.CapacityBytes / (1024 * 1024));
-            Log.Information(
-                "Edited disk: hot-updated {MountPoint} ({Label}, {CapacityMb} MB).",
-                vm.MountPoint,
-                newOptions.VolumeLabel,
-                newOptions.CapacityBytes / (1024 * 1024));
         }
     }
 
@@ -443,7 +421,6 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             if (tempOnRamDisk)
             {
                 TempDirResetService.Reset();
-                Log.Information("Auto-reset temp directory before exiting.");
             }
             Application.Current.Shutdown();
         }
@@ -480,7 +457,6 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 
         vm.Refresh();
         StatusText = Loc.Format("Status.FormatDisk", vm.MountPoint);
-        Log.Information("Formatted disk {MountPoint}.", vm.MountPoint);
         MessageBox.Show(
             Loc.Format("Msg.FormatDiskSuccess", vm.MountPoint),
             "ManagedDrive",
@@ -511,7 +487,6 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
                 "ManagedDrive",
                 MessageBoxButton.OK,
                 MessageBoxImage.Information);
-            Log.Information("User temp directories reset to defaults.");
         }
         else
         {
@@ -520,7 +495,6 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
                 "ManagedDrive",
                 MessageBoxButton.OK,
                 MessageBoxImage.Error);
-            Log.Warning("Failed to reset user temp directories.");
         }
     }
 
@@ -562,7 +536,6 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
                 "ManagedDrive",
                 MessageBoxButton.OK,
                 MessageBoxImage.Information);
-            Log.Information("Saved image for {MountPoint}.", vm.MountPoint);
         }
         catch (Exception ex)
         {
@@ -571,7 +544,6 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
                 "ManagedDrive",
                 MessageBoxButton.OK,
                 MessageBoxImage.Error);
-            Log.Error(ex, "Failed to save image for {MountPoint}.", vm.MountPoint);
         }
     }
 
@@ -607,7 +579,6 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
                     MessageBoxButton.OK,
                     MessageBoxImage.Information);
                 vm.Refresh();
-                Log.Information("User temp directories reset to defaults from {MountPoint}.", vm.MountPoint);
             }
             else
             {
@@ -616,7 +587,6 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
                     "ManagedDrive",
                     MessageBoxButton.OK,
                     MessageBoxImage.Error);
-                Log.Warning("Failed to reset user temp directories.");
             }
         }
         else
@@ -650,7 +620,6 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
                     MessageBoxImage.Information);
                 StatusText = Loc.Format("Status.TempDirSet", tempPath);
                 vm.Refresh();
-                Log.Information("User temp directory set to {TempPath}.", tempPath);
             }
             else
             {
@@ -659,7 +628,6 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
                     "ManagedDrive",
                     MessageBoxButton.OK,
                     MessageBoxImage.Error);
-                Log.Warning("Failed to set user temp directory to {TempPath}.", tempPath);
             }
         }
     }
@@ -690,7 +658,6 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         if (vm.IsCurrentTempDir)
         {
             await Task.Run(TempDirResetService.Reset);
-            Log.Information("Auto-reset temp directory before unmounting {MountPoint}.", vm.MountPoint);
         }
 
         var mountPoint = vm.Disk.Options.MountPoint;
@@ -699,7 +666,6 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         _mountManager.Unmount(mountPoint);
         SaveSettings();
         StatusText = Loc.Format("Status.Unmounted", mountPoint);
-        Log.Information("Unmounted {MountPoint}.", mountPoint);
     }
 
     private void OnPropertyChanged(string propertyName) =>
