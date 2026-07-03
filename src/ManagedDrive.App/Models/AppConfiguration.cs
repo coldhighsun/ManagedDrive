@@ -31,6 +31,14 @@ public sealed record AppConfiguration
     }
 
     /// <summary>
+    /// Theme choice for the UI: "light", "dark", or <c>null</c> to follow the Windows system theme.
+    /// </summary>
+    public string? Theme
+    {
+        get; init;
+    }
+
+    /// <summary>
     /// Gets or sets a value indicating whether the main window should be hidden on startup,
     /// showing only the system tray icon. Defaults to <c>false</c>.
     /// </summary>

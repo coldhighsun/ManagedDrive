@@ -33,7 +33,7 @@
 
         <!-- App bar -->
         <Border DockPanel.Dock="Top"
-                Background="{DynamicResource AppPrimary}"
+                Background="{DynamicResource AppBarBackground}"
                 Padding="4,4,4,4">
             <Border.Effect>
                 <DropShadowEffect ShadowDepth="2" BlurRadius="4" Opacity="0.2"/>
@@ -82,7 +82,7 @@
                 <TextBlock VerticalAlignment="Center"
                            Margin="12,0,0,0"
                            FontSize="16" FontWeight="Medium"
-                           Foreground="White"
+                           Foreground="{DynamicResource AppBarForeground}"
                            Text="{DynamicResource Window.Title}"/>
             </DockPanel>
         </Border>
@@ -195,10 +195,10 @@
 
                             <!-- Drive letter badge -->
                             <Border Width="48" Height="48" CornerRadius="8"
-                                    Background="{DynamicResource AppPrimary}">
+                                    Background="{DynamicResource AppBarBackground}">
                                 <TextBlock Text="{Binding MountPoint}"
                                            FontSize="18" FontWeight="SemiBold"
-                                           Foreground="White"
+                                           Foreground="{DynamicResource AppBarForeground}"
                                            HorizontalAlignment="Center"
                                            VerticalAlignment="Center"/>
                             </Border>
@@ -206,7 +206,8 @@
                             <!-- Label + progress bar + used/capacity -->
                             <StackPanel Grid.Column="1" Margin="12,0,16,0" VerticalAlignment="Center">
                                 <TextBlock Text="{Binding VolumeLabel}"
-                                           FontSize="14" FontWeight="Medium"/>
+                                           FontSize="14" FontWeight="Medium"
+                                           Foreground="{DynamicResource AppForeground}"/>
                                 <ProgressBar Style="{StaticResource SlimProgressBar}"
                                              Minimum="0" Maximum="100"
                                              Value="{Binding UsedPercent, Mode=OneWay}"/>
@@ -224,6 +225,7 @@
                             <StackPanel Grid.Column="2" VerticalAlignment="Center" HorizontalAlignment="Right">
                                 <TextBlock Text="{Binding FreeFormatted}"
                                            FontSize="14" FontWeight="Medium"
+                                           Foreground="{DynamicResource AppForeground}"
                                            HorizontalAlignment="Right"/>
                                 <TextBlock Text="{DynamicResource Col.Free}" FontSize="11"
                                            Foreground="{DynamicResource AppForegroundLight}"

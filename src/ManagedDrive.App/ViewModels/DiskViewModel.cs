@@ -1,9 +1,3 @@
-using ManagedDrive.App.Infrastructure;
-using ManagedDrive.Core;
-using System.ComponentModel;
-using System.Diagnostics;
-using System.Windows.Threading;
-
 namespace ManagedDrive.App.ViewModels;
 
 /// <summary>
@@ -169,7 +163,7 @@ public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
     private bool CheckIsCurrentTempDir()
     {
         var userTemp = Environment.GetEnvironmentVariable("TEMP", EnvironmentVariableTarget.User);
-        var diskTemp = System.IO.Path.Combine(MountPoint, "Temp");
+        var diskTemp = Path.Combine(MountPoint, "Temp");
         return string.Equals(userTemp, diskTemp, StringComparison.OrdinalIgnoreCase);
     }
 

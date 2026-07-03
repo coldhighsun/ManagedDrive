@@ -2,19 +2,6 @@
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                     xmlns:helpers="clr-namespace:ManagedDrive.App.Helpers">
 
-    <!-- ========== Brushes ========== -->
-    <SolidColorBrush x:Key="AppPrimary" Color="#3F51B5"/>
-    <SolidColorBrush x:Key="AppPrimaryDark" Color="#303F9F"/>
-    <SolidColorBrush x:Key="AppPrimaryForeground" Color="White"/>
-    <SolidColorBrush x:Key="AppForeground" Color="#DD000000"/>
-    <SolidColorBrush x:Key="AppForegroundLight" Color="#89000000"/>
-    <SolidColorBrush x:Key="AppBackground" Color="#FFFFFF"/>
-    <SolidColorBrush x:Key="AppDivider" Color="#1F000000"/>
-    <SolidColorBrush x:Key="AppToolBarBackground" Color="#F5F5F5"/>
-    <SolidColorBrush x:Key="AppWarning" Color="#FF9800"/>
-    <SolidColorBrush x:Key="AppHover" Color="#0A000000"/>
-    <SolidColorBrush x:Key="AppPressed" Color="#14000000"/>
-
     <!-- ========== Icon font style ========== -->
     <Style x:Key="IconText" TargetType="TextBlock">
         <Setter Property="FontFamily" Value="Segoe Fluent Icons"/>
@@ -40,7 +27,7 @@
         <Setter Property="Height" Value="40"/>
         <Setter Property="Background" Value="Transparent"/>
         <Setter Property="BorderThickness" Value="0"/>
-        <Setter Property="Foreground" Value="{DynamicResource AppPrimaryForeground}"/>
+        <Setter Property="Foreground" Value="{DynamicResource AppBarForeground}"/>
         <Setter Property="Cursor" Value="Hand"/>
         <Setter Property="Padding" Value="0"/>
         <Setter Property="HorizontalContentAlignment" Value="Center"/>
@@ -180,6 +167,39 @@
         </Setter>
     </Style>
 
+    <!-- ========== Spin button (capacity/interval up/down arrows) ========== -->
+    <Style x:Key="SpinRepeatButton" TargetType="RepeatButton">
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="BorderThickness" Value="0"/>
+        <Setter Property="Foreground" Value="{DynamicResource AppForeground}"/>
+        <Setter Property="Cursor" Value="Hand"/>
+        <Setter Property="HorizontalContentAlignment" Value="Center"/>
+        <Setter Property="VerticalContentAlignment" Value="Center"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="RepeatButton">
+                    <Border x:Name="Bd" Background="{TemplateBinding Background}"
+                            CornerRadius="2">
+                        <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                          VerticalAlignment="{TemplateBinding VerticalContentAlignment}"/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource AppForeground}"/>
+                            <Setter Property="Foreground" Value="{DynamicResource AppBackground}"/>
+                        </Trigger>
+                        <Trigger Property="IsPressed" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource AppForegroundLight}"/>
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.4"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
     <!-- ========== TextBox with watermark ========== -->
     <Style x:Key="OutlinedTextBox" TargetType="TextBox">
         <Setter Property="Padding" Value="8,8"/>
@@ -227,12 +247,171 @@
     </Style>
 
     <!-- ========== ComboBox with watermark ========== -->
+    <!-- Custom template so the dropdown popup itself follows the app theme (native popups
+         always render with a white background, which is wrong in dark mode). -->
+    <Style x:Key="OutlinedComboBoxItem" TargetType="ComboBoxItem">
+        <Setter Property="Padding" Value="8,6"/>
+        <Setter Property="Foreground" Value="{DynamicResource AppForeground}"/>
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ComboBoxItem">
+                    <Border x:Name="Bd" Background="{TemplateBinding Background}"
+                            Padding="{TemplateBinding Padding}">
+                        <ContentPresenter/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsHighlighted" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource AppHover}"/>
+                        </Trigger>
+                        <Trigger Property="IsSelected" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource AppPressed}"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
     <Style x:Key="OutlinedComboBox" TargetType="ComboBox">
         <Setter Property="Padding" Value="8,8"/>
         <Setter Property="BorderBrush" Value="{DynamicResource AppDivider}"/>
         <Setter Property="BorderThickness" Value="1"/>
         <Setter Property="Background" Value="Transparent"/>
         <Setter Property="Foreground" Value="{DynamicResource AppForeground}"/>
+        <Setter Property="ItemContainerStyle" Value="{StaticResource OutlinedComboBoxItem}"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ComboBox">
+                    <Grid>
+                        <ToggleButton x:Name="ToggleBtn"
+                                      Background="{TemplateBinding Background}"
+                                      BorderThickness="{TemplateBinding BorderThickness}"
+                                      IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}"
+                                      ClickMode="Press"
+                                      Focusable="False">
+                            <ToggleButton.Template>
+                                <ControlTemplate TargetType="ToggleButton">
+                                    <Border Background="{TemplateBinding Background}"
+                                            BorderBrush="{DynamicResource AppDivider}"
+                                            BorderThickness="{TemplateBinding BorderThickness}"
+                                            CornerRadius="3"/>
+                                </ControlTemplate>
+                            </ToggleButton.Template>
+                        </ToggleButton>
+                        <Grid Margin="{TemplateBinding Padding}" IsHitTestVisible="False">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock x:Name="Hint"
+                                       Text="{Binding Path=(helpers:HintHelper.Text), RelativeSource={RelativeSource TemplatedParent}}"
+                                       Foreground="{DynamicResource AppForegroundLight}"
+                                       VerticalAlignment="Center"
+                                       Visibility="Collapsed"/>
+                            <ContentPresenter Grid.Column="0" x:Name="ContentSite"
+                                              Content="{TemplateBinding SelectionBoxItem}"
+                                              ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"
+                                              VerticalAlignment="Center"/>
+                            <TextBlock Grid.Column="1" Text="&#xE70D;" FontFamily="Segoe Fluent Icons" FontSize="10"
+                                       Foreground="{DynamicResource AppForegroundLight}"
+                                       VerticalAlignment="Center" Margin="6,0,0,0"/>
+                        </Grid>
+                        <Popup x:Name="Popup" Placement="Bottom" IsOpen="{TemplateBinding IsDropDownOpen}"
+                               AllowsTransparency="True" Focusable="False" PopupAnimation="Fade">
+                            <Border Background="{DynamicResource AppSurface}"
+                                    BorderBrush="{DynamicResource AppDivider}"
+                                    BorderThickness="1" CornerRadius="3"
+                                    MinWidth="{Binding ActualWidth, RelativeSource={RelativeSource TemplatedParent}}"
+                                    MaxHeight="240">
+                                <Border.Effect>
+                                    <DropShadowEffect ShadowDepth="1" BlurRadius="6" Opacity="0.2"/>
+                                </Border.Effect>
+                                <ScrollViewer SnapsToDevicePixels="True">
+                                    <ItemsPresenter/>
+                                </ScrollViewer>
+                            </Border>
+                        </Popup>
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="SelectedIndex" Value="-1">
+                            <Setter TargetName="Hint" Property="Visibility" Value="Visible"/>
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.5"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- ========== Context menu ========== -->
+    <!-- Implicit styles (no x:Key) so every ContextMenu/MenuItem/Separator in the app
+         follows the theme, since the native popup chrome always renders white. -->
+    <Style TargetType="ContextMenu">
+        <Setter Property="Background" Value="{DynamicResource AppSurface}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource AppDivider}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="Padding" Value="4"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ContextMenu">
+                    <Border Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            Padding="{TemplateBinding Padding}"
+                            CornerRadius="4">
+                        <Border.Effect>
+                            <DropShadowEffect ShadowDepth="1" BlurRadius="8" Opacity="0.25"/>
+                        </Border.Effect>
+                        <StackPanel IsItemsHost="True"/>
+                    </Border>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style TargetType="MenuItem">
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="Foreground" Value="{DynamicResource AppForeground}"/>
+        <Setter Property="Padding" Value="12,8"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="MenuItem">
+                    <Border x:Name="Bd" Background="{TemplateBinding Background}"
+                            Padding="{TemplateBinding Padding}"
+                            CornerRadius="3">
+                        <ContentPresenter ContentSource="Header" VerticalAlignment="Center"/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsHighlighted" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource AppHover}"/>
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.4"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- Separators inside a Menu/ContextMenu are styled via MenuItem.SeparatorStyleKey, not a
+         plain TargetType="Separator" style, so that special key must be targeted directly —
+         otherwise WPF's built-in separator style (which reserves left indent for an icon
+         gutter) wins and the line appears indented with a large blank on the left. -->
+    <Style x:Key="{x:Static MenuItem.SeparatorStyleKey}" TargetType="Separator">
+        <Setter Property="Background" Value="{DynamicResource AppDivider}"/>
+        <Setter Property="Height" Value="1"/>
+        <Setter Property="Margin" Value="0,4"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Separator">
+                    <Border Background="{TemplateBinding Background}" Height="{TemplateBinding Height}"/>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
     </Style>
 
     <!-- ========== ProgressBar ========== -->
@@ -257,7 +436,7 @@
 
     <!-- ========== Disk card border ========== -->
     <Style x:Key="DiskCard" TargetType="Border">
-        <Setter Property="Background" Value="White"/>
+        <Setter Property="Background" Value="{DynamicResource AppSurface}"/>
         <Setter Property="BorderBrush" Value="{DynamicResource AppDivider}"/>
         <Setter Property="BorderThickness" Value="1"/>
         <Setter Property="CornerRadius" Value="4"/>

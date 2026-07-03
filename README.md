@@ -34,6 +34,7 @@ Create, mount and manage in-memory volumes that appear as normal drive letters i
 - System tray menu — quick access to **Reset Temp Directory** (executes silently with a notification bubble result) and **Settings** in addition to Show, New Disk, and Exit
 - Main window opens centered on the primary screen and is brought to the foreground on startup
 - Bilingual UI — English and Simplified Chinese, auto-detected from system locale with manual override in Settings
+- Light and dark themes — follows the Windows app theme by default, with a manual override (System Default / Light / Dark) in Settings; switches instantly without restarting
 - About dialog — accessible from the overflow menu; shows the app version and a link to the GitHub repository
 
 ### Installation
@@ -85,6 +86,7 @@ ManagedDrive/
 │   │
 │   └── ManagedDrive.App/           # WPF desktop application
 │       ├── Localization/           #   ResourceDictionary strings (en-US, zh-CN)
+│       ├── Themes/                 #   AppTheme.xaml styles + light/dark color palettes, ThemeManager
 │       ├── Infrastructure/         #   RelayCommand
 │       ├── Models/                 #   AppConfiguration, DiskProfile
 │       ├── Services/               #   SettingsStore, StartupManager, TempDirResetService
@@ -239,6 +241,7 @@ MIT
 - 系统托盘菜单——在显示、新建磁盘、退出之外，新增**重置临时文件夹**（静默执行，结果通过气泡通知反馈）和**设置**快捷入口
 - 主窗口启动时居中显示于主屏幕并置于前台
 - 双语界面——中文与英文，根据系统语言自动切换，也可在设置中手动更改
+- 浅色/深色主题——默认跟随 Windows 系统主题，也可在设置中手动切换（跟随系统／浅色／深色），切换即时生效，无需重启
 - 关于对话框——可从溢出菜单打开，显示应用版本及 GitHub 仓库链接
 
 ### 安装
@@ -290,6 +293,7 @@ ManagedDrive/
 │   │
 │   └── ManagedDrive.App/           # WPF 桌面应用程序
 │       ├── Localization/           #   ResourceDictionary 字符串（en-US、zh-CN）
+│       ├── Themes/                 #   AppTheme.xaml 样式 + 浅色/深色配色字典、ThemeManager
 │       ├── Infrastructure/         #   RelayCommand
 │       ├── Models/                 #   AppConfiguration、DiskProfile
 │       ├── Services/               #   SettingsStore、StartupManager、TempDirResetService

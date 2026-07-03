@@ -1,0 +1,14 @@
+global using ManagedDrive.App.Infrastructure;
+global using ManagedDrive.App.Localization;
+global using ManagedDrive.App.Models;
+global using ManagedDrive.App.Services;
+global using ManagedDrive.App.Themes;
+global using ManagedDrive.App.ViewModels;
+global using ManagedDrive.App.Views;
+global using ManagedDrive.Core;
+global using Microsoft.Win32;
+global using System.ComponentModel;
+global using System.Diagnostics;
+global using System.IO;
+global using System.Windows;
+global using System.Windows.Threading;

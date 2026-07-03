@@ -1,11 +1,5 @@
-using ManagedDrive.App.Localization;
-using ManagedDrive.Core;
-using System.IO;
-using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
-using MessageBox = System.Windows.MessageBox;
-using SaveFileDialog = Microsoft.Win32.SaveFileDialog;
 
 namespace ManagedDrive.App.Views;
 

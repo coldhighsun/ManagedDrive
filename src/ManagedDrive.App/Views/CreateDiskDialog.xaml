@@ -66,10 +66,10 @@
                             <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="2,0,0,0">
                                 <RepeatButton x:Name="CapacityUp" Content="&#xE70E;" FontFamily="Segoe Fluent Icons"
                                               FontSize="8" Width="24" Height="16" Click="CapacityUp_Click"
-                                              BorderThickness="0" Background="Transparent"/>
+                                              Style="{StaticResource SpinRepeatButton}"/>
                                 <RepeatButton x:Name="CapacityDown" Content="&#xE70D;" FontFamily="Segoe Fluent Icons"
                                               FontSize="8" Width="24" Height="16" Click="CapacityDown_Click"
-                                              BorderThickness="0" Background="Transparent"/>
+                                              Style="{StaticResource SpinRepeatButton}"/>
                             </StackPanel>
                         </Grid>
                         <ComboBox Grid.Column="2" x:Name="CapacityUnitBox" IsEditable="False"
@@ -95,11 +95,13 @@
                     <!-- Auto Mount -->
                     <CheckBox Grid.Column="0" x:Name="AutoMountBox" IsChecked="True"
                               Content="{DynamicResource CreateDisk.AutoMount}"
+                              Foreground="{DynamicResource AppForeground}"
                               ToolTip="{DynamicResource Tip.AutoMount}"/>
 
                     <!-- Read Only -->
                     <CheckBox Grid.Column="2" x:Name="ReadOnlyBox"
                               Content="{DynamicResource CreateDisk.ReadOnly}"
+                              Foreground="{DynamicResource AppForeground}"
                               ToolTip="{DynamicResource Tip.ReadOnly}"
                               Checked="ReadOnlyBox_CheckedChanged" Unchecked="ReadOnlyBox_CheckedChanged"/>
                 </Grid>
@@ -149,6 +151,7 @@
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
                         <CheckBox Grid.Column="0" x:Name="AutoSaveBox" VerticalAlignment="Center"
+                                  Foreground="{DynamicResource AppForeground}"
                                   ToolTip="{DynamicResource Tip.AutoSave}"
                                   Checked="AutoSaveBox_CheckedChanged" Unchecked="AutoSaveBox_CheckedChanged"/>
                         <TextBlock Grid.Column="2" Text="{DynamicResource CreateDisk.AutoSavePrefix}"
@@ -166,10 +169,10 @@
                             <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="2,0,0,0">
                                 <RepeatButton x:Name="AutoSaveIntervalUp" Content="&#xE70E;" FontFamily="Segoe Fluent Icons"
                                               FontSize="8" Width="24" Height="16" Click="AutoSaveIntervalUp_Click"
-                                              BorderThickness="0" Background="Transparent"/>
+                                              Style="{StaticResource SpinRepeatButton}"/>
                                 <RepeatButton x:Name="AutoSaveIntervalDown" Content="&#xE70D;" FontFamily="Segoe Fluent Icons"
                                               FontSize="8" Width="24" Height="16" Click="AutoSaveIntervalDown_Click"
-                                              BorderThickness="0" Background="Transparent"/>
+                                              Style="{StaticResource SpinRepeatButton}"/>
                             </StackPanel>
                         </Grid>
                         <TextBlock Grid.Column="6" Text="{DynamicResource CreateDisk.AutoSaveSuffix}"

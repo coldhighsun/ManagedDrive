@@ -1,6 +1,3 @@
-using System.Windows;
-using ManagedDrive.App.ViewModels;
-
 namespace ManagedDrive.App;
 
 /// <summary>

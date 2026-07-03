@@ -26,6 +26,8 @@ The solution file is `ManagedDrive.slnx` (Visual Studio 2022+ format).
 
 `Directory.Build.props` sets `Nullable enable` and `ImplicitUsings enable` globally — do not add explicit `using` directives for implicitly imported namespaces, and follow nullable annotation conventions throughout.
 
+`ManagedDrive.App/GlobalUsings.cs` adds project-wide `global using` directives for namespaces referenced across most files: all `ManagedDrive.App.*` sub-namespaces, `ManagedDrive.Core`, `Microsoft.Win32`, `System.ComponentModel`, `System.Diagnostics`, `System.IO`, `System.Windows`, and `System.Windows.Threading`. Don't re-add explicit `using` directives for these in individual files — only add file-specific ones (e.g. `System.Windows.Controls`, `System.Windows.Input`, `System.Text.Json`).
+
 The solution has three projects targeting `net10.0-windows`:
 
 - **`ManagedDrive.Core`** — Pure file-system engine, no UI dependency.
@@ -54,7 +56,7 @@ Standard WPF MVVM:
 - `MainViewModel` — owns `ObservableCollection<DiskViewModel>` sorted by mount point. Commands: `CreateDiskCommand` (opens `CreateDiskDialog`), `EditDiskCommand` (edit label/capacity/flags; non-destructive changes apply live via `RamDisk.TryApplyOptions()`; mount-point or read-only changes trigger full remount), `UnmountCommand` (auto-resets TEMP if it points to the disk before unmounting), `FormatCommand` (deletes all files on the disk; blocked when read-only), `SaveImageCommand`, `RefreshCommand`, `SettingsCommand`, `ResetTempDirsCommand` (resets TEMP/TMP to Windows defaults), `ToggleTempDirCommand` (toggles TEMP/TMP between the selected disk's `Temp` folder and the Windows default). Mount operations, `MountManager.Unmount`, and `MountManager.Dispose` (in `App.xaml.cs`) are dispatched to `Task.Run` to keep the UI responsive, since unmounting may perform a synchronous final auto-save write. `GetOtherDiskOptions(excluding)` returns the `DiskOptions` of every other active disk, passed into `CreateDiskDialog` so it can validate that a new/edited disk's image path doesn't collide with another disk's mount point or image file.
 - `DiskViewModel` — wraps a `RamDisk`; exposes bindable properties (mount point, used/free/total bytes, `IsCurrentTempDir`). A `DispatcherTimer` refreshes usage stats every 2 s automatically; `Refresh()` triggers a manual refresh. Fires `HighUsageWarning` when usage first crosses 90 %; the warning resets when usage drops below 85 % (hysteresis to prevent rapid flip-flopping). `IsCurrentTempDir` compares `[MountPoint]\Temp` against the user-level TEMP variable (case-insensitive).
 - `MainWindow` — uses `WindowStyle="None"` + `WindowChrome` (custom app bar as title bar). Closing the window hides it to the tray; exit is only via the tray menu or the toolbar close button. Any interactive element inside the `WindowChrome` caption area must have `WindowChrome.IsHitTestVisibleInChrome="True"`. The overflow menu uses a `Button` + `ContextMenu` pattern (opened in code-behind). A `TrayTooltipView` popup appears on tray icon hover and auto-hides after 3 s.
-- `SettingsStore` — persists `AppConfiguration` (JSON) to `%APPDATA%\ManagedDrive\settings.json`. `AppConfiguration` holds `RunAtStartup`, `StartMinimized`, `Language` (BCP-47 tag or `null` for system default), `TempDirCompatWarningShown` (one-time startup warning flag), and the list of `DiskProfile` records. `DiskProfile` is the serializable counterpart of `DiskOptions`.
+- `SettingsStore` — persists `AppConfiguration` (JSON) to `%APPDATA%\ManagedDrive\settings.json`. `AppConfiguration` holds `RunAtStartup`, `StartMinimized`, `Language` (BCP-47 tag or `null` for system default), `Theme` (`"light"`/`"dark"`/`null` for system default), `TempDirCompatWarningShown` (one-time startup warning flag), and the list of `DiskProfile` records. `DiskProfile` is the serializable counterpart of `DiskOptions`.
 - `RelayCommand` — thin `ICommand` wrapper in `Infrastructure/`; constructor takes `execute` action and optional `canExecute` predicate. Used for all ViewModel commands.
 - `StartupManager` — reads/writes the `HKCU\...\Run` registry key to control Windows startup.
 - `TempDirResetService` — static helper that reads/writes `HKCU\Environment` (TEMP and TMP) and broadcasts `WM_SETTINGCHANGE` so running processes pick up the change immediately. `Set(path)` writes `String` values (absolute paths); `Reset()` writes `ExpandString` values (unexpanded `%USERPROFILE%\AppData\Local\Temp`) for portability. Uses `SendMessageTimeoutAbortIfHung` with a 5 s timeout.
@@ -69,10 +71,18 @@ Strings live in `Localization/Strings.{tag}.xaml` resource dictionaries. `Langua
 - `LanguageManager.Instance.Apply(string? saved)` — `null` or empty means "system default"; the method resolves to a concrete tag via `LanguageManager.Resolve()` (matches system locale against `SupportedLanguages`, falls back to `"en-US"`).
 - `LanguageManager.Instance.SavedLanguage` — the raw persisted choice (`null` = system default). `CurrentLanguage` is always the resolved concrete tag. Always persist `SavedLanguage`, not `CurrentLanguage`.
 - XAML strings use `{DynamicResource Key}` bindings so that a runtime language switch propagates without restart.
-- The app is **light mode only** with custom styles defined in `Themes/AppTheme.xaml`. Icons use the **Segoe Fluent Icons** font (built into Windows 10/11). There is no third-party UI framework — all controls are native WPF with custom styles.
+- Custom styles are defined in `Themes/AppTheme.xaml`; the app supports light and dark palettes (see Theming below). Icons use the **Segoe Fluent Icons** font (built into Windows 10/11). There is no third-party UI framework — all controls are native WPF with custom styles.
 - `Helpers/HintHelper.cs` provides a `Hint.Text` attached property for watermark/placeholder text in TextBox and ComboBox controls.
 
 **Adding a new language:** create `Localization/Strings.{tag}.xaml` (copy an existing one), add the BCP-47 tag to `LanguageManager.SupportedLanguages`, and add the tag to `<SatelliteResourceLanguages>` in `Directory.Build.props`.
+
+### Theming
+
+`Themes/AppTheme.xaml` defines structural styles/templates that reference color keys by `{DynamicResource}`; the actual colors live in separate palette dictionaries swapped at runtime:
+
+- `ThemeManager.Instance` — analogous to `LanguageManager`. `Apply(saved)` takes `"light"`, `"dark"`, or `null` (system default) and merges `Themes/AppTheme.Colors.{Light,Dark}.xaml` into `Application.Current.Resources.MergedDictionaries`, removing the previous palette dictionary first. `SavedTheme` is the raw persisted choice (`null` = system default); `CurrentTheme` is always the resolved concrete value. Always persist `SavedTheme`, not `CurrentTheme`, mirroring the localization convention.
+- System-default resolution reads `HKCU\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize\AppsUseLightTheme` and falls back to light on any failure. When `SavedTheme` is `null`, `ThemeManager` subscribes to `SystemEvents.UserPreferenceChanged` (`UserPreferenceCategory.General`) to live-follow OS theme switches.
+- `TrayColorTable` supplies theme-aware colors for tray-menu/tooltip rendering that can't use `DynamicResource` bindings (e.g. WinForms `ContextMenuStrip`).
 
 ### Tests (`ManagedDrive.Tests`)
 

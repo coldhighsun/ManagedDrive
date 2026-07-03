@@ -1,8 +1,8 @@
 <UserControl x:Class="ManagedDrive.App.Views.TrayTooltipView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
-    <Border Background="White"
-            BorderBrush="#E0E0E0"
+    <Border Background="{DynamicResource AppSurface}"
+            BorderBrush="{DynamicResource AppDivider}"
             BorderThickness="1"
             CornerRadius="8"
             Padding="12,10">
@@ -37,16 +37,16 @@
                             <TextBlock Grid.Column="0"
                                        FontSize="13"
                                        FontWeight="Bold"
-                                       Foreground="#1565C0"
+                                       Foreground="{DynamicResource AppPrimary}"
                                        Text="{Binding MountPoint}" />
                             <TextBlock Grid.Column="1"
                                        FontSize="13"
-                                       Foreground="#424242"
+                                       Foreground="{DynamicResource AppForeground}"
                                        Text="{Binding VolumeLabel}"
                                        TextTrimming="CharacterEllipsis" />
                             <TextBlock Grid.Column="2"
                                        FontSize="13"
-                                       Foreground="#9E9E9E"
+                                       Foreground="{DynamicResource AppForegroundLight}"
                                        Text="{Binding UsedPercent, StringFormat={}{0:F0}%}" />
                         </Grid>
                     </DataTemplate>
@@ -54,7 +54,7 @@
             </ItemsControl>
 
             <TextBlock FontSize="13"
-                       Foreground="#9E9E9E"
+                       Foreground="{DynamicResource AppForegroundLight}"
                        Text="{DynamicResource Tray.NoDisksMounted}">
                 <TextBlock.Style>
                     <Style TargetType="TextBlock">

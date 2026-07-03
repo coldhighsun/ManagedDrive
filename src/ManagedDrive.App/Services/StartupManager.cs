@@ -1,5 +1,3 @@
-using Microsoft.Win32;
-
 namespace ManagedDrive.App.Services;
 
 /// <summary>

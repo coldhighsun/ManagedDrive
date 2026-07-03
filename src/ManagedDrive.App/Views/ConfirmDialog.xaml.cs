@@ -1,5 +1,3 @@
-using System.Windows;
-
 namespace ManagedDrive.App.Views;
 
 /// <summary>
