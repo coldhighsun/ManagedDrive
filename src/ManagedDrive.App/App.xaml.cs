@@ -11,6 +11,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls.Primitives;
+using System.Windows.Media;
 using System.Windows.Threading;
 
 namespace ManagedDrive.App;
@@ -22,7 +23,10 @@ namespace ManagedDrive.App;
 public partial class App
 {
     private const string SingleInstanceMutexName = "Global\\ManagedDrive-4A7C2E1B-9F3D-4B8A-A1C5-3E6D2F0B8C9A";
-    private readonly TimeSpan _showTrayInfoPopup = TimeSpan.FromSeconds(3);
+    // NotifyIcon has no MouseLeave event; Windows keeps resending MouseMove while the cursor
+    // rests over the icon, so a short timer that gets restarted on every MouseMove effectively
+    // hides the popup shortly after the cursor actually leaves the icon.
+    private readonly TimeSpan _showTrayInfoPopup = TimeSpan.FromSeconds(2);
     private readonly DispatcherTimer _timerHiddenTrayInfoPopup = new();
     private bool _isExiting;
     private MainViewModel? _mainViewModel;
@@ -209,12 +213,12 @@ public partial class App
 
         if (dllPath is not null &&
             File.Exists(dllPath) &&
-            (FileVersionInfo.GetVersionInfo(dllPath).FileVersion?.StartsWith("2.1.") == true))
+            (FileVersionInfo.GetVersionInfo(dllPath).FileVersion?.StartsWith("2.2.") == true))
         {
             return;
         }
 
-        Log.Warning("WinFsp 2.1.x not detected. InstallDir={InstallDir}", installDir ?? "<none>");
+        Log.Warning("WinFsp 2.2.x not detected. InstallDir={InstallDir}", installDir ?? "<none>");
 
         var result = MessageBox.Show(
             Loc.Get("Msg.WinFspMissingBody"),
@@ -232,6 +236,20 @@ public partial class App
 
     private async Task ExecuteResetTempDirsFromTray()
     {
+        var confirm = new ConfirmDialog(
+            Loc.Get("Msg.ResetTempConfirmTitle"),
+            Loc.Get("Msg.ResetTempConfirmBody"));
+
+        if (_mainWindow is { IsLoaded: true })
+        {
+            confirm.Owner = _mainWindow;
+        }
+
+        if (confirm.ShowDialog() != true)
+        {
+            return;
+        }
+
         var success = await Task.Run(TempDirResetService.Reset);
         _trayIcon?.ShowBalloonTip(
             5000,
@@ -243,7 +261,13 @@ public partial class App
 
     private void ShowAboutDialog()
     {
-        new AboutDialog { Owner = _mainWindow }.ShowDialog();
+        var dialog = new AboutDialog();
+        if (_mainWindow is { IsLoaded: true })
+        {
+            dialog.Owner = _mainWindow;
+        }
+
+        dialog.ShowDialog();
     }
 
     private void ExitApplication()
@@ -351,7 +375,8 @@ public partial class App
         _trayInfoPopup = new Popup
         {
             Child = new TrayTooltipView { DataContext = _mainViewModel },
-            Placement = PlacementMode.Mouse,
+            Placement = PlacementMode.Custom,
+            CustomPopupPlacementCallback = GetTrayPopupPlacement,
             AllowsTransparency = true,
             StaysOpen = true,
         };
@@ -368,6 +393,62 @@ public partial class App
         };
 
         LanguageManager.Instance.LanguageChanged += (_, _) => UpdateTrayMenuHeaders();
+    }
+
+    private CustomPopupPlacement[] GetTrayPopupPlacement(System.Windows.Size popupSize, System.Windows.Size targetSize, System.Windows.Point offset)
+    {
+        var dpiScale = VisualTreeHelper.GetDpi(_mainWindow ?? this.MainWindow ?? _trayInfoPopup!.Child).DpiScaleX;
+
+        var cursor = System.Windows.Forms.Cursor.Position;
+        var screen = System.Windows.Forms.Screen.FromPoint(cursor);
+        var workArea = screen.WorkingArea;
+        var screenBounds = screen.Bounds;
+
+        var mouseX = cursor.X / dpiScale;
+        var mouseY = cursor.Y / dpiScale;
+        var workLeft = workArea.Left / dpiScale;
+        var workTop = workArea.Top / dpiScale;
+        var workRight = workArea.Right / dpiScale;
+        var workBottom = workArea.Bottom / dpiScale;
+
+        // Taskbar occupies the gap between the monitor's full bounds and its working area.
+        var taskbarOnBottom = workArea.Bottom < screenBounds.Bottom;
+        var taskbarOnTop = workArea.Top > screenBounds.Top;
+        var taskbarOnLeft = workArea.Left > screenBounds.Left;
+        var taskbarOnRight = workArea.Right < screenBounds.Right;
+
+        double x, y;
+        if (taskbarOnLeft)
+        {
+            x = workLeft;
+            y = mouseY;
+        }
+        else if (taskbarOnRight)
+        {
+            x = workRight - popupSize.Width;
+            y = mouseY;
+        }
+        else if (taskbarOnTop)
+        {
+            x = mouseX;
+            y = workTop;
+        }
+        else if (taskbarOnBottom)
+        {
+            x = mouseX;
+            y = workBottom - popupSize.Height;
+        }
+        else
+        {
+            // No taskbar detected on this monitor (auto-hidden or none): default to below/right of the cursor.
+            x = mouseX;
+            y = mouseY;
+        }
+
+        x = Math.Clamp(x, workLeft, Math.Max(workLeft, workRight - popupSize.Width));
+        y = Math.Clamp(y, workTop, Math.Max(workTop, workBottom - popupSize.Height));
+
+        return [new CustomPopupPlacement(new System.Windows.Point(x, y), PopupPrimaryAxis.None)];
     }
 
     private void SetupUsageWarnings()

@@ -276,7 +276,13 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 
     private void ExecuteAbout()
     {
-        new AboutDialog { Owner = Application.Current.MainWindow }.ShowDialog();
+        var dialog = new AboutDialog();
+        if (Application.Current.MainWindow is { IsLoaded: true } mainWindow)
+        {
+            dialog.Owner = mainWindow;
+        }
+
+        dialog.ShowDialog();
     }
 
     private async void ExecuteCreateDisk()

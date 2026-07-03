@@ -46,14 +46,14 @@ Download the latest MSI from the [Releases](https://github.com/coldhighsun/Manag
 | Requirement | Notes |
 |---|---|
 | **Windows 10 / 11 (64-bit)** | ARM64 is not currently tested |
-| **[WinFsp 2.1.25156](https://winfsp.dev/rel/)** | Exactly this version must be installed before running ManagedDrive. Install via winget: `winget install WinFsp.WinFsp -v 2.1.25156`. The managed assembly `winfsp-msil.dll` is installed to `C:\Program Files (x86)\WinFsp\bin\` and is referenced by the project automatically. |
+| **[WinFsp 2.2.26183 (2026 Beta2)](https://github.com/winfsp/winfsp/releases/tag/v2.2B2)** | Must be installed before running ManagedDrive. Download the installer directly: [winfsp-2.2.26183.msi](https://github.com/winfsp/winfsp/releases/download/v2.2B2/winfsp-2.2.26183.msi) — do not use `winget install WinFsp.WinFsp`, as the winget package lags behind the latest release. The managed assembly `winfsp-msil.dll` is installed to `C:\Program Files (x86)\WinFsp\bin\` and is referenced by the project automatically. |
 | **.NET 10 SDK** | Required to build. |
 
 ### Getting Started
 
 ```powershell
-# 1. Install WinFsp 2.1.25156
-winget install WinFsp.WinFsp -v 2.1.25156
+# 1. Download and install WinFsp 2.2.26183 (2026 Beta2)
+# https://github.com/winfsp/winfsp/releases/download/v2.2B2/winfsp-2.2.26183.msi
 
 # 2. Clone the repository
 git clone https://github.com/coldhighsun/ManagedDrive
@@ -251,14 +251,14 @@ MIT
 | 要求 | 说明 |
 |---|---|
 | **Windows 10 / 11（64 位）** | 暂未测试 ARM64 |
-| **[WinFsp 2.1.25156](https://winfsp.dev/rel/)** | 必须安装此特定版本。可使用 winget 安装：`winget install WinFsp.WinFsp -v 2.1.25156`。托管程序集 `winfsp-msil.dll` 将安装至 `C:\Program Files (x86)\WinFsp\bin\`，项目会自动引用。 |
+| **[WinFsp 2.2.26183（2026 Beta2）](https://github.com/winfsp/winfsp/releases/tag/v2.2B2)** | 必须安装此版本才能运行 ManagedDrive。请直接下载安装包：[winfsp-2.2.26183.msi](https://github.com/winfsp/winfsp/releases/download/v2.2B2/winfsp-2.2.26183.msi)——不要使用 `winget install WinFsp.WinFsp` 安装，因为该 winget 包更新不及时，落后于最新发布版本。托管程序集 `winfsp-msil.dll` 将安装至 `C:\Program Files (x86)\WinFsp\bin\`，项目会自动引用。 |
 | **.NET 10 SDK** | 编译所需。 |
 
 ### 快速开始
 
 ```powershell
-# 1. 安装 WinFsp 2.1.25156
-winget install WinFsp.WinFsp -v 2.1.25156
+# 1. 下载并安装 WinFsp 2.2.26183（2026 Beta2）
+# https://github.com/winfsp/winfsp/releases/download/v2.2B2/winfsp-2.2.26183.msi
 
 # 2. 克隆仓库
 git clone https://github.com/coldhighsun/ManagedDrive

@@ -124,6 +124,7 @@
     <sys:String x:Key="About.Description">An in-memory RAM disk for Windows.</sys:String>
     <sys:String x:Key="About.Copyright">© 2026 coldhighsun</sys:String>
     <sys:String x:Key="About.ViewOnGitHub">View on GitHub</sys:String>
+    <sys:String x:Key="About.ViewWinFsp">Powered by WinFsp</sys:String>
 
     <!-- SaveFileDialog -->
     <sys:String x:Key="SaveDlg.Title">Select Image File</sys:String>
