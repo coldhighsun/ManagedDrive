@@ -1,8 +1,4 @@
-using System.Windows;
 using System.Windows.Controls;
-using ManagedDrive.App.Localization;
-using ManagedDrive.App.Models;
-using ManagedDrive.App.Services;
 
 namespace ManagedDrive.App.Views;
 
@@ -44,6 +40,25 @@ public partial class SettingsDialog
         {
             LanguageBox.SelectedIndex = 0;
         }
+
+        ThemeBox.Items.Add(new ComboBoxItem { Content = Loc.Get("Settings.Theme.System"), Tag = "" });
+        ThemeBox.Items.Add(new ComboBoxItem { Content = Loc.Get("Settings.Theme.Light"), Tag = "light" });
+        ThemeBox.Items.Add(new ComboBoxItem { Content = Loc.Get("Settings.Theme.Dark"), Tag = "dark" });
+
+        var savedTheme = config.Theme ?? "";
+        foreach (ComboBoxItem item in ThemeBox.Items)
+        {
+            if ((string)item.Tag == savedTheme)
+            {
+                ThemeBox.SelectedItem = item;
+                break;
+            }
+        }
+
+        if (ThemeBox.SelectedItem == null)
+        {
+            ThemeBox.SelectedIndex = 0;
+        }
     }
 
     /// <summary>
@@ -63,11 +78,15 @@ public partial class SettingsDialog
         var selectedTag = LanguageBox.SelectedItem is ComboBoxItem { Tag: string t } && !string.IsNullOrEmpty(t) ? t : null;
         LanguageManager.Instance.Apply(selectedTag);
 
+        var selectedTheme = ThemeBox.SelectedItem is ComboBoxItem { Tag: string th } && !string.IsNullOrEmpty(th) ? th : null;
+        ThemeManager.Instance.Apply(selectedTheme);
+
         Result = new AppConfiguration
         {
             RunAtStartup = runAtStartup,
             StartMinimized = StartMinimizedBox.IsChecked == true,
             Language = selectedTag,
+            Theme = selectedTheme,
             Disks = _original.Disks,
             TempDirCompatWarningShown = _original.TempDirCompatWarningShown,
         };
