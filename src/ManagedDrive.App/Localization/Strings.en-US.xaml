@@ -58,14 +58,15 @@
     <sys:String x:Key="Tip.StartMinimized">Hide the main window on startup and show only the system tray icon</sys:String>
 
     <!-- Shared buttons -->
-    <sys:String x:Key="Btn.Ok">_OK</sys:String>
-    <sys:String x:Key="Btn.Cancel">_Cancel</sys:String>
+    <sys:String x:Key="Btn.Ok">OK</sys:String>
+    <sys:String x:Key="Btn.Cancel">Cancel</sys:String>
 
     <!-- Tray menu -->
     <sys:String x:Key="Tray.Show">Show</sys:String>
     <sys:String x:Key="Tray.NewDisk">New Disk</sys:String>
     <sys:String x:Key="Tray.ResetTempDirs">Reset Temp Directory</sys:String>
     <sys:String x:Key="Tray.Settings">Settings…</sys:String>
+    <sys:String x:Key="Tray.About">About</sys:String>
     <sys:String x:Key="Tray.Exit">Exit</sys:String>
     <sys:String x:Key="Tray.NoDisksMounted">No disks mounted</sys:String>
     <sys:String x:Key="Tray.HighUsageTitle">RAM Disk Nearly Full</sys:String>
@@ -121,7 +122,7 @@
 
     <!-- AboutDialog -->
     <sys:String x:Key="About.Description">An in-memory RAM disk for Windows.</sys:String>
-    <sys:String x:Key="About.Copyright">© 2026 ManagedDrive Contributors</sys:String>
+    <sys:String x:Key="About.Copyright">© 2026 coldhighsun</sys:String>
     <sys:String x:Key="About.ViewOnGitHub">View on GitHub</sys:String>
 
     <!-- SaveFileDialog -->

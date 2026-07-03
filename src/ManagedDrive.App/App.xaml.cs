@@ -1,4 +1,3 @@
-using H.NotifyIcon;
 using ManagedDrive.App.Localization;
 using ManagedDrive.App.Models;
 using ManagedDrive.App.Services;
@@ -11,9 +10,7 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.Windows;
-using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
-using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 
 namespace ManagedDrive.App;
@@ -33,8 +30,20 @@ public partial class App
     private MountManager? _mountManager;
     private SettingsStore? _settings;
     private Mutex? _singleInstanceMutex;
-    private TaskbarIcon? _trayIcon;
+    private System.Windows.Forms.NotifyIcon? _trayIcon;
     private Popup? _trayInfoPopup;
+
+    private static bool IsTempOnAnyDisk(IEnumerable<DiskViewModel> disks)
+    {
+        var userTemp = Environment.GetEnvironmentVariable("TEMP", EnvironmentVariableTarget.User);
+        if (string.IsNullOrEmpty(userTemp))
+        {
+            return false;
+        }
+
+        var expanded = Environment.ExpandEnvironmentVariables(userTemp);
+        return disks.Any(d => expanded.StartsWith(d.MountPoint, StringComparison.OrdinalIgnoreCase));
+    }
 
     private void App_Exit(object sender, ExitEventArgs e)
     {
@@ -104,7 +113,7 @@ public partial class App
 
         if (config.StartMinimized)
         {
-            _trayIcon!.Visibility = Visibility.Visible;
+            _trayIcon!.Visible = true;
         }
         else
         {
@@ -112,6 +121,22 @@ public partial class App
             _mainWindow.Show();
             _mainWindow.Activate();
             _mainWindow.Topmost = false;
+        }
+    }
+
+    private void AutoMountDisks()
+    {
+        if (_settings == null || _mainViewModel == null)
+        {
+            return;
+        }
+
+        foreach (var profile in _settings.Load().Disks)
+        {
+            if (profile.AutoMount)
+            {
+                _mainViewModel.MountFromProfile(profile);
+            }
         }
     }
 
@@ -164,23 +189,10 @@ public partial class App
                     MessageBoxButton.OK,
                     MessageBoxImage.Warning);
 
-                _settings!.Save(config with { TempDirCompatWarningShown = true });
-            }
-        }
-    }
-
-    private void AutoMountDisks()
-    {
-        if (_settings == null || _mainViewModel == null)
-        {
-            return;
-        }
-
-        foreach (var profile in _settings.Load().Disks)
-        {
-            if (profile.AutoMount)
-            {
-                _mainViewModel.MountFromProfile(profile);
+                _settings!.Save(config with
+                {
+                    TempDirCompatWarningShown = true
+                });
             }
         }
     }
@@ -218,6 +230,22 @@ public partial class App
         Shutdown();
     }
 
+    private async Task ExecuteResetTempDirsFromTray()
+    {
+        var success = await Task.Run(TempDirResetService.Reset);
+        _trayIcon?.ShowBalloonTip(
+            5000,
+            "ManagedDrive",
+            success ? Loc.Get("Msg.ResetTempSuccess") : Loc.Get("Msg.ResetTempFailed"),
+            success ? System.Windows.Forms.ToolTipIcon.Info : System.Windows.Forms.ToolTipIcon.Warning);
+        Log.Information("Tray: reset temp directories, success={Success}.", success);
+    }
+
+    private void ShowAboutDialog()
+    {
+        new AboutDialog { Owner = _mainWindow }.ShowDialog();
+    }
+
     private void ExitApplication()
     {
         if (_mainViewModel != null && IsTempOnAnyDisk(_mainViewModel.Disks))
@@ -248,18 +276,6 @@ public partial class App
         Shutdown();
     }
 
-    private static bool IsTempOnAnyDisk(IEnumerable<DiskViewModel> disks)
-    {
-        var userTemp = Environment.GetEnvironmentVariable("TEMP", EnvironmentVariableTarget.User);
-        if (string.IsNullOrEmpty(userTemp))
-        {
-            return false;
-        }
-
-        var expanded = Environment.ExpandEnvironmentVariables(userTemp);
-        return disks.Any(d => expanded.StartsWith(d.MountPoint, StringComparison.OrdinalIgnoreCase));
-    }
-
     private void MainWindow_Closing(object? sender, CancelEventArgs e)
     {
         if (_isExiting)
@@ -269,7 +285,10 @@ public partial class App
 
         e.Cancel = true;
         _mainWindow!.Hide();
-        _trayIcon?.Visibility = Visibility.Visible;
+        if (_trayIcon != null)
+        {
+            _trayIcon.Visible = true;
+        }
     }
 
     private void OnDiskHighUsageWarning(object? sender, EventArgs e)
@@ -281,7 +300,7 @@ public partial class App
 
         var title = Loc.Get("Tray.HighUsageTitle");
         var body = Loc.Format("Tray.HighUsageBody", vm.VolumeLabel, vm.MountPoint, vm.UsedPercent);
-        _trayIcon.ShowNotification(title, body, H.NotifyIcon.Core.NotificationIcon.Warning);
+        _trayIcon.ShowBalloonTip(5000, title, body, System.Windows.Forms.ToolTipIcon.Warning);
         Log.Warning("High disk usage on {MountPoint}: {UsedPercent:F1}%.", vm.MountPoint, vm.UsedPercent);
     }
 
@@ -303,35 +322,31 @@ public partial class App
 
     private void SetupTrayIcon()
     {
-        var showItem = new MenuItem { Header = Loc.Get("Tray.Show") };
-        showItem.Click += (_, _) => ShowMainWindow();
-        var newDiskItem = new MenuItem { Header = Loc.Get("Tray.NewDisk") };
-        newDiskItem.Click += (_, _) => ShowMainWindowAndCreate();
-        var resetTempItem = new MenuItem { Header = Loc.Get("Tray.ResetTempDirs") };
-        resetTempItem.Click += async (_, _) => await ExecuteResetTempDirsFromTray();
-        var settingsItem = new MenuItem { Header = Loc.Get("Tray.Settings") };
-        settingsItem.Click += (_, _) => ShowMainWindowAndSettings();
-        var exitItem = new MenuItem { Header = Loc.Get("Tray.Exit") };
-        exitItem.Click += (_, _) => ExitApplication();
+        var menu = new System.Windows.Forms.ContextMenuStrip();
+        menu.Items.Add(Loc.Get("Tray.Show"), null, (_, _) => Dispatcher.Invoke(ShowMainWindow));
+        menu.Items.Add(Loc.Get("Tray.NewDisk"), null, (_, _) => Dispatcher.Invoke(ShowMainWindowAndCreate));
+        menu.Items.Add(new System.Windows.Forms.ToolStripSeparator());
+        menu.Items.Add(Loc.Get("Tray.ResetTempDirs"), null, async (_, _) => await Dispatcher.InvokeAsync(ExecuteResetTempDirsFromTray));
+        menu.Items.Add(Loc.Get("Tray.Settings"), null, (_, _) => Dispatcher.Invoke(ShowMainWindowAndSettings));
+        menu.Items.Add(Loc.Get("Tray.About"), null, (_, _) => Dispatcher.Invoke(ShowAboutDialog));
+        menu.Items.Add(new System.Windows.Forms.ToolStripSeparator());
+        menu.Items.Add(Loc.Get("Tray.Exit"), null, (_, _) => Dispatcher.Invoke(ExitApplication));
 
-        var menu = new ContextMenu();
-        menu.Items.Add(showItem);
-        menu.Items.Add(newDiskItem);
-        menu.Items.Add(new Separator());
-        menu.Items.Add(resetTempItem);
-        menu.Items.Add(settingsItem);
-        menu.Items.Add(new Separator());
-        menu.Items.Add(exitItem);
+        var iconStream = GetResourceStream(new Uri("pack://application:,,,/ManagedDrive.ico"))!.Stream;
 
-        _trayIcon = new TaskbarIcon
+        _trayIcon = new System.Windows.Forms.NotifyIcon
         {
-            IconSource = new BitmapImage(new Uri("pack://application:,,,/ManagedDrive.ico")),
-            ContextMenu = menu,
-            ToolTipText = "ManagedDrive",
-            Visibility = Visibility.Hidden,
+            Icon = new Icon(iconStream),
+            ContextMenuStrip = menu,
+            Text = "ManagedDrive",
+            Visible = false,
         };
-        _trayIcon.TrayMouseDoubleClick += (_, _) => ShowMainWindow();
-        _trayIcon.ForceCreate();
+        _trayIcon.DoubleClick += (_, _) => Dispatcher.Invoke(ShowMainWindow);
+        _trayIcon.MouseMove += (_, _) => Dispatcher.Invoke(() =>
+        {
+            _trayInfoPopup!.IsOpen = true;
+            _timerHiddenTrayInfoPopup.Start();
+        });
 
         _trayInfoPopup = new Popup
         {
@@ -350,12 +365,6 @@ public partial class App
             }
 
             _timerHiddenTrayInfoPopup.Stop();
-        };
-
-        _trayIcon.TrayMouseMove += (_, _) =>
-        {
-            _trayInfoPopup.IsOpen = true;
-            _timerHiddenTrayInfoPopup.Start();
         };
 
         LanguageManager.Instance.LanguageChanged += (_, _) => UpdateTrayMenuHeaders();
@@ -392,7 +401,10 @@ public partial class App
     {
         _mainWindow?.Show();
         _mainWindow?.Activate();
-        _trayIcon?.Visibility = Visibility.Hidden;
+        if (_trayIcon != null)
+        {
+            _trayIcon.Visible = false;
+        }
     }
 
     private void ShowMainWindowAndCreate()
@@ -401,35 +413,24 @@ public partial class App
         _mainViewModel?.CreateDiskCommand.Execute(null);
     }
 
-    private void UpdateTrayMenuHeaders()
-    {
-        if (_trayIcon?.ContextMenu is not { } menu)
-        {
-            return;
-        }
-
-        ((MenuItem)menu.Items[0]!).Header = Loc.Get("Tray.Show");
-        ((MenuItem)menu.Items[1]!).Header = Loc.Get("Tray.NewDisk");
-        // index 2 is Separator
-        ((MenuItem)menu.Items[3]!).Header = Loc.Get("Tray.ResetTempDirs");
-        ((MenuItem)menu.Items[4]!).Header = Loc.Get("Tray.Settings");
-        // index 5 is Separator
-        ((MenuItem)menu.Items[6]!).Header = Loc.Get("Tray.Exit");
-    }
-
-    private async Task ExecuteResetTempDirsFromTray()
-    {
-        var success = await Task.Run(TempDirResetService.Reset);
-        _trayIcon?.ShowNotification(
-            "ManagedDrive",
-            success ? Loc.Get("Msg.ResetTempSuccess") : Loc.Get("Msg.ResetTempFailed"),
-            success ? H.NotifyIcon.Core.NotificationIcon.Info : H.NotifyIcon.Core.NotificationIcon.Warning);
-        Log.Information("Tray: reset temp directories, success={Success}.", success);
-    }
-
     private void ShowMainWindowAndSettings()
     {
         ShowMainWindow();
         _mainViewModel?.SettingsCommand.Execute(null);
+    }
+
+    private void UpdateTrayMenuHeaders()
+    {
+        if (_trayIcon?.ContextMenuStrip is not { } menu)
+        {
+            return;
+        }
+
+        menu.Items[0].Text = Loc.Get("Tray.Show");
+        menu.Items[1].Text = Loc.Get("Tray.NewDisk");
+        menu.Items[3].Text = Loc.Get("Tray.ResetTempDirs");
+        menu.Items[4].Text = Loc.Get("Tray.Settings");
+        menu.Items[5].Text = Loc.Get("Tray.About");
+        menu.Items[7].Text = Loc.Get("Tray.Exit");
     }
 }

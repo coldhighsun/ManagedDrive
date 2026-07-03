@@ -3,23 +3,20 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
         xmlns:vm="clr-namespace:ManagedDrive.App.ViewModels"
         mc:Ignorable="d"
-        Style="{StaticResource MaterialDesignWindow}"
+        Style="{StaticResource AppWindow}"
         WindowStyle="None"
         Icon="pack://application:,,,/ManagedDrive.ico"
         Title="{DynamicResource Window.Title}"
         Height="480" Width="760"
         MinHeight="320" MinWidth="520"
         WindowStartupLocation="CenterScreen"
-        TextElement.Foreground="{DynamicResource MaterialDesignBody}"
-        Background="{DynamicResource MaterialDesignBackground}"
+        TextElement.Foreground="{DynamicResource AppForeground}"
         TextElement.FontWeight="Regular"
         TextElement.FontSize="13"
         TextOptions.TextFormattingMode="Ideal"
-        TextOptions.TextRenderingMode="Auto"
-        FontFamily="{materialDesign:MaterialDesignFont}">
+        TextOptions.TextRenderingMode="Auto">
 
     <Window.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVis"/>
@@ -35,78 +32,70 @@
     <DockPanel>
 
         <!-- App bar -->
-        <materialDesign:ColorZone Mode="PrimaryMid" DockPanel.Dock="Top"
-                                   Padding="4,4,4,4"
-                                   materialDesign:ElevationAssist.Elevation="Dp4">
+        <Border DockPanel.Dock="Top"
+                Background="{DynamicResource AppPrimary}"
+                Padding="4,4,4,4">
+            <Border.Effect>
+                <DropShadowEffect ShadowDepth="2" BlurRadius="4" Opacity="0.2"/>
+            </Border.Effect>
             <DockPanel>
                 <StackPanel DockPanel.Dock="Right" Orientation="Horizontal"
                             WindowChrome.IsHitTestVisibleInChrome="True">
-                    <Button Style="{StaticResource MaterialDesignIconForegroundButton}"
-
+                    <Button Style="{StaticResource IconButton}"
                             Command="{Binding CreateDiskCommand}"
                             ToolTip="{DynamicResource Tip.NewDisk}">
-                        <materialDesign:PackIcon Kind="PlusCircle" Width="22" Height="22"/>
+                        <TextBlock Style="{StaticResource IconText}" Text="&#xE710;"/>
                     </Button>
-                    <Button Style="{StaticResource MaterialDesignIconForegroundButton}"
-
-                            Command="{Binding RefreshCommand}"
-                            ToolTip="{DynamicResource Tip.Refresh}">
-                        <materialDesign:PackIcon Kind="Refresh" Width="22" Height="22"/>
-                    </Button>
-                    <Button Style="{StaticResource MaterialDesignIconForegroundButton}"
-
+                    <Button Style="{StaticResource IconButton}"
                             Command="{Binding ResetTempDirsCommand}"
                             ToolTip="{DynamicResource Tip.ResetTempDirs}">
-                        <materialDesign:PackIcon Kind="FolderRefresh" Width="22" Height="22"/>
+                        <TextBlock Style="{StaticResource IconText}" Text="&#xE7A7;"/>
                     </Button>
-                    <Button Style="{StaticResource MaterialDesignIconForegroundButton}"
-
+                    <Button Style="{StaticResource IconButton}"
                             Command="{Binding SettingsCommand}"
                             ToolTip="{DynamicResource Tip.Settings}">
-                        <materialDesign:PackIcon Kind="Cog" Width="22" Height="22"/>
+                        <TextBlock Style="{StaticResource IconText}" Text="&#xE713;"/>
                     </Button>
-                    <materialDesign:PopupBox PlacementMode="BottomAndAlignRightEdges">
-                        <StackPanel MinWidth="140" Margin="4"
-                                    TextElement.Foreground="{DynamicResource MaterialDesignBody}">
-                            <Button Content="{DynamicResource Menu.About}"
-                                    Command="{Binding AboutCommand}"
-                                    HorizontalAlignment="Stretch"
-                                    HorizontalContentAlignment="Left"
-                                    Style="{StaticResource MaterialDesignFlatButton}"/>
-                            <Button Content="{DynamicResource Menu.Exit}"
-                                    Command="{Binding ExitCommand}"
-                                    HorizontalAlignment="Stretch"
-                                    HorizontalContentAlignment="Left"
-                                    Style="{StaticResource MaterialDesignFlatButton}"/>
-                        </StackPanel>
-                    </materialDesign:PopupBox>
-                    <Button Style="{StaticResource MaterialDesignIconForegroundButton}"
+                    <Button x:Name="OverflowBtn" Style="{StaticResource IconButton}"
+                            Click="OverflowBtn_Click">
+                        <Button.ContextMenu>
+                            <ContextMenu x:Name="OverflowMenu">
+                                <MenuItem Header="{DynamicResource Menu.About}"
+                                          Command="{Binding AboutCommand}"/>
+                                <MenuItem Header="{DynamicResource Menu.Exit}"
+                                          Command="{Binding ExitCommand}"/>
+                            </ContextMenu>
+                        </Button.ContextMenu>
+                        <TextBlock Style="{StaticResource IconText}" Text="&#xE712;"/>
+                    </Button>
+                    <Button Style="{StaticResource IconButton}"
                             Click="MinimizeButton_Click"
                             ToolTip="{DynamicResource Tip.Minimize}">
-                        <materialDesign:PackIcon Kind="WindowMinimize" Width="18" Height="18"/>
+                        <TextBlock Style="{StaticResource IconText}" Text="&#xE921;" FontSize="12"/>
                     </Button>
-                    <Button Style="{StaticResource MaterialDesignIconForegroundButton}"
+                    <Button Style="{StaticResource IconButton}"
                             Click="CloseButton_Click"
                             ToolTip="{DynamicResource Tip.Close}">
-                        <materialDesign:PackIcon Kind="Close" Width="18" Height="18"/>
+                        <TextBlock Style="{StaticResource IconText}" Text="&#xE8BB;"/>
                     </Button>
                 </StackPanel>
                 <TextBlock VerticalAlignment="Center"
                            Margin="12,0,0,0"
                            FontSize="16" FontWeight="Medium"
+                           Foreground="White"
                            Text="{DynamicResource Window.Title}"/>
             </DockPanel>
-        </materialDesign:ColorZone>
+        </Border>
 
         <!-- Status bar -->
         <Border DockPanel.Dock="Bottom"
-                Background="{DynamicResource MaterialDesignToolBarBackground}"
-                BorderBrush="{DynamicResource MaterialDesignDivider}"
+                Background="{DynamicResource AppToolBarBackground}"
+                BorderBrush="{DynamicResource AppDivider}"
                 BorderThickness="0,1,0,0"
                 Padding="12,4">
             <TextBlock Text="{Binding StatusText}"
                        FontSize="11"
-                       Foreground="{DynamicResource MaterialDesignBodyLight}"/>
+                       Foreground="{DynamicResource AppForegroundLight}"/>
         </Border>
 
         <!-- Disk card list -->
@@ -121,11 +110,7 @@
                 <ContextMenu>
                     <MenuItem Header="{DynamicResource Btn.NewDisk}"
                               Command="{Binding PlacementTarget.Tag.CreateDiskCommand,
-                                        RelativeSource={RelativeSource AncestorType=ContextMenu}}">
-                        <MenuItem.Icon>
-                            <materialDesign:PackIcon Kind="PlusCircle"/>
-                        </MenuItem.Icon>
-                    </MenuItem>
+                                        RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
                 </ContextMenu>
             </ListBox.ContextMenu>
             <ListBox.ItemContainerStyle>
@@ -144,38 +129,28 @@
             </ListBox.ItemContainerStyle>
             <ListBox.ItemTemplate>
                 <DataTemplate DataType="{x:Type vm:DiskViewModel}">
-                    <materialDesign:Card x:Name="Card"
-                                         Margin="12,4"
-                                         Padding="16"
-                                         materialDesign:ElevationAssist.Elevation="Dp2"
-                                         BorderThickness="1"
-                                         BorderBrush="{DynamicResource MaterialDesignDivider}"
-                                         Cursor="Hand"
-                                         Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=Window}}">
-                        <materialDesign:Card.InputBindings>
+                    <Border x:Name="Card"
+                            Style="{StaticResource DiskCard}"
+                            Margin="12,4"
+                            Padding="16"
+                            Cursor="Hand"
+                            Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=Window}}">
+                        <Border.InputBindings>
                             <MouseBinding MouseAction="LeftDoubleClick" Command="{Binding OpenInExplorerCommand}"/>
-                        </materialDesign:Card.InputBindings>
-                        <materialDesign:Card.ContextMenu>
+                        </Border.InputBindings>
+                        <Border.ContextMenu>
                             <ContextMenu>
                                 <!-- Navigation -->
                                 <MenuItem Header="{DynamicResource Btn.OpenInExplorer}"
                                           Command="{Binding PlacementTarget.DataContext.OpenInExplorerCommand,
-                                                    RelativeSource={RelativeSource AncestorType=ContextMenu}}">
-                                    <MenuItem.Icon>
-                                        <materialDesign:PackIcon Kind="FolderOpen"/>
-                                    </MenuItem.Icon>
-                                </MenuItem>
+                                                    RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
                                 <Separator/>
                                 <!-- Configuration -->
                                 <MenuItem Header="{DynamicResource Btn.EditDisk}"
                                           Command="{Binding PlacementTarget.Tag.EditDiskCommand,
                                                     RelativeSource={RelativeSource AncestorType=ContextMenu}}"
                                           CommandParameter="{Binding PlacementTarget.DataContext,
-                                                    RelativeSource={RelativeSource AncestorType=ContextMenu}}">
-                                    <MenuItem.Icon>
-                                        <materialDesign:PackIcon Kind="Pencil"/>
-                                    </MenuItem.Icon>
-                                </MenuItem>
+                                                    RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
                                 <MenuItem Header="{DynamicResource Btn.SetAsTempDir}"
                                           Visibility="{Binding PlacementTarget.DataContext.IsNotCurrentTempDir,
                                                         RelativeSource={RelativeSource AncestorType=ContextMenu},
@@ -183,11 +158,7 @@
                                           Command="{Binding PlacementTarget.Tag.ToggleTempDirCommand,
                                                     RelativeSource={RelativeSource AncestorType=ContextMenu}}"
                                           CommandParameter="{Binding PlacementTarget.DataContext,
-                                                    RelativeSource={RelativeSource AncestorType=ContextMenu}}">
-                                    <MenuItem.Icon>
-                                        <materialDesign:PackIcon Kind="FolderSwap"/>
-                                    </MenuItem.Icon>
-                                </MenuItem>
+                                                    RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
                                 <MenuItem Header="{DynamicResource Btn.RestoreDefaultTemp}"
                                           Visibility="{Binding PlacementTarget.DataContext.IsCurrentTempDir,
                                                         RelativeSource={RelativeSource AncestorType=ContextMenu},
@@ -195,42 +166,26 @@
                                           Command="{Binding PlacementTarget.Tag.ToggleTempDirCommand,
                                                     RelativeSource={RelativeSource AncestorType=ContextMenu}}"
                                           CommandParameter="{Binding PlacementTarget.DataContext,
-                                                    RelativeSource={RelativeSource AncestorType=ContextMenu}}">
-                                    <MenuItem.Icon>
-                                        <materialDesign:PackIcon Kind="FolderRefresh"/>
-                                    </MenuItem.Icon>
-                                </MenuItem>
+                                                    RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
                                 <Separator/>
                                 <!-- Destructive operations -->
                                 <MenuItem Header="{DynamicResource Btn.SaveImage}"
                                           Command="{Binding PlacementTarget.Tag.SaveImageCommand,
                                                     RelativeSource={RelativeSource AncestorType=ContextMenu}}"
                                           CommandParameter="{Binding PlacementTarget.DataContext,
-                                                    RelativeSource={RelativeSource AncestorType=ContextMenu}}">
-                                    <MenuItem.Icon>
-                                        <materialDesign:PackIcon Kind="ContentSave"/>
-                                    </MenuItem.Icon>
-                                </MenuItem>
+                                                    RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
                                 <MenuItem Header="{DynamicResource Btn.FormatDisk}"
                                           Command="{Binding PlacementTarget.Tag.FormatDiskCommand,
                                                     RelativeSource={RelativeSource AncestorType=ContextMenu}}"
                                           CommandParameter="{Binding PlacementTarget.DataContext,
-                                                    RelativeSource={RelativeSource AncestorType=ContextMenu}}">
-                                    <MenuItem.Icon>
-                                        <materialDesign:PackIcon Kind="Eraser"/>
-                                    </MenuItem.Icon>
-                                </MenuItem>
+                                                    RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
                                 <MenuItem Header="{DynamicResource Btn.Unmount}"
                                           Command="{Binding PlacementTarget.Tag.UnmountCommand,
                                                     RelativeSource={RelativeSource AncestorType=ContextMenu}}"
                                           CommandParameter="{Binding PlacementTarget.DataContext,
-                                                    RelativeSource={RelativeSource AncestorType=ContextMenu}}">
-                                    <MenuItem.Icon>
-                                        <materialDesign:PackIcon Kind="Eject"/>
-                                    </MenuItem.Icon>
-                                </MenuItem>
+                                                    RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
                             </ContextMenu>
-                        </materialDesign:Card.ContextMenu>
+                        </Border.ContextMenu>
                         <Grid>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="56"/>
@@ -240,9 +195,10 @@
 
                             <!-- Drive letter badge -->
                             <Border Width="48" Height="48" CornerRadius="8"
-                                    Background="{DynamicResource PrimaryHueMidBrush}">
+                                    Background="{DynamicResource AppPrimary}">
                                 <TextBlock Text="{Binding MountPoint}"
                                            FontSize="18" FontWeight="SemiBold"
+                                           Foreground="White"
                                            HorizontalAlignment="Center"
                                            VerticalAlignment="Center"/>
                             </Border>
@@ -251,17 +207,16 @@
                             <StackPanel Grid.Column="1" Margin="12,0,16,0" VerticalAlignment="Center">
                                 <TextBlock Text="{Binding VolumeLabel}"
                                            FontSize="14" FontWeight="Medium"/>
-                                <ProgressBar Style="{StaticResource MaterialDesignLinearProgressBar}"
+                                <ProgressBar Style="{StaticResource SlimProgressBar}"
                                              Minimum="0" Maximum="100"
-                                             Value="{Binding UsedPercent, Mode=OneWay}"
-                                             Height="4" Margin="0,6,0,4"/>
+                                             Value="{Binding UsedPercent, Mode=OneWay}"/>
                                 <StackPanel Orientation="Horizontal">
                                     <TextBlock Text="{Binding UsedFormatted}" FontSize="12"
-                                               Foreground="{DynamicResource MaterialDesignBodyLight}"/>
+                                               Foreground="{DynamicResource AppForegroundLight}"/>
                                     <TextBlock Text=" / " FontSize="12"
-                                               Foreground="{DynamicResource MaterialDesignBodyLight}"/>
+                                               Foreground="{DynamicResource AppForegroundLight}"/>
                                     <TextBlock Text="{Binding CapacityFormatted}" FontSize="12"
-                                               Foreground="{DynamicResource MaterialDesignBodyLight}"/>
+                                               Foreground="{DynamicResource AppForegroundLight}"/>
                                 </StackPanel>
                             </StackPanel>
 
@@ -271,18 +226,22 @@
                                            FontSize="14" FontWeight="Medium"
                                            HorizontalAlignment="Right"/>
                                 <TextBlock Text="{DynamicResource Col.Free}" FontSize="11"
-                                           Foreground="{DynamicResource MaterialDesignBodyLight}"
+                                           Foreground="{DynamicResource AppForegroundLight}"
                                            HorizontalAlignment="Right"/>
                             </StackPanel>
                         </Grid>
-                    </materialDesign:Card>
+                    </Border>
                     <DataTemplate.Triggers>
                         <DataTrigger Value="True">
                             <DataTrigger.Binding>
                                 <Binding Path="IsSelected"
                                          RelativeSource="{RelativeSource AncestorType=ListBoxItem}"/>
                             </DataTrigger.Binding>
-                            <Setter TargetName="Card" Property="materialDesign:ElevationAssist.Elevation" Value="Dp8"/>
+                            <Setter TargetName="Card" Property="Effect">
+                                <Setter.Value>
+                                    <DropShadowEffect ShadowDepth="2" BlurRadius="10" Opacity="0.2"/>
+                                </Setter.Value>
+                            </Setter>
                         </DataTrigger>
                     </DataTemplate.Triggers>
                 </DataTemplate>
