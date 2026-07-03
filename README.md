@@ -133,7 +133,6 @@ A little-endian binary format:
 
 - Settings are stored as JSON at `%APPDATA%\ManagedDrive\settings.json`.
 - Windows startup registration uses `HKCU\SOFTWARE\Microsoft\Windows\CurrentVersion\Run` (no elevation required).
-- Logs are written to `{AppPath}\logs\log-.txt` with daily rolling and 7-day retention (Serilog).
 - Version is derived from git tags (`v`-prefixed, e.g. `v0.1.0`) via MinVer.
 
 ### Performance
@@ -338,7 +337,6 @@ ManagedDrive 使用 **WinFsp**（Windows 文件系统代理）将内存目录树
 
 - 配置以 JSON 格式存储于 `%APPDATA%\ManagedDrive\settings.json`。
 - 开机自启通过 `HKCU\SOFTWARE\Microsoft\Windows\CurrentVersion\Run` 注册表项实现（无需提升权限）。
-- 日志写入 `{AppPath}\logs\log-.txt`，每日滚动，保留 7 天（Serilog）。
 - 版本号由 MinVer 从 git 标签派生（`v` 前缀，例如 `v0.1.0`）。
 
 ### 性能基准
