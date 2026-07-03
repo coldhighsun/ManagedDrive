@@ -36,6 +36,9 @@
     <!-- CreateDiskDialog -->
     <sys:String x:Key="CreateDisk.Title">Create RAM Disk</sys:String>
     <sys:String x:Key="CreateDisk.TitleEdit">Edit RAM Disk</sys:String>
+    <sys:String x:Key="CreateDisk.Section.Basic">Basic Info</sys:String>
+    <sys:String x:Key="CreateDisk.Section.Access">Access</sys:String>
+    <sys:String x:Key="CreateDisk.Section.Persistence">Persistence</sys:String>
     <sys:String x:Key="CreateDisk.DriveLetter">Drive Letter:</sys:String>
     <sys:String x:Key="CreateDisk.VolumeLabel">Volume Label:</sys:String>
     <sys:String x:Key="CreateDisk.Capacity">Capacity:</sys:String>
@@ -44,9 +47,20 @@
     <sys:String x:Key="CreateDisk.ImageFile">Image File</sys:String>
     <sys:String x:Key="CreateDisk.DefaultLabel">RAM Disk</sys:String>
     <sys:String x:Key="Tip.Capacity">Disk size (select unit: MB or GB)</sys:String>
+    <sys:String x:Key="Tip.ReadOnly">Prevent all writes to this disk (also disables auto-save, since a read-only disk never changes)</sys:String>
     <sys:String x:Key="Tip.AutoMount">Re-mount this disk automatically on next application start</sys:String>
-    <sys:String x:Key="Tip.ImageFile">Optional: path to a .mdr image file for persistence (leave blank for volatile disk)</sys:String>
+    <sys:String x:Key="Tip.ImageFile">Optional: path to a .mdr image file for persistence (leave blank for volatile disk). Click to browse.</sys:String>
     <sys:String x:Key="Tip.ClearImagePath">Clear image file path</sys:String>
+    <sys:String x:Key="CreateDisk.AutoSavePrefix">Every</sys:String>
+    <sys:String x:Key="CreateDisk.AutoSaveSuffix">minutes, auto-save the image</sys:String>
+    <sys:String x:Key="CreateDisk.AutoSaveInterval">Interval (min)</sys:String>
+    <sys:String x:Key="Tip.AutoSave">Periodically save the disk contents to the image file while mounted</sys:String>
+    <sys:String x:Key="Tip.AutoSaveInterval">How often to auto-save, in minutes</sys:String>
+    <sys:String x:Key="Val.AutoSaveNoImage">Select an image file before enabling auto-save.</sys:String>
+    <sys:String x:Key="Val.ImagePathOnRamDisk">The image file cannot be located on a RAM disk.</sys:String>
+    <sys:String x:Key="Val.ImagePathInUse">This image file is already used by another RAM disk.</sys:String>
+    <sys:String x:Key="Val.BadAutoSaveInterval">Enter a valid auto-save interval (1-60 minutes).</sys:String>
+    <sys:String x:Key="Val.BadImagePath">The image file path is invalid or its folder does not exist.</sys:String>
 
     <!-- SettingsDialog -->
     <sys:String x:Key="Settings.Title">Settings</sys:String>

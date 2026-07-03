@@ -52,4 +52,13 @@ public sealed record DiskOptions
     {
         get; init;
     }
+
+    /// <summary>
+    /// Optional interval, in minutes, at which the disk contents are automatically saved to
+    /// <see cref="PersistImagePath"/>. <c>null</c> disables auto-save.
+    /// </summary>
+    public uint? AutoSaveIntervalMinutes
+    {
+        get; init;
+    }
 }

@@ -83,6 +83,12 @@ public static class DiskImageSerializer
         string volumeLabel,
         string imagePath)
     {
+        var directory = Path.GetDirectoryName(imagePath);
+        if (!string.IsNullOrEmpty(directory))
+        {
+            Directory.CreateDirectory(directory);
+        }
+
         using var stream = new FileStream(imagePath, FileMode.Create, FileAccess.Write);
         using var writer = new BinaryWriter(stream, System.Text.Encoding.UTF8, leaveOpen: false);
 

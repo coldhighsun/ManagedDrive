@@ -14,7 +14,9 @@ public sealed class RamDisk : IDisposable
     private const uint ShcnfPath = 0x0005;
     private readonly MemoryFileSystem _fs;
     private readonly FileSystemHost _host;
+    private readonly Lock _autoSaveLock = new();
     private bool _disposed;
+    private Timer? _autoSaveTimer;
 
     private RamDisk(MemoryFileSystem fs, FileSystemHost host, DiskOptions options)
     {
@@ -113,17 +115,40 @@ public sealed class RamDisk : IDisposable
             NotifyShellDriveAdded(options.MountPoint);
         }
 
-        return new RamDisk(fs, host, options);
+        var disk = new RamDisk(fs, host, options);
+        disk.ConfigureAutoSaveTimer();
+        return disk;
     }
 
     /// <summary>
     /// Unmounts the disk and releases all resources. After disposal the disk is no longer
-    /// accessible from the Windows shell.
+    /// accessible from the Windows shell. If auto-save is enabled, a final save is performed
+    /// before unmounting.
     /// </summary>
     public void Dispose()
     {
         if (!_disposed)
         {
+            _autoSaveTimer?.Dispose();
+            _autoSaveTimer = null;
+
+            if (Options.AutoSaveIntervalMinutes is > 0)
+            {
+                // Wait for any in-flight periodic save to finish, then perform the final save,
+                // so the two never write to the image file concurrently.
+                lock (_autoSaveLock)
+                {
+                    try
+                    {
+                        SaveToImage();
+                    }
+                    catch
+                    {
+                        // Best-effort final save.
+                    }
+                }
+            }
+
             _host.Unmount();
             _host.Dispose();
             _disposed = true;
@@ -169,9 +194,10 @@ public sealed class RamDisk : IDisposable
     /// <summary>
     /// Applies <paramref name="newOptions"/> to the live disk without unmounting.
     /// Only <see cref="DiskOptions.VolumeLabel"/>, <see cref="DiskOptions.CapacityBytes"/>,
-    /// <see cref="DiskOptions.AutoMount"/>, and <see cref="DiskOptions.PersistImagePath"/> may
-    /// be changed this way. <see cref="DiskOptions.MountPoint"/> and
-    /// <see cref="DiskOptions.ReadOnly"/> require a full unmount/remount.
+    /// <see cref="DiskOptions.AutoMount"/>, <see cref="DiskOptions.PersistImagePath"/>, and
+    /// <see cref="DiskOptions.AutoSaveIntervalMinutes"/> may be changed this way.
+    /// <see cref="DiskOptions.MountPoint"/> and <see cref="DiskOptions.ReadOnly"/> require a
+    /// full unmount/remount.
     /// </summary>
     /// <param name="newOptions">The updated options to apply.</param>
     /// <param name="error">
@@ -196,8 +222,54 @@ public sealed class RamDisk : IDisposable
         }
 
         Options = newOptions;
+        ConfigureAutoSaveTimer();
         error = null;
         return true;
+    }
+
+    /// <summary>
+    /// (Re)starts the periodic auto-save timer based on the current <see cref="Options"/>,
+    /// or stops it when auto-save is disabled or no image path is configured. The first save
+    /// fires immediately (on a background thread) so that enabling auto-save via create/edit
+    /// captures the current contents right away instead of waiting a full interval.
+    /// </summary>
+    private void ConfigureAutoSaveTimer()
+    {
+        _autoSaveTimer?.Dispose();
+        _autoSaveTimer = null;
+
+        if (Options.AutoSaveIntervalMinutes is { } minutes && minutes > 0 &&
+            Options.PersistImagePath != null)
+        {
+            var interval = TimeSpan.FromMinutes(minutes);
+            _autoSaveTimer = new Timer(_ => TryAutoSave(), null, TimeSpan.Zero, interval);
+        }
+    }
+
+    /// <summary>
+    /// Saves the disk image on the periodic timer tick, swallowing any exception so a failed
+    /// save does not affect the mounted disk or crash the timer thread. If the previous tick's
+    /// save is still running, this tick is skipped instead of running concurrently with it.
+    /// </summary>
+    private void TryAutoSave()
+    {
+        if (!_autoSaveLock.TryEnter())
+        {
+            return;
+        }
+
+        try
+        {
+            SaveToImage();
+        }
+        catch
+        {
+            // Best-effort periodic save.
+        }
+        finally
+        {
+            _autoSaveLock.Exit();
+        }
     }
 
     private static void ConfigureHost(FileSystemHost host)
