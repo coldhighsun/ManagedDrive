@@ -15,15 +15,22 @@ namespace ManagedDrive.App.Views;
 public partial class CreateDiskDialog
 {
     private readonly ulong _maxCapacityBytes;
+    private readonly IReadOnlyList<DiskOptions> _otherDisks;
     private int _capacityValue = 2;
     private int _capacityMaximum;
+    private int _intervalValue = 10;
 
     /// <summary>
     /// Initializes the dialog in create mode.
     /// </summary>
-    public CreateDiskDialog()
+    /// <param name="otherDisks">
+    /// Options of all other currently active disks, used to validate that the image file path
+    /// does not collide with another disk's mount point or image file.
+    /// </param>
+    public CreateDiskDialog(IReadOnlyList<DiskOptions>? otherDisks = null)
     {
         InitializeComponent();
+        _otherDisks = otherDisks ?? [];
         _maxCapacityBytes = (ulong)GC.GetGCMemoryInfo().TotalAvailableMemoryBytes;
         LoadDriveLetters(reservedLetter: null);
         VolumeLabelBox.Text = Loc.Get("CreateDisk.DefaultLabel");
@@ -39,7 +46,12 @@ public partial class CreateDiskDialog
     /// Initializes the dialog in edit mode, pre-populating all fields from <paramref name="existing"/>.
     /// </summary>
     /// <param name="existing">The options of the disk being edited.</param>
-    public CreateDiskDialog(DiskOptions existing) : this()
+    /// <param name="otherDisks">
+    /// Options of all other currently active disks (excluding <paramref name="existing"/>), used
+    /// to validate that the image file path does not collide with another disk's mount point or
+    /// image file.
+    /// </param>
+    public CreateDiskDialog(DiskOptions existing, IReadOnlyList<DiskOptions>? otherDisks = null) : this(otherDisks)
     {
         Title = Loc.Get("CreateDisk.TitleEdit");
 
@@ -68,6 +80,14 @@ public partial class CreateDiskDialog
         ReadOnlyBox.IsChecked = existing.ReadOnly;
         AutoMountBox.IsChecked = existing.AutoMount;
         ImagePathBox.Text = existing.PersistImagePath ?? string.Empty;
+
+        if (existing.AutoSaveIntervalMinutes is { } minutes && !existing.ReadOnly)
+        {
+            AutoSaveBox.IsChecked = true;
+            AutoSaveIntervalPanel.IsEnabled = true;
+            _intervalValue = (int)Math.Max(1, minutes);
+            IntervalValue = _intervalValue;
+        }
     }
 
     /// <summary>
@@ -132,12 +152,64 @@ public partial class CreateDiskDialog
         }
     }
 
+    private int IntervalValue
+    {
+        get => _intervalValue;
+        set
+        {
+            _intervalValue = Math.Clamp(value, 1, 60);
+            AutoSaveIntervalBox.Text = _intervalValue.ToString();
+        }
+    }
+
+    private void AutoSaveIntervalUp_Click(object sender, RoutedEventArgs e)
+    {
+        ParseIntervalFromBox();
+        IntervalValue = _intervalValue + 1;
+    }
+
+    private void AutoSaveIntervalDown_Click(object sender, RoutedEventArgs e)
+    {
+        ParseIntervalFromBox();
+        IntervalValue = _intervalValue - 1;
+    }
+
+    private void ParseIntervalFromBox()
+    {
+        if (int.TryParse(AutoSaveIntervalBox.Text, out var parsed))
+        {
+            _intervalValue = parsed;
+        }
+    }
+
+    private void AutoSaveBox_CheckedChanged(object sender, RoutedEventArgs e)
+    {
+        UpdateAutoSaveIntervalPanelState();
+    }
+
+    private void ReadOnlyBox_CheckedChanged(object sender, RoutedEventArgs e)
+    {
+        AutoSaveBox.IsEnabled = ReadOnlyBox.IsChecked != true;
+        UpdateAutoSaveIntervalPanelState();
+    }
+
+    private void UpdateAutoSaveIntervalPanelState()
+    {
+        AutoSaveIntervalPanel.IsEnabled = AutoSaveBox.IsChecked == true && ReadOnlyBox.IsChecked != true;
+    }
+
     private void ClearImagePath_Click(object sender, RoutedEventArgs e)
     {
         ImagePathBox.Text = string.Empty;
     }
 
-    private void BrowseImagePath_Click(object sender, RoutedEventArgs e)
+    private void ImagePathBox_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        e.Handled = true;
+        OpenImagePathDialog();
+    }
+
+    private void OpenImagePathDialog()
     {
         var dlg = new SaveFileDialog
         {
@@ -151,6 +223,30 @@ public partial class CreateDiskDialog
         if (dlg.ShowDialog() == true)
         {
             ImagePathBox.Text = dlg.FileName;
+        }
+    }
+
+    private static bool IsValidImagePath(string path)
+    {
+        try
+        {
+            if (!Path.IsPathRooted(path))
+            {
+                return false;
+            }
+
+            var directory = Path.GetDirectoryName(path);
+            if (string.IsNullOrEmpty(directory) || !Directory.Exists(directory))
+            {
+                return false;
+            }
+
+            _ = Path.GetFullPath(path);
+            return true;
+        }
+        catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException)
+        {
+            return false;
         }
     }
 
@@ -212,14 +308,59 @@ public partial class CreateDiskDialog
             ? null
             : ImagePathBox.Text.Trim();
 
+        if (imagePath != null)
+        {
+            if (!IsValidImagePath(imagePath))
+            {
+                error = Loc.Get("Val.BadImagePath");
+                return false;
+            }
+
+            var allMountPoints = _otherDisks.Select(d => d.MountPoint).Append(mountPoint);
+            if (allMountPoints.Any(mp => imagePath.StartsWith(mp, StringComparison.OrdinalIgnoreCase)))
+            {
+                error = Loc.Get("Val.ImagePathOnRamDisk");
+                return false;
+            }
+
+            if (_otherDisks.Any(d => d.PersistImagePath != null &&
+                string.Equals(d.PersistImagePath, imagePath, StringComparison.OrdinalIgnoreCase)))
+            {
+                error = Loc.Get("Val.ImagePathInUse");
+                return false;
+            }
+        }
+
+        var isReadOnly = ReadOnlyBox.IsChecked == true;
+
+        uint? autoSaveIntervalMinutes = null;
+        if (AutoSaveBox.IsChecked == true && !isReadOnly)
+        {
+            if (imagePath == null)
+            {
+                error = Loc.Get("Val.AutoSaveNoImage");
+                return false;
+            }
+
+            ParseIntervalFromBox();
+            if (_intervalValue < 1 || _intervalValue > 60)
+            {
+                error = Loc.Get("Val.BadAutoSaveInterval");
+                return false;
+            }
+
+            autoSaveIntervalMinutes = (uint)_intervalValue;
+        }
+
         options = new DiskOptions
         {
             MountPoint = mountPoint,
             VolumeLabel = VolumeLabelBox.Text.Trim(),
             CapacityBytes = capacityBytes,
-            ReadOnly = ReadOnlyBox.IsChecked == true,
+            ReadOnly = isReadOnly,
             AutoMount = AutoMountBox.IsChecked == true,
             PersistImagePath = imagePath,
+            AutoSaveIntervalMinutes = autoSaveIntervalMinutes,
         };
 
         error = string.Empty;

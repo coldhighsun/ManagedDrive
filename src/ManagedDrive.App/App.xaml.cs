@@ -53,7 +53,9 @@ public partial class App
         SaveSettings();
         _trayIcon?.Dispose();
         _mainViewModel?.Dispose();
-        _mountManager?.Dispose();
+        // Unmounting a disk performs a final auto-save write; run it off the UI thread so
+        // large disks don't freeze the shutdown sequence for longer than necessary.
+        Task.Run(() => _mountManager?.Dispose()).Wait();
         if (_singleInstanceMutex != null)
         {
             _singleInstanceMutex.ReleaseMutex();
@@ -270,7 +272,8 @@ public partial class App
         SaveSettings();
         _trayIcon?.Dispose();
         _mainViewModel?.Dispose();
-        _mountManager?.Dispose();
+        // See App_Exit: offload the final auto-save write to a background thread.
+        Task.Run(() => _mountManager?.Dispose()).Wait();
         Shutdown();
     }
 

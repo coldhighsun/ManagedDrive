@@ -268,4 +268,19 @@
         </Setter>
     </Style>
 
+    <!-- ========== Dialog field grouping ========== -->
+    <Style x:Key="SectionBorder" TargetType="Border">
+        <Setter Property="BorderBrush" Value="{DynamicResource AppDivider}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="CornerRadius" Value="4"/>
+        <Setter Property="Padding" Value="14,12"/>
+    </Style>
+
+    <Style x:Key="SectionHeaderText" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="12"/>
+        <Setter Property="FontWeight" Value="SemiBold"/>
+        <Setter Property="Foreground" Value="{DynamicResource AppForegroundLight}"/>
+        <Setter Property="Margin" Value="0,0,0,10"/>
+    </Style>
+
 </ResourceDictionary>

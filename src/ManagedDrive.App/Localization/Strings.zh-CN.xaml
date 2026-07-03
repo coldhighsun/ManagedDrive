@@ -36,6 +36,9 @@
     <!-- CreateDiskDialog -->
     <sys:String x:Key="CreateDisk.Title">创建 RAM 磁盘</sys:String>
     <sys:String x:Key="CreateDisk.TitleEdit">编辑 RAM 磁盘</sys:String>
+    <sys:String x:Key="CreateDisk.Section.Basic">基本信息</sys:String>
+    <sys:String x:Key="CreateDisk.Section.Access">访问权限</sys:String>
+    <sys:String x:Key="CreateDisk.Section.Persistence">镜像持久化</sys:String>
     <sys:String x:Key="CreateDisk.DriveLetter">驱动器号：</sys:String>
     <sys:String x:Key="CreateDisk.VolumeLabel">卷标：</sys:String>
     <sys:String x:Key="CreateDisk.Capacity">容量：</sys:String>
@@ -44,9 +47,20 @@
     <sys:String x:Key="CreateDisk.ImageFile">镜像文件</sys:String>
     <sys:String x:Key="CreateDisk.DefaultLabel">RAM 磁盘</sys:String>
     <sys:String x:Key="Tip.Capacity">磁盘大小（选择单位：MB 或 GB）</sys:String>
+    <sys:String x:Key="Tip.ReadOnly">禁止对此磁盘的所有写入操作（同时会禁用自动保存，因为只读磁盘的内容不会变化）</sys:String>
     <sys:String x:Key="Tip.AutoMount">下次启动时自动重新挂载此磁盘</sys:String>
-    <sys:String x:Key="Tip.ImageFile">可选：.mdr 镜像文件路径，用于持久化存储（留空则为临时磁盘）</sys:String>
+    <sys:String x:Key="Tip.ImageFile">可选：.mdr 镜像文件路径，用于持久化存储（留空则为临时磁盘）。点击可打开文件选择对话框。</sys:String>
     <sys:String x:Key="Tip.ClearImagePath">清空镜像文件路径</sys:String>
+    <sys:String x:Key="CreateDisk.AutoSavePrefix">每</sys:String>
+    <sys:String x:Key="CreateDisk.AutoSaveSuffix">分钟自动保存镜像</sys:String>
+    <sys:String x:Key="CreateDisk.AutoSaveInterval">间隔（分钟）</sys:String>
+    <sys:String x:Key="Tip.AutoSave">挂载期间按间隔自动将磁盘内容保存到镜像文件</sys:String>
+    <sys:String x:Key="Tip.AutoSaveInterval">自动保存的时间间隔（分钟）</sys:String>
+    <sys:String x:Key="Val.AutoSaveNoImage">开启自动保存前请先选择镜像文件。</sys:String>
+    <sys:String x:Key="Val.ImagePathOnRamDisk">镜像文件不能位于内存盘上。</sys:String>
+    <sys:String x:Key="Val.ImagePathInUse">该镜像文件已被其他内存盘使用。</sys:String>
+    <sys:String x:Key="Val.BadAutoSaveInterval">请输入有效的自动保存间隔（1-60 分钟）。</sys:String>
+    <sys:String x:Key="Val.BadImagePath">镜像文件路径不合法，或所在文件夹不存在。</sys:String>
 
     <!-- SettingsDialog -->
     <sys:String x:Key="Settings.Title">设置</sys:String>
