@@ -100,27 +100,6 @@
         <File Source="$(PublishDir)winfsp-msil.dll" KeyPath="yes" />
       </Component>
 
-      <!-- Material Design -->
-      <Component Id="MaterialDesignThemes">
-        <File Source="$(PublishDir)MaterialDesignThemes.Wpf.dll" KeyPath="yes" />
-      </Component>
-      <Component Id="MaterialDesignColors">
-        <File Source="$(PublishDir)MaterialDesignColors.dll" KeyPath="yes" />
-      </Component>
-      <Component Id="XamlBehaviors">
-        <File Source="$(PublishDir)Microsoft.Xaml.Behaviors.dll" KeyPath="yes" />
-      </Component>
-
-      <!-- Notify icon -->
-      <Component Id="HNotifyIconWpf">
-        <File Source="$(PublishDir)H.NotifyIcon.Wpf.dll" KeyPath="yes" />
-      </Component>
-      <Component Id="HNotifyIcon">
-        <File Source="$(PublishDir)H.NotifyIcon.dll" KeyPath="yes" />
-      </Component>
-      <Component Id="HGeneratedIcons">
-        <File Source="$(PublishDir)H.GeneratedIcons.System.Drawing.dll" KeyPath="yes" />
-      </Component>
 
       <!-- Serilog -->
       <Component Id="Serilog">

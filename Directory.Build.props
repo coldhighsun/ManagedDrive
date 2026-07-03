@@ -16,4 +16,5 @@
         <DebugType>embedded</DebugType>
     </PropertyGroup>
 
+    <Import Project="Directory.Build.user" Condition="Exists('Directory.Build.user')" />
 </Project>

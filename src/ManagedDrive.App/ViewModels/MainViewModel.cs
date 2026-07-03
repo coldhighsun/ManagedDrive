@@ -73,6 +73,14 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     public event PropertyChangedEventHandler? PropertyChanged;
 
     /// <summary>
+    /// Gets the command that opens the About dialog.
+    /// </summary>
+    public RelayCommand AboutCommand
+    {
+        get;
+    }
+
+    /// <summary>
     /// Gets the command that opens the "Create Disk" dialog.
     /// </summary>
     public RelayCommand CreateDiskCommand
@@ -81,17 +89,17 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     }
 
     /// <summary>
+    /// Gets the observable list of active disk view models displayed in the main grid.
+    /// </summary>
+    public ObservableCollection<DiskViewModel> Disks { get; } = [];
+
+    /// <summary>
     /// Gets the command that opens the "Edit Disk" dialog for the selected disk.
     /// </summary>
     public RelayCommand EditDiskCommand
     {
         get;
     }
-
-    /// <summary>
-    /// Gets the observable list of active disk view models displayed in the main grid.
-    /// </summary>
-    public ObservableCollection<DiskViewModel> Disks { get; } = [];
 
     /// <summary>
     /// Gets the command that exits the application.
@@ -118,6 +126,14 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     }
 
     /// <summary>
+    /// Gets the command that resets Windows TEMP and TMP directories to their OS defaults.
+    /// </summary>
+    public RelayCommand ResetTempDirsCommand
+    {
+        get;
+    }
+
+    /// <summary>
     /// Gets the command that saves the selected disk's image to file.
     /// </summary>
     public RelayCommand SaveImageCommand
@@ -139,34 +155,9 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     }
 
     /// <summary>
-    /// Gets the command that resets Windows TEMP and TMP directories to their OS defaults.
-    /// </summary>
-    public RelayCommand ResetTempDirsCommand
-    {
-        get;
-    }
-
-    /// <summary>
-    /// Gets the command that toggles the user's TEMP/TMP between the selected disk's
-    /// Temp folder and the Windows default, depending on the current state.
-    /// </summary>
-    public RelayCommand ToggleTempDirCommand
-    {
-        get;
-    }
-
-    /// <summary>
     /// Gets the command that opens the Settings dialog.
     /// </summary>
     public RelayCommand SettingsCommand
-    {
-        get;
-    }
-
-    /// <summary>
-    /// Gets the command that opens the About dialog.
-    /// </summary>
-    public RelayCommand AboutCommand
     {
         get;
     }
@@ -182,6 +173,15 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             field = value;
             OnPropertyChanged(nameof(StatusText));
         }
+    }
+
+    /// <summary>
+    /// Gets the command that toggles the user's TEMP/TMP between the selected disk's
+    /// Temp folder and the Windows default, depending on the current state.
+    /// </summary>
+    public RelayCommand ToggleTempDirCommand
+    {
+        get;
     }
 
     /// <summary>
@@ -272,6 +272,11 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             i++;
         }
         Disks.Insert(i, vm);
+    }
+
+    private void ExecuteAbout()
+    {
+        new AboutDialog { Owner = Application.Current.MainWindow }.ShowDialog();
     }
 
     private async void ExecuteCreateDisk()
@@ -401,6 +406,43 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         }
     }
 
+    private void ExecuteExit()
+    {
+        if (Disks.Count == 0)
+        {
+            Application.Current.Shutdown();
+            return;
+        }
+
+        var userTemp = Environment.GetEnvironmentVariable("TEMP", EnvironmentVariableTarget.User);
+        var expandedTemp = string.IsNullOrEmpty(userTemp) ? null : Environment.ExpandEnvironmentVariables(userTemp);
+        var tempOnRamDisk = expandedTemp != null &&
+            Disks.Any(d => expandedTemp.StartsWith(d.MountPoint, StringComparison.OrdinalIgnoreCase));
+
+        var body = Loc.Get("Msg.ExitConfirmBody");
+        if (tempOnRamDisk)
+        {
+            body = body + "\n\n" + Loc.Get("Msg.ExitTempDirWillBeReset");
+        }
+
+        var dialog = new ConfirmDialog(
+            Loc.Get("Msg.ExitConfirmTitle"),
+            body)
+        {
+            Owner = Application.Current.MainWindow
+        };
+
+        if (dialog.ShowDialog() == true)
+        {
+            if (tempOnRamDisk)
+            {
+                TempDirResetService.Reset();
+                Log.Information("Auto-reset temp directory before exiting.");
+            }
+            Application.Current.Shutdown();
+        }
+    }
+
     private void ExecuteFormatDisk(DiskViewModel? vm)
     {
         if (vm == null)
@@ -440,91 +482,6 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             MessageBoxImage.Information);
     }
 
-    private void ExecuteExit()
-    {
-        if (Disks.Count == 0)
-        {
-            Application.Current.Shutdown();
-            return;
-        }
-
-        var userTemp = Environment.GetEnvironmentVariable("TEMP", EnvironmentVariableTarget.User);
-        var expandedTemp = string.IsNullOrEmpty(userTemp) ? null : Environment.ExpandEnvironmentVariables(userTemp);
-        var tempOnRamDisk = expandedTemp != null &&
-            Disks.Any(d => expandedTemp.StartsWith(d.MountPoint, StringComparison.OrdinalIgnoreCase));
-
-        var body = Loc.Get("Msg.ExitConfirmBody");
-        if (tempOnRamDisk)
-        {
-            body = body + "\n\n" + Loc.Get("Msg.ExitTempDirWillBeReset");
-        }
-
-        var dialog = new ConfirmDialog(
-            Loc.Get("Msg.ExitConfirmTitle"),
-            body)
-        {
-            Owner = Application.Current.MainWindow
-        };
-
-        if (dialog.ShowDialog() == true)
-        {
-            if (tempOnRamDisk)
-            {
-                TempDirResetService.Reset();
-                Log.Information("Auto-reset temp directory before exiting.");
-            }
-            Application.Current.Shutdown();
-        }
-    }
-
-    private void ExecuteSaveImage(DiskViewModel? vm)
-    {
-        if (vm == null)
-        {
-            return;
-        }
-
-        if (vm.Disk.Options.PersistImagePath == null)
-        {
-            var dlg = new SaveFileDialog
-            {
-                Title = Loc.Get("SaveDlg.Title"),
-                Filter = Loc.Get("SaveDlg.Filter"),
-                DefaultExt = ".mdr",
-                OverwritePrompt = true,
-            };
-
-            if (dlg.ShowDialog() != true)
-            {
-                return;
-            }
-
-            vm.Disk.TryApplyOptions(vm.Disk.Options with { PersistImagePath = dlg.FileName }, out _);
-            SaveSettings();
-        }
-
-        try
-        {
-            vm.Disk.SaveToImage();
-            StatusText = Loc.Format("Status.ImageSaved", vm.MountPoint);
-            MessageBox.Show(
-                Loc.Format("Msg.SaveImageSuccess", vm.Disk.Options.PersistImagePath),
-                "ManagedDrive",
-                MessageBoxButton.OK,
-                MessageBoxImage.Information);
-            Log.Information("Saved image for {MountPoint}.", vm.MountPoint);
-        }
-        catch (Exception ex)
-        {
-            MessageBox.Show(
-                Loc.Format("Msg.SaveImageFailed", ex.Message),
-                "ManagedDrive",
-                MessageBoxButton.OK,
-                MessageBoxImage.Error);
-            Log.Error(ex, "Failed to save image for {MountPoint}.", vm.MountPoint);
-        }
-    }
-
     private async void ExecuteResetTempDirs()
     {
         var confirm = new ConfirmDialog(
@@ -558,6 +515,70 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
                 MessageBoxButton.OK,
                 MessageBoxImage.Error);
             Log.Warning("Failed to reset user temp directories.");
+        }
+    }
+
+    private void ExecuteSaveImage(DiskViewModel? vm)
+    {
+        if (vm == null)
+        {
+            return;
+        }
+
+        if (vm.Disk.Options.PersistImagePath == null)
+        {
+            var dlg = new SaveFileDialog
+            {
+                Title = Loc.Get("SaveDlg.Title"),
+                Filter = Loc.Get("SaveDlg.Filter"),
+                DefaultExt = ".mdr",
+                OverwritePrompt = true,
+            };
+
+            if (dlg.ShowDialog() != true)
+            {
+                return;
+            }
+
+            vm.Disk.TryApplyOptions(vm.Disk.Options with
+            {
+                PersistImagePath = dlg.FileName
+            }, out _);
+            SaveSettings();
+        }
+
+        try
+        {
+            vm.Disk.SaveToImage();
+            StatusText = Loc.Format("Status.ImageSaved", vm.MountPoint);
+            MessageBox.Show(
+                Loc.Format("Msg.SaveImageSuccess", vm.Disk.Options.PersistImagePath),
+                "ManagedDrive",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
+            Log.Information("Saved image for {MountPoint}.", vm.MountPoint);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(
+                Loc.Format("Msg.SaveImageFailed", ex.Message),
+                "ManagedDrive",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+            Log.Error(ex, "Failed to save image for {MountPoint}.", vm.MountPoint);
+        }
+    }
+
+    private void ExecuteSettings()
+    {
+        var config = _settingsStore.Load();
+        var dialog = new SettingsDialog(config) { Owner = Application.Current.MainWindow };
+
+        if (dialog.ShowDialog() == true)
+        {
+            var updated = dialog.Result!;
+            updated.Disks = config.Disks;
+            _settingsStore.Save(updated);
         }
     }
 
@@ -596,10 +617,12 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         {
             if (!_tempDirCompatWarningShown)
             {
-                var warn = new Views.ConfirmDialog(
+                var warn = new ConfirmDialog(
                     Loc.Get("Msg.SetTempDirWarningTitle"),
                     Loc.Get("Msg.SetTempDirWarningBody"))
-                { Owner = Application.Current.MainWindow };
+                {
+                    Owner = Application.Current.MainWindow
+                };
                 if (warn.ShowDialog() != true)
                 {
                     return;
@@ -633,24 +656,6 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
                 Log.Warning("Failed to set user temp directory to {TempPath}.", tempPath);
             }
         }
-    }
-
-    private void ExecuteSettings()
-    {
-        var config = _settingsStore.Load();
-        var dialog = new SettingsDialog(config) { Owner = Application.Current.MainWindow };
-
-        if (dialog.ShowDialog() == true)
-        {
-            var updated = dialog.Result!;
-            updated.Disks = config.Disks;
-            _settingsStore.Save(updated);
-        }
-    }
-
-    private void ExecuteAbout()
-    {
-        new AboutDialog { Owner = Application.Current.MainWindow }.ShowDialog();
     }
 
     private async void ExecuteUnmount(DiskViewModel? vm)
