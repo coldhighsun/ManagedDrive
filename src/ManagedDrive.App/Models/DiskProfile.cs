@@ -47,4 +47,12 @@ public sealed record DiskProfile
     /// Gets or sets the NTFS volume label.
     /// </summary>
     public string VolumeLabel { get; init; } = "RAM Disk";
+
+    /// <summary>
+    /// Gets or sets the optional auto-save interval in minutes. <c>null</c> disables auto-save.
+    /// </summary>
+    public uint? AutoSaveIntervalMinutes
+    {
+        get; init;
+    }
 }

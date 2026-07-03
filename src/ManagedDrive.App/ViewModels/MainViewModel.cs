@@ -216,6 +216,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             ReadOnly = vm.Disk.Options.ReadOnly,
             AutoMount = vm.Disk.Options.AutoMount,
             PersistImagePath = vm.Disk.Options.PersistImagePath,
+            AutoSaveIntervalMinutes = vm.Disk.Options.AutoSaveIntervalMinutes,
         });
     }
 
@@ -257,7 +258,16 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         ReadOnly = p.ReadOnly,
         AutoMount = p.AutoMount,
         PersistImagePath = p.PersistImagePath,
+        AutoSaveIntervalMinutes = p.AutoSaveIntervalMinutes,
     };
+
+    /// <summary>
+    /// Returns the <see cref="DiskOptions"/> of every currently active disk except
+    /// <paramref name="excluding"/>. Used to validate that a new or edited disk's image file
+    /// path does not collide with another disk's mount point or image file.
+    /// </summary>
+    private IReadOnlyList<DiskOptions> GetOtherDiskOptions(DiskViewModel? excluding) =>
+        Disks.Where(d => d != excluding).Select(d => d.Disk.Options).ToList();
 
     private void AddDiskSorted(DiskViewModel vm)
     {
@@ -283,7 +293,10 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 
     private async void ExecuteCreateDisk()
     {
-        var dialog = new CreateDiskDialog { Owner = Application.Current.MainWindow };
+        var dialog = new CreateDiskDialog(GetOtherDiskOptions(excluding: null))
+        {
+            Owner = Application.Current.MainWindow
+        };
 
         if (dialog.ShowDialog() != true)
         {
@@ -316,7 +329,10 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             return;
         }
 
-        var dialog = new CreateDiskDialog(vm.Disk.Options) { Owner = Application.Current.MainWindow };
+        var dialog = new CreateDiskDialog(vm.Disk.Options, GetOtherDiskOptions(excluding: vm))
+        {
+            Owner = Application.Current.MainWindow
+        };
 
         if (dialog.ShowDialog() != true)
         {
@@ -353,7 +369,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             var oldMountPoint = old.MountPoint;
             vm.Dispose();
             Disks.Remove(vm);
-            _mountManager.Unmount(oldMountPoint);
+            await Task.Run(() => _mountManager.Unmount(oldMountPoint));
 
             try
             {
@@ -663,7 +679,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         var mountPoint = vm.Disk.Options.MountPoint;
         vm.Dispose();
         Disks.Remove(vm);
-        _mountManager.Unmount(mountPoint);
+        await Task.Run(() => _mountManager.Unmount(mountPoint));
         SaveSettings();
         StatusText = Loc.Format("Status.Unmounted", mountPoint);
     }
