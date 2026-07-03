@@ -21,6 +21,7 @@ Create, mount and manage in-memory volumes that appear as normal drive letters i
 - Dynamic memory allocation — disk capacity is a ceiling, not a reservation; memory is consumed only as files are written and released when files are deleted
 - Edit a mounted disk — change label, capacity, auto-mount, and image path live without data loss; changing the drive letter or read-only flag remounts the disk
 - Optional persistence — save the disk contents to a `.mdr` image file and restore it on next mount; Save Image is always available and prompts for a file path if none is set
+- Optional auto-save — periodically save the disk contents to its image file every 1–60 minutes (configurable when creating or editing a disk); a save also fires immediately when enabled and once more right before the disk is unmounted or the app exits, so nothing is lost between intervals. The image file must be selected through the file picker (no manual typing) and cannot be located on a RAM disk or reused across two disks. Checking Read Only disables auto-save, since a read-only disk's contents never change
 - Auto-mount saved profiles on application startup
 - Double-click a disk card to open it in Explorer
 - System-tray icon for quick access; minimizes to tray on window close
@@ -112,7 +113,7 @@ Key classes:
 - **`FileNode`** — holds `Fsp.Interop.FileInfo` metadata, a `byte[]` data buffer, and a security descriptor.
 - **`FileNodeMap`** — a case-insensitive `SortedDictionary<string, FileNode>` that maps full paths to nodes, supports paginated child enumeration, and tracks total allocated bytes. Thread-safe via the C# 13 `Lock` type.
 - **`MemoryFileSystem : FileSystemBase`** — overrides all 21 required WinFsp callbacks (`Create`, `Open`, `Read`, `Write`, `Rename`, `CanDelete`, `ReadDirectoryEntry`, etc.) and enforces a configurable capacity ceiling, returning `STATUS_DISK_FULL` when exceeded; memory is not pre-allocated — each `FileNode` holds only the bytes actually written.
-- **`RamDisk`** — composes `MemoryFileSystem` with a `FileSystemHost`. The static `Create()` factory mounts the volume and polls until the drive letter is visible in the OS (up to 2.5 s), then broadcasts `SHCNE_DRIVEADD` to refresh Explorer. `Dispose()` unmounts.
+- **`RamDisk`** — composes `MemoryFileSystem` with a `FileSystemHost`. The static `Create()` factory mounts the volume and polls until the drive letter is visible in the OS (up to 2.5 s), then broadcasts `SHCNE_DRIVEADD` to refresh Explorer. `Dispose()` unmounts. When an auto-save interval is configured, a background timer saves the image immediately and then on every interval; a final save runs on `Dispose()` so unmounting, remounting, or exiting never skips the latest save.
 - **`MountManager`** — thread-safe registry of active `RamDisk` instances. Fires `DiskMounted` / `DiskUnmounted` events.
 - **`DiskImageSerializer`** — reads/writes `.mdr` files (full FS state including metadata, ACLs, and file data).
 
@@ -225,6 +226,7 @@ MIT
 - 动态内存分配——磁盘容量为上限而非预分配；内存随文件写入而占用，随文件删除而释放
 - 编辑已挂载磁盘——修改卷标、容量、自动挂载和镜像路径无需重挂即可实时生效；更改盘符或只读标志时自动重挂
 - 可选持久化——将磁盘内容保存为 `.mdr` 镜像文件，下次挂载时自动还原；保存镜像功能始终可用，未设置镜像路径时自动弹出选择对话框
+- 可选自动保存——每 1-60 分钟（创建或编辑磁盘时可配置）自动将磁盘内容保存到镜像文件；开启自动保存时会立即触发一次保存，卸载磁盘或退出应用前也会再保存一次，避免在两次定时保存之间丢失数据。镜像文件只能通过文件选择对话框设置（不可手动输入），且不能位于内存盘上，也不能与其他磁盘共用同一个镜像文件。勾选只读后自动保存会被禁用，因为只读磁盘的内容不会变化
 - 应用启动时自动挂载已保存的磁盘配置
 - 双击磁盘卡片可在资源管理器中打开对应盘符
 - 系统托盘图标，关闭窗口时最小化到托盘
@@ -316,7 +318,7 @@ ManagedDrive 使用 **WinFsp**（Windows 文件系统代理）将内存目录树
 - **`FileNode`** — 持有 `Fsp.Interop.FileInfo` 元数据、`byte[]` 数据缓冲区及安全描述符。
 - **`FileNodeMap`** — 不区分大小写的 `SortedDictionary<string, FileNode>`，将完整路径映射到节点，支持分页子节点枚举，并追踪已分配字节总量。通过 C# 13 `Lock` 类型保证线程安全。
 - **`MemoryFileSystem : FileSystemBase`** — 覆写全部 21 个所需的 WinFsp 回调（`Create`、`Open`、`Read`、`Write`、`Rename`、`CanDelete`、`ReadDirectoryEntry` 等），并强制执行可配置的容量上限，超出时返回 `STATUS_DISK_FULL`；内存不预分配——每个 `FileNode` 仅保留实际写入的字节数。
-- **`RamDisk`** — 组合 `MemoryFileSystem` 与 `FileSystemHost`。静态工厂方法 `Create()` 挂载卷，并轮询直至驱动器号在系统中可见（最长 2.5 秒），随后向资源管理器广播 `SHCNE_DRIVEADD`。`Dispose()` 执行卸载。
+- **`RamDisk`** — 组合 `MemoryFileSystem` 与 `FileSystemHost`。静态工厂方法 `Create()` 挂载卷，并轮询直至驱动器号在系统中可见（最长 2.5 秒），随后向资源管理器广播 `SHCNE_DRIVEADD`。`Dispose()` 执行卸载。配置了自动保存间隔时，后台计时器会立即保存一次镜像，随后按间隔重复保存；`Dispose()` 还会执行一次收尾保存，确保卸载、重新挂载或退出应用时不会遗漏最新的改动。
 - **`MountManager`** — 线程安全的活动 `RamDisk` 实例注册表，提供 `DiskMounted` / `DiskUnmounted` 事件。
 - **`DiskImageSerializer`** — 读写 `.mdr` 文件（保存完整文件系统状态，包含元数据、ACL 和文件数据）。
 
