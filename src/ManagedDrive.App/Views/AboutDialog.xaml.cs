@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Reflection;
 using System.Windows.Input;
 using System.Windows.Navigation;

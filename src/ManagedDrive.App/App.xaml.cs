@@ -1,17 +1,4 @@
-using ManagedDrive.App.Localization;
-using ManagedDrive.App.Models;
-using ManagedDrive.App.Services;
-using ManagedDrive.App.ViewModels;
-using ManagedDrive.App.Views;
-using ManagedDrive.Core;
-using Microsoft.Win32;
-using System.ComponentModel;
-using System.Diagnostics;
-using System.IO;
-using System.Windows;
 using System.Windows.Controls.Primitives;
-using System.Windows.Media;
-using System.Windows.Threading;
 
 namespace ManagedDrive.App;
 
@@ -85,6 +72,7 @@ public partial class App
         _settings = new SettingsStore();
         var config = _settings.Load();
         LanguageManager.Instance.ApplyDefault(config.Language);
+        ThemeManager.Instance.ApplyDefault(config.Theme);
 
         CheckWinFspPrerequisite();
 
@@ -316,6 +304,7 @@ public partial class App
             RunAtStartup = StartupManager.IsEnabled,
             StartMinimized = _settings.Load().StartMinimized,
             Language = LanguageManager.Instance.SavedLanguage,
+            Theme = ThemeManager.Instance.SavedTheme,
             Disks = _mainViewModel.GetProfiles().ToList(),
         });
     }
@@ -351,8 +340,7 @@ public partial class App
         _trayInfoPopup = new Popup
         {
             Child = new TrayTooltipView { DataContext = _mainViewModel },
-            Placement = PlacementMode.Custom,
-            CustomPopupPlacementCallback = GetTrayPopupPlacement,
+            Placement = PlacementMode.Mouse,
             AllowsTransparency = true,
             StaysOpen = true,
         };
@@ -369,62 +357,8 @@ public partial class App
         };
 
         LanguageManager.Instance.LanguageChanged += (_, _) => UpdateTrayMenuHeaders();
-    }
-
-    private CustomPopupPlacement[] GetTrayPopupPlacement(System.Windows.Size popupSize, System.Windows.Size targetSize, System.Windows.Point offset)
-    {
-        var dpiScale = VisualTreeHelper.GetDpi(_mainWindow ?? this.MainWindow ?? _trayInfoPopup!.Child).DpiScaleX;
-
-        var cursor = System.Windows.Forms.Cursor.Position;
-        var screen = System.Windows.Forms.Screen.FromPoint(cursor);
-        var workArea = screen.WorkingArea;
-        var screenBounds = screen.Bounds;
-
-        var mouseX = cursor.X / dpiScale;
-        var mouseY = cursor.Y / dpiScale;
-        var workLeft = workArea.Left / dpiScale;
-        var workTop = workArea.Top / dpiScale;
-        var workRight = workArea.Right / dpiScale;
-        var workBottom = workArea.Bottom / dpiScale;
-
-        // Taskbar occupies the gap between the monitor's full bounds and its working area.
-        var taskbarOnBottom = workArea.Bottom < screenBounds.Bottom;
-        var taskbarOnTop = workArea.Top > screenBounds.Top;
-        var taskbarOnLeft = workArea.Left > screenBounds.Left;
-        var taskbarOnRight = workArea.Right < screenBounds.Right;
-
-        double x, y;
-        if (taskbarOnLeft)
-        {
-            x = workLeft;
-            y = mouseY;
-        }
-        else if (taskbarOnRight)
-        {
-            x = workRight - popupSize.Width;
-            y = mouseY;
-        }
-        else if (taskbarOnTop)
-        {
-            x = mouseX;
-            y = workTop;
-        }
-        else if (taskbarOnBottom)
-        {
-            x = mouseX;
-            y = workBottom - popupSize.Height;
-        }
-        else
-        {
-            // No taskbar detected on this monitor (auto-hidden or none): default to below/right of the cursor.
-            x = mouseX;
-            y = mouseY;
-        }
-
-        x = Math.Clamp(x, workLeft, Math.Max(workLeft, workRight - popupSize.Width));
-        y = Math.Clamp(y, workTop, Math.Max(workTop, workBottom - popupSize.Height));
-
-        return [new CustomPopupPlacement(new System.Windows.Point(x, y), PopupPrimaryAxis.None)];
+        ApplyTrayMenuTheme();
+        ThemeManager.Instance.ThemeChanged += (_, _) => Dispatcher.Invoke(ApplyTrayMenuTheme);
     }
 
     private void SetupUsageWarnings()
@@ -474,6 +408,29 @@ public partial class App
     {
         ShowMainWindow();
         _mainViewModel?.SettingsCommand.Execute(null);
+    }
+
+    private void ApplyTrayMenuTheme()
+    {
+        if (_trayIcon?.ContextMenuStrip is not { } menu)
+        {
+            return;
+        }
+
+        var isDark = ThemeManager.Instance.CurrentTheme == "dark";
+        var background = isDark
+            ? Color.FromArgb(0xFF, 0x2A, 0x2A, 0x2A)
+            : Color.White;
+        var foreground = isDark ? Color.White : Color.Black;
+
+        menu.ShowImageMargin = false;
+        menu.Renderer = new System.Windows.Forms.ToolStripProfessionalRenderer(new TrayColorTable(isDark));
+        menu.BackColor = background;
+        menu.ForeColor = foreground;
+        foreach (System.Windows.Forms.ToolStripItem item in menu.Items)
+        {
+            item.ForeColor = foreground;
+        }
     }
 
     private void UpdateTrayMenuHeaders()

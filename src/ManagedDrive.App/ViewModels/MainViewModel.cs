@@ -1,15 +1,4 @@
-using ManagedDrive.App.Infrastructure;
-using ManagedDrive.App.Localization;
-using ManagedDrive.App.Models;
-using ManagedDrive.App.Services;
-using ManagedDrive.App.Views;
-using ManagedDrive.Core;
 using System.Collections.ObjectModel;
-using System.ComponentModel;
-using System.Windows;
-using Application = System.Windows.Application;
-using MessageBox = System.Windows.MessageBox;
-using SaveFileDialog = Microsoft.Win32.SaveFileDialog;
 
 namespace ManagedDrive.App.ViewModels;
 
@@ -271,7 +260,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 
     private void AddDiskSorted(DiskViewModel vm)
     {
-        int i = 0;
+        var i = 0;
         while (i < Disks.Count &&
                string.Compare(Disks[i].MountPoint, vm.MountPoint, StringComparison.OrdinalIgnoreCase) < 0)
         {
@@ -624,7 +613,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
                 SaveSettings();
             }
 
-            var tempPath = System.IO.Path.Combine(vm.MountPoint, "Temp");
+            var tempPath = Path.Combine(vm.MountPoint, "Temp");
             var success = await Task.Run(() => TempDirResetService.Set(tempPath));
 
             if (success)
