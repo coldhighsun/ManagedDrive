@@ -1,16 +1,13 @@
 <Window x:Class="ManagedDrive.App.Views.CreateDiskDialog"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
-        Style="{StaticResource MaterialDesignWindow}"
+        xmlns:helpers="clr-namespace:ManagedDrive.App.Helpers"
+        Style="{StaticResource AppWindow}"
         Title="{DynamicResource CreateDisk.Title}"
         Width="420" SizeToContent="Height"
         ResizeMode="NoResize"
         WindowStartupLocation="CenterOwner"
-        ShowInTaskbar="False"
-        TextElement.Foreground="{DynamicResource MaterialDesignBody}"
-        Background="{DynamicResource MaterialDesignBackground}"
-        FontFamily="{materialDesign:MaterialDesignFont}">
+        ShowInTaskbar="False">
 
     <Grid Margin="24">
         <Grid.RowDefinitions>
@@ -31,13 +28,13 @@
 
         <!-- Drive Letter -->
         <ComboBox Grid.Row="0" x:Name="DriveLetterBox" IsEditable="False"
-                  materialDesign:HintAssist.Hint="{DynamicResource CreateDisk.DriveLetter}"
-                  Style="{StaticResource MaterialDesignOutlinedComboBox}"/>
+                  helpers:HintHelper.Text="{DynamicResource CreateDisk.DriveLetter}"
+                  Style="{StaticResource OutlinedComboBox}"/>
 
         <!-- Volume Label -->
         <TextBox Grid.Row="2" x:Name="VolumeLabelBox" MaxLength="32"
-                 materialDesign:HintAssist.Hint="{DynamicResource CreateDisk.VolumeLabel}"
-                 Style="{StaticResource MaterialDesignOutlinedTextBox}"/>
+                 helpers:HintHelper.Text="{DynamicResource CreateDisk.VolumeLabel}"
+                 Style="{StaticResource OutlinedTextBox}"/>
 
         <!-- Capacity -->
         <Grid Grid.Row="4">
@@ -46,13 +43,28 @@
                 <ColumnDefinition Width="8"/>
                 <ColumnDefinition Width="100"/>
             </Grid.ColumnDefinitions>
-            <materialDesign:NumericUpDown x:Name="CapacityBox"
-                     Value="2" Minimum="1" ValueStep="1"
-                     materialDesign:HintAssist.Hint="{DynamicResource CreateDisk.Capacity}"
-                     ToolTip="{DynamicResource Tip.Capacity}"
-                     Style="{StaticResource MaterialDesignOutlinedNumericUpDown}"/>
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <TextBox x:Name="CapacityBox" Text="2"
+                         helpers:HintHelper.Text="{DynamicResource CreateDisk.Capacity}"
+                         ToolTip="{DynamicResource Tip.Capacity}"
+                         Style="{StaticResource OutlinedTextBox}"
+                         VerticalContentAlignment="Center"
+                         PreviewTextInput="CapacityBox_PreviewTextInput"/>
+                <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="2,0,0,0">
+                    <RepeatButton x:Name="CapacityUp" Content="&#xE70E;" FontFamily="Segoe Fluent Icons"
+                                  FontSize="8" Width="24" Height="16" Click="CapacityUp_Click"
+                                  BorderThickness="0" Background="Transparent"/>
+                    <RepeatButton x:Name="CapacityDown" Content="&#xE70D;" FontFamily="Segoe Fluent Icons"
+                                  FontSize="8" Width="24" Height="16" Click="CapacityDown_Click"
+                                  BorderThickness="0" Background="Transparent"/>
+                </StackPanel>
+            </Grid>
             <ComboBox Grid.Column="2" x:Name="CapacityUnitBox" IsEditable="False"
-                      Style="{StaticResource MaterialDesignOutlinedComboBox}"/>
+                      Style="{StaticResource OutlinedComboBox}"/>
         </Grid>
 
         <!-- Read Only -->
@@ -74,26 +86,26 @@
                 <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
             <TextBox x:Name="ImagePathBox"
-                     materialDesign:HintAssist.Hint="{DynamicResource CreateDisk.ImageFile}"
+                     helpers:HintHelper.Text="{DynamicResource CreateDisk.ImageFile}"
                      ToolTip="{DynamicResource Tip.ImageFile}"
-                     Style="{StaticResource MaterialDesignOutlinedTextBox}"/>
-            <Button Grid.Column="2" Content="×" Width="40"
+                     Style="{StaticResource OutlinedTextBox}"/>
+            <Button Grid.Column="2" Content="&#xD7;" Width="40"
                     ToolTip="{DynamicResource Tip.ClearImagePath}"
                     Click="ClearImagePath_Click"
-                    Style="{StaticResource MaterialDesignOutlinedButton}"/>
-            <Button Grid.Column="4" Content="…" Width="40"
+                    Style="{StaticResource OutlinedButton}"/>
+            <Button Grid.Column="4" Content="&#x2026;" Width="40"
                     Click="BrowseImagePath_Click"
-                    Style="{StaticResource MaterialDesignOutlinedButton}"/>
+                    Style="{StaticResource OutlinedButton}"/>
         </Grid>
 
         <!-- OK / Cancel -->
         <StackPanel Grid.Row="12" Orientation="Horizontal" HorizontalAlignment="Right">
             <Button Content="{DynamicResource Btn.Cancel}" Width="80" IsCancel="True"
-                    Style="{StaticResource MaterialDesignFlatButton}"
+                    Style="{StaticResource FlatButton}"
                     Margin="0,0,8,0"/>
             <Button Content="{DynamicResource Btn.Ok}" Width="80" IsDefault="True"
                     Click="OK_Click"
-                    Style="{StaticResource MaterialDesignRaisedButton}"/>
+                    Style="{StaticResource RaisedButton}"/>
         </StackPanel>
     </Grid>
 </Window>
