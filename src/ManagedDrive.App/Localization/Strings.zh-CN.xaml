@@ -124,6 +124,7 @@
     <sys:String x:Key="About.Description">Windows 内存虚拟磁盘工具。</sys:String>
     <sys:String x:Key="About.Copyright">© 2026 coldhighsun</sys:String>
     <sys:String x:Key="About.ViewOnGitHub">在 GitHub 上查看</sys:String>
+    <sys:String x:Key="About.ViewWinFsp">基于 WinFsp 构建</sys:String>
 
     <!-- SaveFileDialog -->
     <sys:String x:Key="SaveDlg.Title">选择镜像文件</sys:String>

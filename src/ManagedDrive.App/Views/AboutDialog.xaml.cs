@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Reflection;
+using System.Windows.Input;
 using System.Windows.Navigation;
 
 namespace ManagedDrive.App.Views;
@@ -10,6 +11,7 @@ namespace ManagedDrive.App.Views;
 public partial class AboutDialog
 {
     private const string GitHubUrl = "https://github.com/coldhighsun/ManagedDrive";
+    private const string WinFspUrl = "https://winfsp.dev/";
 
     public AboutDialog()
     {
@@ -26,11 +28,20 @@ public partial class AboutDialog
 
         VersionText.Text = version;
         GitHubLink.NavigateUri = new Uri(GitHubUrl);
+        WinFspLink.NavigateUri = new Uri(WinFspUrl);
     }
 
-    private void GitHubLink_RequestNavigate(object sender, RequestNavigateEventArgs e)
+    private void Hyperlink_RequestNavigate(object sender, RequestNavigateEventArgs e)
     {
         Process.Start(new ProcessStartInfo(e.Uri.AbsoluteUri) { UseShellExecute = true });
         e.Handled = true;
+    }
+
+    private void Window_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (e.ButtonState == MouseButtonState.Pressed)
+        {
+            DragMove();
+        }
     }
 }
