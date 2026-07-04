@@ -89,6 +89,26 @@ public sealed class ThemeManager
         return "light";
     }
 
+    private void ApplyConcrete(string tag)
+    {
+        var dict = new ResourceDictionary
+        {
+            Source = new($"pack://application:,,,/Themes/AppTheme.Colors.{(tag == "dark" ? "Dark" : "Light")}.xaml", UriKind.Absolute),
+        };
+
+        var merged = Application.Current.Resources.MergedDictionaries;
+        if (_currentDict != null)
+        {
+            merged.Remove(_currentDict);
+        }
+
+        merged.Add(dict);
+        _currentDict = dict;
+        CurrentTheme = tag;
+
+        ThemeChanged?.Invoke(this, EventArgs.Empty);
+    }
+
     private void SubscribeToSystemEvents()
     {
         if (_subscribedToSystemEvents)
@@ -106,25 +126,5 @@ public sealed class ThemeManager
 
             ApplyConcrete(ReadSystemTheme());
         };
-    }
-
-    private void ApplyConcrete(string tag)
-    {
-        var dict = new ResourceDictionary
-        {
-            Source = new Uri($"pack://application:,,,/Themes/AppTheme.Colors.{(tag == "dark" ? "Dark" : "Light")}.xaml", UriKind.Absolute),
-        };
-
-        var merged = Application.Current.Resources.MergedDictionaries;
-        if (_currentDict != null)
-        {
-            merged.Remove(_currentDict);
-        }
-
-        merged.Add(dict);
-        _currentDict = dict;
-        CurrentTheme = tag;
-
-        ThemeChanged?.Invoke(this, EventArgs.Empty);
     }
 }

@@ -18,16 +18,16 @@ public partial class MainWindow
     private void CloseButton_Click(object sender, RoutedEventArgs e) =>
         Close();
 
+    private void MinimizeButton_Click(object sender, RoutedEventArgs e) =>
+            WindowState = WindowState.Minimized;
+
     private void OverflowBtn_Click(object sender, RoutedEventArgs e)
     {
-        if (sender is FrameworkElement btn && btn.ContextMenu != null)
+        if (sender is FrameworkElement { ContextMenu: not null } btn)
         {
             btn.ContextMenu.DataContext = DataContext;
             btn.ContextMenu.PlacementTarget = btn;
             btn.ContextMenu.IsOpen = true;
         }
     }
-
-    private void MinimizeButton_Click(object sender, RoutedEventArgs e) =>
-            WindowState = WindowState.Minimized;
 }

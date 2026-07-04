@@ -1,6 +1,32 @@
 namespace ManagedDrive.Core;
 
 /// <summary>
+/// Compression level applied when saving a <c>.mdr</c> disk image.
+/// </summary>
+public enum ImageCompressionLevel
+{
+    /// <summary>
+    /// No compression; the image is written uncompressed.
+    /// </summary>
+    None = 0,
+
+    /// <summary>
+    /// Lowest compression ratio, optimized for write speed.
+    /// </summary>
+    Fastest = 1,
+
+    /// <summary>
+    /// Balanced compression ratio and speed. Default.
+    /// </summary>
+    Optimal = 2,
+
+    /// <summary>
+    /// Highest compression ratio, at the cost of write speed.
+    /// </summary>
+    SmallestSize = 3,
+}
+
+/// <summary>
 /// Immutable configuration record used to create and mount a RAM disk.
 /// </summary>
 public sealed record DiskOptions
@@ -61,4 +87,9 @@ public sealed record DiskOptions
     {
         get; init;
     }
+
+    /// <summary>
+    /// Compression level applied when the saved <c>.mdr</c> image is written.
+    /// </summary>
+    public ImageCompressionLevel CompressionLevel { get; init; } = ImageCompressionLevel.Fastest;
 }

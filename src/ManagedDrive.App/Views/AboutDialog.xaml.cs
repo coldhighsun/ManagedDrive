@@ -26,8 +26,8 @@ public partial class AboutDialog
         }
 
         VersionText.Text = version;
-        GitHubLink.NavigateUri = new Uri(GitHubUrl);
-        WinFspLink.NavigateUri = new Uri(WinFspUrl);
+        GitHubLink.NavigateUri = new(GitHubUrl);
+        WinFspLink.NavigateUri = new(WinFspUrl);
     }
 
     private void Hyperlink_RequestNavigate(object sender, RequestNavigateEventArgs e)

@@ -55,4 +55,9 @@ public sealed record DiskProfile
     {
         get; init;
     }
+
+    /// <summary>
+    /// Gets or sets the compression level applied when the saved image is written.
+    /// </summary>
+    public ImageCompressionLevel CompressionLevel { get; init; } = ImageCompressionLevel.Fastest;
 }

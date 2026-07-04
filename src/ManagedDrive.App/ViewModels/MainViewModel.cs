@@ -26,35 +26,35 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 
         StatusText = Loc.Get("Status.Ready");
 
-        CreateDiskCommand = new RelayCommand(_ => ExecuteCreateDisk());
-        EditDiskCommand = new RelayCommand(
+        CreateDiskCommand = new(_ => ExecuteCreateDisk());
+        EditDiskCommand = new(
             p => ExecuteEditDisk(p as DiskViewModel ?? SelectedDisk),
             p => p is DiskViewModel || SelectedDisk != null);
-        ExitCommand = new RelayCommand(_ => ExecuteExit());
-        UnmountCommand = new RelayCommand(
+        ExitCommand = new(_ => ExecuteExit());
+        UnmountCommand = new(
             p => ExecuteUnmount(p as DiskViewModel ?? SelectedDisk),
             p => p is DiskViewModel || SelectedDisk != null);
-        SaveImageCommand = new RelayCommand(
+        SaveImageCommand = new(
             p => ExecuteSaveImage(p as DiskViewModel ?? SelectedDisk),
             p => p is DiskViewModel || SelectedDisk != null);
-        FormatDiskCommand = new RelayCommand(
+        FormatDiskCommand = new(
             p => ExecuteFormatDisk(p as DiskViewModel ?? SelectedDisk),
             p =>
             {
                 var vm = p as DiskViewModel ?? SelectedDisk;
-                return vm != null && !vm.Disk.Options.ReadOnly;
+                return vm is { Disk.Options.ReadOnly: false };
             });
-        RefreshCommand = new RelayCommand(_ => RefreshAll());
-        ResetTempDirsCommand = new RelayCommand(_ => ExecuteResetTempDirs());
-        ToggleTempDirCommand = new RelayCommand(
+        RefreshCommand = new(_ => RefreshAll());
+        ResetTempDirsCommand = new(_ => ExecuteResetTempDirs());
+        ToggleTempDirCommand = new(
             p => ExecuteToggleTempDir(p as DiskViewModel ?? SelectedDisk),
             p =>
             {
                 var vm = p as DiskViewModel ?? SelectedDisk;
-                return vm != null && !vm.Disk.Options.ReadOnly;
+                return vm is { Disk.Options.ReadOnly: false };
             });
-        SettingsCommand = new RelayCommand(_ => ExecuteSettings());
-        AboutCommand = new RelayCommand(_ => ExecuteAbout());
+        SettingsCommand = new(_ => ExecuteSettings());
+        AboutCommand = new(_ => ExecuteAbout());
     }
 
     /// <inheritdoc />
@@ -206,6 +206,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             AutoMount = vm.Disk.Options.AutoMount,
             PersistImagePath = vm.Disk.Options.PersistImagePath,
             AutoSaveIntervalMinutes = vm.Disk.Options.AutoSaveIntervalMinutes,
+            CompressionLevel = vm.Disk.Options.CompressionLevel,
         });
     }
 
@@ -220,7 +221,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         {
             var options = ProfileToOptions(profile);
             var disk = await Task.Run(() => _mountManager.Mount(options));
-            AddDiskSorted(new DiskViewModel(disk));
+            AddDiskSorted(new(disk));
             StatusText = Loc.Format("Status.Mounted", disk.MountPoint, profile.VolumeLabel);
         }
         catch (Exception ex)
@@ -248,15 +249,8 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         AutoMount = p.AutoMount,
         PersistImagePath = p.PersistImagePath,
         AutoSaveIntervalMinutes = p.AutoSaveIntervalMinutes,
+        CompressionLevel = p.CompressionLevel,
     };
-
-    /// <summary>
-    /// Returns the <see cref="DiskOptions"/> of every currently active disk except
-    /// <paramref name="excluding"/>. Used to validate that a new or edited disk's image file
-    /// path does not collide with another disk's mount point or image file.
-    /// </summary>
-    private IReadOnlyList<DiskOptions> GetOtherDiskOptions(DiskViewModel? excluding) =>
-        Disks.Where(d => d != excluding).Select(d => d.Disk.Options).ToList();
 
     private void AddDiskSorted(DiskViewModel vm)
     {
@@ -296,7 +290,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         {
             var options = dialog.Result!;
             var disk = await Task.Run(() => _mountManager.Mount(options));
-            AddDiskSorted(new DiskViewModel(disk));
+            AddDiskSorted(new(disk));
             SaveSettings();
             StatusText = Loc.Format("Status.MountedWithCapacity", disk.MountPoint, options.VolumeLabel, options.CapacityBytes / (1024 * 1024));
         }
@@ -363,7 +357,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             try
             {
                 var disk = await Task.Run(() => _mountManager.Mount(newOptions));
-                AddDiskSorted(new DiskViewModel(disk));
+                AddDiskSorted(new(disk));
                 SaveSettings();
                 StatusText = Loc.Format("Status.MountedWithCapacity", disk.MountPoint, newOptions.VolumeLabel, newOptions.CapacityBytes / (1024 * 1024));
             }
@@ -503,7 +497,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         }
     }
 
-    private void ExecuteSaveImage(DiskViewModel? vm)
+    private async void ExecuteSaveImage(DiskViewModel? vm)
     {
         if (vm == null)
         {
@@ -534,7 +528,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 
         try
         {
-            vm.Disk.SaveToImage();
+            await Task.Run(() => vm.Disk.SaveToImage());
             StatusText = Loc.Format("Status.ImageSaved", vm.MountPoint);
             MessageBox.Show(
                 Loc.Format("Msg.SaveImageSuccess", vm.Disk.Options.PersistImagePath),
@@ -673,8 +667,16 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         StatusText = Loc.Format("Status.Unmounted", mountPoint);
     }
 
+    /// <summary>
+    /// Returns the <see cref="DiskOptions"/> of every currently active disk except
+    /// <paramref name="excluding"/>. Used to validate that a new or edited disk's image file
+    /// path does not collide with another disk's mount point or image file.
+    /// </summary>
+    private IReadOnlyList<DiskOptions> GetOtherDiskOptions(DiskViewModel? excluding) =>
+        Disks.Where(d => d != excluding).Select(d => d.Disk.Options).ToList();
+
     private void OnPropertyChanged(string propertyName) =>
-        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+        PropertyChanged?.Invoke(this, new(propertyName));
 
     private void RefreshAll()
     {
@@ -686,7 +688,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 
     private void SaveSettings()
     {
-        _settingsStore.Save(new AppConfiguration
+        _settingsStore.Save(new()
         {
             RunAtStartup = StartupManager.IsEnabled,
             Language = LanguageManager.Instance.SavedLanguage,

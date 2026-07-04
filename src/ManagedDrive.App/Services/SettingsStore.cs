@@ -40,7 +40,7 @@ public sealed class SettingsStore
     {
         if (!File.Exists(_settingsPath))
         {
-            return new AppConfiguration();
+            return new();
         }
 
         try
@@ -51,7 +51,7 @@ public sealed class SettingsStore
         }
         catch
         {
-            return new AppConfiguration();
+            return new();
         }
     }
 

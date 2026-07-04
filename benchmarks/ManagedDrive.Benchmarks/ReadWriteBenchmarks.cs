@@ -73,7 +73,7 @@ public class ReadWriteBenchmarks
     [GlobalSetup]
     public void Setup()
     {
-        _ramDisk = RamDisk.Create(new DiskOptions
+        _ramDisk = RamDisk.Create(new()
         {
             CapacityBytes = CapacityBytes,
             MountPoint = RamMountPoint,

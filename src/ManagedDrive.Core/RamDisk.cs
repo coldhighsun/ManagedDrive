@@ -9,14 +9,15 @@ namespace ManagedDrive.Core;
 /// </summary>
 public sealed class RamDisk : IDisposable
 {
-    private const uint ShcneDriveadd = 0x00000100;
-    private const uint ShcnfFlush = 0x1000;
-    private const uint ShcnfPath = 0x0005;
+    private const uint EventDriveAdd = 0x00000100;
+    private const uint FlagFlush = 0x1000;
+    private const uint FlagPath = 0x0005;
+    private readonly Lock _autoSaveLock = new();
     private readonly MemoryFileSystem _fs;
     private readonly FileSystemHost _host;
-    private readonly Lock _autoSaveLock = new();
-    private bool _disposed;
     private Timer? _autoSaveTimer;
+    private bool _disposed;
+    private string? _lastSavedImagePath;
 
     private RamDisk(MemoryFileSystem fs, FileSystemHost host, DiskOptions options)
     {
@@ -31,9 +32,10 @@ public sealed class RamDisk : IDisposable
     public ulong FreeBytes => TotalBytes > UsedBytes ? TotalBytes - UsedBytes : 0;
 
     /// <summary>
-    /// Gets the mount point string as reported by WinFsp after a successful mount.
+    /// Gets the UTC timestamp of the most recent content mutation (create/write/rename/delete/etc.),
+    /// or <c>null</c> if the disk has never been modified since mount.
     /// </summary>
-    public string MountPoint => _host.MountPoint() ?? Options.MountPoint;
+    public DateTime? LastContentWriteTime => _fs.LastContentWriteTimeUtc;
 
     /// <summary>
     /// Gets the UTC timestamp of the most recent successful image save (auto-save, final
@@ -45,6 +47,11 @@ public sealed class RamDisk : IDisposable
         get;
         private set;
     }
+
+    /// <summary>
+    /// Gets the mount point string as reported by WinFsp after a successful mount.
+    /// </summary>
+    public string MountPoint => _host.MountPoint() ?? Options.MountPoint;
 
     /// <summary>
     /// Gets the configuration used to create this disk.
@@ -91,11 +98,11 @@ public sealed class RamDisk : IDisposable
 
             var capacity = savedCapacity > 0 ? savedCapacity : options.CapacityBytes;
             var label = string.IsNullOrEmpty(savedLabel) ? options.VolumeLabel : savedLabel;
-            fs = new MemoryFileSystem(capacity, label, nodeMap, options.ReadOnly);
+            fs = new(capacity, label, nodeMap, options.ReadOnly);
         }
         else
         {
-            fs = new MemoryFileSystem(options.CapacityBytes, options.VolumeLabel, options.ReadOnly);
+            fs = new(options.CapacityBytes, options.VolumeLabel, options.ReadOnly);
         }
 
         var host = new FileSystemHost(fs);
@@ -167,26 +174,6 @@ public sealed class RamDisk : IDisposable
     }
 
     /// <summary>
-    /// Serializes the current disk contents to <see cref="DiskOptions.PersistImagePath"/>.
-    /// Does nothing if <see cref="DiskOptions.PersistImagePath"/> is <c>null</c>.
-    /// </summary>
-    public void SaveToImage()
-    {
-        if (Options.PersistImagePath == null)
-        {
-            return;
-        }
-
-        DiskImageSerializer.Save(
-            _fs.NodeMap,
-            Options.CapacityBytes,
-            Options.VolumeLabel,
-            Options.PersistImagePath);
-
-        LastSaveTime = DateTime.UtcNow;
-    }
-
-    /// <summary>
     /// Removes all files and directories from the disk, leaving it empty.
     /// Does nothing and returns <c>false</c> when the disk is read-only.
     /// </summary>
@@ -201,14 +188,53 @@ public sealed class RamDisk : IDisposable
         }
 
         _fs.NodeMap.ClearAll();
+        _fs.MarkDirty();
         return true;
+    }
+
+    /// <summary>
+    /// Serializes the current disk contents to <see cref="DiskOptions.PersistImagePath"/>.
+    /// Does nothing if <see cref="DiskOptions.PersistImagePath"/> is <c>null</c>.
+    /// </summary>
+    public void SaveToImage()
+    {
+        if (Options.PersistImagePath == null)
+        {
+            return;
+        }
+
+        DiskImageSerializer.Save(
+            _fs.NodeMap,
+            Options.CapacityBytes,
+            Options.VolumeLabel,
+            Options.PersistImagePath,
+            Options.CompressionLevel);
+
+        LastSaveTime = DateTime.UtcNow;
+        _fs.ClearDirty();
+        _lastSavedImagePath = Options.PersistImagePath;
+    }
+
+    /// <summary>
+    /// Saves the disk image while holding <see cref="_autoSaveLock"/>, without unmounting.
+    /// Intended for external shutdown-notification callers (e.g. Windows session-ending) that
+    /// need a quick, safe save that can't race the periodic auto-save tick. Does nothing if
+    /// <see cref="DiskOptions.PersistImagePath"/> is <c>null</c>.
+    /// </summary>
+    public void SaveToImageSafe()
+    {
+        lock (_autoSaveLock)
+        {
+            SaveToImage();
+        }
     }
 
     /// <summary>
     /// Applies <paramref name="newOptions"/> to the live disk without unmounting.
     /// Only <see cref="DiskOptions.VolumeLabel"/>, <see cref="DiskOptions.CapacityBytes"/>,
-    /// <see cref="DiskOptions.AutoMount"/>, <see cref="DiskOptions.PersistImagePath"/>, and
-    /// <see cref="DiskOptions.AutoSaveIntervalMinutes"/> may be changed this way.
+    /// <see cref="DiskOptions.AutoMount"/>, <see cref="DiskOptions.PersistImagePath"/>,
+    /// <see cref="DiskOptions.AutoSaveIntervalMinutes"/>, and <see cref="DiskOptions.CompressionLevel"/>
+    /// may be changed this way.
     /// <see cref="DiskOptions.MountPoint"/> and <see cref="DiskOptions.ReadOnly"/> require a
     /// full unmount/remount.
     /// </summary>
@@ -240,51 +266,6 @@ public sealed class RamDisk : IDisposable
         return true;
     }
 
-    /// <summary>
-    /// (Re)starts the periodic auto-save timer based on the current <see cref="Options"/>,
-    /// or stops it when auto-save is disabled or no image path is configured. The first save
-    /// fires immediately (on a background thread) so that enabling auto-save via create/edit
-    /// captures the current contents right away instead of waiting a full interval.
-    /// </summary>
-    private void ConfigureAutoSaveTimer()
-    {
-        _autoSaveTimer?.Dispose();
-        _autoSaveTimer = null;
-
-        if (Options.AutoSaveIntervalMinutes is { } minutes && minutes > 0 &&
-            Options.PersistImagePath != null)
-        {
-            var interval = TimeSpan.FromMinutes(minutes);
-            _autoSaveTimer = new Timer(_ => TryAutoSave(), null, TimeSpan.Zero, interval);
-        }
-    }
-
-    /// <summary>
-    /// Saves the disk image on the periodic timer tick, swallowing any exception so a failed
-    /// save does not affect the mounted disk or crash the timer thread. If the previous tick's
-    /// save is still running, this tick is skipped instead of running concurrently with it.
-    /// </summary>
-    private void TryAutoSave()
-    {
-        if (!_autoSaveLock.TryEnter())
-        {
-            return;
-        }
-
-        try
-        {
-            SaveToImage();
-        }
-        catch
-        {
-            // Best-effort periodic save.
-        }
-        finally
-        {
-            _autoSaveLock.Exit();
-        }
-    }
-
     private static void ConfigureHost(FileSystemHost host)
     {
         host.SectorSize = (ushort)FileNode.AllocationUnit;
@@ -308,7 +289,7 @@ public sealed class RamDisk : IDisposable
         mountPoint.Length == 2 && char.IsLetter(mountPoint[0]) && mountPoint[1] == ':';
 
     /// <summary>
-    /// Broadcasts a <c>SHCNE_DRIVEADD</c> Shell change notification so that Windows Explorer
+    /// Broadcasts a <c>EventDriveAdd</c> Shell change notification so that Windows Explorer
     /// immediately refreshes and shows the newly mounted drive letter.
     /// </summary>
     /// <param name="mountPoint">Drive-letter mount point in the form <c>X:</c>.</param>
@@ -316,7 +297,7 @@ public sealed class RamDisk : IDisposable
     {
         // Shell expects the path to end with a backslash.
         var path = mountPoint.TrimEnd('\\') + '\\';
-        SHChangeNotify(ShcneDriveadd, ShcnfPath | ShcnfFlush, path, null);
+        SHChangeNotify(EventDriveAdd, FlagPath | FlagFlush, path, null);
     }
 
     [System.Runtime.InteropServices.DllImport("shell32.dll", CharSet = System.Runtime.InteropServices.CharSet.Auto)]
@@ -348,5 +329,55 @@ public sealed class RamDisk : IDisposable
         }
 
         return false;
+    }
+
+    /// <summary>
+    /// (Re)starts the periodic auto-save timer based on the current <see cref="Options"/>,
+    /// or stops it when auto-save is disabled or no image path is configured. The first save
+    /// fires immediately (on a background thread) so that enabling auto-save via create/edit
+    /// captures the current contents right away instead of waiting a full interval.
+    /// </summary>
+    private void ConfigureAutoSaveTimer()
+    {
+        _autoSaveTimer?.Dispose();
+        _autoSaveTimer = null;
+
+        if (Options.AutoSaveIntervalMinutes is { } minutes and > 0 &&
+            Options.PersistImagePath != null)
+        {
+            var interval = TimeSpan.FromMinutes(minutes);
+            _autoSaveTimer = new(_ => TryAutoSave(), null, TimeSpan.Zero, interval);
+        }
+    }
+
+    /// <summary>
+    /// Saves the disk image on the periodic timer tick, swallowing any exception so a failed
+    /// save does not affect the mounted disk or crash the timer thread. If the previous tick's
+    /// save is still running, this tick is skipped instead of running concurrently with it.
+    /// Skips the save entirely (no disk I/O) when the disk's content has not changed since the
+    /// last successful save and the configured image path hasn't changed either.
+    /// </summary>
+    private void TryAutoSave()
+    {
+        if (!_autoSaveLock.TryEnter())
+        {
+            return;
+        }
+
+        try
+        {
+            if (_fs.IsDirty || Options.PersistImagePath != _lastSavedImagePath)
+            {
+                SaveToImage();
+            }
+        }
+        catch
+        {
+            // Best-effort periodic save.
+        }
+        finally
+        {
+            _autoSaveLock.Exit();
+        }
     }
 }

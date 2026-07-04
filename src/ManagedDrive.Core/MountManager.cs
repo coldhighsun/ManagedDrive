@@ -30,7 +30,7 @@ public sealed class MountManager : IDisposable
 
         lock (_syncRoot)
         {
-            all = new List<RamDisk>(_disks.Values);
+            all = new(_disks.Values);
             _disks.Clear();
         }
 

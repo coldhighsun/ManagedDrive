@@ -17,6 +17,8 @@ public sealed class MemoryFileSystem : FileSystemBase
 
     private readonly FileNodeMap _nodeMap;
     private readonly bool _readOnly;
+    private volatile bool _isDirty;
+    private long _lastContentWriteTicks;
     private ulong _maxCapacity;
     private string _volumeLabel;
 
@@ -31,7 +33,7 @@ public sealed class MemoryFileSystem : FileSystemBase
         _readOnly = readOnly;
         _maxCapacity = maxCapacity;
         _volumeLabel = volumeLabel;
-        _nodeMap = new FileNodeMap();
+        _nodeMap = new();
     }
 
     /// <summary>
@@ -48,6 +50,25 @@ public sealed class MemoryFileSystem : FileSystemBase
         _maxCapacity = maxCapacity;
         _volumeLabel = volumeLabel;
         _nodeMap = existingNodeMap;
+    }
+
+    /// <summary>
+    /// Gets a value indicating whether the disk's content has changed since the last
+    /// successful save (<see cref="ClearDirty"/>).
+    /// </summary>
+    internal bool IsDirty => _isDirty;
+
+    /// <summary>
+    /// Gets the UTC timestamp of the most recent content mutation (create/write/rename/delete/etc.),
+    /// or <c>null</c> if the disk's content has never changed since mount.
+    /// </summary>
+    internal DateTime? LastContentWriteTimeUtc
+    {
+        get
+        {
+            var ticks = Interlocked.Read(ref _lastContentWriteTicks);
+            return ticks == 0 ? null : new DateTime(ticks, DateTimeKind.Utc);
+        }
     }
 
     /// <summary>
@@ -99,17 +120,20 @@ public sealed class MemoryFileSystem : FileSystemBase
         if ((flags & CleanupDelete) != 0 && !_readOnly)
         {
             _nodeMap.Remove(fileName);
+            MarkDirty();
         }
 
         if ((flags & CleanupSetLastWriteTime) != 0)
         {
             node.FileInfo.LastWriteTime = now;
             node.FileInfo.ChangeTime = now;
+            MarkDirty();
         }
 
         if ((flags & CleanupSetAllocationSize) != 0 && !node.IsDirectory)
         {
             SetFileSizeCore(node, node.FileInfo.FileSize, setAllocationSize: false);
+            MarkDirty();
         }
     }
 
@@ -184,6 +208,7 @@ public sealed class MemoryFileSystem : FileSystemBase
         }
 
         _nodeMap.Add(fileName, node);
+        MarkDirty();
         fileNode = node;
         fileInfo = node.FileInfo;
         return STATUS_SUCCESS;
@@ -423,6 +448,7 @@ public sealed class MemoryFileSystem : FileSystemBase
         node.FileInfo.LastWriteTime = now;
         node.FileInfo.ChangeTime = now;
 
+        MarkDirty();
         fileInfo = node.FileInfo;
         return STATUS_SUCCESS;
     }
@@ -524,6 +550,7 @@ public sealed class MemoryFileSystem : FileSystemBase
 
         _nodeMap.Remove(fileName);
         _nodeMap.Add(newFileName, node);
+        MarkDirty();
         return STATUS_SUCCESS;
     }
 
@@ -574,6 +601,7 @@ public sealed class MemoryFileSystem : FileSystemBase
             node.FileInfo.ChangeTime = changeTime;
         }
 
+        MarkDirty();
         fileInfo = node.FileInfo;
         return STATUS_SUCCESS;
     }
@@ -602,6 +630,7 @@ public sealed class MemoryFileSystem : FileSystemBase
 
         var node = (FileNode)fileNode;
         var result = SetFileSizeCore(node, newSize, setAllocationSize);
+        MarkDirty();
         fileInfo = node.FileInfo;
         return result;
     }
@@ -625,6 +654,7 @@ public sealed class MemoryFileSystem : FileSystemBase
 
         var node = (FileNode)fileNode;
         node.FileSecurity = securityDescriptor;
+        MarkDirty();
         return STATUS_SUCCESS;
     }
 
@@ -643,6 +673,7 @@ public sealed class MemoryFileSystem : FileSystemBase
         }
 
         _volumeLabel = volumeLabel;
+        MarkDirty();
         return GetVolumeInfo(out volumeInfo);
     }
 
@@ -710,8 +741,23 @@ public sealed class MemoryFileSystem : FileSystemBase
         node.FileInfo.LastWriteTime = now;
         node.FileInfo.ChangeTime = now;
 
+        MarkDirty();
         fileInfo = node.FileInfo;
         return STATUS_SUCCESS;
+    }
+
+    /// <summary>
+    /// Marks the disk's content as up to date with the on-disk image.
+    /// </summary>
+    internal void ClearDirty() => _isDirty = false;
+
+    /// <summary>
+    /// Marks the disk's content as changed since the last save.
+    /// </summary>
+    internal void MarkDirty()
+    {
+        _isDirty = true;
+        Interlocked.Exchange(ref _lastContentWriteTicks, DateTime.UtcNow.Ticks);
     }
 
     /// <summary>
@@ -847,7 +893,7 @@ public sealed class MemoryFileSystem : FileSystemBase
             }
         }
 
-        return new DirContext(entries);
+        return new(entries);
     }
 
     /// <summary>

@@ -28,9 +28,9 @@ public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
         _freeBytes = disk.FreeBytes;
         _isCurrentTempDir = CheckIsCurrentTempDir();
 
-        OpenInExplorerCommand = new RelayCommand(_ => Process.Start("explorer.exe", MountPoint));
+        OpenInExplorerCommand = new(_ => Process.Start("explorer.exe", MountPoint));
 
-        _refreshTimer = new DispatcherTimer
+        _refreshTimer = new()
         {
             Interval = TimeSpan.FromSeconds(2)
         };
@@ -71,24 +71,6 @@ public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
             : 100.0;
 
     /// <summary>
-    /// Gets the mount point string (e.g., <c>Z:</c>).
-    /// </summary>
-    public string MountPoint => _disk.MountPoint;
-
-    /// <summary>
-    /// Gets the timestamp of the most recent image save, formatted for display.
-    /// </summary>
-    public string LastAutoSaveFormatted => _disk.LastSaveTime is { } t
-        ? Loc.Format("Card.LastAutoSavePrefix", t.ToLocalTime().ToString("HH:mm:ss"))
-        : Loc.Get("Card.AutoSaveNever");
-
-    /// <summary>
-    /// Gets whether this disk has auto-save enabled, controlling visibility of the last-save
-    /// timestamp on the disk card.
-    /// </summary>
-    public bool ShowLastAutoSave => _disk.Options.AutoSaveIntervalMinutes is > 0;
-
-    /// <summary>
     /// Gets whether the user's TEMP and TMP currently point to this disk's Temp folder.
     /// </summary>
     public bool IsCurrentTempDir
@@ -113,12 +95,37 @@ public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
     public bool IsNotCurrentTempDir => !_isCurrentTempDir;
 
     /// <summary>
+    /// Gets the timestamp of the most recent image save, formatted for display.
+    /// </summary>
+    public string LastAutoSaveFormatted => _disk.LastSaveTime is { } t
+        ? Loc.Format("Card.LastAutoSavePrefix", t.ToLocalTime().ToString("HH:mm:ss"))
+        : Loc.Get("Card.NeverAutoSaved");
+
+    /// <summary>
+    /// Gets the timestamp of the most recent content mutation, formatted for display.
+    /// </summary>
+    public string LastContentWriteFormatted => _disk.LastContentWriteTime is { } t
+        ? Loc.Format("Card.LastWritePrefix", t.ToLocalTime().ToString("HH:mm:ss"))
+        : Loc.Get("Card.NeverWritten");
+
+    /// <summary>
+    /// Gets the mount point string (e.g., <c>Z:</c>).
+    /// </summary>
+    public string MountPoint => _disk.MountPoint;
+
+    /// <summary>
     /// Gets the command that opens this disk's mount point in Windows Explorer.
     /// </summary>
     public RelayCommand OpenInExplorerCommand
     {
         get;
     }
+
+    /// <summary>
+    /// Gets whether this disk has auto-save enabled, controlling visibility of the
+    /// last-image-save timestamp on the disk card.
+    /// </summary>
+    public bool ShowLastAutoSave => _disk.Options.AutoSaveIntervalMinutes is > 0;
 
     /// <summary>
     /// Gets the amount of used space formatted as a human-readable string.
@@ -158,6 +165,7 @@ public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
         OnPropertyChanged(nameof(UsedPercent));
         OnPropertyChanged(nameof(CapacityFormatted));
         OnPropertyChanged(nameof(VolumeLabel));
+        OnPropertyChanged(nameof(LastContentWriteFormatted));
         OnPropertyChanged(nameof(LastAutoSaveFormatted));
         OnPropertyChanged(nameof(ShowLastAutoSave));
 
@@ -173,13 +181,6 @@ public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
         {
             _highUsageWarned = false;
         }
-    }
-
-    private bool CheckIsCurrentTempDir()
-    {
-        var userTemp = Environment.GetEnvironmentVariable("TEMP", EnvironmentVariableTarget.User);
-        var diskTemp = Path.Combine(MountPoint, "Temp");
-        return string.Equals(userTemp, diskTemp, StringComparison.OrdinalIgnoreCase);
     }
 
     private static string FormatBytes(ulong bytes)
@@ -202,8 +203,15 @@ public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
         return $"{bytes} B";
     }
 
+    private bool CheckIsCurrentTempDir()
+    {
+        var userTemp = Environment.GetEnvironmentVariable("TEMP", EnvironmentVariableTarget.User);
+        var diskTemp = Path.Combine(MountPoint, "Temp");
+        return string.Equals(userTemp, diskTemp, StringComparison.OrdinalIgnoreCase);
+    }
+
     private void OnPropertyChanged(string propertyName) =>
-        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+        PropertyChanged?.Invoke(this, new(propertyName));
 
     private void OnRefreshTick(object? sender, EventArgs e) => Refresh();
 }

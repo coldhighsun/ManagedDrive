@@ -45,24 +45,34 @@
     <sys:String x:Key="CreateDisk.ReadOnly">Read Only</sys:String>
     <sys:String x:Key="CreateDisk.AutoMount">Auto-mount</sys:String>
     <sys:String x:Key="CreateDisk.ImageFile">Image File</sys:String>
+    <sys:String x:Key="CreateDisk.CompressionLevel">Compression:</sys:String>
     <sys:String x:Key="CreateDisk.DefaultLabel">RAM Disk</sys:String>
     <sys:String x:Key="Tip.Capacity">Disk size (select unit: MB or GB)</sys:String>
     <sys:String x:Key="Tip.ReadOnly">Prevent all writes to this disk (also disables auto-save, since a read-only disk never changes)</sys:String>
     <sys:String x:Key="Tip.AutoMount">Re-mount this disk automatically on next application start</sys:String>
     <sys:String x:Key="Tip.ImageFile">Optional: path to a .mdr image file for persistence (leave blank for volatile disk). Click to browse.</sys:String>
     <sys:String x:Key="Tip.ClearImagePath">Clear image file path</sys:String>
+    <sys:String x:Key="Tip.CompressionLevel">Compress the saved image to reduce disk usage. Higher levels shrink the file more but take longer to save/load.</sys:String>
+    <sys:String x:Key="CompressionLevel.None">Off</sys:String>
+    <sys:String x:Key="CompressionLevel.Fastest">Fast</sys:String>
+    <sys:String x:Key="CompressionLevel.Optimal">Balanced</sys:String>
+    <sys:String x:Key="CompressionLevel.SmallestSize">Max</sys:String>
     <sys:String x:Key="CreateDisk.AutoSavePrefix">Every</sys:String>
     <sys:String x:Key="CreateDisk.AutoSaveSuffix">minutes, auto-save the image</sys:String>
     <sys:String x:Key="CreateDisk.AutoSaveInterval">Interval (min)</sys:String>
     <sys:String x:Key="Tip.AutoSave">Periodically save the disk contents to the image file while mounted</sys:String>
     <sys:String x:Key="Tip.AutoSaveInterval">How often to auto-save, in minutes</sys:String>
-    <sys:String x:Key="Card.LastAutoSavePrefix">Last saved: {0}</sys:String>
-    <sys:String x:Key="Card.AutoSaveNever">Not yet saved</sys:String>
+    <sys:String x:Key="Card.LastWritePrefix">Last modified: {0}</sys:String>
+    <sys:String x:Key="Card.NeverWritten">Not yet modified</sys:String>
+    <sys:String x:Key="Card.LastAutoSavePrefix">Last image save: {0}</sys:String>
+    <sys:String x:Key="Card.NeverAutoSaved">Image not yet saved</sys:String>
     <sys:String x:Key="Val.AutoSaveNoImage">Select an image file before enabling auto-save.</sys:String>
     <sys:String x:Key="Val.ImagePathOnRamDisk">The image file cannot be located on a RAM disk.</sys:String>
     <sys:String x:Key="Val.ImagePathInUse">This image file is already used by another RAM disk.</sys:String>
     <sys:String x:Key="Val.BadAutoSaveInterval">Enter a valid auto-save interval (1-60 minutes).</sys:String>
     <sys:String x:Key="Val.BadImagePath">The image file path is invalid or its folder does not exist.</sys:String>
+    <sys:String x:Key="Val.ReadOnlyRequiresImage">Read-only disks must use an existing image file.</sys:String>
+    <sys:String x:Key="Val.ReadOnlyImageNotFound">The selected image file does not exist.</sys:String>
 
     <!-- SettingsDialog -->
     <sys:String x:Key="Settings.Title">Settings</sys:String>
