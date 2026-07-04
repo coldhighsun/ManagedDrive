@@ -48,6 +48,12 @@ public sealed class FileNode
         (FileInfo.FileAttributes & (uint)FileAttributes.Directory) != 0;
 
     /// <summary>
+    /// The name component of <see cref="FilePath"/> (i.e., the path's last segment).
+    /// Kept in sync by <see cref="FileNodeMap"/> whenever <see cref="FilePath"/> changes.
+    /// </summary>
+    public string LeafName { get; set; } = string.Empty;
+
+    /// <summary>
     /// Rounds <paramref name="size"/> up to the nearest <see cref="AllocationUnit"/> boundary.
     /// </summary>
     /// <param name="size">The size in bytes to align.</param>

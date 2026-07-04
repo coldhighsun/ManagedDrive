@@ -114,8 +114,8 @@ ManagedDrive uses **WinFsp** (Windows File System Proxy) to present an in-memory
 
 Key classes:
 
-- **`FileNode`** — holds `Fsp.Interop.FileInfo` metadata, a `byte[]` data buffer, and a security descriptor.
-- **`FileNodeMap`** — a case-insensitive `SortedDictionary<string, FileNode>` that maps full paths to nodes, supports paginated child enumeration, and tracks total allocated bytes. Thread-safe via the C# 13 `Lock` type.
+- **`FileNode`** — holds `Fsp.Interop.FileInfo` metadata, a `byte[]` data buffer, a cached leaf name, and a security descriptor.
+- **`FileNodeMap`** — a case-insensitive `SortedDictionary<string, FileNode>` that maps full paths to nodes, supports paginated child enumeration via a bounded prefix walk, and tracks total allocated bytes with an incrementally-maintained counter (O(1) reads instead of a full scan). Thread-safe via the C# 13 `Lock` type.
 - **`MemoryFileSystem : FileSystemBase`** — overrides all 21 required WinFsp callbacks (`Create`, `Open`, `Read`, `Write`, `Rename`, `CanDelete`, `ReadDirectoryEntry`, etc.) and enforces a configurable capacity ceiling, returning `STATUS_DISK_FULL` when exceeded; memory is not pre-allocated — each `FileNode` holds only the bytes actually written.
 - **`RamDisk`** — composes `MemoryFileSystem` with a `FileSystemHost`. The static `Create()` factory mounts the volume and polls until the drive letter is visible in the OS (up to 2.5 s), then broadcasts `SHCNE_DRIVEADD` to refresh Explorer. `Dispose()` unmounts. When an auto-save interval is configured, a background timer saves the image immediately and then on every interval, skipping ticks where nothing has changed since the last save; a final save (always performed, regardless of changes) runs on `Dispose()` so unmounting, remounting, or exiting never skips the latest save.
 - **`MountManager`** — thread-safe registry of active `RamDisk` instances. Fires `DiskMounted` / `DiskUnmounted` events.
@@ -326,8 +326,8 @@ ManagedDrive 使用 **WinFsp**（Windows 文件系统代理）将内存目录树
 
 核心类：
 
-- **`FileNode`** — 持有 `Fsp.Interop.FileInfo` 元数据、`byte[]` 数据缓冲区及安全描述符。
-- **`FileNodeMap`** — 不区分大小写的 `SortedDictionary<string, FileNode>`，将完整路径映射到节点，支持分页子节点枚举，并追踪已分配字节总量。通过 C# 13 `Lock` 类型保证线程安全。
+- **`FileNode`** — 持有 `Fsp.Interop.FileInfo` 元数据、`byte[]` 数据缓冲区、缓存的叶子节点名称及安全描述符。
+- **`FileNodeMap`** — 不区分大小写的 `SortedDictionary<string, FileNode>`，将完整路径映射到节点，通过有界前缀遍历支持分页子节点枚举，并通过增量维护的计数器追踪已分配字节总量（O(1) 读取，无需全量扫描）。通过 C# 13 `Lock` 类型保证线程安全。
 - **`MemoryFileSystem : FileSystemBase`** — 覆写全部 21 个所需的 WinFsp 回调（`Create`、`Open`、`Read`、`Write`、`Rename`、`CanDelete`、`ReadDirectoryEntry` 等），并强制执行可配置的容量上限，超出时返回 `STATUS_DISK_FULL`；内存不预分配——每个 `FileNode` 仅保留实际写入的字节数。
 - **`RamDisk`** — 组合 `MemoryFileSystem` 与 `FileSystemHost`。静态工厂方法 `Create()` 挂载卷，并轮询直至驱动器号在系统中可见（最长 2.5 秒），随后向资源管理器广播 `SHCNE_DRIVEADD`。`Dispose()` 执行卸载。配置了自动保存间隔时，后台计时器会立即保存一次镜像，随后按间隔重复保存，若自上次保存后内容未变化则跳过该次保存；`Dispose()` 还会执行一次收尾保存（不受内容是否变化影响，始终执行），确保卸载、重新挂载或退出应用时不会遗漏最新的改动。
 - **`MountManager`** — 线程安全的活动 `RamDisk` 实例注册表，提供 `DiskMounted` / `DiskUnmounted` 事件。

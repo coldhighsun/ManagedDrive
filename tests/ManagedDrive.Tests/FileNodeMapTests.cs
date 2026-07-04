@@ -5,6 +5,26 @@ namespace ManagedDrive.Tests;
 public sealed class FileNodeMapTests
 {
     [Fact]
+    public void Add_Root_SetsLeafNameToEmpty()
+    {
+        var map = new FileNodeMap();
+        var node = MakeDir();
+        map.Add("\\", node);
+
+        Assert.Equal(string.Empty, node.LeafName);
+    }
+
+    [Fact]
+    public void Add_SetsLeafName()
+    {
+        var map = new FileNodeMap();
+        var node = MakeFile();
+        map.Add("\\Folder\\file.txt", node);
+
+        Assert.Equal("file.txt", node.LeafName);
+    }
+
+    [Fact]
     public void Add_UpdatesFilePathOnNode()
     {
         var map = new FileNodeMap();
@@ -39,6 +59,18 @@ public sealed class FileNodeMapTests
         var children = map.GetChildren("\\Empty", null).ToList();
 
         Assert.Empty(children);
+    }
+
+    [Fact]
+    public void GetChildren_LeafNameMatchesChildKeySuffix()
+    {
+        var map = new FileNodeMap();
+        map.Add("\\Sub", MakeDir());
+        map.Add("\\Sub\\File.txt", MakeFile());
+
+        var child = map.GetChildren("\\Sub", null).Single();
+
+        Assert.Equal("File.txt", child.Value.LeafName);
     }
 
     [Fact]
@@ -87,6 +119,57 @@ public sealed class FileNodeMapTests
 
         Assert.Equal(2, children.Count);
         Assert.DoesNotContain(children, kvp => kvp.Key == "\\A");
+    }
+
+    [Fact]
+    public void GetTotalAllocated_AfterClearAll_ExcludesRemovedNodes()
+    {
+        var map = new FileNodeMap();
+
+        var root = MakeDir();
+        root.FileInfo.AllocationSize = 0;
+        map.Add("\\", root);
+
+        var f1 = MakeFile();
+        f1.FileInfo.AllocationSize = 512;
+        map.Add("\\f1", f1);
+
+        map.ClearAll();
+
+        Assert.Equal(0UL, map.GetTotalAllocated());
+    }
+
+    [Fact]
+    public void GetTotalAllocated_AfterRemove_SubtractsAllocationSize()
+    {
+        var map = new FileNodeMap();
+
+        var f1 = MakeFile();
+        f1.FileInfo.AllocationSize = 512;
+        var f2 = MakeFile();
+        f2.FileInfo.AllocationSize = 1024;
+        map.Add("\\f1", f1);
+        map.Add("\\f2", f2);
+
+        map.Remove("\\f1");
+
+        Assert.Equal(1024UL, map.GetTotalAllocated());
+    }
+
+    [Fact]
+    public void GetTotalAllocated_AfterReplacingExistingKey_ReplacesOldSize()
+    {
+        var map = new FileNodeMap();
+
+        var f1 = MakeFile();
+        f1.FileInfo.AllocationSize = 512;
+        map.Add("\\f1", f1);
+
+        var replacement = MakeFile();
+        replacement.FileInfo.AllocationSize = 2048;
+        map.Add("\\f1", replacement);
+
+        Assert.Equal(2048UL, map.GetTotalAllocated());
     }
 
     [Fact]
@@ -160,6 +243,19 @@ public sealed class FileNodeMapTests
     }
 
     [Fact]
+    public void RenameDescendants_UpdatesLeafNameOfDescendants()
+    {
+        var map = new FileNodeMap();
+        var file = MakeFile();
+        map.Add("\\Old\\Sub\\file.txt", file);
+
+        map.RenameDescendants("\\Old", "\\New");
+
+        Assert.Equal("file.txt", file.LeafName);
+        Assert.Equal("\\New\\Sub\\file.txt", file.FilePath);
+    }
+
+    [Fact]
     public void TryGet_AfterAdd_ReturnsNode()
     {
         var map = new FileNodeMap();
@@ -193,6 +289,39 @@ public sealed class FileNodeMapTests
         var found = map.TryGet("\\nonexistent.txt", out _);
 
         Assert.False(found);
+    }
+
+    [Fact]
+    public void UpdateAllocationSize_AdjustsCachedTotal()
+    {
+        var map = new FileNodeMap();
+
+        var f1 = MakeFile();
+        f1.FileInfo.AllocationSize = 512;
+        map.Add("\\f1", f1);
+
+        map.UpdateAllocationSize(f1, 2048);
+
+        Assert.Equal(2048UL, f1.FileInfo.AllocationSize);
+        Assert.Equal(2048UL, map.GetTotalAllocated());
+    }
+
+    [Fact]
+    public void UpdateAllocationSize_MultipleNodes_KeepsTotalAccurate()
+    {
+        var map = new FileNodeMap();
+
+        var f1 = MakeFile();
+        f1.FileInfo.AllocationSize = 512;
+        var f2 = MakeFile();
+        f2.FileInfo.AllocationSize = 1024;
+        map.Add("\\f1", f1);
+        map.Add("\\f2", f2);
+
+        map.UpdateAllocationSize(f1, 256);
+        map.UpdateAllocationSize(f2, 4096);
+
+        Assert.Equal(4352UL, map.GetTotalAllocated());
     }
 
     private static FileNode MakeDir() => new()
