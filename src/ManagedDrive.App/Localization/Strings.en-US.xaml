@@ -56,6 +56,8 @@
     <sys:String x:Key="CreateDisk.AutoSaveInterval">Interval (min)</sys:String>
     <sys:String x:Key="Tip.AutoSave">Periodically save the disk contents to the image file while mounted</sys:String>
     <sys:String x:Key="Tip.AutoSaveInterval">How often to auto-save, in minutes</sys:String>
+    <sys:String x:Key="Card.LastAutoSavePrefix">Last saved: {0}</sys:String>
+    <sys:String x:Key="Card.AutoSaveNever">Not yet saved</sys:String>
     <sys:String x:Key="Val.AutoSaveNoImage">Select an image file before enabling auto-save.</sys:String>
     <sys:String x:Key="Val.ImagePathOnRamDisk">The image file cannot be located on a RAM disk.</sys:String>
     <sys:String x:Key="Val.ImagePathInUse">This image file is already used by another RAM disk.</sys:String>

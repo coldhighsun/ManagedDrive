@@ -21,14 +21,15 @@ Create, mount and manage in-memory volumes that appear as normal drive letters i
 - Dynamic memory allocation — disk capacity is a ceiling, not a reservation; memory is consumed only as files are written and released when files are deleted
 - Edit a mounted disk — change label, capacity, auto-mount, and image path live without data loss; changing the drive letter or read-only flag remounts the disk
 - Optional persistence — save the disk contents to a `.mdr` image file and restore it on next mount; Save Image is always available and prompts for a file path if none is set
-- Optional auto-save — periodically save the disk contents to its image file every 1–60 minutes (configurable when creating or editing a disk); a save also fires immediately when enabled and once more right before the disk is unmounted or the app exits, so nothing is lost between intervals. The image file must be selected through the file picker (no manual typing) and cannot be located on a RAM disk or reused across two disks. Checking Read Only disables auto-save, since a read-only disk's contents never change
+- Optional auto-save — periodically save the disk contents to its image file every 1–60 minutes (configurable when creating or editing a disk); a save also fires immediately when enabled and once more right before the disk is unmounted or the app exits, so nothing is lost between intervals. The image file must be selected through the file picker (no manual typing) and cannot be located on a RAM disk or reused across two disks. Checking Read Only disables auto-save, since a read-only disk's contents never change. The disk card shows the timestamp of the most recent save while auto-save is enabled
 - Auto-mount saved profiles on application startup
 - Double-click a disk card to open it in Explorer
 - System-tray icon for quick access; minimizes to tray on window close
 - Tray icon tooltip — hover to see all mounted disks with live usage percentages
 - High-usage warning — system tray notification when a disk exceeds 90% capacity
 - Optional start-minimized mode — launch directly to tray without showing the main window
-- Temp directory redirection — right-click a disk to set it as the Windows TEMP/TMP directory; reset to the system default from the toolbar, context menu, or tray menu; automatically resets to the system default when the disk is unmounted or remounted; on startup, if TEMP/TMP points to any RAM disk profile a warning is shown — if the disk is not set to auto-mount, TEMP is also automatically reset to the system default; on user-initiated exit (menu button or tray menu), if TEMP/TMP points to any mounted RAM disk the app interrupts the exit, brings the main window to the foreground, and asks for confirmation before resetting and exiting — system-initiated shutdown bypasses this prompt
+- Temp directory redirection — right-click a disk to set it as the Windows TEMP/TMP directory; reset to the system default from the toolbar, context menu, or tray menu; automatically resets to the system default when the disk is unmounted or remounted; on startup, if TEMP/TMP points to any RAM disk profile a warning is shown — if the disk is not set to auto-mount, TEMP is also automatically reset to the system default
+- Exit confirmation — exiting the app (toolbar button or tray menu) while any disk is mounted brings the main window to the foreground and asks for confirmation; if TEMP/TMP points to any mounted RAM disk, the confirmation also warns that TEMP will be reset, and confirming resets it before exiting — system-initiated shutdown bypasses this prompt
 - NTFS-compatible volume identity — the RAM disk reports its filesystem type as NTFS, making it fully usable as a destination for tools that require an NTFS volume (e.g. WinGet, Windows Update staging, BITS downloads)
 - Format disk — right-click a disk and choose **Format** to delete all files and folders instantly (read-only disks are protected); the context menu is organized into three groups: navigation, configuration, and destructive operations
 - System tray menu — quick access to **Reset Temp Directory** (executes silently with a notification bubble result) and **Settings** in addition to Show, New Disk, and Exit
@@ -228,14 +229,15 @@ MIT
 - 动态内存分配——磁盘容量为上限而非预分配；内存随文件写入而占用，随文件删除而释放
 - 编辑已挂载磁盘——修改卷标、容量、自动挂载和镜像路径无需重挂即可实时生效；更改盘符或只读标志时自动重挂
 - 可选持久化——将磁盘内容保存为 `.mdr` 镜像文件，下次挂载时自动还原；保存镜像功能始终可用，未设置镜像路径时自动弹出选择对话框
-- 可选自动保存——每 1-60 分钟（创建或编辑磁盘时可配置）自动将磁盘内容保存到镜像文件；开启自动保存时会立即触发一次保存，卸载磁盘或退出应用前也会再保存一次，避免在两次定时保存之间丢失数据。镜像文件只能通过文件选择对话框设置（不可手动输入），且不能位于内存盘上，也不能与其他磁盘共用同一个镜像文件。勾选只读后自动保存会被禁用，因为只读磁盘的内容不会变化
+- 可选自动保存——每 1-60 分钟（创建或编辑磁盘时可配置）自动将磁盘内容保存到镜像文件；开启自动保存时会立即触发一次保存，卸载磁盘或退出应用前也会再保存一次，避免在两次定时保存之间丢失数据。镜像文件只能通过文件选择对话框设置（不可手动输入），且不能位于内存盘上，也不能与其他磁盘共用同一个镜像文件。勾选只读后自动保存会被禁用，因为只读磁盘的内容不会变化。开启自动保存时，磁盘卡片会显示最近一次保存的时间
 - 应用启动时自动挂载已保存的磁盘配置
 - 双击磁盘卡片可在资源管理器中打开对应盘符
 - 系统托盘图标，关闭窗口时最小化到托盘
 - 托盘图标悬浮提示——鼠标悬停时显示所有已挂载磁盘及其实时使用率
 - 高用量警告——磁盘使用率超过 90% 时通过系统托盘发出通知
 - 可选最小化启动——直接启动到托盘，不显示主窗口
-- 临时目录重定向——右键单击磁盘可将其设为 Windows TEMP/TMP 目录；通过工具栏、右键菜单或托盘菜单恢复系统默认值；卸载或重挂时自动恢复为系统默认临时目录；启动时若 TEMP/TMP 指向任一内存盘配置，均会显示警告——若该磁盘未设置自动挂载，还会自动将 TEMP 恢复为系统默认值；用户主动退出（菜单按钮或托盘菜单）时，若 TEMP/TMP 指向任一已挂载内存盘，程序将中断退出、将主窗口带到前台，并由用户确认重置后再退出——系统发送关闭信号时不触发此流程
+- 临时目录重定向——右键单击磁盘可将其设为 Windows TEMP/TMP 目录；通过工具栏、右键菜单或托盘菜单恢复系统默认值；卸载或重挂时自动恢复为系统默认临时目录；启动时若 TEMP/TMP 指向任一内存盘配置，均会显示警告——若该磁盘未设置自动挂载，还会自动将 TEMP 恢复为系统默认值
+- 退出确认——只要还有磁盘处于挂载状态，无论是通过工具栏按钮还是托盘菜单退出，程序都会将主窗口带到前台并要求用户确认；若 TEMP/TMP 恰好指向某个已挂载的内存盘，确认提示中还会额外警告将重置 TEMP，用户确认后先重置再退出——系统发送关闭信号时不触发此流程
 - NTFS 兼容卷标识——内存盘以 NTFS 文件系统类型上报，可作为需要 NTFS 卷的工具（如 WinGet、Windows Update 暂存、BITS 下载）的目标路径
 - 磁盘格式化——右键单击磁盘并选择**格式化**可立即删除所有文件和文件夹（只读磁盘受保护）；右键菜单按导航、配置、破坏性操作三个分组排列
 - 系统托盘菜单——在显示、新建磁盘、退出之外，新增**重置临时文件夹**（静默执行，结果通过气泡通知反馈）和**设置**快捷入口

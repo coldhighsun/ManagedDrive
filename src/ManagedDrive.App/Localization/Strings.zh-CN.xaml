@@ -56,6 +56,8 @@
     <sys:String x:Key="CreateDisk.AutoSaveInterval">间隔（分钟）</sys:String>
     <sys:String x:Key="Tip.AutoSave">挂载期间按间隔自动将磁盘内容保存到镜像文件</sys:String>
     <sys:String x:Key="Tip.AutoSaveInterval">自动保存的时间间隔（分钟）</sys:String>
+    <sys:String x:Key="Card.LastAutoSavePrefix">上次保存：{0}</sys:String>
+    <sys:String x:Key="Card.AutoSaveNever">尚未保存</sys:String>
     <sys:String x:Key="Val.AutoSaveNoImage">开启自动保存前请先选择镜像文件。</sys:String>
     <sys:String x:Key="Val.ImagePathOnRamDisk">镜像文件不能位于内存盘上。</sys:String>
     <sys:String x:Key="Val.ImagePathInUse">该镜像文件已被其他内存盘使用。</sys:String>
