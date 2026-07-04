@@ -36,6 +36,17 @@ public sealed class RamDisk : IDisposable
     public string MountPoint => _host.MountPoint() ?? Options.MountPoint;
 
     /// <summary>
+    /// Gets the UTC timestamp of the most recent successful image save (auto-save, final
+    /// save on unmount, or manual save via <see cref="SaveToImage"/>). <c>null</c> if no
+    /// save has occurred yet.
+    /// </summary>
+    public DateTime? LastSaveTime
+    {
+        get;
+        private set;
+    }
+
+    /// <summary>
     /// Gets the configuration used to create this disk.
     /// </summary>
     public DiskOptions Options
@@ -171,6 +182,8 @@ public sealed class RamDisk : IDisposable
             Options.CapacityBytes,
             Options.VolumeLabel,
             Options.PersistImagePath);
+
+        LastSaveTime = DateTime.UtcNow;
     }
 
     /// <summary>

@@ -237,13 +237,21 @@ public partial class App
 
     private void ExitApplication()
     {
-        if (_mainViewModel != null && IsTempOnAnyDisk(_mainViewModel.Disks))
+        var tempOnRamDisk = _mainViewModel != null && IsTempOnAnyDisk(_mainViewModel.Disks);
+
+        if (_mainViewModel != null && _mainViewModel.Disks.Count > 0)
         {
             ShowMainWindow();
 
+            var body = Loc.Get("Msg.ExitConfirmBody");
+            if (tempOnRamDisk)
+            {
+                body = body + "\n\n" + Loc.Get("Msg.ExitTempDirWillBeReset");
+            }
+
             var dialog = new ConfirmDialog(
-                Loc.Get("Msg.TrayExitTempResetTitle"),
-                Loc.Get("Msg.TrayExitTempResetBody"))
+                Loc.Get("Msg.ExitConfirmTitle"),
+                body)
             {
                 Owner = _mainWindow
             };
@@ -253,7 +261,10 @@ public partial class App
                 return;
             }
 
-            TempDirResetService.Reset();
+            if (tempOnRamDisk)
+            {
+                TempDirResetService.Reset();
+            }
         }
 
         _isExiting = true;
