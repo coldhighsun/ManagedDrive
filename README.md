@@ -37,6 +37,7 @@ Create, mount and manage in-memory volumes that appear as normal drive letters i
 - Main window opens centered on the primary screen and is brought to the foreground on startup
 - Bilingual UI — English and Simplified Chinese, auto-detected from system locale with manual override in Settings
 - Light and dark themes — follows the Windows app theme by default, with a manual override (System Default / Light / Dark) in Settings; switches instantly without restarting
+- At-a-glance disk cards — the drive-letter badge shows small corner icons for read-only and current-TEMP-directory status; the usage bar displays its percentage and turns to a warning color (along with the free-space text) once usage crosses 90%; read-only disks collapse the usage bar into a single line showing the backing image path instead of capacity figures that never change
 - About dialog — accessible from the overflow menu; shows the app version and a link to the GitHub repository
 
 ### Installation
@@ -257,6 +258,7 @@ MIT
 - 主窗口启动时居中显示于主屏幕并置于前台
 - 双语界面——中文与英文，根据系统语言自动切换，也可在设置中手动更改
 - 浅色/深色主题——默认跟随 Windows 系统主题，也可在设置中手动切换（跟随系统／浅色／深色），切换即时生效，无需重启
+- 一目了然的磁盘卡片——驱动器字母徽章上会叠加只读、当前临时目录等状态角标；用量进度条旁显示百分比，使用率超过 90% 时进度条及可用空间文字会变为警示色；只读磁盘的用量区域会替换为单行文字，显示其绑定的镜像文件路径，而非无意义的容量数字
 - 关于对话框——可从溢出菜单打开，显示应用版本及 GitHub 仓库链接
 
 ### 安装

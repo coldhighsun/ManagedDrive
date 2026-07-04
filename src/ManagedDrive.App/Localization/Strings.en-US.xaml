@@ -66,6 +66,8 @@
     <sys:String x:Key="Card.NeverWritten">Not yet modified</sys:String>
     <sys:String x:Key="Card.LastAutoSavePrefix">Last image save: {0}</sys:String>
     <sys:String x:Key="Card.NeverAutoSaved">Image not yet saved</sys:String>
+    <sys:String x:Key="Card.ReadOnly">Read-only</sys:String>
+    <sys:String x:Key="Card.ReadOnlyNoImage">Read-only · No image</sys:String>
     <sys:String x:Key="Val.AutoSaveNoImage">Select an image file before enabling auto-save.</sys:String>
     <sys:String x:Key="Val.ImagePathOnRamDisk">The image file cannot be located on a RAM disk.</sys:String>
     <sys:String x:Key="Val.ImagePathInUse">This image file is already used by another RAM disk.</sys:String>

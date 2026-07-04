@@ -193,38 +193,91 @@
                                 <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
 
-                            <!-- Drive letter badge -->
-                            <Border Width="48" Height="48" CornerRadius="8"
-                                    Background="{DynamicResource AppBarBackground}">
-                                <TextBlock Text="{Binding MountPoint}"
-                                           FontSize="18" FontWeight="SemiBold"
-                                           Foreground="{DynamicResource AppBarForeground}"
-                                           HorizontalAlignment="Center"
-                                           VerticalAlignment="Center"/>
-                            </Border>
+                            <!-- Drive letter badge, with read-only/temp-dir status corner icons -->
+                            <Grid Width="48" Height="48" VerticalAlignment="Center">
+                                <Border CornerRadius="8"
+                                        Background="{DynamicResource AppBarBackground}">
+                                    <TextBlock Text="{Binding MountPoint}"
+                                               FontSize="18" FontWeight="SemiBold"
+                                               Foreground="{DynamicResource AppBarForeground}"
+                                               HorizontalAlignment="Center"
+                                               VerticalAlignment="Center"/>
+                                </Border>
+                                <StackPanel Orientation="Horizontal"
+                                            HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                                            Margin="0,0,-4,-4">
+                                    <Border Width="18" Height="18" CornerRadius="9"
+                                            Background="{DynamicResource AppSurface}"
+                                            BorderBrush="{DynamicResource AppDivider}" BorderThickness="1"
+                                            ToolTip="{DynamicResource Card.ReadOnly}"
+                                            Visibility="{Binding IsReadOnly, Converter={StaticResource BoolToVis}}">
+                                        <TextBlock Text="&#xE72E;" Style="{StaticResource IconText}" FontSize="10"
+                                                   Foreground="{DynamicResource AppForegroundLight}"/>
+                                    </Border>
+                                    <Border Width="18" Height="18" CornerRadius="9" Margin="2,0,0,0"
+                                            Background="{DynamicResource AppSurface}"
+                                            BorderBrush="{DynamicResource AppDivider}" BorderThickness="1"
+                                            ToolTip="{DynamicResource Btn.RestoreDefaultTemp}"
+                                            Visibility="{Binding IsCurrentTempDir, Converter={StaticResource BoolToVis}}">
+                                        <TextBlock Text="&#xE8B7;" Style="{StaticResource IconText}" FontSize="10"
+                                                   Foreground="{DynamicResource AppPrimary}"/>
+                                    </Border>
+                                </StackPanel>
+                            </Grid>
 
-                            <!-- Label + progress bar + used/capacity -->
+                            <!-- Label + progress bar + used/capacity, or read-only summary -->
                             <StackPanel Grid.Column="1" Margin="12,0,16,0" VerticalAlignment="Center">
                                 <TextBlock Text="{Binding VolumeLabel}"
                                            FontSize="14" FontWeight="Medium"
                                            Foreground="{DynamicResource AppForeground}"/>
-                                <ProgressBar Style="{StaticResource SlimProgressBar}"
-                                             Minimum="0" Maximum="100"
-                                             Value="{Binding UsedPercent, Mode=OneWay}"/>
-                                <StackPanel Orientation="Horizontal">
-                                    <TextBlock Text="{Binding UsedFormatted}" FontSize="12"
-                                               Foreground="{DynamicResource AppForegroundLight}"/>
-                                    <TextBlock Text=" / " FontSize="12"
-                                               Foreground="{DynamicResource AppForegroundLight}"/>
-                                    <TextBlock Text="{Binding CapacityFormatted}" FontSize="12"
-                                               Foreground="{DynamicResource AppForegroundLight}"/>
+
+                                <StackPanel Visibility="{Binding IsReadOnly, Converter={StaticResource BoolToVis}}">
+                                    <TextBlock FontSize="12"
+                                               Foreground="{DynamicResource AppForegroundLight}"
+                                               TextTrimming="CharacterEllipsis">
+                                        <Run Text="{DynamicResource Card.ReadOnly}"/>
+                                        <Run Text=" · "/>
+                                        <Run Text="{Binding PersistImagePath, Mode=OneWay}"/>
+                                    </TextBlock>
                                 </StackPanel>
-                                <StackPanel Orientation="Horizontal">
+
+                                <StackPanel Visibility="{Binding IsNotReadOnly, Converter={StaticResource BoolToVis}}">
+                                    <Grid>
+                                        <ProgressBar Minimum="0" Maximum="100"
+                                                     Value="{Binding UsedPercent, Mode=OneWay}">
+                                            <ProgressBar.Style>
+                                                <Style TargetType="ProgressBar" BasedOn="{StaticResource SlimProgressBar}">
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding IsHighUsage}" Value="True">
+                                                            <Setter Property="Foreground" Value="{DynamicResource AppWarning}"/>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </ProgressBar.Style>
+                                        </ProgressBar>
+                                    </Grid>
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="{Binding UsedFormatted}" FontSize="12"
+                                                   Foreground="{DynamicResource AppForegroundLight}"/>
+                                        <TextBlock Text=" / " FontSize="12"
+                                                   Foreground="{DynamicResource AppForegroundLight}"/>
+                                        <TextBlock Text="{Binding CapacityFormatted}" FontSize="12"
+                                                   Foreground="{DynamicResource AppForegroundLight}"/>
+                                        <TextBlock Text="{Binding UsedPercent, StringFormat='  ({0:0}%)'}" FontSize="12"
+                                                   Foreground="{DynamicResource AppForegroundLight}"/>
+                                    </StackPanel>
+                                </StackPanel>
+
+                                <StackPanel Orientation="Horizontal" Margin="0,2,0,0">
+                                    <TextBlock Text="&#xE823;" FontFamily="Segoe Fluent Icons" FontSize="10"
+                                               Foreground="{DynamicResource AppForegroundLight}"
+                                               VerticalAlignment="Center" Margin="0,0,4,0"/>
                                     <TextBlock Text="{Binding LastContentWriteFormatted}"
                                                FontSize="11"
                                                Foreground="{DynamicResource AppForegroundLight}"/>
-                                    <TextBlock Text="  ·  " FontSize="11"
+                                    <TextBlock Text="&#xE74E;" FontFamily="Segoe Fluent Icons" FontSize="10"
                                                Foreground="{DynamicResource AppForegroundLight}"
+                                               VerticalAlignment="Center" Margin="12,0,4,0"
                                                Visibility="{Binding ShowLastAutoSave, Converter={StaticResource BoolToVis}}"/>
                                     <TextBlock Text="{Binding LastAutoSaveFormatted}"
                                                FontSize="11"
@@ -234,11 +287,22 @@
                             </StackPanel>
 
                             <!-- Free space -->
-                            <StackPanel Grid.Column="2" VerticalAlignment="Center" HorizontalAlignment="Right">
+                            <StackPanel Grid.Column="2" VerticalAlignment="Center" HorizontalAlignment="Right"
+                                        Visibility="{Binding IsNotReadOnly, Converter={StaticResource BoolToVis}}">
                                 <TextBlock Text="{Binding FreeFormatted}"
                                            FontSize="14" FontWeight="Medium"
-                                           Foreground="{DynamicResource AppForeground}"
-                                           HorizontalAlignment="Right"/>
+                                           HorizontalAlignment="Right">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="Foreground" Value="{DynamicResource AppForeground}"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding IsHighUsage}" Value="True">
+                                                    <Setter Property="Foreground" Value="{DynamicResource AppWarning}"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
                                 <TextBlock Text="{DynamicResource Col.Free}" FontSize="11"
                                            Foreground="{DynamicResource AppForegroundLight}"
                                            HorizontalAlignment="Right"/>
