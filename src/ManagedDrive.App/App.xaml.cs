@@ -9,10 +9,12 @@ namespace ManagedDrive.App;
 public partial class App
 {
     private const string SingleInstanceMutexName = "Global\\ManagedDrive-4A7C2E1B-9F3D-4B8A-A1C5-3E6D2F0B8C9A";
+
     // NotifyIcon has no MouseLeave event; Windows keeps resending MouseMove while the cursor
     // rests over the icon, so a short timer that gets restarted on every MouseMove effectively
     // hides the popup shortly after the cursor actually leaves the icon.
     private readonly TimeSpan _showTrayInfoPopup = TimeSpan.FromSeconds(2);
+
     private readonly DispatcherTimer _timerHiddenTrayInfoPopup = new();
     private bool _isExiting;
     private MainViewModel? _mainViewModel;
@@ -37,9 +39,11 @@ public partial class App
 
     private void App_Exit(object sender, ExitEventArgs e)
     {
+        SystemEvents.SessionEnding -= OnSessionEnding;
         SaveSettings();
         _trayIcon?.Dispose();
         _mainViewModel?.Dispose();
+
         // Unmounting a disk performs a final auto-save write; run it off the UI thread so
         // large disks don't freeze the shutdown sequence for longer than necessary.
         Task.Run(() => _mountManager?.Dispose()).Wait();
@@ -54,7 +58,7 @@ public partial class App
     {
         if (Environment.GetEnvironmentVariable("DOTNET_ENVIRONMENT") != "Development")
         {
-            _singleInstanceMutex = new Mutex(true, SingleInstanceMutexName, out var createdNew);
+            _singleInstanceMutex = new(true, SingleInstanceMutexName, out var createdNew);
             if (!createdNew)
             {
                 _singleInstanceMutex.Dispose();
@@ -69,16 +73,17 @@ public partial class App
             }
         }
 
-        _settings = new SettingsStore();
+        _settings = new();
         var config = _settings.Load();
         LanguageManager.Instance.ApplyDefault(config.Language);
         ThemeManager.Instance.ApplyDefault(config.Theme);
 
         CheckWinFspPrerequisite();
 
-        _mountManager = new MountManager();
-        _mainViewModel = new MainViewModel(_mountManager, _settings, config);
-        _mainWindow = new MainWindow(_mainViewModel);
+        _mountManager = new();
+        SystemEvents.SessionEnding += OnSessionEnding;
+        _mainViewModel = new(_mountManager, _settings, config);
+        _mainWindow = new(_mainViewModel);
         _mainWindow.Closing += MainWindow_Closing;
 
         SetupTrayIcon();
@@ -96,6 +101,29 @@ public partial class App
             _mainWindow.Show();
             _mainWindow.Activate();
             _mainWindow.Topmost = false;
+        }
+    }
+
+    private void ApplyTrayMenuTheme()
+    {
+        if (_trayIcon?.ContextMenuStrip is not { } menu)
+        {
+            return;
+        }
+
+        var isDark = ThemeManager.Instance.CurrentTheme == "dark";
+        var background = isDark
+            ? Color.FromArgb(0xFF, 0x2A, 0x2A, 0x2A)
+            : Color.White;
+        var foreground = isDark ? Color.White : Color.Black;
+
+        menu.ShowImageMargin = false;
+        menu.Renderer = new System.Windows.Forms.ToolStripProfessionalRenderer(new TrayColorTable(isDark));
+        menu.BackColor = background;
+        menu.ForeColor = foreground;
+        foreach (System.Windows.Forms.ToolStripItem item in menu.Items)
+        {
+            item.ForeColor = foreground;
         }
     }
 
@@ -224,17 +252,6 @@ public partial class App
             success ? System.Windows.Forms.ToolTipIcon.Info : System.Windows.Forms.ToolTipIcon.Warning);
     }
 
-    private void ShowAboutDialog()
-    {
-        var dialog = new AboutDialog();
-        if (_mainWindow is { IsLoaded: true })
-        {
-            dialog.Owner = _mainWindow;
-        }
-
-        dialog.ShowDialog();
-    }
-
     private void ExitApplication()
     {
         var tempOnRamDisk = _mainViewModel != null && IsTempOnAnyDisk(_mainViewModel.Disks);
@@ -267,6 +284,7 @@ public partial class App
             }
         }
 
+        SystemEvents.SessionEnding -= OnSessionEnding;
         _isExiting = true;
         SaveSettings();
         _trayIcon?.Dispose();
@@ -303,6 +321,33 @@ public partial class App
         _trayIcon.ShowBalloonTip(5000, title, body, System.Windows.Forms.ToolTipIcon.Warning);
     }
 
+    /// <summary>
+    /// Fires when Windows is logging off, shutting down, or restarting. WPF's own
+    /// <c>Exit</c> event does not fire in this case, and the OS may kill the process shortly
+    /// after this callback returns, so save every mounted disk's image synchronously and
+    /// without unmounting (unmounting is unnecessary here and would risk exceeding the
+    /// shutdown time budget).
+    /// </summary>
+    private void OnSessionEnding(object sender, SessionEndingEventArgs e)
+    {
+        if (_mountManager == null)
+        {
+            return;
+        }
+
+        foreach (var disk in _mountManager.GetAll())
+        {
+            try
+            {
+                disk.SaveToImageSafe();
+            }
+            catch
+            {
+                // Best-effort, matches RamDisk.Dispose()/TryAutoSave() swallow pattern.
+            }
+        }
+    }
+
     private void SaveSettings()
     {
         if (_settings == null || _mainViewModel == null)
@@ -310,7 +355,7 @@ public partial class App
             return;
         }
 
-        _settings.Save(new AppConfiguration
+        _settings.Save(new()
         {
             RunAtStartup = StartupManager.IsEnabled,
             StartMinimized = _settings.Load().StartMinimized,
@@ -332,11 +377,11 @@ public partial class App
         menu.Items.Add(new System.Windows.Forms.ToolStripSeparator());
         menu.Items.Add(Loc.Get("Tray.Exit"), null, (_, _) => Dispatcher.Invoke(ExitApplication));
 
-        var iconStream = GetResourceStream(new Uri("pack://application:,,,/ManagedDrive.ico"))!.Stream;
+        var iconStream = GetResourceStream(new("pack://application:,,,/ManagedDrive.ico"))!.Stream;
 
-        _trayIcon = new System.Windows.Forms.NotifyIcon
+        _trayIcon = new()
         {
-            Icon = new Icon(iconStream),
+            Icon = new(iconStream),
             ContextMenuStrip = menu,
             Text = "ManagedDrive",
             Visible = false,
@@ -348,7 +393,7 @@ public partial class App
             _timerHiddenTrayInfoPopup.Start();
         });
 
-        _trayInfoPopup = new Popup
+        _trayInfoPopup = new()
         {
             Child = new TrayTooltipView { DataContext = _mainViewModel },
             Placement = PlacementMode.Mouse,
@@ -399,6 +444,17 @@ public partial class App
         };
     }
 
+    private void ShowAboutDialog()
+    {
+        var dialog = new AboutDialog();
+        if (_mainWindow is { IsLoaded: true })
+        {
+            dialog.Owner = _mainWindow;
+        }
+
+        dialog.ShowDialog();
+    }
+
     private void ShowMainWindow()
     {
         _mainWindow?.Show();
@@ -419,29 +475,6 @@ public partial class App
     {
         ShowMainWindow();
         _mainViewModel?.SettingsCommand.Execute(null);
-    }
-
-    private void ApplyTrayMenuTheme()
-    {
-        if (_trayIcon?.ContextMenuStrip is not { } menu)
-        {
-            return;
-        }
-
-        var isDark = ThemeManager.Instance.CurrentTheme == "dark";
-        var background = isDark
-            ? Color.FromArgb(0xFF, 0x2A, 0x2A, 0x2A)
-            : Color.White;
-        var foreground = isDark ? Color.White : Color.Black;
-
-        menu.ShowImageMargin = false;
-        menu.Renderer = new System.Windows.Forms.ToolStripProfessionalRenderer(new TrayColorTable(isDark));
-        menu.BackColor = background;
-        menu.ForeColor = foreground;
-        foreach (System.Windows.Forms.ToolStripItem item in menu.Items)
-        {
-            item.ForeColor = foreground;
-        }
     }
 
     private void UpdateTrayMenuHeaders()

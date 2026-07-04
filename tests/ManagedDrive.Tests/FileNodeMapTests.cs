@@ -20,10 +20,10 @@ public sealed class FileNodeMapTests
         var map = new FileNodeMap();
         Assert.Equal(0, map.Count);
 
-        map.Add("\\a", new FileNode());
+        map.Add("\\a", new());
         Assert.Equal(1, map.Count);
 
-        map.Add("\\b", new FileNode());
+        map.Add("\\b", new());
         Assert.Equal(2, map.Count);
 
         map.Remove("\\a");

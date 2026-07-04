@@ -81,7 +81,7 @@ public partial class SettingsDialog
         var selectedTheme = ThemeBox.SelectedItem is ComboBoxItem { Tag: string th } && !string.IsNullOrEmpty(th) ? th : null;
         ThemeManager.Instance.Apply(selectedTheme);
 
-        Result = new AppConfiguration
+        Result = new()
         {
             RunAtStartup = runAtStartup,
             StartMinimized = StartMinimizedBox.IsChecked == true,

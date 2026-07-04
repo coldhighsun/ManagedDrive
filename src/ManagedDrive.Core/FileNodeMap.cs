@@ -41,6 +41,29 @@ public sealed class FileNodeMap
     }
 
     /// <summary>
+    /// Removes all nodes except the root directory entry (<c>\</c>).
+    /// </summary>
+    public void ClearAll()
+    {
+        lock (_syncRoot)
+        {
+            var toRemove = new List<string>();
+            foreach (var key in _map.Keys)
+            {
+                if (key != "\\")
+                {
+                    toRemove.Add(key);
+                }
+            }
+
+            foreach (var key in toRemove)
+            {
+                _map.Remove(key);
+            }
+        }
+    }
+
+    /// <summary>
     /// Returns a snapshot of all nodes in the map, in sorted path order.
     /// </summary>
     /// <returns>
@@ -71,7 +94,7 @@ public sealed class FileNodeMap
         List<KeyValuePair<string, FileNode>> snapshot;
         lock (_syncRoot)
         {
-            snapshot = new List<KeyValuePair<string, FileNode>>(_map);
+            snapshot = new(_map);
         }
 
         // For root "\" (length 1) the prefix equals dirPath itself; for others append "\"
@@ -124,29 +147,6 @@ public sealed class FileNodeMap
                 total += node.FileInfo.AllocationSize;
             }
             return total;
-        }
-    }
-
-    /// <summary>
-    /// Removes all nodes except the root directory entry (<c>\</c>).
-    /// </summary>
-    public void ClearAll()
-    {
-        lock (_syncRoot)
-        {
-            var toRemove = new List<string>();
-            foreach (var key in _map.Keys)
-            {
-                if (key != "\\")
-                {
-                    toRemove.Add(key);
-                }
-            }
-
-            foreach (var key in toRemove)
-            {
-                _map.Remove(key);
-            }
         }
     }
 

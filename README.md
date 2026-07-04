@@ -21,7 +21,8 @@ Create, mount and manage in-memory volumes that appear as normal drive letters i
 - Dynamic memory allocation — disk capacity is a ceiling, not a reservation; memory is consumed only as files are written and released when files are deleted
 - Edit a mounted disk — change label, capacity, auto-mount, and image path live without data loss; changing the drive letter or read-only flag remounts the disk
 - Optional persistence — save the disk contents to a `.mdr` image file and restore it on next mount; Save Image is always available and prompts for a file path if none is set
-- Optional auto-save — periodically save the disk contents to its image file every 1–60 minutes (configurable when creating or editing a disk); a save also fires immediately when enabled and once more right before the disk is unmounted or the app exits, so nothing is lost between intervals. The image file must be selected through the file picker (no manual typing) and cannot be located on a RAM disk or reused across two disks. Checking Read Only disables auto-save, since a read-only disk's contents never change. The disk card shows the timestamp of the most recent save while auto-save is enabled
+- Optional auto-save — periodically save the disk contents to its image file every 1–60 minutes (configurable when creating or editing a disk); a save also fires immediately when enabled and once more right before the disk is unmounted or the app exits, so nothing is lost between intervals. Periodic saves are skipped automatically when nothing has changed since the last save, avoiding unnecessary disk I/O on an idle disk. The image file must be selected through the file picker (no manual typing) and cannot be located on a RAM disk or reused across two disks. Checking Read Only disables auto-save and image compression, and requires an existing image file to be selected — a read-only disk's contents never change, so there is nothing to save or compress, and an empty read-only disk would be meaningless. The disk card shows the timestamp of the most recent content modification
+- Selectable image compression — choose a compression level (Off / Fast / Balanced / Max) for the saved `.mdr` image, trading save/load speed for file size; defaults to Fast
 - Auto-mount saved profiles on application startup
 - Double-click a disk card to open it in Explorer
 - System-tray icon for quick access; minimizes to tray on window close
@@ -116,9 +117,9 @@ Key classes:
 - **`FileNode`** — holds `Fsp.Interop.FileInfo` metadata, a `byte[]` data buffer, and a security descriptor.
 - **`FileNodeMap`** — a case-insensitive `SortedDictionary<string, FileNode>` that maps full paths to nodes, supports paginated child enumeration, and tracks total allocated bytes. Thread-safe via the C# 13 `Lock` type.
 - **`MemoryFileSystem : FileSystemBase`** — overrides all 21 required WinFsp callbacks (`Create`, `Open`, `Read`, `Write`, `Rename`, `CanDelete`, `ReadDirectoryEntry`, etc.) and enforces a configurable capacity ceiling, returning `STATUS_DISK_FULL` when exceeded; memory is not pre-allocated — each `FileNode` holds only the bytes actually written.
-- **`RamDisk`** — composes `MemoryFileSystem` with a `FileSystemHost`. The static `Create()` factory mounts the volume and polls until the drive letter is visible in the OS (up to 2.5 s), then broadcasts `SHCNE_DRIVEADD` to refresh Explorer. `Dispose()` unmounts. When an auto-save interval is configured, a background timer saves the image immediately and then on every interval; a final save runs on `Dispose()` so unmounting, remounting, or exiting never skips the latest save.
+- **`RamDisk`** — composes `MemoryFileSystem` with a `FileSystemHost`. The static `Create()` factory mounts the volume and polls until the drive letter is visible in the OS (up to 2.5 s), then broadcasts `SHCNE_DRIVEADD` to refresh Explorer. `Dispose()` unmounts. When an auto-save interval is configured, a background timer saves the image immediately and then on every interval, skipping ticks where nothing has changed since the last save; a final save (always performed, regardless of changes) runs on `Dispose()` so unmounting, remounting, or exiting never skips the latest save.
 - **`MountManager`** — thread-safe registry of active `RamDisk` instances. Fires `DiskMounted` / `DiskUnmounted` events.
-- **`DiskImageSerializer`** — reads/writes `.mdr` files (full FS state including metadata, ACLs, and file data).
+- **`DiskImageSerializer`** — reads/writes `.mdr` files (full FS state including metadata, ACLs, and file data), optionally gzip-compressed at a user-selectable level.
 
 ### Disk Image Format (`.mdr`)
 
@@ -127,11 +128,14 @@ A little-endian binary format:
 | Field | Type | Description |
 |---|---|---|
 | Magic | `byte[4]` | `MDRD` |
-| Version | `int32` | Currently `1` |
+| Version | `int32` | Currently `2` |
+| CompressionLevel | `byte` | `ImageCompressionLevel` value (0=None/1=Fastest/2=Optimal/3=SmallestSize); when not `None`, everything below is gzip-compressed |
 | Capacity | `uint64` | Configured capacity in bytes |
 | VolumeLabel | `string` | Length-prefixed UTF-8 |
 | NodeCount | `int32` | Number of nodes that follow |
 | *Node entries* | — | Path, metadata (10 fields), security descriptor, file data |
+
+Version `1` images (no `CompressionLevel` byte, always uncompressed) remain readable for backward compatibility.
 
 ### Settings & Persistence
 
@@ -229,7 +233,8 @@ MIT
 - 动态内存分配——磁盘容量为上限而非预分配；内存随文件写入而占用，随文件删除而释放
 - 编辑已挂载磁盘——修改卷标、容量、自动挂载和镜像路径无需重挂即可实时生效；更改盘符或只读标志时自动重挂
 - 可选持久化——将磁盘内容保存为 `.mdr` 镜像文件，下次挂载时自动还原；保存镜像功能始终可用，未设置镜像路径时自动弹出选择对话框
-- 可选自动保存——每 1-60 分钟（创建或编辑磁盘时可配置）自动将磁盘内容保存到镜像文件；开启自动保存时会立即触发一次保存，卸载磁盘或退出应用前也会再保存一次，避免在两次定时保存之间丢失数据。镜像文件只能通过文件选择对话框设置（不可手动输入），且不能位于内存盘上，也不能与其他磁盘共用同一个镜像文件。勾选只读后自动保存会被禁用，因为只读磁盘的内容不会变化。开启自动保存时，磁盘卡片会显示最近一次保存的时间
+- 可选自动保存——每 1-60 分钟（创建或编辑磁盘时可配置）自动将磁盘内容保存到镜像文件；开启自动保存时会立即触发一次保存，卸载磁盘或退出应用前也会再保存一次，避免在两次定时保存之间丢失数据。若自上次保存后内容未发生变化，定时保存会自动跳过，避免不必要的磁盘 IO。镜像文件只能通过文件选择对话框设置（不可手动输入），且不能位于内存盘上，也不能与其他磁盘共用同一个镜像文件。勾选只读后自动保存和镜像压缩都会被禁用，且必须选择一个已存在的镜像文件——只读磁盘的内容不会变化，因此无需保存或压缩，而一个没有内容的只读空盘也没有意义。磁盘卡片会显示磁盘内容最近一次被修改的时间
+- 可选镜像压缩——为保存的 `.mdr` 镜像选择压缩级别（不压缩／快速／均衡／最高），在保存/加载速度与文件大小之间取舍；默认快速
 - 应用启动时自动挂载已保存的磁盘配置
 - 双击磁盘卡片可在资源管理器中打开对应盘符
 - 系统托盘图标，关闭窗口时最小化到托盘
@@ -324,9 +329,9 @@ ManagedDrive 使用 **WinFsp**（Windows 文件系统代理）将内存目录树
 - **`FileNode`** — 持有 `Fsp.Interop.FileInfo` 元数据、`byte[]` 数据缓冲区及安全描述符。
 - **`FileNodeMap`** — 不区分大小写的 `SortedDictionary<string, FileNode>`，将完整路径映射到节点，支持分页子节点枚举，并追踪已分配字节总量。通过 C# 13 `Lock` 类型保证线程安全。
 - **`MemoryFileSystem : FileSystemBase`** — 覆写全部 21 个所需的 WinFsp 回调（`Create`、`Open`、`Read`、`Write`、`Rename`、`CanDelete`、`ReadDirectoryEntry` 等），并强制执行可配置的容量上限，超出时返回 `STATUS_DISK_FULL`；内存不预分配——每个 `FileNode` 仅保留实际写入的字节数。
-- **`RamDisk`** — 组合 `MemoryFileSystem` 与 `FileSystemHost`。静态工厂方法 `Create()` 挂载卷，并轮询直至驱动器号在系统中可见（最长 2.5 秒），随后向资源管理器广播 `SHCNE_DRIVEADD`。`Dispose()` 执行卸载。配置了自动保存间隔时，后台计时器会立即保存一次镜像，随后按间隔重复保存；`Dispose()` 还会执行一次收尾保存，确保卸载、重新挂载或退出应用时不会遗漏最新的改动。
+- **`RamDisk`** — 组合 `MemoryFileSystem` 与 `FileSystemHost`。静态工厂方法 `Create()` 挂载卷，并轮询直至驱动器号在系统中可见（最长 2.5 秒），随后向资源管理器广播 `SHCNE_DRIVEADD`。`Dispose()` 执行卸载。配置了自动保存间隔时，后台计时器会立即保存一次镜像，随后按间隔重复保存，若自上次保存后内容未变化则跳过该次保存；`Dispose()` 还会执行一次收尾保存（不受内容是否变化影响，始终执行），确保卸载、重新挂载或退出应用时不会遗漏最新的改动。
 - **`MountManager`** — 线程安全的活动 `RamDisk` 实例注册表，提供 `DiskMounted` / `DiskUnmounted` 事件。
-- **`DiskImageSerializer`** — 读写 `.mdr` 文件（保存完整文件系统状态，包含元数据、ACL 和文件数据）。
+- **`DiskImageSerializer`** — 读写 `.mdr` 文件（保存完整文件系统状态，包含元数据、ACL 和文件数据），可选按用户指定的级别进行 gzip 压缩。
 
 ### 磁盘镜像格式（`.mdr`）
 
@@ -335,11 +340,14 @@ ManagedDrive 使用 **WinFsp**（Windows 文件系统代理）将内存目录树
 | 字段 | 类型 | 说明 |
 |---|---|---|
 | 魔数 | `byte[4]` | `MDRD` |
-| 版本 | `int32` | 当前为 `1` |
+| 版本 | `int32` | 当前为 `2` |
+| 压缩级别 | `byte` | `ImageCompressionLevel` 取值（0=不压缩/1=快速/2=均衡/3=最高）；非 0 时，后续内容整体经 gzip 压缩 |
 | 容量 | `uint64` | 配置的容量（字节） |
 | 卷标 | `string` | 长度前缀 UTF-8 |
 | 节点数 | `int32` | 后续节点数量 |
 | *节点条目* | — | 路径、元数据（10 个字段）、安全描述符、文件数据 |
+
+版本 `1` 的镜像（不含压缩级别字段，始终不压缩）仍可正常读取，保持向后兼容。
 
 ### 配置与持久化
 

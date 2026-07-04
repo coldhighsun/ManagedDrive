@@ -8,10 +8,18 @@ namespace ManagedDrive.App.Views;
 /// </summary>
 public partial class CreateDiskDialog
 {
+    private static readonly List<ImageCompressionLevel> CompressionLevels =
+    [
+        ImageCompressionLevel.None,
+        ImageCompressionLevel.Fastest,
+        ImageCompressionLevel.Optimal,
+        ImageCompressionLevel.SmallestSize,
+    ];
+
     private readonly ulong _maxCapacityBytes;
     private readonly IReadOnlyList<DiskOptions> _otherDisks;
-    private int _capacityValue = 2;
     private int _capacityMaximum;
+    private int _capacityValue = 2;
     private int _intervalValue = 10;
 
     /// <summary>
@@ -34,6 +42,14 @@ public partial class CreateDiskDialog
         CapacityUnitBox.SelectionChanged += CapacityUnitBox_SelectionChanged;
         _capacityMaximum = GetMaxCapacityValue();
         UpdateCapacityDisplay();
+
+        foreach (var level in CompressionLevels)
+        {
+            CompressionLevelBox.Items.Add(new CompressionLevelItem(level, Loc.Get(CompressionLevelKey(level))));
+        }
+
+        CompressionLevelBox.SelectedIndex = CompressionLevels.IndexOf(ImageCompressionLevel.Fastest);
+        UpdateCompressionLevelState();
     }
 
     /// <summary>
@@ -74,8 +90,10 @@ public partial class CreateDiskDialog
         ReadOnlyBox.IsChecked = existing.ReadOnly;
         AutoMountBox.IsChecked = existing.AutoMount;
         ImagePathBox.Text = existing.PersistImagePath ?? string.Empty;
+        CompressionLevelBox.SelectedIndex = CompressionLevels.IndexOf(existing.CompressionLevel);
+        UpdateCompressionLevelState();
 
-        if (existing.AutoSaveIntervalMinutes is { } minutes && !existing.ReadOnly)
+        if (existing is { AutoSaveIntervalMinutes: { } minutes, ReadOnly: false })
         {
             AutoSaveBox.IsChecked = true;
             AutoSaveIntervalPanel.IsEnabled = true;
@@ -88,7 +106,10 @@ public partial class CreateDiskDialog
     /// Gets the <see cref="DiskOptions"/> built from user input after <c>OK</c> is pressed.
     /// <c>null</c> when the dialog was cancelled.
     /// </summary>
-    public DiskOptions? Result { get; private set; }
+    public DiskOptions? Result
+    {
+        get; private set;
+    }
 
     private int CapacityValue
     {
@@ -97,52 +118,6 @@ public partial class CreateDiskDialog
         {
             _capacityValue = Math.Clamp(value, 1, _capacityMaximum);
             UpdateCapacityDisplay();
-        }
-    }
-
-    private void UpdateCapacityDisplay()
-    {
-        CapacityBox.Text = _capacityValue.ToString();
-    }
-
-    private int GetMaxCapacityValue()
-    {
-        var isGb = CapacityUnitBox.SelectedItem as string == "GB";
-        var divisor = isGb ? 1024UL * 1024 * 1024 : 1024UL * 1024;
-        return (int)Math.Max(1, Math.Min(_maxCapacityBytes / divisor, int.MaxValue));
-    }
-
-    private void CapacityUnitBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
-    {
-        _capacityMaximum = GetMaxCapacityValue();
-        if (_capacityValue > _capacityMaximum)
-        {
-            CapacityValue = _capacityMaximum;
-        }
-    }
-
-    private void CapacityBox_PreviewTextInput(object sender, TextCompositionEventArgs e)
-    {
-        e.Handled = !int.TryParse(e.Text, out _);
-    }
-
-    private void CapacityUp_Click(object sender, RoutedEventArgs e)
-    {
-        ParseCapacityFromBox();
-        CapacityValue = _capacityValue + 1;
-    }
-
-    private void CapacityDown_Click(object sender, RoutedEventArgs e)
-    {
-        ParseCapacityFromBox();
-        CapacityValue = _capacityValue - 1;
-    }
-
-    private void ParseCapacityFromBox()
-    {
-        if (int.TryParse(CapacityBox.Text, out var parsed))
-        {
-            _capacityValue = parsed;
         }
     }
 
@@ -156,68 +131,17 @@ public partial class CreateDiskDialog
         }
     }
 
-    private void AutoSaveIntervalUp_Click(object sender, RoutedEventArgs e)
+    private static string CompressionLevelKey(ImageCompressionLevel level) => level switch
     {
-        ParseIntervalFromBox();
-        IntervalValue = _intervalValue + 1;
-    }
+        ImageCompressionLevel.None => "CompressionLevel.None",
+        ImageCompressionLevel.Fastest => "CompressionLevel.Fastest",
+        ImageCompressionLevel.SmallestSize => "CompressionLevel.SmallestSize",
+        _ => "CompressionLevel.Optimal",
+    };
 
-    private void AutoSaveIntervalDown_Click(object sender, RoutedEventArgs e)
+    private sealed record CompressionLevelItem(ImageCompressionLevel Level, string Display)
     {
-        ParseIntervalFromBox();
-        IntervalValue = _intervalValue - 1;
-    }
-
-    private void ParseIntervalFromBox()
-    {
-        if (int.TryParse(AutoSaveIntervalBox.Text, out var parsed))
-        {
-            _intervalValue = parsed;
-        }
-    }
-
-    private void AutoSaveBox_CheckedChanged(object sender, RoutedEventArgs e)
-    {
-        UpdateAutoSaveIntervalPanelState();
-    }
-
-    private void ReadOnlyBox_CheckedChanged(object sender, RoutedEventArgs e)
-    {
-        AutoSaveBox.IsEnabled = ReadOnlyBox.IsChecked != true;
-        UpdateAutoSaveIntervalPanelState();
-    }
-
-    private void UpdateAutoSaveIntervalPanelState()
-    {
-        AutoSaveIntervalPanel.IsEnabled = AutoSaveBox.IsChecked == true && ReadOnlyBox.IsChecked != true;
-    }
-
-    private void ClearImagePath_Click(object sender, RoutedEventArgs e)
-    {
-        ImagePathBox.Text = string.Empty;
-    }
-
-    private void ImagePathBox_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
-    {
-        e.Handled = true;
-        OpenImagePathDialog();
-    }
-
-    private void OpenImagePathDialog()
-    {
-        var dlg = new SaveFileDialog
-        {
-            Title = Loc.Get("SaveDlg.Title"),
-            Filter = Loc.Get("SaveDlg.Filter"),
-            DefaultExt = ".mdr",
-            OverwritePrompt = false,
-            FileName = ImagePathBox.Text,
-        };
-
-        if (dlg.ShowDialog() == true)
-        {
-            ImagePathBox.Text = dlg.FileName;
-        }
+        public override string ToString() => Display;
     }
 
     private static bool IsValidImagePath(string path)
@@ -242,6 +166,68 @@ public partial class CreateDiskDialog
         {
             return false;
         }
+    }
+
+    private void AutoSaveBox_CheckedChanged(object sender, RoutedEventArgs e)
+    {
+        UpdateAutoSaveIntervalPanelState();
+    }
+
+    private void AutoSaveIntervalDown_Click(object sender, RoutedEventArgs e)
+    {
+        ParseIntervalFromBox();
+        IntervalValue = _intervalValue - 1;
+    }
+
+    private void AutoSaveIntervalUp_Click(object sender, RoutedEventArgs e)
+    {
+        ParseIntervalFromBox();
+        IntervalValue = _intervalValue + 1;
+    }
+
+    private void CapacityBox_PreviewTextInput(object sender, TextCompositionEventArgs e)
+    {
+        e.Handled = !int.TryParse(e.Text, out _);
+    }
+
+    private void CapacityDown_Click(object sender, RoutedEventArgs e)
+    {
+        ParseCapacityFromBox();
+        CapacityValue = _capacityValue - 1;
+    }
+
+    private void CapacityUnitBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        _capacityMaximum = GetMaxCapacityValue();
+        if (_capacityValue > _capacityMaximum)
+        {
+            CapacityValue = _capacityMaximum;
+        }
+    }
+
+    private void CapacityUp_Click(object sender, RoutedEventArgs e)
+    {
+        ParseCapacityFromBox();
+        CapacityValue = _capacityValue + 1;
+    }
+
+    private void ClearImagePath_Click(object sender, RoutedEventArgs e)
+    {
+        ImagePathBox.Text = string.Empty;
+        UpdateCompressionLevelState();
+    }
+
+    private int GetMaxCapacityValue()
+    {
+        var isGb = CapacityUnitBox.SelectedItem as string == "GB";
+        var divisor = isGb ? 1024UL * 1024 * 1024 : 1024UL * 1024;
+        return (int)Math.Max(1, Math.Min(_maxCapacityBytes / divisor, int.MaxValue));
+    }
+
+    private void ImagePathBox_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        e.Handled = true;
+        OpenImagePathDialog();
     }
 
     private void LoadDriveLetters(char? reservedLetter)
@@ -273,6 +259,47 @@ public partial class CreateDiskDialog
 
         Result = options;
         DialogResult = true;
+    }
+
+    private void OpenImagePathDialog()
+    {
+        var dlg = new SaveFileDialog
+        {
+            Title = Loc.Get("SaveDlg.Title"),
+            Filter = Loc.Get("SaveDlg.Filter"),
+            DefaultExt = ".mdr",
+            OverwritePrompt = false,
+            FileName = ImagePathBox.Text,
+        };
+
+        if (dlg.ShowDialog() == true)
+        {
+            ImagePathBox.Text = dlg.FileName;
+            UpdateCompressionLevelState();
+        }
+    }
+
+    private void ParseCapacityFromBox()
+    {
+        if (int.TryParse(CapacityBox.Text, out var parsed))
+        {
+            _capacityValue = parsed;
+        }
+    }
+
+    private void ParseIntervalFromBox()
+    {
+        if (int.TryParse(AutoSaveIntervalBox.Text, out var parsed))
+        {
+            _intervalValue = parsed;
+        }
+    }
+
+    private void ReadOnlyBox_CheckedChanged(object sender, RoutedEventArgs e)
+    {
+        AutoSaveBox.IsEnabled = ReadOnlyBox.IsChecked != true;
+        UpdateAutoSaveIntervalPanelState();
+        UpdateCompressionLevelState();
     }
 
     private bool TryBuildOptions(out DiskOptions? options, out string error)
@@ -327,6 +354,21 @@ public partial class CreateDiskDialog
 
         var isReadOnly = ReadOnlyBox.IsChecked == true;
 
+        if (isReadOnly)
+        {
+            if (imagePath == null)
+            {
+                error = Loc.Get("Val.ReadOnlyRequiresImage");
+                return false;
+            }
+
+            if (!File.Exists(imagePath))
+            {
+                error = Loc.Get("Val.ReadOnlyImageNotFound");
+                return false;
+            }
+        }
+
         uint? autoSaveIntervalMinutes = null;
         if (AutoSaveBox.IsChecked == true && !isReadOnly)
         {
@@ -346,7 +388,7 @@ public partial class CreateDiskDialog
             autoSaveIntervalMinutes = (uint)_intervalValue;
         }
 
-        options = new DiskOptions
+        options = new()
         {
             MountPoint = mountPoint,
             VolumeLabel = VolumeLabelBox.Text.Trim(),
@@ -355,9 +397,26 @@ public partial class CreateDiskDialog
             AutoMount = AutoMountBox.IsChecked == true,
             PersistImagePath = imagePath,
             AutoSaveIntervalMinutes = autoSaveIntervalMinutes,
+            CompressionLevel = (CompressionLevelBox.SelectedItem as CompressionLevelItem)?.Level
+                ?? ImageCompressionLevel.Fastest,
         };
 
         error = string.Empty;
         return true;
+    }
+
+    private void UpdateAutoSaveIntervalPanelState()
+    {
+        AutoSaveIntervalPanel.IsEnabled = AutoSaveBox.IsChecked == true && ReadOnlyBox.IsChecked != true;
+    }
+
+    private void UpdateCapacityDisplay()
+    {
+        CapacityBox.Text = _capacityValue.ToString();
+    }
+
+    private void UpdateCompressionLevelState()
+    {
+        CompressionLevelBox.IsEnabled = !string.IsNullOrEmpty(ImagePathBox.Text) && ReadOnlyBox.IsChecked != true;
     }
 }
