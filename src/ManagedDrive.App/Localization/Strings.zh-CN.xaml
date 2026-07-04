@@ -66,6 +66,8 @@
     <sys:String x:Key="Card.NeverWritten">尚未写入</sys:String>
     <sys:String x:Key="Card.LastAutoSavePrefix">上次保存镜像：{0}</sys:String>
     <sys:String x:Key="Card.NeverAutoSaved">镜像尚未保存</sys:String>
+    <sys:String x:Key="Card.ReadOnly">只读</sys:String>
+    <sys:String x:Key="Card.ReadOnlyNoImage">只读 · 无镜像</sys:String>
     <sys:String x:Key="Val.AutoSaveNoImage">开启自动保存前请先选择镜像文件。</sys:String>
     <sys:String x:Key="Val.ImagePathOnRamDisk">镜像文件不能位于内存盘上。</sys:String>
     <sys:String x:Key="Val.ImagePathInUse">该镜像文件已被其他内存盘使用。</sys:String>

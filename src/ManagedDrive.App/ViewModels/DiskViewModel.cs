@@ -90,9 +90,24 @@ public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
     }
 
     /// <summary>
+    /// Gets whether disk usage is at or above the high-usage warning threshold.
+    /// </summary>
+    public bool IsHighUsage => _highUsageWarned;
+
+    /// <summary>
     /// Gets the inverse of <see cref="IsCurrentTempDir"/> for visibility binding.
     /// </summary>
     public bool IsNotCurrentTempDir => !_isCurrentTempDir;
+
+    /// <summary>
+    /// Gets the inverse of <see cref="IsReadOnly"/> for visibility binding.
+    /// </summary>
+    public bool IsNotReadOnly => !_disk.Options.ReadOnly;
+
+    /// <summary>
+    /// Gets whether this disk is read-only.
+    /// </summary>
+    public bool IsReadOnly => _disk.Options.ReadOnly;
 
     /// <summary>
     /// Gets the timestamp of the most recent image save, formatted for display.
@@ -120,6 +135,11 @@ public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
     {
         get;
     }
+
+    /// <summary>
+    /// Gets the backing image file path, or <c>null</c> if this disk has none.
+    /// </summary>
+    public string? PersistImagePath => _disk.Options.PersistImagePath;
 
     /// <summary>
     /// Gets whether this disk has auto-save enabled, controlling visibility of the
@@ -175,11 +195,13 @@ public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
         if (!_highUsageWarned && used >= HighUsageThreshold)
         {
             _highUsageWarned = true;
+            OnPropertyChanged(nameof(IsHighUsage));
             HighUsageWarning?.Invoke(this, EventArgs.Empty);
         }
         else if (_highUsageWarned && used < HighUsageResetThreshold)
         {
             _highUsageWarned = false;
+            OnPropertyChanged(nameof(IsHighUsage));
         }
     }
 
