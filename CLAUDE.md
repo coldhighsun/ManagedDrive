@@ -110,7 +110,11 @@ Package versions are pinned in `Directory.Packages.props` (Central Package Manag
 
 ### Benchmarks
 
-`ManagedDrive.Benchmarks` (separate project, not in the solution) uses BenchmarkDotNet to compare RamDisk vs physical disk for sequential read/write at 4 KB, 1 MB, and 64 MB. Drive letter `R:` must be free. Run in Release mode: `dotnet run --project benchmarks/ManagedDrive.Benchmarks -c Release`.
+`ManagedDrive.Benchmarks` (separate project, not in the solution) uses BenchmarkDotNet to compare RamDisk vs physical disk. `DriveLetterHelper.FindFreeMountPoint()` auto-selects the first free drive letter between `D:` and `Z:` (no fixed letter required). Two benchmark classes, both using `[SimpleJob(warmupCount: 2, iterationCount: 3)]` to keep total run time low:
+- `SequentialReadWriteBenchmarks` — sequential read/write at 4 KB and 1 MB.
+- `RandomAccessBenchmarks` — random-seek reads and small-file high-frequency writes.
+
+Run in Release mode: `dotnet run --project benchmarks/ManagedDrive.Benchmarks -c Release` (prompts to pick which class(es) to run), or pass `--filter '*ClassName*'` to run one non-interactively.
 
 ### Release pipeline
 

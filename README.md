@@ -103,9 +103,11 @@ ManagedDrive/
 │       └── FileNodeMapTests.cs
 │
 └── benchmarks/
-    └── ManagedDrive.Benchmarks/    # BenchmarkDotNet sequential read/write throughput benchmarks
+    └── ManagedDrive.Benchmarks/    # BenchmarkDotNet throughput/latency benchmarks
         ├── Program.cs
-        └── ReadWriteBenchmarks.cs
+        ├── DriveLetterHelper.cs           #   Picks a free mount point (D:-Z:) for the RAM disk
+        ├── SequentialReadWriteBenchmarks.cs #  Sequential read/write at 4 KB and 1 MB
+        └── RandomAccessBenchmarks.cs        #  Random-seek reads and small-file high-frequency writes
 ```
 
 ### How It Works
@@ -145,39 +147,45 @@ Version `1` images (no `CompressionLevel` byte, always uncompressed) remain read
 
 ### Performance
 
-Sequential read/write throughput measured with [BenchmarkDotNet](https://benchmarkdotnet.org/) on:
+Read/write, random-access, and small-file throughput measured with [BenchmarkDotNet](https://benchmarkdotnet.org/) on:
 
 | | |
 |---|---|
-| **CPU** | Intel Core Ultra 7 255H, 16C/16T, 2.0 GHz base |
-| **RAM** | 32 GB |
-| **Disk** | Samsung MZVLC512HFJD NVMe SSD (512 GB) |
-| **OS** | Windows 11 25H2 (Build 26200.7462) |
+| **CPU** | Intel Core i9-13980HX, 24C/32T, 2.2 GHz base |
+| **RAM** | 64 GB |
+| **Disk** | KIOXIA KXG8AZNV1T02 NVMe SSD (1 TB) |
+| **OS** | Windows 11 Pro (Build 26200) |
 | **Runtime** | .NET 10.0.9 · BenchmarkDotNet 0.15.8 |
 
-Each benchmark creates or reads a single file via `FileStream`. Writes use `FileOptions.WriteThrough` (no OS write-back cache) and reads use `FileOptions.SequentialScan`.
+`SequentialReadWriteBenchmarks` creates or reads a single file via `FileStream` at 4 KB and 1 MB. Writes use `FileOptions.WriteThrough` (no OS write-back cache) and reads use `FileOptions.SequentialScan`.
 
 | File Size | Operation | RAM Disk | NVMe SSD | Ratio |
 |---:|---|---:|---:|---:|
-| 4 KB | Write | 1.6 MB/s | 0.9 MB/s | **1.8× faster** |
-| 4 KB | Read | 3.1 MB/s | 6.4 MB/s | 0.5× slower |
-| 1 MB | Write | 424 MB/s | 87 MB/s | **4.8× faster** |
-| 1 MB | Read | 562 MB/s | 1,290 MB/s | 0.4× slower |
-| 64 MB | Write | 3,281 MB/s | 918 MB/s | **3.6× faster** |
-| 64 MB | Read | 1,955 MB/s | 3,224 MB/s | 0.6× slower |
+| 4 KB | Write | 1.5 MB/s | 0.8 MB/s | **1.9× faster** |
+| 4 KB | Read | 2.2 MB/s | 4.5 MB/s | 0.5× slower |
+| 1 MB | Write | 279 MB/s | 85 MB/s | **3.3× faster** |
+| 1 MB | Read | 547 MB/s | 1,139 MB/s | 0.5× slower |
 
 > **Why are RAM disk reads slower?**  
 > Physical disk reads appear fast because the OS page cache keeps recently-written files in DRAM. The RAM disk reads go through WinFsp's kernel–userspace bridge, which adds IPC overhead compared to the direct page-cache path. In workloads where data is written once and read many times from cold cache (e.g. build outputs, temp files that outlive page-cache pressure), the RAM disk will consistently outperform SSD on reads too.
 >
 > **4 KB note:** small-file results are dominated by file-open/close syscall overhead, not transfer speed.
 
-Raw latency (DefaultJob mean):
+Raw latency (mean, `[SimpleJob(warmupCount: 2, iterationCount: 3)]`):
 
 | File Size | RamDisk Write | RamDisk Read | NVMe Write | NVMe Read |
 |---:|---:|---:|---:|---:|
-| 4 KB | 2,440 μs | 1,259 μs | 4,399 μs | 610 μs |
-| 1 MB | 2,361 μs | 1,779 μs | 11,446 μs | 775 μs |
-| 64 MB | 19,506 μs | 32,746 μs | 69,695 μs | 19,852 μs |
+| 4 KB | 2,582 μs | 1,785 μs | 4,988 μs | 871 μs |
+| 1 MB | 3,580 μs | 1,829 μs | 11,740 μs | 878 μs |
+
+`RandomAccessBenchmarks` covers seek-heavy and small-file-heavy patterns not exercised by the sequential benchmarks above:
+
+| Scenario | RAM Disk | NVMe SSD | Ratio |
+|---|---:|---:|---:|
+| Random 4 KB read (30 seeks over a 16 MB file) | 3.26 ms | 1.00 ms | 3.3× slower |
+| 30× small-file (4 KB) create+write | 75.5 ms (2.52 ms/file) | 115.1 ms (3.84 ms/file) | **1.5× faster** |
+
+Random reads are slower on the RAM disk for the same reason sequential reads are (WinFsp kernel–userspace round-trip per I/O), while small-file writes are faster because RAM disk file creation skips physical block allocation and journaling entirely — at the cost of far higher managed memory allocation per operation (see `Alloc Ratio` in the raw BenchmarkDotNet output).
 
 ### Running Tests
 
@@ -189,13 +197,13 @@ Tests cover `FileNode` (allocation unit alignment, index numbers) and `FileNodeM
 
 ### Running Benchmarks
 
-Drive letter `R:` must be free. WinFsp must be installed.
+WinFsp must be installed. The benchmark project auto-selects the first free drive letter between `D:` and `Z:` — no manual configuration needed.
 
 ```powershell
 dotnet run --project benchmarks/ManagedDrive.Benchmarks -c Release
 ```
 
-Results are written to `BenchmarkDotNet.Artifacts/results/` in the working directory.
+BenchmarkDotNet will prompt you to pick which benchmark class(es) to run (`SequentialReadWriteBenchmarks`, `RandomAccessBenchmarks`, or both). Results are written to `BenchmarkDotNet.Artifacts/results/` in the working directory.
 
 ### Known Issues
 
@@ -315,9 +323,11 @@ ManagedDrive/
 │       └── FileNodeMapTests.cs
 │
 └── benchmarks/
-    └── ManagedDrive.Benchmarks/    # BenchmarkDotNet 顺序读写吞吐量基准测试
+    └── ManagedDrive.Benchmarks/    # BenchmarkDotNet 吞吐量/延迟基准测试
         ├── Program.cs
-        └── ReadWriteBenchmarks.cs
+        ├── DriveLetterHelper.cs             #   为内存盘自动选择一个空闲盘符（D:-Z:）
+        ├── SequentialReadWriteBenchmarks.cs #  4 KB / 1 MB 顺序读写
+        └── RandomAccessBenchmarks.cs        #  随机寻址读取 + 小文件高频写入
 ```
 
 ### 工作原理
@@ -357,39 +367,45 @@ ManagedDrive 使用 **WinFsp**（Windows 文件系统代理）将内存目录树
 
 ### 性能基准
 
-使用 [BenchmarkDotNet](https://benchmarkdotnet.org/) 测量顺序读写吞吐量，测试环境：
+使用 [BenchmarkDotNet](https://benchmarkdotnet.org/) 测量读写、随机访问及小文件吞吐量，测试环境：
 
 | | |
 |---|---|
-| **CPU** | Intel Core Ultra 7 255H，16C/16T，基础频率 2.0 GHz |
-| **内存** | 32 GB |
-| **磁盘** | Samsung MZVLC512HFJD NVMe SSD（512 GB） |
-| **系统** | Windows 11 25H2（Build 26200.7462） |
+| **CPU** | Intel Core i9-13980HX，24C/32T，基础频率 2.2 GHz |
+| **内存** | 64 GB |
+| **磁盘** | KIOXIA KXG8AZNV1T02 NVMe SSD（1 TB） |
+| **系统** | Windows 11 Pro（Build 26200） |
 | **运行时** | .NET 10.0.9 · BenchmarkDotNet 0.15.8 |
 
-每个 benchmark 通过 `FileStream` 对单个文件进行创建或读取操作。写入使用 `FileOptions.WriteThrough`（禁用操作系统写回缓存），读取使用 `FileOptions.SequentialScan`。
+`SequentialReadWriteBenchmarks` 通过 `FileStream` 在 4 KB 和 1 MB 大小下对单个文件进行创建或读取操作。写入使用 `FileOptions.WriteThrough`（禁用操作系统写回缓存），读取使用 `FileOptions.SequentialScan`。
 
 | 文件大小 | 操作 | 内存盘 | NVMe SSD | 倍率 |
 |---:|---|---:|---:|---:|
-| 4 KB | 写入 | 1.6 MB/s | 0.9 MB/s | **快 1.8×** |
-| 4 KB | 读取 | 3.1 MB/s | 6.4 MB/s | 慢 0.5× |
-| 1 MB | 写入 | 424 MB/s | 87 MB/s | **快 4.8×** |
-| 1 MB | 读取 | 562 MB/s | 1,290 MB/s | 慢 0.4× |
-| 64 MB | 写入 | 3,281 MB/s | 918 MB/s | **快 3.6×** |
-| 64 MB | 读取 | 1,955 MB/s | 3,224 MB/s | 慢 0.6× |
+| 4 KB | 写入 | 1.5 MB/s | 0.8 MB/s | **快 1.9×** |
+| 4 KB | 读取 | 2.2 MB/s | 4.5 MB/s | 慢 0.5× |
+| 1 MB | 写入 | 279 MB/s | 85 MB/s | **快 3.3×** |
+| 1 MB | 读取 | 547 MB/s | 1,139 MB/s | 慢 0.5× |
 
 > **为何内存盘读取反而更慢？**  
 > 物理磁盘的读取速度之所以快，是因为操作系统页面缓存将最近写入的文件保留在 DRAM 中。内存盘的读取则需要经过 WinFsp 的内核–用户态桥接，引入了额外的 IPC 开销，比直接走页面缓存路径更慢。在数据写入一次、多次读取且页面缓存已失效的场景下（如构建产物、临时文件），内存盘的读取性能同样会超越 SSD。
 >
 > **4 KB 说明：** 小文件结果主要受文件打开/关闭的系统调用开销主导，不反映实际传输速率。
 
-原始延迟（DefaultJob 均值）：
+原始延迟（均值，`[SimpleJob(warmupCount: 2, iterationCount: 3)]`）：
 
 | 文件大小 | 内存盘写入 | 内存盘读取 | NVMe 写入 | NVMe 读取 |
 |---:|---:|---:|---:|---:|
-| 4 KB | 2,440 μs | 1,259 μs | 4,399 μs | 610 μs |
-| 1 MB | 2,361 μs | 1,779 μs | 11,446 μs | 775 μs |
-| 64 MB | 19,506 μs | 32,746 μs | 69,695 μs | 19,852 μs |
+| 4 KB | 2,582 μs | 1,785 μs | 4,988 μs | 871 μs |
+| 1 MB | 3,580 μs | 1,829 μs | 11,740 μs | 878 μs |
+
+`RandomAccessBenchmarks` 补充了顺序读写未覆盖的寻址密集与小文件密集场景：
+
+| 场景 | 内存盘 | NVMe SSD | 倍率 |
+|---|---:|---:|---:|
+| 随机 4 KB 读取（对 16 MB 文件随机寻址 30 次） | 3.26 ms | 1.00 ms | 慢 3.3× |
+| 30 次小文件（4 KB）创建+写入 | 75.5 ms（2.52 ms/文件） | 115.1 ms（3.84 ms/文件） | **快 1.5×** |
+
+随机读取在内存盘上更慢，原因与顺序读取相同（每次 I/O 都要经过 WinFsp 内核–用户态往返）；而小文件写入更快，是因为内存盘创建文件完全跳过了物理块分配和日志记录——代价是每次操作的托管内存分配量显著更高（详见原始 BenchmarkDotNet 输出中的 `Alloc Ratio`）。
 
 ### 运行测试
 
@@ -401,13 +417,13 @@ dotnet test tests/ManagedDrive.Tests
 
 ### 运行基准测试
 
-驱动器号 `R:` 须处于空闲状态，且已安装 WinFsp。
+须已安装 WinFsp。基准测试项目会自动选择 `D:` 到 `Z:` 之间第一个空闲盘符，无需手动配置。
 
 ```powershell
 dotnet run --project benchmarks/ManagedDrive.Benchmarks -c Release
 ```
 
-结果将写入工作目录下的 `BenchmarkDotNet.Artifacts/results/`。
+BenchmarkDotNet 会提示你选择要运行的基准测试类（`SequentialReadWriteBenchmarks`、`RandomAccessBenchmarks`，或两者都运行）。结果将写入工作目录下的 `BenchmarkDotNet.Artifacts/results/`。
 
 ### 已知问题
 
