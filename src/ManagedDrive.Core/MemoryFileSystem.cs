@@ -439,7 +439,7 @@ public sealed class MemoryFileSystem : FileSystemBase
             node.FileInfo.FileAttributes |= fileAttributes;
         }
 
-        node.FileInfo.AllocationSize = aligned;
+        _nodeMap.UpdateAllocationSize(node, aligned);
         node.FileInfo.FileSize = 0;
         node.FileData = aligned > 0 ? new byte[aligned] : null;
 
@@ -886,7 +886,7 @@ public sealed class MemoryFileSystem : FileSystemBase
 
         foreach (var kvp in _nodeMap.GetChildren(dir.FilePath, childMarker))
         {
-            var childName = kvp.Key.Substring(kvp.Key.LastIndexOf('\\') + 1);
+            var childName = kvp.Value.LeafName;
             if (MatchesPattern(pattern, childName))
             {
                 entries.Add((childName, kvp.Value.FileInfo));
@@ -943,7 +943,7 @@ public sealed class MemoryFileSystem : FileSystemBase
                 node.FileData = null;
             }
 
-            node.FileInfo.AllocationSize = aligned;
+            _nodeMap.UpdateAllocationSize(node, aligned);
 
             if (node.FileInfo.FileSize > aligned)
             {
