@@ -219,6 +219,10 @@
                                     <TextBlock Text="{Binding CapacityFormatted}" FontSize="12"
                                                Foreground="{DynamicResource AppForegroundLight}"/>
                                 </StackPanel>
+                                <TextBlock Text="{Binding LastAutoSaveFormatted}"
+                                           FontSize="11"
+                                           Foreground="{DynamicResource AppForegroundLight}"
+                                           Visibility="{Binding ShowLastAutoSave, Converter={StaticResource BoolToVis}}"/>
                             </StackPanel>
 
                             <!-- Free space -->

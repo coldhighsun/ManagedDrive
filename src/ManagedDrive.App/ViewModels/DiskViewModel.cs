@@ -76,6 +76,19 @@ public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
     public string MountPoint => _disk.MountPoint;
 
     /// <summary>
+    /// Gets the timestamp of the most recent image save, formatted for display.
+    /// </summary>
+    public string LastAutoSaveFormatted => _disk.LastSaveTime is { } t
+        ? Loc.Format("Card.LastAutoSavePrefix", t.ToLocalTime().ToString("HH:mm:ss"))
+        : Loc.Get("Card.AutoSaveNever");
+
+    /// <summary>
+    /// Gets whether this disk has auto-save enabled, controlling visibility of the last-save
+    /// timestamp on the disk card.
+    /// </summary>
+    public bool ShowLastAutoSave => _disk.Options.AutoSaveIntervalMinutes is > 0;
+
+    /// <summary>
     /// Gets whether the user's TEMP and TMP currently point to this disk's Temp folder.
     /// </summary>
     public bool IsCurrentTempDir
@@ -145,6 +158,8 @@ public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
         OnPropertyChanged(nameof(UsedPercent));
         OnPropertyChanged(nameof(CapacityFormatted));
         OnPropertyChanged(nameof(VolumeLabel));
+        OnPropertyChanged(nameof(LastAutoSaveFormatted));
+        OnPropertyChanged(nameof(ShowLastAutoSave));
 
         IsCurrentTempDir = CheckIsCurrentTempDir();
 
