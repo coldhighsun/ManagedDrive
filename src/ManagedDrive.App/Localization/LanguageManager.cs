@@ -96,9 +96,9 @@ public sealed class LanguageManager
         ResourceDictionary dict;
         try
         {
-            dict = new ResourceDictionary
+            dict = new()
             {
-                Source = new Uri($"pack://application:,,,/Localization/Strings.{tag}.xaml", UriKind.Absolute),
+                Source = new($"pack://application:,,,/Localization/Strings.{tag}.xaml", UriKind.Absolute),
             };
         }
         catch
