@@ -144,6 +144,9 @@
                                 <MenuItem Header="{DynamicResource Btn.OpenInExplorer}"
                                           Command="{Binding PlacementTarget.DataContext.OpenInExplorerCommand,
                                                     RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
+                                <MenuItem Header="{DynamicResource Btn.OpenImageDirectory}"
+                                          Command="{Binding PlacementTarget.DataContext.OpenImageDirectoryCommand,
+                                                    RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
                                 <Separator/>
                                 <!-- Configuration -->
                                 <MenuItem Header="{DynamicResource Btn.EditDisk}"

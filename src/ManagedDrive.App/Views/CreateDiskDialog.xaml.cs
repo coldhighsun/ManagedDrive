@@ -50,6 +50,7 @@ public partial class CreateDiskDialog
 
         CompressionLevelBox.SelectedIndex = CompressionLevels.IndexOf(ImageCompressionLevel.Fastest);
         UpdateCompressionLevelState();
+        UpdateAutoSaveEnabledState();
     }
 
     /// <summary>
@@ -92,6 +93,7 @@ public partial class CreateDiskDialog
         ImagePathBox.Text = existing.PersistImagePath ?? string.Empty;
         CompressionLevelBox.SelectedIndex = CompressionLevels.IndexOf(existing.CompressionLevel);
         UpdateCompressionLevelState();
+        UpdateAutoSaveEnabledState();
 
         if (existing is { AutoSaveIntervalMinutes: { } minutes, ReadOnly: false })
         {
@@ -215,6 +217,7 @@ public partial class CreateDiskDialog
     {
         ImagePathBox.Text = string.Empty;
         UpdateCompressionLevelState();
+        UpdateAutoSaveEnabledState();
     }
 
     private int GetMaxCapacityValue()
@@ -276,6 +279,7 @@ public partial class CreateDiskDialog
         {
             ImagePathBox.Text = dlg.FileName;
             UpdateCompressionLevelState();
+            UpdateAutoSaveEnabledState();
         }
     }
 
@@ -297,8 +301,7 @@ public partial class CreateDiskDialog
 
     private void ReadOnlyBox_CheckedChanged(object sender, RoutedEventArgs e)
     {
-        AutoSaveBox.IsEnabled = ReadOnlyBox.IsChecked != true;
-        UpdateAutoSaveIntervalPanelState();
+        UpdateAutoSaveEnabledState();
         UpdateCompressionLevelState();
     }
 
@@ -403,6 +406,18 @@ public partial class CreateDiskDialog
 
         error = string.Empty;
         return true;
+    }
+
+    private void UpdateAutoSaveEnabledState()
+    {
+        var hasImagePath = !string.IsNullOrEmpty(ImagePathBox.Text);
+        AutoSaveBox.IsEnabled = hasImagePath && ReadOnlyBox.IsChecked != true;
+        if (!AutoSaveBox.IsEnabled)
+        {
+            AutoSaveBox.IsChecked = false;
+        }
+
+        UpdateAutoSaveIntervalPanelState();
     }
 
     private void UpdateAutoSaveIntervalPanelState()
