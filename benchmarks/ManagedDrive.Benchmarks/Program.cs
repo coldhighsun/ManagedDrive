@@ -1,4 +1,8 @@
 using BenchmarkDotNet.Running;
 using ManagedDrive.Benchmarks;
 
-BenchmarkSwitcher.FromTypes([typeof(SequentialReadWriteBenchmarks), typeof(RandomAccessBenchmarks)]).Run(args);
+BenchmarkSwitcher.FromTypes([
+    typeof(SequentialReadWriteBenchmarks),
+    typeof(RandomAccessBenchmarks),
+    typeof(ConcurrentAccessBenchmarks)
+]).Run(args);

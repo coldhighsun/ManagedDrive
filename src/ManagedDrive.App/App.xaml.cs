@@ -202,8 +202,7 @@ public partial class App
         using var key = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\WOW6432Node\WinFsp")
                         ?? Registry.LocalMachine.OpenSubKey(@"SOFTWARE\WinFsp");
 
-        var installDir = key?.GetValue("InstallDir") as string;
-        var dllPath = installDir is not null
+        var dllPath = key?.GetValue("InstallDir") is string installDir
             ? Path.Combine(installDir, "bin", "winfsp-msil.dll")
             : null;
 
@@ -256,7 +255,7 @@ public partial class App
     {
         var tempOnRamDisk = _mainViewModel != null && IsTempOnAnyDisk(_mainViewModel.Disks);
 
-        if (_mainViewModel != null && _mainViewModel.Disks.Count > 0)
+        if (_mainViewModel is { Disks.Count: > 0 })
         {
             ShowMainWindow();
 

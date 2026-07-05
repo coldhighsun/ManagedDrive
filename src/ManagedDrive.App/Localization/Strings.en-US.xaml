@@ -66,6 +66,7 @@
     <sys:String x:Key="Card.NeverWritten">Not yet modified</sys:String>
     <sys:String x:Key="Card.LastAutoSavePrefix">Last image save: {0}</sys:String>
     <sys:String x:Key="Card.NeverAutoSaved">Image not yet saved</sys:String>
+    <sys:String x:Key="Card.Saving">Saving...</sys:String>
     <sys:String x:Key="Card.ReadOnly">Read-only</sys:String>
     <sys:String x:Key="Card.ReadOnlyNoImage">Read-only · No image</sys:String>
     <sys:String x:Key="Val.AutoSaveNoImage">Select an image file before enabling auto-save.</sys:String>
@@ -122,7 +123,6 @@
     <sys:String x:Key="Msg.ExitConfirmTitle">ManagedDrive</sys:String>
     <sys:String x:Key="Msg.ExitConfirmBody">All mounted RAM disks will be unmounted and any unimaged data will be lost.&#x0a;&#x0a;Exit anyway?</sys:String>
     <sys:String x:Key="Msg.MountFailed">Failed to mount disk:&#x0a;{0}</sys:String>
-    <sys:String x:Key="Msg.SaveImageSuccess">Image saved successfully to:&#x0a;{0}</sys:String>
     <sys:String x:Key="Msg.SaveImageFailed">Failed to save image:&#x0a;{0}</sys:String>
     <sys:String x:Key="Msg.FormatDiskConfirmTitle">Format Disk</sys:String>
     <sys:String x:Key="Msg.FormatDiskConfirmBody">Format {0} ({1})?&#x0a;&#x0a;All files and folders on this disk will be permanently deleted.</sys:String>

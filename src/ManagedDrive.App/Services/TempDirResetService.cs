@@ -12,7 +12,7 @@ public static class TempDirResetService
     private const string DefaultUserTemp = @"%USERPROFILE%\AppData\Local\Temp";
 
     private const uint SendMessageTimeoutAbortIfHung = 0x0002;
-    private const string UserEnvKeyPath = @"Environment";
+    private const string UserEnvKeyPath = "Environment";
     private const uint WmSettingChange = 0x001A;
     private static readonly IntPtr HwndBroadcast = new(-1);
 
