@@ -10,6 +10,7 @@
     <sys:String x:Key="Menu.About">关于</sys:String>
     <sys:String x:Key="Btn.NewDisk">新建磁盘</sys:String>
     <sys:String x:Key="Btn.OpenInExplorer">在资源管理器中打开</sys:String>
+    <sys:String x:Key="Btn.OpenImageDirectory">打开镜像文件目录</sys:String>
     <sys:String x:Key="Btn.EditDisk">编辑磁盘…</sys:String>
     <sys:String x:Key="Btn.Unmount">卸载</sys:String>
     <sys:String x:Key="Btn.SaveImage">保存镜像</sys:String>
