@@ -526,15 +526,11 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             SaveSettings();
         }
 
+        vm.IsSaving = true;
         try
         {
             await Task.Run(() => vm.Disk.SaveToImage());
             StatusText = Loc.Format("Status.ImageSaved", vm.MountPoint);
-            MessageBox.Show(
-                Loc.Format("Msg.SaveImageSuccess", vm.Disk.Options.PersistImagePath),
-                "ManagedDrive",
-                MessageBoxButton.OK,
-                MessageBoxImage.Information);
         }
         catch (Exception ex)
         {
@@ -543,6 +539,10 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
                 "ManagedDrive",
                 MessageBoxButton.OK,
                 MessageBoxImage.Error);
+        }
+        finally
+        {
+            vm.IsSaving = false;
         }
     }
 

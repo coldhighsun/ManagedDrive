@@ -4,4 +4,8 @@
     <PackageReference Include="winfsp.net" />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="ManagedDrive.Tests" />
+  </ItemGroup>
+
 </Project>

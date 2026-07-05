@@ -32,6 +32,49 @@ public sealed class DiskImageSerializerTests
         }
     }
 
+    [Fact]
+    public async Task Save_ConcurrentMapMutation_DoesNotThrowAndProducesLoadableImage()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid()}.mdr");
+        try
+        {
+            var map = new FileNodeMap();
+            map.Add("\\", MakeDir());
+            for (var i = 0; i < 50; i++)
+            {
+                map.Add($"\\File{i}.txt", MakeFile("hello world"u8.ToArray()));
+            }
+
+            var stop = new bool[1];
+            var mutator = Task.Run(() =>
+            {
+                var i = 0;
+                while (!Volatile.Read(ref stop[0]))
+                {
+                    var mutatePath = $"\\Mutating{i % 10}.txt";
+                    map.Add(mutatePath, MakeFile("mutated"u8.ToArray()));
+                    map.Remove(mutatePath);
+                    i++;
+                }
+            });
+
+            for (var i = 0; i < 20; i++)
+            {
+                DiskImageSerializer.Save(map, capacityBytes: 1024 * 1024, "MyLabel", path, ImageCompressionLevel.Fastest);
+
+                var loaded = DiskImageSerializer.Load(path, out _, out _);
+                Assert.True(loaded.Count >= 51);
+            }
+
+            Volatile.Write(ref stop[0], true);
+            await mutator;
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
     [Theory]
     [InlineData(ImageCompressionLevel.None)]
     [InlineData(ImageCompressionLevel.Fastest)]

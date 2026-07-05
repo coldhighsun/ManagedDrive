@@ -79,7 +79,7 @@ public sealed class FileNodeMap
     /// <returns>
     /// A sequence of all (path, node) pairs currently stored in the map.
     /// </returns>
-    public IEnumerable<KeyValuePair<string, FileNode>> GetAllNodes()
+    public IReadOnlyList<KeyValuePair<string, FileNode>> GetAllNodes()
     {
         lock (_syncRoot)
         {
