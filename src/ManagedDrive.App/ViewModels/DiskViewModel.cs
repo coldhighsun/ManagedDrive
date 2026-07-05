@@ -28,6 +28,9 @@ public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
         _isCurrentTempDir = CheckIsCurrentTempDir();
 
         OpenInExplorerCommand = new(_ => Process.Start("explorer.exe", MountPoint));
+        OpenImageDirectoryCommand = new(
+            _ => Process.Start("explorer.exe", Path.GetDirectoryName(PersistImagePath)!),
+            _ => HasImagePath);
 
         _refreshTimer = new()
         {
@@ -158,6 +161,19 @@ public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
     /// Gets the backing image file path, or <c>null</c> if this disk has none.
     /// </summary>
     public string? PersistImagePath => Disk.Options.PersistImagePath;
+
+    /// <summary>
+    /// Gets whether this disk has a backing image file configured.
+    /// </summary>
+    public bool HasImagePath => !string.IsNullOrEmpty(PersistImagePath);
+
+    /// <summary>
+    /// Gets the command that opens this disk's backing image file directory in Windows Explorer.
+    /// </summary>
+    public RelayCommand OpenImageDirectoryCommand
+    {
+        get;
+    }
 
     /// <summary>
     /// Gets whether this disk has auto-save enabled, controlling visibility of the

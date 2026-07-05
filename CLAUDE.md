@@ -88,7 +88,7 @@ Strings live in `Localization/Strings.{tag}.xaml` resource dictionaries. `Langua
 
 ### Tests (`ManagedDrive.Tests`)
 
-Tests are synchronous xUnit v3 unit tests for pure-managed code (no WinFsp driver required). `FileNodeTests` covers `FileNode` metadata; `FileNodeMapTests` covers all map operations; `DiskImageSerializerTests` round-trips `Save`/`Load` across every `ImageCompressionLevel` and covers loading a hand-written legacy version-1 (uncompressed) image. All three use local `MakeDir()`/`MakeFile()` helpers to construct test nodes with appropriate `FileAttributes`.
+Tests are synchronous xUnit v3 unit tests for pure-managed code (no WinFsp driver required). `FileNodeTests` covers `FileNode` metadata; `FileNodeMapTests` covers all map operations; `DiskImageSerializerTests` round-trips `Save`/`Load` across every `ImageCompressionLevel` and covers loading a hand-written legacy version-1 (uncompressed) image; `WildcardMatchTests` covers the wildcard glob matcher used by directory listing. The first three use local `MakeDir()`/`MakeFile()` helpers to construct test nodes with appropriate `FileAttributes`.
 
 ### Threading model
 
@@ -110,9 +110,10 @@ Package versions are pinned in `Directory.Packages.props` (Central Package Manag
 
 ### Benchmarks
 
-`ManagedDrive.Benchmarks` (separate project, not in the solution) uses BenchmarkDotNet to compare RamDisk vs physical disk. `DriveLetterHelper.FindFreeMountPoint()` auto-selects the first free drive letter between `D:` and `Z:` (no fixed letter required). Two benchmark classes, both using `[SimpleJob(warmupCount: 2, iterationCount: 3)]` to keep total run time low:
+`ManagedDrive.Benchmarks` (separate project, not in the solution) uses BenchmarkDotNet to compare RamDisk vs physical disk. `DriveLetterHelper.FindFreeMountPoint()` auto-selects the first free drive letter between `D:` and `Z:` (no fixed letter required). Three benchmark classes, all using `[SimpleJob(warmupCount: 2, iterationCount: 3)]` to keep total run time low:
 - `SequentialReadWriteBenchmarks` — sequential read/write at 4 KB and 1 MB.
 - `RandomAccessBenchmarks` — random-seek reads and small-file high-frequency writes.
+- `ConcurrentAccessBenchmarks` — multi-threaded reads/writes to disjoint files, measuring `FileNodeMap` lock contention.
 
 Run in Release mode: `dotnet run --project benchmarks/ManagedDrive.Benchmarks -c Release` (prompts to pick which class(es) to run), or pass `--filter '*ClassName*'` to run one non-interactively.
 

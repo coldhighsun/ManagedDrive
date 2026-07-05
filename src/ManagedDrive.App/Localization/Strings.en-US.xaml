@@ -10,6 +10,7 @@
     <sys:String x:Key="Menu.About">About</sys:String>
     <sys:String x:Key="Btn.NewDisk">New Disk</sys:String>
     <sys:String x:Key="Btn.OpenInExplorer">Open in Explorer</sys:String>
+    <sys:String x:Key="Btn.OpenImageDirectory">Open Image File Directory</sys:String>
     <sys:String x:Key="Btn.EditDisk">Edit Disk…</sys:String>
     <sys:String x:Key="Btn.Unmount">Unmount</sys:String>
     <sys:String x:Key="Btn.SaveImage">Save Image</sys:String>
