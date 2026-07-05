@@ -307,6 +307,26 @@
                                            Foreground="{DynamicResource AppForegroundLight}"
                                            HorizontalAlignment="Right"/>
                             </StackPanel>
+
+                            <!-- Saving overlay -->
+                            <Border Grid.ColumnSpan="3"
+                                    Background="{DynamicResource AppSurface}"
+                                    Opacity="0.85"
+                                    CornerRadius="8"
+                                    Visibility="{Binding IsSaving, Converter={StaticResource BoolToVis}}">
+                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                    <TextBlock x:Name="SavingSpinner"
+                                               Text="&#xE895;" FontFamily="Segoe Fluent Icons" FontSize="16"
+                                               Foreground="{DynamicResource AppPrimary}"
+                                               RenderTransformOrigin="0.5,0.5">
+                                        <TextBlock.RenderTransform>
+                                            <RotateTransform x:Name="SpinnerRotate" Angle="0"/>
+                                        </TextBlock.RenderTransform>
+                                    </TextBlock>
+                                    <TextBlock Text="{DynamicResource Card.Saving}" FontSize="12" Margin="6,0,0,0"
+                                               Foreground="{DynamicResource AppForeground}"/>
+                                </StackPanel>
+                            </Border>
                         </Grid>
                     </Border>
                     <DataTemplate.Triggers>
@@ -320,6 +340,21 @@
                                     <DropShadowEffect ShadowDepth="2" BlurRadius="10" Opacity="0.2"/>
                                 </Setter.Value>
                             </Setter>
+                        </DataTrigger>
+                        <DataTrigger Binding="{Binding IsSaving}" Value="True">
+                            <DataTrigger.EnterActions>
+                                <BeginStoryboard x:Name="SpinStoryboard">
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetName="SpinnerRotate"
+                                                          Storyboard.TargetProperty="Angle"
+                                                          From="0" To="360" Duration="0:0:1"
+                                                          RepeatBehavior="Forever"/>
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </DataTrigger.EnterActions>
+                            <DataTrigger.ExitActions>
+                                <StopStoryboard BeginStoryboardName="SpinStoryboard"/>
+                            </DataTrigger.ExitActions>
                         </DataTrigger>
                     </DataTemplate.Triggers>
                 </DataTemplate>

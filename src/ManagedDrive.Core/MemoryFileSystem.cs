@@ -15,7 +15,6 @@ public sealed class MemoryFileSystem : FileSystemBase
 {
     private const uint InvalidFileAttributes = FileNode.InvalidFileAttributes;
 
-    private readonly FileNodeMap _nodeMap;
     private readonly bool _readOnly;
     private volatile bool _isDirty;
     private long _lastContentWriteTicks;
@@ -33,7 +32,7 @@ public sealed class MemoryFileSystem : FileSystemBase
         _readOnly = readOnly;
         _maxCapacity = maxCapacity;
         _volumeLabel = volumeLabel;
-        _nodeMap = new();
+        NodeMap = new();
     }
 
     /// <summary>
@@ -49,7 +48,7 @@ public sealed class MemoryFileSystem : FileSystemBase
         _readOnly = readOnly;
         _maxCapacity = maxCapacity;
         _volumeLabel = volumeLabel;
-        _nodeMap = existingNodeMap;
+        NodeMap = existingNodeMap;
     }
 
     /// <summary>
@@ -74,7 +73,10 @@ public sealed class MemoryFileSystem : FileSystemBase
     /// <summary>
     /// Exposes the underlying node map for serialization and capacity queries.
     /// </summary>
-    internal FileNodeMap NodeMap => _nodeMap;
+    internal FileNodeMap NodeMap
+    {
+        get;
+    }
 
     /// <summary>
     /// Checks whether a file or directory can be deleted.
@@ -94,7 +96,7 @@ public sealed class MemoryFileSystem : FileSystemBase
 
         if (node.IsDirectory)
         {
-            foreach (var _ in _nodeMap.GetChildren(fileName, null))
+            foreach (var _ in NodeMap.GetChildren(fileName, null))
             {
                 return STATUS_DIRECTORY_NOT_EMPTY;
             }
@@ -119,7 +121,7 @@ public sealed class MemoryFileSystem : FileSystemBase
 
         if ((flags & CleanupDelete) != 0 && !_readOnly)
         {
-            _nodeMap.Remove(fileName);
+            NodeMap.Remove(fileName);
             MarkDirty();
         }
 
@@ -173,14 +175,14 @@ public sealed class MemoryFileSystem : FileSystemBase
             return STATUS_MEDIA_WRITE_PROTECTED;
         }
 
-        if (_nodeMap.TryGet(fileName, out _))
+        if (NodeMap.TryGet(fileName, out _))
         {
             return STATUS_OBJECT_NAME_COLLISION;
         }
 
         var aligned = FileNode.AlignToAllocationUnit(allocationSize);
 
-        if (_nodeMap.GetTotalAllocated() + aligned > _maxCapacity)
+        if (NodeMap.GetTotalAllocated() + aligned > _maxCapacity)
         {
             return STATUS_DISK_FULL;
         }
@@ -207,7 +209,7 @@ public sealed class MemoryFileSystem : FileSystemBase
             node.FileData = new byte[aligned];
         }
 
-        _nodeMap.Add(fileName, node);
+        NodeMap.Add(fileName, node);
         MarkDirty();
         fileNode = node;
         fileInfo = node.FileInfo;
@@ -246,7 +248,7 @@ public sealed class MemoryFileSystem : FileSystemBase
             ? (dir.FilePath + fileName)
             : (dir.FilePath + "\\" + fileName);
 
-        if (!_nodeMap.TryGet(childPath, out var child) || child == null)
+        if (!NodeMap.TryGet(childPath, out var child) || child == null)
         {
             normalizedName = fileName;
             fileInfo = default;
@@ -299,7 +301,7 @@ public sealed class MemoryFileSystem : FileSystemBase
         out uint fileAttributes,
         ref byte[] securityDescriptor)
     {
-        if (!_nodeMap.TryGet(fileName, out var node) || node == null)
+        if (!NodeMap.TryGet(fileName, out var node) || node == null)
         {
             fileAttributes = 0;
             return STATUS_OBJECT_NAME_NOT_FOUND;
@@ -323,7 +325,7 @@ public sealed class MemoryFileSystem : FileSystemBase
     /// </returns>
     public override int GetVolumeInfo(out VolumeInfo volumeInfo)
     {
-        var used = _nodeMap.GetTotalAllocated();
+        var used = NodeMap.GetTotalAllocated();
         volumeInfo = default;
         volumeInfo.TotalSize = _maxCapacity;
         volumeInfo.FreeSize = _maxCapacity > used ? _maxCapacity - used : 0;
@@ -340,7 +342,7 @@ public sealed class MemoryFileSystem : FileSystemBase
     /// </returns>
     public override int Init(object host)
     {
-        if (!_nodeMap.TryGet("\\", out _))
+        if (!NodeMap.TryGet("\\", out _))
         {
             var now = FileTimeNow();
 
@@ -362,7 +364,7 @@ public sealed class MemoryFileSystem : FileSystemBase
                     IndexNumber    = FileNode.NewIndexNumber(),
                 },
             };
-            _nodeMap.Add("\\", root);
+            NodeMap.Add("\\", root);
         }
 
         return STATUS_SUCCESS;
@@ -388,7 +390,7 @@ public sealed class MemoryFileSystem : FileSystemBase
         fileInfo = default;
         normalizedName = fileName;
 
-        if (!_nodeMap.TryGet(fileName, out var node) || node == null)
+        if (!NodeMap.TryGet(fileName, out var node) || node == null)
         {
             return STATUS_OBJECT_NAME_NOT_FOUND;
         }
@@ -424,7 +426,7 @@ public sealed class MemoryFileSystem : FileSystemBase
         var currentAlloc = node.FileInfo.AllocationSize;
         var extra = aligned > currentAlloc ? aligned - currentAlloc : 0;
 
-        if (_nodeMap.GetTotalAllocated() + extra > _maxCapacity)
+        if (NodeMap.GetTotalAllocated() + extra > _maxCapacity)
         {
             fileInfo = node.FileInfo;
             return STATUS_DISK_FULL;
@@ -439,7 +441,7 @@ public sealed class MemoryFileSystem : FileSystemBase
             node.FileInfo.FileAttributes |= fileAttributes;
         }
 
-        _nodeMap.UpdateAllocationSize(node, aligned);
+        NodeMap.UpdateAllocationSize(node, aligned);
         node.FileInfo.FileSize = 0;
         node.FileData = aligned > 0 ? new byte[aligned] : null;
 
@@ -531,25 +533,25 @@ public sealed class MemoryFileSystem : FileSystemBase
             return STATUS_MEDIA_WRITE_PROTECTED;
         }
 
-        if (_nodeMap.TryGet(newFileName, out var existing) && existing != null)
+        if (NodeMap.TryGet(newFileName, out var existing) && existing != null)
         {
             if (!replaceIfExists)
             {
                 return STATUS_OBJECT_NAME_COLLISION;
             }
 
-            _nodeMap.Remove(newFileName);
+            NodeMap.Remove(newFileName);
         }
 
         var node = (FileNode)fileNode;
 
         if (node.IsDirectory)
         {
-            _nodeMap.RenameDescendants(fileName, newFileName);
+            NodeMap.RenameDescendants(fileName, newFileName);
         }
 
-        _nodeMap.Remove(fileName);
-        _nodeMap.Add(newFileName, node);
+        NodeMap.Remove(fileName);
+        NodeMap.Add(newFileName, node);
         MarkDirty();
         return STATUS_SUCCESS;
     }
@@ -766,7 +768,7 @@ public sealed class MemoryFileSystem : FileSystemBase
     /// </summary>
     internal bool TryUpdateCapacity(ulong newCapacity)
     {
-        if (_nodeMap.GetTotalAllocated() > newCapacity)
+        if (NodeMap.GetTotalAllocated() > newCapacity)
         {
             return false;
         }
@@ -797,45 +799,45 @@ public sealed class MemoryFileSystem : FileSystemBase
         return WildcardMatch(pattern.AsSpan(), name.AsSpan());
     }
 
-    private static bool WildcardMatch(ReadOnlySpan<char> pattern, ReadOnlySpan<char> name)
+    internal static bool WildcardMatch(ReadOnlySpan<char> pattern, ReadOnlySpan<char> name)
     {
-        while (!pattern.IsEmpty)
+        var p = 0;
+        var n = 0;
+        var starIdx = -1;
+        var matchIdx = 0;
+
+        while (n < name.Length)
         {
-            if (pattern[0] == '*')
+            if (p < pattern.Length &&
+                (pattern[p] == '?' || char.ToUpperInvariant(pattern[p]) == char.ToUpperInvariant(name[n])))
             {
-                pattern = pattern.Slice(1);
-                if (pattern.IsEmpty)
-                {
-                    return true;
-                }
-
-                for (var i = 0; i <= name.Length; i++)
-                {
-                    if (WildcardMatch(pattern, name.Slice(i)))
-                    {
-                        return true;
-                    }
-                }
-
-                return false;
+                p++;
+                n++;
             }
-
-            if (name.IsEmpty)
+            else if (p < pattern.Length && pattern[p] == '*')
             {
-                return false;
+                starIdx = p;
+                matchIdx = n;
+                p++;
             }
-
-            if (pattern[0] != '?' &&
-                char.ToUpperInvariant(pattern[0]) != char.ToUpperInvariant(name[0]))
+            else if (starIdx != -1)
+            {
+                p = starIdx + 1;
+                matchIdx++;
+                n = matchIdx;
+            }
+            else
             {
                 return false;
             }
-
-            pattern = pattern.Slice(1);
-            name = name.Slice(1);
         }
 
-        return name.IsEmpty;
+        while (p < pattern.Length && pattern[p] == '*')
+        {
+            p++;
+        }
+
+        return p == pattern.Length;
     }
 
     /// <summary>
@@ -863,7 +865,7 @@ public sealed class MemoryFileSystem : FileSystemBase
             if (dir.FilePath.Length > 1)
             {
                 var parentPath = Path.GetDirectoryName(dir.FilePath)!;
-                if (!_nodeMap.TryGet(parentPath, out var p) || p == null)
+                if (!NodeMap.TryGet(parentPath, out var p) || p == null)
                 {
                     parentNode = dir;
                 }
@@ -884,7 +886,7 @@ public sealed class MemoryFileSystem : FileSystemBase
             childMarker = marker;
         }
 
-        foreach (var kvp in _nodeMap.GetChildren(dir.FilePath, childMarker))
+        foreach (var kvp in NodeMap.GetChildren(dir.FilePath, childMarker))
         {
             var childName = kvp.Value.LeafName;
             if (MatchesPattern(pattern, childName))
@@ -919,7 +921,7 @@ public sealed class MemoryFileSystem : FileSystemBase
             if (aligned > node.FileInfo.AllocationSize)
             {
                 var extra = aligned - node.FileInfo.AllocationSize;
-                if (_nodeMap.GetTotalAllocated() + extra > _maxCapacity)
+                if (NodeMap.GetTotalAllocated() + extra > _maxCapacity)
                 {
                     return STATUS_DISK_FULL;
                 }
@@ -943,7 +945,7 @@ public sealed class MemoryFileSystem : FileSystemBase
                 node.FileData = null;
             }
 
-            _nodeMap.UpdateAllocationSize(node, aligned);
+            NodeMap.UpdateAllocationSize(node, aligned);
 
             if (node.FileInfo.FileSize > aligned)
             {

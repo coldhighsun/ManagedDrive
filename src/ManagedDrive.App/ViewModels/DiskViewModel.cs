@@ -9,12 +9,11 @@ public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
 {
     private const double HighUsageResetThreshold = 85.0;
     private const double HighUsageThreshold = 90.0;
-    private readonly RamDisk _disk;
     private readonly DispatcherTimer _refreshTimer;
 
     private ulong _freeBytes;
-    private bool _highUsageWarned;
     private bool _isCurrentTempDir;
+    private bool _isSaving;
     private ulong _usedBytes;
 
     /// <summary>
@@ -23,7 +22,7 @@ public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
     /// <param name="disk">The live RAM disk to represent.</param>
     public DiskViewModel(RamDisk disk)
     {
-        _disk = disk;
+        Disk = disk;
         _usedBytes = disk.UsedBytes;
         _freeBytes = disk.FreeBytes;
         _isCurrentTempDir = CheckIsCurrentTempDir();
@@ -50,12 +49,12 @@ public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
     /// <summary>
     /// Gets the total capacity formatted as a human-readable string.
     /// </summary>
-    public string CapacityFormatted => FormatBytes(_disk.TotalBytes);
+    public string CapacityFormatted => FormatBytes(Disk.TotalBytes);
 
     /// <summary>
     /// Gets the underlying <see cref="RamDisk"/> instance.
     /// </summary>
-    public RamDisk Disk => _disk;
+    public RamDisk Disk { get; }
 
     /// <summary>
     /// Gets the amount of free space formatted as a human-readable string.
@@ -66,8 +65,8 @@ public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
     /// Gets the free-space percentage (0–100) for display.
     /// </summary>
     public double FreePercent =>
-        _disk.TotalBytes > 0
-            ? Math.Round((double)_freeBytes / _disk.TotalBytes * 100.0, 1)
+        Disk.TotalBytes > 0
+            ? Math.Round((double)_freeBytes / Disk.TotalBytes * 100.0, 1)
             : 100.0;
 
     /// <summary>
@@ -92,7 +91,7 @@ public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
     /// <summary>
     /// Gets whether disk usage is at or above the high-usage warning threshold.
     /// </summary>
-    public bool IsHighUsage => _highUsageWarned;
+    public bool IsHighUsage { get; private set; }
 
     /// <summary>
     /// Gets the inverse of <see cref="IsCurrentTempDir"/> for visibility binding.
@@ -100,33 +99,52 @@ public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
     public bool IsNotCurrentTempDir => !_isCurrentTempDir;
 
     /// <summary>
+    /// Gets or sets whether this disk's image is currently being saved, driving the
+    /// "saving" overlay on the disk card.
+    /// </summary>
+    public bool IsSaving
+    {
+        get => _isSaving;
+        set
+        {
+            if (_isSaving == value)
+            {
+                return;
+            }
+
+            _isSaving = value;
+            OnPropertyChanged(nameof(IsSaving));
+        }
+    }
+
+    /// <summary>
     /// Gets the inverse of <see cref="IsReadOnly"/> for visibility binding.
     /// </summary>
-    public bool IsNotReadOnly => !_disk.Options.ReadOnly;
+    public bool IsNotReadOnly => !Disk.Options.ReadOnly;
 
     /// <summary>
     /// Gets whether this disk is read-only.
     /// </summary>
-    public bool IsReadOnly => _disk.Options.ReadOnly;
+    public bool IsReadOnly => Disk.Options.ReadOnly;
 
     /// <summary>
     /// Gets the timestamp of the most recent image save, formatted for display.
     /// </summary>
-    public string LastAutoSaveFormatted => _disk.LastSaveTime is { } t
+    public string LastAutoSaveFormatted => Disk.LastSaveTime is { } t
         ? Loc.Format("Card.LastAutoSavePrefix", t.ToLocalTime().ToString("HH:mm:ss"))
         : Loc.Get("Card.NeverAutoSaved");
 
     /// <summary>
     /// Gets the timestamp of the most recent content mutation, formatted for display.
     /// </summary>
-    public string LastContentWriteFormatted => _disk.LastContentWriteTime is { } t
+    public string LastContentWriteFormatted => Disk.LastContentWriteTime is { } t
         ? Loc.Format("Card.LastWritePrefix", t.ToLocalTime().ToString("HH:mm:ss"))
         : Loc.Get("Card.NeverWritten");
 
     /// <summary>
     /// Gets the mount point string (e.g., <c>Z:</c>).
     /// </summary>
-    public string MountPoint => _disk.MountPoint;
+    public string MountPoint => Disk.MountPoint;
 
     /// <summary>
     /// Gets the command that opens this disk's mount point in Windows Explorer.
@@ -139,13 +157,13 @@ public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
     /// <summary>
     /// Gets the backing image file path, or <c>null</c> if this disk has none.
     /// </summary>
-    public string? PersistImagePath => _disk.Options.PersistImagePath;
+    public string? PersistImagePath => Disk.Options.PersistImagePath;
 
     /// <summary>
     /// Gets whether this disk has auto-save enabled, controlling visibility of the
     /// last-image-save timestamp on the disk card.
     /// </summary>
-    public bool ShowLastAutoSave => _disk.Options.AutoSaveIntervalMinutes is > 0;
+    public bool ShowLastAutoSave => Disk.Options.AutoSaveIntervalMinutes is > 0;
 
     /// <summary>
     /// Gets the amount of used space formatted as a human-readable string.
@@ -156,14 +174,14 @@ public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
     /// Gets the used-space percentage (0–100) for progress-bar display.
     /// </summary>
     public double UsedPercent =>
-        _disk.TotalBytes > 0
-            ? Math.Round((double)_usedBytes / _disk.TotalBytes * 100.0, 1)
+        Disk.TotalBytes > 0
+            ? Math.Round((double)_usedBytes / Disk.TotalBytes * 100.0, 1)
             : 0.0;
 
     /// <summary>
     /// Gets the volume label from the disk options.
     /// </summary>
-    public string VolumeLabel => _disk.Options.VolumeLabel;
+    public string VolumeLabel => Disk.Options.VolumeLabel;
 
     /// <inheritdoc />
     public void Dispose()
@@ -177,8 +195,8 @@ public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
     /// </summary>
     public void Refresh()
     {
-        _usedBytes = _disk.UsedBytes;
-        _freeBytes = _disk.FreeBytes;
+        _usedBytes = Disk.UsedBytes;
+        _freeBytes = Disk.FreeBytes;
         OnPropertyChanged(nameof(UsedFormatted));
         OnPropertyChanged(nameof(FreeFormatted));
         OnPropertyChanged(nameof(FreePercent));
@@ -192,15 +210,15 @@ public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
         IsCurrentTempDir = CheckIsCurrentTempDir();
 
         var used = UsedPercent;
-        if (!_highUsageWarned && used >= HighUsageThreshold)
+        if (!IsHighUsage && used >= HighUsageThreshold)
         {
-            _highUsageWarned = true;
+            IsHighUsage = true;
             OnPropertyChanged(nameof(IsHighUsage));
             HighUsageWarning?.Invoke(this, EventArgs.Empty);
         }
-        else if (_highUsageWarned && used < HighUsageResetThreshold)
+        else if (IsHighUsage && used < HighUsageResetThreshold)
         {
-            _highUsageWarned = false;
+            IsHighUsage = false;
             OnPropertyChanged(nameof(IsHighUsage));
         }
     }

@@ -9,48 +9,43 @@ namespace ManagedDrive.App.Themes;
 /// </summary>
 public sealed class TrayColorTable : ProfessionalColorTable
 {
-    private readonly Color _background;
-    private readonly Color _border;
-    private readonly Color _hover;
-    private readonly Color _separator;
-
     public TrayColorTable(bool isDark)
     {
         if (isDark)
         {
-            _background = Color.FromArgb(0xFF, 0x2A, 0x2A, 0x2A);
-            _border = Color.FromArgb(0xFF, 0x3D, 0x3D, 0x3D);
-            _hover = Color.FromArgb(0xFF, 0x3A, 0x3A, 0x50);
-            _separator = Color.FromArgb(0xFF, 0x44, 0x44, 0x44);
+            ToolStripDropDownBackground = Color.FromArgb(0xFF, 0x2A, 0x2A, 0x2A);
+            MenuBorder = Color.FromArgb(0xFF, 0x3D, 0x3D, 0x3D);
+            MenuItemSelected = Color.FromArgb(0xFF, 0x3A, 0x3A, 0x50);
+            SeparatorDark = Color.FromArgb(0xFF, 0x44, 0x44, 0x44);
         }
         else
         {
-            _background = Color.White;
-            _border = Color.FromArgb(0xFF, 0xE0, 0xE0, 0xE0);
-            _hover = Color.FromArgb(0xFF, 0xE8, 0xEA, 0xF6);
-            _separator = Color.FromArgb(0xFF, 0xE0, 0xE0, 0xE0);
+            ToolStripDropDownBackground = Color.White;
+            MenuBorder = Color.FromArgb(0xFF, 0xE0, 0xE0, 0xE0);
+            MenuItemSelected = Color.FromArgb(0xFF, 0xE8, 0xEA, 0xF6);
+            SeparatorDark = Color.FromArgb(0xFF, 0xE0, 0xE0, 0xE0);
         }
     }
 
-    public override Color ToolStripDropDownBackground => _background;
+    public override Color ToolStripDropDownBackground { get; }
 
-    public override Color ImageMarginGradientBegin => _background;
+    public override Color ImageMarginGradientBegin => ToolStripDropDownBackground;
 
-    public override Color ImageMarginGradientMiddle => _background;
+    public override Color ImageMarginGradientMiddle => ToolStripDropDownBackground;
 
-    public override Color ImageMarginGradientEnd => _background;
+    public override Color ImageMarginGradientEnd => ToolStripDropDownBackground;
 
-    public override Color MenuBorder => _border;
+    public override Color MenuBorder { get; }
 
-    public override Color MenuItemBorder => _border;
+    public override Color MenuItemBorder => MenuBorder;
 
-    public override Color MenuItemSelected => _hover;
+    public override Color MenuItemSelected { get; }
 
-    public override Color MenuItemSelectedGradientBegin => _hover;
+    public override Color MenuItemSelectedGradientBegin => MenuItemSelected;
 
-    public override Color MenuItemSelectedGradientEnd => _hover;
+    public override Color MenuItemSelectedGradientEnd => MenuItemSelected;
 
-    public override Color SeparatorDark => _separator;
+    public override Color SeparatorDark { get; }
 
-    public override Color SeparatorLight => _separator;
+    public override Color SeparatorLight => SeparatorDark;
 }

@@ -126,7 +126,7 @@ public static class DiskImageSerializer
                     payloadWriter.Write(capacityBytes);
                     payloadWriter.Write(volumeLabel);
 
-                    var nodes = new List<KeyValuePair<string, FileNode>>(nodeMap.GetAllNodes());
+                    var nodes = nodeMap.GetAllNodes();
                     payloadWriter.Write(nodes.Count);
 
                     foreach (var kvp in nodes)

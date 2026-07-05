@@ -20,7 +20,7 @@ Create, mount and manage in-memory volumes that appear as normal drive letters i
 - Configurable capacity, volume label and read-only flag
 - Dynamic memory allocation — disk capacity is a ceiling, not a reservation; memory is consumed only as files are written and released when files are deleted
 - Edit a mounted disk — change label, capacity, auto-mount, and image path live without data loss; changing the drive letter or read-only flag remounts the disk
-- Optional persistence — save the disk contents to a `.mdr` image file and restore it on next mount; Save Image is always available and prompts for a file path if none is set
+- Optional persistence — save the disk contents to a `.mdr` image file and restore it on next mount; Save Image is always available and prompts for a file path if none is set; the disk card shows a "Saving..." overlay while the save is in progress
 - Optional auto-save — periodically save the disk contents to its image file every 1–60 minutes (configurable when creating or editing a disk); a save also fires immediately when enabled and once more right before the disk is unmounted or the app exits, so nothing is lost between intervals. Periodic saves are skipped automatically when nothing has changed since the last save, avoiding unnecessary disk I/O on an idle disk. The image file must be selected through the file picker (no manual typing) and cannot be located on a RAM disk or reused across two disks. Checking Read Only disables auto-save and image compression, and requires an existing image file to be selected — a read-only disk's contents never change, so there is nothing to save or compress, and an empty read-only disk would be meaningless. The disk card shows the timestamp of the most recent content modification
 - Selectable image compression — choose a compression level (Off / Fast / Balanced / Max) for the saved `.mdr` image, trading save/load speed for file size; defaults to Fast
 - Auto-mount saved profiles on application startup
@@ -101,14 +101,17 @@ ManagedDrive/
 ├── tests/
 │   └── ManagedDrive.Tests/         # xUnit v3 unit tests (pure-managed code only)
 │       ├── FileNodeTests.cs
-│       └── FileNodeMapTests.cs
+│       ├── FileNodeMapTests.cs
+│       ├── DiskImageSerializerTests.cs
+│       └── WildcardMatchTests.cs
 │
 └── benchmarks/
     └── ManagedDrive.Benchmarks/    # BenchmarkDotNet throughput/latency benchmarks
         ├── Program.cs
-        ├── DriveLetterHelper.cs           #   Picks a free mount point (D:-Z:) for the RAM disk
+        ├── DriveLetterHelper.cs             #   Picks a free mount point (D:-Z:) for the RAM disk
         ├── SequentialReadWriteBenchmarks.cs #  Sequential read/write at 4 KB and 1 MB
-        └── RandomAccessBenchmarks.cs        #  Random-seek reads and small-file high-frequency writes
+        ├── RandomAccessBenchmarks.cs        #  Random-seek reads and small-file high-frequency writes
+        └── ConcurrentAccessBenchmarks.cs    #  Multi-threaded reads/writes to disjoint files, measuring FileNodeMap lock contention
 ```
 
 ### How It Works
@@ -194,7 +197,7 @@ Random reads are slower on the RAM disk for the same reason sequential reads are
 dotnet test tests/ManagedDrive.Tests
 ```
 
-Tests cover `FileNode` (allocation unit alignment, index numbers) and `FileNodeMap` (CRUD, case-insensitive lookup, child pagination, rename, capacity tracking). Mount/unmount integration tests require the WinFsp driver and must be run manually.
+Tests cover `FileNode` (allocation unit alignment, index numbers), `FileNodeMap` (CRUD, case-insensitive lookup, child pagination, rename, capacity tracking), `DiskImageSerializer` (save/load round-trips across every compression level, legacy version-1 images, concurrent map mutation during save), and the wildcard glob matcher used by directory listing. Mount/unmount integration tests require the WinFsp driver and must be run manually.
 
 ### Running Benchmarks
 
@@ -204,7 +207,7 @@ WinFsp must be installed. The benchmark project auto-selects the first free driv
 dotnet run --project benchmarks/ManagedDrive.Benchmarks -c Release
 ```
 
-BenchmarkDotNet will prompt you to pick which benchmark class(es) to run (`SequentialReadWriteBenchmarks`, `RandomAccessBenchmarks`, or both). Results are written to `BenchmarkDotNet.Artifacts/results/` in the working directory.
+BenchmarkDotNet will prompt you to pick which benchmark class(es) to run (`SequentialReadWriteBenchmarks`, `RandomAccessBenchmarks`, `ConcurrentAccessBenchmarks`, or any combination). Results are written to `BenchmarkDotNet.Artifacts/results/` in the working directory.
 
 ### Known Issues
 
@@ -241,7 +244,7 @@ MIT
 - 可配置容量、卷标和只读标志
 - 动态内存分配——磁盘容量为上限而非预分配；内存随文件写入而占用，随文件删除而释放
 - 编辑已挂载磁盘——修改卷标、容量、自动挂载和镜像路径无需重挂即可实时生效；更改盘符或只读标志时自动重挂
-- 可选持久化——将磁盘内容保存为 `.mdr` 镜像文件，下次挂载时自动还原；保存镜像功能始终可用，未设置镜像路径时自动弹出选择对话框
+- 可选持久化——将磁盘内容保存为 `.mdr` 镜像文件，下次挂载时自动还原；保存镜像功能始终可用，未设置镜像路径时自动弹出选择对话框；保存期间磁盘卡片会显示"正在保存..."提示
 - 可选自动保存——每 1-60 分钟（创建或编辑磁盘时可配置）自动将磁盘内容保存到镜像文件；开启自动保存时会立即触发一次保存，卸载磁盘或退出应用前也会再保存一次，避免在两次定时保存之间丢失数据。若自上次保存后内容未发生变化，定时保存会自动跳过，避免不必要的磁盘 IO。镜像文件只能通过文件选择对话框设置（不可手动输入），且不能位于内存盘上，也不能与其他磁盘共用同一个镜像文件。勾选只读后自动保存和镜像压缩都会被禁用，且必须选择一个已存在的镜像文件——只读磁盘的内容不会变化，因此无需保存或压缩，而一个没有内容的只读空盘也没有意义。磁盘卡片会显示磁盘内容最近一次被修改的时间
 - 可选镜像压缩——为保存的 `.mdr` 镜像选择压缩级别（不压缩／快速／均衡／最高），在保存/加载速度与文件大小之间取舍；默认快速
 - 应用启动时自动挂载已保存的磁盘配置
@@ -322,14 +325,17 @@ ManagedDrive/
 ├── tests/
 │   └── ManagedDrive.Tests/         # xUnit v3 单元测试（仅纯托管代码）
 │       ├── FileNodeTests.cs
-│       └── FileNodeMapTests.cs
+│       ├── FileNodeMapTests.cs
+│       ├── DiskImageSerializerTests.cs
+│       └── WildcardMatchTests.cs
 │
 └── benchmarks/
     └── ManagedDrive.Benchmarks/    # BenchmarkDotNet 吞吐量/延迟基准测试
         ├── Program.cs
         ├── DriveLetterHelper.cs             #   为内存盘自动选择一个空闲盘符（D:-Z:）
         ├── SequentialReadWriteBenchmarks.cs #  4 KB / 1 MB 顺序读写
-        └── RandomAccessBenchmarks.cs        #  随机寻址读取 + 小文件高频写入
+        ├── RandomAccessBenchmarks.cs        #  随机寻址读取 + 小文件高频写入
+        └── ConcurrentAccessBenchmarks.cs    #  多线程并发读写互不重叠的文件，测量 FileNodeMap 锁竞争
 ```
 
 ### 工作原理
@@ -415,7 +421,7 @@ ManagedDrive 使用 **WinFsp**（Windows 文件系统代理）将内存目录树
 dotnet test tests/ManagedDrive.Tests
 ```
 
-测试覆盖 `FileNode`（分配单元对齐、索引编号）和 `FileNodeMap`（增删改查、大小写无关查找、子节点分页、重命名、容量追踪）。挂载/卸载集成测试需要 WinFsp 驱动程序，须手动运行。
+测试覆盖 `FileNode`（分配单元对齐、索引编号）、`FileNodeMap`（增删改查、大小写无关查找、子节点分页、重命名、容量追踪）、`DiskImageSerializer`（各压缩级别的保存/加载往返、旧版本 1 镜像、保存期间并发修改磁盘节点）以及目录枚举所用的通配符匹配逻辑。挂载/卸载集成测试需要 WinFsp 驱动程序，须手动运行。
 
 ### 运行基准测试
 
@@ -425,7 +431,7 @@ dotnet test tests/ManagedDrive.Tests
 dotnet run --project benchmarks/ManagedDrive.Benchmarks -c Release
 ```
 
-BenchmarkDotNet 会提示你选择要运行的基准测试类（`SequentialReadWriteBenchmarks`、`RandomAccessBenchmarks`，或两者都运行）。结果将写入工作目录下的 `BenchmarkDotNet.Artifacts/results/`。
+BenchmarkDotNet 会提示你选择要运行的基准测试类（`SequentialReadWriteBenchmarks`、`RandomAccessBenchmarks`、`ConcurrentAccessBenchmarks`，或任意组合）。结果将写入工作目录下的 `BenchmarkDotNet.Artifacts/results/`。
 
 ### 已知问题
 
