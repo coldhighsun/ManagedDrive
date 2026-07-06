@@ -134,14 +134,14 @@ public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
     /// Gets the timestamp of the most recent image save, formatted for display.
     /// </summary>
     public string LastAutoSaveFormatted => Disk.LastSaveTime is { } t
-        ? Loc.Format("Card.LastAutoSavePrefix", t.ToLocalTime().ToString("HH:mm:ss"))
+        ? Loc.Format("Card.LastAutoSavePrefix", FormatRelativeTime(t))
         : Loc.Get("Card.NeverAutoSaved");
 
     /// <summary>
     /// Gets the timestamp of the most recent content mutation, formatted for display.
     /// </summary>
     public string LastContentWriteFormatted => Disk.LastContentWriteTime is { } t
-        ? Loc.Format("Card.LastWritePrefix", t.ToLocalTime().ToString("HH:mm:ss"))
+        ? Loc.Format("Card.LastWritePrefix", FormatRelativeTime(t))
         : Loc.Get("Card.NeverWritten");
 
     /// <summary>
@@ -237,6 +237,15 @@ public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
             IsHighUsage = false;
             OnPropertyChanged(nameof(IsHighUsage));
         }
+    }
+
+    private static string FormatRelativeTime(DateTimeOffset timestamp)
+    {
+        var elapsed = DateTimeOffset.UtcNow - timestamp;
+        if (elapsed.TotalMinutes < 1) return Loc.Get("Time.JustNow");
+        if (elapsed.TotalMinutes < 60) return Loc.Format("Time.MinutesAgo", (int)elapsed.TotalMinutes);
+        if (elapsed.TotalHours < 24) return Loc.Format("Time.HoursAgo", (int)elapsed.TotalHours);
+        return Loc.Format("Time.DaysAgo", (int)elapsed.TotalDays);
     }
 
     private static string FormatBytes(ulong bytes)
