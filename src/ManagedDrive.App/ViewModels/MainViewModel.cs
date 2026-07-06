@@ -664,10 +664,18 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             Owner = Application.Current.MainWindow
         };
 
+        if (vm.HasImagePath)
+        {
+            confirm.ShowOption(Loc.Get("Msg.DeleteImageOption"));
+        }
+
         if (confirm.ShowDialog() != true)
         {
             return;
         }
+
+        var deleteImage = confirm.IsOptionChecked;
+        var imagePath = vm.PersistImagePath;
 
         if (vm.IsCurrentTempDir)
         {
@@ -678,6 +686,12 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         vm.Dispose();
         Disks.Remove(vm);
         await Task.Run(() => _mountManager.Unmount(mountPoint));
+
+        if (deleteImage && imagePath != null)
+        {
+            try { File.Delete(imagePath); } catch { }
+        }
+
         SaveSettings();
         StatusText = Loc.Format("Status.Unmounted", mountPoint);
     }
@@ -701,12 +715,15 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         }
     }
 
-    private void SaveSettings()
+    internal void SaveSettings()
     {
+        var current = _settingsStore.Load();
         _settingsStore.Save(new()
         {
             RunAtStartup = StartupManager.IsEnabled,
+            StartMinimized = current.StartMinimized,
             Language = LanguageManager.Instance.SavedLanguage,
+            Theme = ThemeManager.Instance.SavedTheme,
             Disks = GetProfiles().ToList(),
             TempDirCompatWarningShown = _tempDirCompatWarningShown,
         });

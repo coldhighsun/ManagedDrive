@@ -17,6 +17,14 @@ public partial class ConfirmDialog
         BodyText.Text = body;
     }
 
+    public bool IsOptionChecked => OptionCheckBox.IsChecked == true;
+
+    public void ShowOption(string label)
+    {
+        OptionCheckBox.Content = label;
+        OptionCheckBox.Visibility = Visibility.Visible;
+    }
+
     private void OkButton_Click(object sender, RoutedEventArgs e) =>
         DialogResult = true;
 }

@@ -41,7 +41,7 @@ public partial class App
     private void App_Exit(object sender, ExitEventArgs e)
     {
         SystemEvents.SessionEnding -= OnSessionEnding;
-        SaveSettings();
+        _mainViewModel?.SaveSettings();
         _trayIcon?.Dispose();
         _mainViewModel?.Dispose();
 
@@ -298,7 +298,7 @@ public partial class App
             ShowMainWindow();
         }
 
-        SaveSettings();
+        _mainViewModel?.SaveSettings();
         _trayIcon?.Dispose();
         _mainViewModel?.Dispose();
         await Task.Run(() => _mountManager?.Dispose());
@@ -357,23 +357,6 @@ public partial class App
                 // Best-effort, matches RamDisk.Dispose()/TryAutoSave() swallow pattern.
             }
         }
-    }
-
-    private void SaveSettings()
-    {
-        if (_settings == null || _mainViewModel == null)
-        {
-            return;
-        }
-
-        _settings.Save(new()
-        {
-            RunAtStartup = StartupManager.IsEnabled,
-            StartMinimized = _settings.Load().StartMinimized,
-            Language = LanguageManager.Instance.SavedLanguage,
-            Theme = ThemeManager.Instance.SavedTheme,
-            Disks = _mainViewModel.GetProfiles().ToList(),
-        });
     }
 
     private void SetupTrayIcon()
