@@ -12,6 +12,7 @@
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="16"/>
             <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
             <RowDefinition Height="24"/>
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
@@ -35,8 +36,15 @@
                    LineHeight="20"
                    Foreground="{DynamicResource AppForegroundLight}"/>
 
+        <!-- Optional checkbox -->
+        <CheckBox x:Name="OptionCheckBox"
+                  Grid.Row="3"
+                  Visibility="Collapsed"
+                  Foreground="{DynamicResource AppForeground}"
+                  Margin="0,8,0,0"/>
+
         <!-- Buttons -->
-        <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Right">
+        <StackPanel Grid.Row="5" Orientation="Horizontal" HorizontalAlignment="Right">
             <Button Content="{DynamicResource Btn.Cancel}" Width="80" IsCancel="True"
                     Style="{StaticResource FlatButton}"
                     Margin="0,0,8,0"/>

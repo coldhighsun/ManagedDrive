@@ -8,13 +8,13 @@
     <sys:String x:Key="Menu.Tools">工具(_T)</sys:String>
     <sys:String x:Key="Menu.Exit">退出(_X)</sys:String>
     <sys:String x:Key="Menu.About">关于</sys:String>
-    <sys:String x:Key="Btn.NewDisk">新建磁盘</sys:String>
+    <sys:String x:Key="Btn.NewDisk">新建磁盘...</sys:String>
     <sys:String x:Key="Btn.OpenInExplorer">在资源管理器中打开</sys:String>
     <sys:String x:Key="Btn.OpenImageDirectory">打开镜像文件目录</sys:String>
     <sys:String x:Key="Btn.EditDisk">编辑磁盘…</sys:String>
-    <sys:String x:Key="Btn.Unmount">卸载</sys:String>
+    <sys:String x:Key="Btn.Unmount">卸载...</sys:String>
     <sys:String x:Key="Btn.SaveImage">保存镜像</sys:String>
-    <sys:String x:Key="Btn.SetAsTempDir">设为临时文件夹</sys:String>
+    <sys:String x:Key="Btn.SetAsTempDir">设为临时文件夹...</sys:String>
     <sys:String x:Key="Btn.RestoreDefaultTemp">恢复默认临时文件夹</sys:String>
     <sys:String x:Key="Btn.FormatDisk">格式化…</sys:String>
     <sys:String x:Key="Btn.Refresh">刷新</sys:String>
@@ -86,7 +86,7 @@
     <sys:String x:Key="Settings.Language">语言</sys:String>
     <sys:String x:Key="Lang.System">系统默认</sys:String>
     <sys:String x:Key="Settings.Theme">主题</sys:String>
-    <sys:String x:Key="Settings.Theme.System">系统默认</sys:String>
+    <sys:String x:Key="Settings.Theme.System">跟随系统</sys:String>
     <sys:String x:Key="Settings.Theme.Light">浅色</sys:String>
     <sys:String x:Key="Settings.Theme.Dark">深色</sys:String>
     <sys:String x:Key="Tip.RunAtStartup">Windows 启动时自动运行 ManagedDrive</sys:String>
@@ -98,7 +98,7 @@
 
     <!-- Tray menu -->
     <sys:String x:Key="Tray.Show">显示</sys:String>
-    <sys:String x:Key="Tray.NewDisk">新建磁盘</sys:String>
+    <sys:String x:Key="Tray.NewDisk">新建磁盘...</sys:String>
     <sys:String x:Key="Tray.ResetTempDirs">重置临时文件夹</sys:String>
     <sys:String x:Key="Tray.Settings">设置…</sys:String>
     <sys:String x:Key="Tray.About">关于</sys:String>
@@ -133,6 +133,7 @@
     <sys:String x:Key="Status.FormatDisk">已格式化 {0}。</sys:String>
     <sys:String x:Key="Msg.UnmountConfirmTitle">卸载磁盘</sys:String>
     <sys:String x:Key="Msg.UnmountConfirmBody">确认卸载 {0}（{1}）？&#x0a;&#x0a;未保存到镜像文件的数据将会丢失。</sys:String>
+    <sys:String x:Key="Msg.DeleteImageOption">同时删除镜像文件</sys:String>
     <sys:String x:Key="Msg.EditDiskConfirmTitle">编辑磁盘</sys:String>
     <sys:String x:Key="Msg.EditDiskConfirmBody">确认编辑 {0}（{1}）？&#x0a;&#x0a;磁盘将以新参数重新挂载，内存中的所有数据将丢失。</sys:String>
     <sys:String x:Key="Msg.TempDirWillBeReset">此磁盘当前是您的 Windows 临时文件夹。卸载前将自动恢复为系统默认临时目录。</sys:String>
