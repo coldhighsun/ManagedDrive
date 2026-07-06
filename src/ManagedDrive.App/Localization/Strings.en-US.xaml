@@ -67,6 +67,10 @@
     <sys:String x:Key="Card.NeverWritten">Not yet modified</sys:String>
     <sys:String x:Key="Card.LastAutoSavePrefix">Last image save: {0}</sys:String>
     <sys:String x:Key="Card.NeverAutoSaved">Image not yet saved</sys:String>
+    <sys:String x:Key="Time.JustNow">Just now</sys:String>
+    <sys:String x:Key="Time.MinutesAgo">{0} min ago</sys:String>
+    <sys:String x:Key="Time.HoursAgo">{0} hours ago</sys:String>
+    <sys:String x:Key="Time.DaysAgo">{0} days ago</sys:String>
     <sys:String x:Key="Card.Saving">Saving...</sys:String>
     <sys:String x:Key="Msg.ExitSaving">Saving disk images, please wait...</sys:String>
     <sys:String x:Key="Card.ReadOnly">Read-only</sys:String>
