@@ -29,6 +29,7 @@
                       NonClientFrameEdges="None"/>
     </WindowChrome.WindowChrome>
 
+    <Grid>
     <DockPanel>
 
         <!-- App bar -->
@@ -365,4 +366,43 @@
         </ListBox>
 
     </DockPanel>
+
+    <!-- Exit saving overlay -->
+    <Border Background="{DynamicResource AppSurface}"
+            Opacity="0.92"
+            Visibility="{Binding IsExiting, Converter={StaticResource BoolToVis}}"
+            Panel.ZIndex="100">
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
+            <TextBlock Text="&#xE895;" FontFamily="Segoe Fluent Icons" FontSize="20"
+                       Foreground="{DynamicResource AppPrimary}"
+                       RenderTransformOrigin="0.5,0.5">
+                <TextBlock.RenderTransform>
+                    <RotateTransform x:Name="ExitSpinnerRotate" Angle="0"/>
+                </TextBlock.RenderTransform>
+                <TextBlock.Style>
+                    <Style TargetType="TextBlock">
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding IsExiting}" Value="True">
+                                <DataTrigger.EnterActions>
+                                    <BeginStoryboard x:Name="ExitSpinStoryboard">
+                                        <Storyboard>
+                                            <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(RotateTransform.Angle)"
+                                                              From="0" To="360" Duration="0:0:1"
+                                                              RepeatBehavior="Forever"/>
+                                        </Storyboard>
+                                    </BeginStoryboard>
+                                </DataTrigger.EnterActions>
+                                <DataTrigger.ExitActions>
+                                    <StopStoryboard BeginStoryboardName="ExitSpinStoryboard"/>
+                                </DataTrigger.ExitActions>
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </TextBlock.Style>
+            </TextBlock>
+            <TextBlock Text="{DynamicResource Msg.ExitSaving}" FontSize="14" Margin="8,0,0,0"
+                       Foreground="{DynamicResource AppForeground}" VerticalAlignment="Center"/>
+        </StackPanel>
+    </Border>
+    </Grid>
 </Window>

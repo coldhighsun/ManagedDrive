@@ -16,6 +16,7 @@ public partial class App
     private readonly TimeSpan _showTrayInfoPopup = TimeSpan.FromSeconds(2);
 
     private readonly DispatcherTimer _timerHiddenTrayInfoPopup = new();
+    private readonly DispatcherTimer _timerShowTrayInfoPopup = new();
     private bool _isExiting;
     private MainViewModel? _mainViewModel;
     private MainWindow? _mainWindow;
@@ -44,8 +45,7 @@ public partial class App
         _trayIcon?.Dispose();
         _mainViewModel?.Dispose();
 
-        // Unmounting a disk performs a final auto-save write; run it off the UI thread so
-        // large disks don't freeze the shutdown sequence for longer than necessary.
+        // Safety net: if ShutdownAsync already disposed the mount manager, this is a no-op.
         Task.Run(() => _mountManager?.Dispose()).Wait();
         if (_singleInstanceMutex != null)
         {
@@ -83,6 +83,7 @@ public partial class App
         _mountManager = new();
         SystemEvents.SessionEnding += OnSessionEnding;
         _mainViewModel = new(_mountManager, _settings, config);
+        _mainViewModel.ExitRequested += async (_, _) => await ShutdownAsync();
         _mainWindow = new(_mainViewModel);
         _mainWindow.Closing += MainWindow_Closing;
 
@@ -251,7 +252,7 @@ public partial class App
             success ? System.Windows.Forms.ToolTipIcon.Info : System.Windows.Forms.ToolTipIcon.Warning);
     }
 
-    private void ExitApplication()
+    private async void ExitApplication()
     {
         var tempOnRamDisk = _mainViewModel != null && IsTempOnAnyDisk(_mainViewModel.Disks);
 
@@ -283,13 +284,24 @@ public partial class App
             }
         }
 
+        await ShutdownAsync();
+    }
+
+    private async Task ShutdownAsync()
+    {
         SystemEvents.SessionEnding -= OnSessionEnding;
         _isExiting = true;
+
+        if (_mainViewModel != null)
+        {
+            _mainViewModel.IsExiting = true;
+            ShowMainWindow();
+        }
+
         SaveSettings();
         _trayIcon?.Dispose();
         _mainViewModel?.Dispose();
-        // See App_Exit: offload the final auto-save write to a background thread.
-        Task.Run(() => _mountManager?.Dispose()).Wait();
+        await Task.Run(() => _mountManager?.Dispose());
         Shutdown();
     }
 
@@ -388,8 +400,14 @@ public partial class App
         _trayIcon.DoubleClick += (_, _) => Dispatcher.Invoke(ShowMainWindow);
         _trayIcon.MouseMove += (_, _) => Dispatcher.Invoke(() =>
         {
-            _trayInfoPopup!.IsOpen = true;
-            _timerHiddenTrayInfoPopup.Start();
+            if (_trayInfoPopup!.IsOpen)
+            {
+                _timerHiddenTrayInfoPopup.Start();
+            }
+            else
+            {
+                _timerShowTrayInfoPopup.Start();
+            }
         });
 
         _trayInfoPopup = new()
@@ -400,9 +418,19 @@ public partial class App
             StaysOpen = true,
         };
 
+        _timerShowTrayInfoPopup.Interval = TimeSpan.FromMilliseconds(500);
+        _timerShowTrayInfoPopup.Tick += (_, _) =>
+        {
+            _timerShowTrayInfoPopup.Stop();
+            _trayInfoPopup!.IsOpen = true;
+            _timerHiddenTrayInfoPopup.Start();
+        };
+
         _timerHiddenTrayInfoPopup.Interval = _showTrayInfoPopup;
         _timerHiddenTrayInfoPopup.Tick += (_, _) =>
         {
+            _timerShowTrayInfoPopup.Stop();
+
             if (_trayInfoPopup is { IsOpen: true })
             {
                 _trayInfoPopup.IsOpen = false;

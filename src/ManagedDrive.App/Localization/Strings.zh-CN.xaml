@@ -68,6 +68,7 @@
     <sys:String x:Key="Card.LastAutoSavePrefix">上次保存镜像：{0}</sys:String>
     <sys:String x:Key="Card.NeverAutoSaved">镜像尚未保存</sys:String>
     <sys:String x:Key="Card.Saving">正在保存...</sys:String>
+    <sys:String x:Key="Msg.ExitSaving">正在保存磁盘镜像，请稍候...</sys:String>
     <sys:String x:Key="Card.ReadOnly">只读</sys:String>
     <sys:String x:Key="Card.ReadOnlyNoImage">只读 · 无镜像</sys:String>
     <sys:String x:Key="Val.AutoSaveNoImage">开启自动保存前请先选择镜像文件。</sys:String>
