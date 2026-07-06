@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<WixLocalization xmlns="http://wixtoolset.org/schemas/v4/wxl" Culture="en-US">
-  <String Id="LicenseRtfPath" Value="installer\License.rtf" />
-  <String Id="TempDirWarningTitle" Value="Check Temporary Directory Before Continuing" />
-  <String Id="TempDirWarningDescription" Value="Read the following carefully before repairing or uninstalling." />
-  <String Id="TempDirWarningHeading" Value="Important: Ensure Temp Directory Is Not on a RAM Disk" />
-  <String Id="TempDirWarningBody" Value="If your Windows user temporary directory (TEMP / TMP) is currently pointing to a ManagedDrive RAM disk, the repair or uninstall operation may fail because the installer writes temporary files there.&#13;&#10;&#13;&#10;Before continuing, open ManagedDrive and use the &quot;Reset to Default Temp Directory&quot; button (next to the temp-dir indicator in the main window) to restore the default Windows temporary folder.&#13;&#10;&#13;&#10;If ManagedDrive is not running, reset manually: System Properties &gt; Advanced &gt; Environment Variables, and set TEMP and TMP to %USERPROFILE%\AppData\Local\Temp." />
-  <String Id="TempDirWarningContinue" Value="I Understand, &amp;Continue" />
-</WixLocalization>
