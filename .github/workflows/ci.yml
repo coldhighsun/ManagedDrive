@@ -48,9 +48,9 @@ jobs:
           name: test-results
           path: '**/results.trx'
 
-  # ── Publish MSI Release ───────────────────────────────────────────────────────
+  # ── Release ──────────────────────────────────────────────────────────────────
   release:
-    name: Publish MSI
+    name: Release
     needs: build-and-test
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: windows-latest
@@ -69,15 +69,6 @@ jobs:
         with:
           dotnet-version: '10.0.x'
 
-      - name: Install WiX v4 toolset
-        run: dotnet tool install --global wix --version 4.0.5
-
-      - name: Add WiX UI extension
-        run: wix extension add WixToolset.UI.wixext/4.0.5
-
-      - name: Add WiX Util extension
-        run: wix extension add WixToolset.Util.wixext/4.0.5
-
       - name: Restore & Publish app (win-x64)
         run: |
           dotnet publish src/ManagedDrive.App/ManagedDrive.App.csproj `
@@ -90,47 +81,10 @@ jobs:
         id: version
         run: |
           $tag = "${{ github.ref_name }}"          # e.g. v1.2.3
-          $ver = $tag.TrimStart('v')                # e.g. 1.2.3
           echo "tag=$tag"   >> $env:GITHUB_OUTPUT
-          echo "version=$ver" >> $env:GITHUB_OUTPUT
         shell: pwsh
 
-      - name: Build MSI (en-US base)
-        run: |
-          wix build installer/ManagedDrive.wxs `
-            -ext WixToolset.UI.wixext `
-            -ext WixToolset.Util.wixext `
-            -arch x64 `
-            -culture en-US `
-            -loc installer/en-US.wxl `
-            -d "PublishDir=publish\" `
-            -d "ProductVersion=${{ steps.version.outputs.version }}" `
-            -o "base-en-US.msi"
-        shell: pwsh
-
-      - name: Build MSI (zh-CN)
-        run: |
-          wix build installer/ManagedDrive.wxs `
-            -ext WixToolset.UI.wixext `
-            -ext WixToolset.Util.wixext `
-            -arch x64 `
-            -culture zh-CN `
-            -loc installer/zh-CN.wxl `
-            -d "PublishDir=publish\" `
-            -d "ProductVersion=${{ steps.version.outputs.version }}" `
-            -o "base-zh-CN.msi"
-        shell: pwsh
-
-      - name: Build multilingual MSI (embed zh-CN transform)
-        run: |
-          $tag = "${{ steps.version.outputs.tag }}"
-          $out = "ManagedDrive-$tag-win-x64.msi"
-          Copy-Item base-en-US.msi $out
-          wix msi transform base-en-US.msi base-zh-CN.msi -t language -o zh-CN.mst
-          cscript //NoLogo installer/EmbedTransform.vbs $out zh-CN.mst 2052
-        shell: pwsh
-
-      - name: Build portable (green) package
+      - name: Build portable package
         run: |
           $tag = "${{ steps.version.outputs.tag }}"
           $zip = "ManagedDrive-$tag-win-x64-portable.zip"
@@ -144,5 +98,4 @@ jobs:
           name: ManagedDrive ${{ github.ref_name }}
           generate_release_notes: true
           files: |
-            ManagedDrive-${{ steps.version.outputs.tag }}-win-x64.msi
             ManagedDrive-${{ steps.version.outputs.tag }}-win-x64-portable.zip
