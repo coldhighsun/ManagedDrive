@@ -8,13 +8,13 @@
     <sys:String x:Key="Menu.Tools">_Tools</sys:String>
     <sys:String x:Key="Menu.Exit">E_xit</sys:String>
     <sys:String x:Key="Menu.About">About</sys:String>
-    <sys:String x:Key="Btn.NewDisk">New Disk</sys:String>
+    <sys:String x:Key="Btn.NewDisk">New Disk...</sys:String>
     <sys:String x:Key="Btn.OpenInExplorer">Open in Explorer</sys:String>
     <sys:String x:Key="Btn.OpenImageDirectory">Open Image File Directory</sys:String>
     <sys:String x:Key="Btn.EditDisk">Edit Disk…</sys:String>
-    <sys:String x:Key="Btn.Unmount">Unmount</sys:String>
+    <sys:String x:Key="Btn.Unmount">Unmount...</sys:String>
     <sys:String x:Key="Btn.SaveImage">Save Image</sys:String>
-    <sys:String x:Key="Btn.SetAsTempDir">Set as Temp Directory</sys:String>
+    <sys:String x:Key="Btn.SetAsTempDir">Set as Temp Directory...</sys:String>
     <sys:String x:Key="Btn.RestoreDefaultTemp">Restore Default Temp Directory</sys:String>
     <sys:String x:Key="Btn.FormatDisk">Format…</sys:String>
     <sys:String x:Key="Btn.Refresh">Refresh</sys:String>
@@ -86,7 +86,7 @@
     <sys:String x:Key="Settings.Language">Language:</sys:String>
     <sys:String x:Key="Lang.System">System Default</sys:String>
     <sys:String x:Key="Settings.Theme">Theme:</sys:String>
-    <sys:String x:Key="Settings.Theme.System">System Default</sys:String>
+    <sys:String x:Key="Settings.Theme.System">Follow System</sys:String>
     <sys:String x:Key="Settings.Theme.Light">Light</sys:String>
     <sys:String x:Key="Settings.Theme.Dark">Dark</sys:String>
     <sys:String x:Key="Tip.RunAtStartup">Start ManagedDrive automatically when Windows starts</sys:String>
@@ -98,7 +98,7 @@
 
     <!-- Tray menu -->
     <sys:String x:Key="Tray.Show">Show</sys:String>
-    <sys:String x:Key="Tray.NewDisk">New Disk</sys:String>
+    <sys:String x:Key="Tray.NewDisk">New Disk...</sys:String>
     <sys:String x:Key="Tray.ResetTempDirs">Reset Temp Directory</sys:String>
     <sys:String x:Key="Tray.Settings">Settings…</sys:String>
     <sys:String x:Key="Tray.About">About</sys:String>
@@ -133,6 +133,7 @@
     <sys:String x:Key="Status.FormatDisk">Formatted {0}.</sys:String>
     <sys:String x:Key="Msg.UnmountConfirmTitle">Unmount Disk</sys:String>
     <sys:String x:Key="Msg.UnmountConfirmBody">Unmount {0} ({1})?&#x0a;&#x0a;Any data not saved to an image file will be lost.</sys:String>
+    <sys:String x:Key="Msg.DeleteImageOption">Also delete the image file</sys:String>
     <sys:String x:Key="Msg.EditDiskConfirmTitle">Edit Disk</sys:String>
     <sys:String x:Key="Msg.EditDiskConfirmBody">Edit {0} ({1})?&#x0a;&#x0a;The disk will be unmounted and remounted with the new settings. All data currently in memory will be lost.</sys:String>
     <sys:String x:Key="Msg.TempDirWillBeReset">This disk is currently your Windows Temp directory. It will be automatically reset to the system default before unmounting.</sys:String>
