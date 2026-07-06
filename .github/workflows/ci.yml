@@ -130,10 +130,19 @@ jobs:
           cscript //NoLogo installer/EmbedTransform.vbs $out zh-CN.mst 2052
         shell: pwsh
 
+      - name: Build portable (green) package
+        run: |
+          $tag = "${{ steps.version.outputs.tag }}"
+          $zip = "ManagedDrive-$tag-win-x64-portable.zip"
+          Compress-Archive -Path publish\* -DestinationPath $zip
+        shell: pwsh
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
           name: ManagedDrive ${{ github.ref_name }}
           generate_release_notes: true
-          files: ManagedDrive-${{ steps.version.outputs.tag }}-win-x64.msi
+          files: |
+            ManagedDrive-${{ steps.version.outputs.tag }}-win-x64.msi
+            ManagedDrive-${{ steps.version.outputs.tag }}-win-x64-portable.zip

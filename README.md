@@ -42,7 +42,10 @@ Create, mount and manage in-memory volumes that appear as normal drive letters i
 
 ### Installation
 
-Download the latest MSI from the [Releases](https://github.com/coldhighsun/ManagedDrive/releases) page and run it. The installer automatically installs WinFsp if it is not already present, and selects the UI language based on your Windows locale (English or Simplified Chinese).
+Download the latest release from the [Releases](https://github.com/coldhighsun/ManagedDrive/releases) page:
+
+- **MSI installer** (`ManagedDrive-vX.Y.Z-win-x64.msi`) — run it. WinFsp must be installed separately first (see Prerequisites below); the installer selects the UI language based on your Windows locale (English or Simplified Chinese).
+- **Portable ZIP** (`ManagedDrive-vX.Y.Z-win-x64-portable.zip`) — no installer. Extract anywhere and run `ManagedDrive.exe` directly. The only registry write is the optional "Run at startup" setting; nothing else touches the registry. WinFsp must still be installed separately first (see Prerequisites below).
 
 > **Before repairing or uninstalling:** if you have redirected your Windows user temporary directory (TEMP/TMP) to a ManagedDrive RAM disk, reset it to the Windows default first — either from inside the app using **Reset to Default Temp Directory**, or manually via System Properties → Advanced → Environment Variables. The installer will remind you of this during repair and uninstall.
 
@@ -266,7 +269,10 @@ MIT
 
 ### 安装
 
-从 [Releases](https://github.com/coldhighsun/ManagedDrive/releases) 页面下载最新的 MSI 安装包并运行。安装程序会在 WinFsp 未安装时自动安装，并根据 Windows 系统语言自动选择界面语言（中文或英文）。
+从 [Releases](https://github.com/coldhighsun/ManagedDrive/releases) 页面下载最新版本：
+
+- **MSI 安装包**（`ManagedDrive-vX.Y.Z-win-x64.msi`）——下载并运行。仍需提前单独安装 WinFsp（见下方环境要求），安装程序会根据 Windows 系统语言自动选择界面语言（中文或英文）。
+- **绿色版 ZIP**（`ManagedDrive-vX.Y.Z-win-x64-portable.zip`）——无需安装。解压到任意目录后直接运行 `ManagedDrive.exe` 即可。唯一会写入注册表的操作是可选的"开机自启"设置，除此之外不会写入注册表。仍需提前单独安装 WinFsp（见下方环境要求）。
 
 > **修复或卸载前请注意：** 如果您已将 Windows 用户临时目录（TEMP/TMP）重定向到 ManagedDrive 内存盘，请先将其恢复为系统默认值——在应用内使用**恢复默认用户临时文件夹**功能，或手动在「系统属性」→「高级」→「环境变量」中修改。安装程序在执行修复和卸载时会提示您完成此操作。
 
