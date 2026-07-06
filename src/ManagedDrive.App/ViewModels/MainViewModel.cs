@@ -60,6 +60,8 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     /// <inheritdoc />
     public event PropertyChangedEventHandler? PropertyChanged;
 
+    public event EventHandler? ExitRequested;
+
     /// <summary>
     /// Gets the command that opens the About dialog.
     /// </summary>
@@ -148,6 +150,19 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     public RelayCommand SettingsCommand
     {
         get;
+    }
+
+    /// <summary>
+    /// Gets whether the application is currently shutting down (saving disk images).
+    /// </summary>
+    public bool IsExiting
+    {
+        get;
+        set
+        {
+            field = value;
+            OnPropertyChanged(nameof(IsExiting));
+        }
     }
 
     /// <summary>
@@ -393,7 +408,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     {
         if (Disks.Count == 0)
         {
-            Application.Current.Shutdown();
+            ExitRequested?.Invoke(this, EventArgs.Empty);
             return;
         }
 
@@ -421,7 +436,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             {
                 TempDirResetService.Reset();
             }
-            Application.Current.Shutdown();
+            ExitRequested?.Invoke(this, EventArgs.Empty);
         }
     }
 
