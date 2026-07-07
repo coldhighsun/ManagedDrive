@@ -10,19 +10,17 @@ public partial class App
 {
     private const string SingleInstanceMutexName = "Global\\ManagedDrive-4A7C2E1B-9F3D-4B8A-A1C5-3E6D2F0B8C9A";
 
-    // NotifyIcon has no MouseLeave event; Windows keeps resending MouseMove while the cursor
-    // rests over the icon, so a short timer that gets restarted on every MouseMove effectively
-    // hides the popup shortly after the cursor actually leaves the icon.
-    private readonly TimeSpan _showTrayInfoPopup = TimeSpan.FromSeconds(2);
-
-    private readonly DispatcherTimer _timerHiddenTrayInfoPopup = new();
+    private readonly DispatcherTimer _timerPollCursor = new();
     private readonly DispatcherTimer _timerShowTrayInfoPopup = new();
+    private readonly DispatcherTimer _timerTooltipCooldown = new();
+    private System.Drawing.Point _iconScreenPoint;
     private bool _isExiting;
     private MainViewModel? _mainViewModel;
     private MainWindow? _mainWindow;
     private MountManager? _mountManager;
     private SettingsStore? _settings;
     private Mutex? _singleInstanceMutex;
+    private bool _tooltipCooldown;
     private System.Windows.Forms.NotifyIcon? _trayIcon;
     private Popup? _trayInfoPopup;
 
@@ -287,22 +285,24 @@ public partial class App
         await ShutdownAsync();
     }
 
-    private async Task ShutdownAsync()
+    private bool IsInIconRegion(System.Drawing.Point cursor)
     {
-        SystemEvents.SessionEnding -= OnSessionEnding;
-        _isExiting = true;
+        const int halfSize = 16;
+        return Math.Abs(cursor.X - _iconScreenPoint.X) <= halfSize
+            && Math.Abs(cursor.Y - _iconScreenPoint.Y) <= halfSize;
+    }
 
-        if (_mainViewModel != null)
-        {
-            _mainViewModel.IsExiting = true;
-            ShowMainWindow();
-        }
-
-        _mainViewModel?.SaveSettings();
-        _trayIcon?.Dispose();
-        _mainViewModel?.Dispose();
-        await Task.Run(() => _mountManager?.Dispose());
-        Shutdown();
+    private bool IsInPopupRegion(System.Drawing.Point cursor)
+    {
+        if (_trayInfoPopup?.Child is not FrameworkElement child)
+            return false;
+        var dpi = System.Windows.Media.VisualTreeHelper.GetDpi(Current.MainWindow ?? new Window());
+        var margin = 16.0;
+        var left = _trayInfoPopup.HorizontalOffset * dpi.DpiScaleX - margin;
+        var top = _trayInfoPopup.VerticalOffset * dpi.DpiScaleY - margin;
+        var right = left + child.ActualWidth * dpi.DpiScaleX + margin * 2;
+        var bottom = top + child.ActualHeight * dpi.DpiScaleY + margin * 2;
+        return cursor.X >= left && cursor.X <= right && cursor.Y >= top && cursor.Y <= bottom;
     }
 
     private void MainWindow_Closing(object? sender, CancelEventArgs e)
@@ -359,6 +359,36 @@ public partial class App
         }
     }
 
+    private void PositionTrayPopup()
+    {
+        var workArea = SystemParameters.WorkArea;
+        var child = _trayInfoPopup!.Child as FrameworkElement;
+        child?.Measure(new System.Windows.Size(double.PositiveInfinity, double.PositiveInfinity));
+        var popupHeight = child?.DesiredSize.Height ?? 80;
+        var popupWidth = child?.DesiredSize.Width ?? 200;
+
+        var dpi = System.Windows.Media.VisualTreeHelper.GetDpi(Current.MainWindow ?? new Window());
+        var x = _iconScreenPoint.X / dpi.DpiScaleX;
+        var y = _iconScreenPoint.Y / dpi.DpiScaleY;
+
+        var left = x - popupWidth / 2;
+        if (left < workArea.Left)
+            left = workArea.Left + 4;
+        if (left + popupWidth > workArea.Right)
+            left = workArea.Right - popupWidth - 4;
+
+        double top;
+        if (y > workArea.Bottom - 60)
+            top = workArea.Bottom - popupHeight - 8;
+        else if (y < workArea.Top + 60)
+            top = workArea.Top + 8;
+        else
+            top = y - popupHeight - 16;
+
+        _trayInfoPopup.HorizontalOffset = left;
+        _trayInfoPopup.VerticalOffset = top;
+    }
+
     private void SetupTrayIcon()
     {
         var menu = new System.Windows.Forms.ContextMenuStrip();
@@ -377,26 +407,21 @@ public partial class App
         {
             Icon = new(iconStream),
             ContextMenuStrip = menu,
-            Text = "ManagedDrive",
+            Text = "",
             Visible = false,
         };
         _trayIcon.DoubleClick += (_, _) => Dispatcher.Invoke(ShowMainWindow);
         _trayIcon.MouseMove += (_, _) => Dispatcher.Invoke(() =>
         {
-            if (_trayInfoPopup!.IsOpen)
-            {
-                _timerHiddenTrayInfoPopup.Start();
-            }
-            else
-            {
+            _iconScreenPoint = System.Windows.Forms.Cursor.Position;
+            if (!_trayInfoPopup!.IsOpen && !_tooltipCooldown)
                 _timerShowTrayInfoPopup.Start();
-            }
         });
 
         _trayInfoPopup = new()
         {
             Child = new TrayTooltipView { DataContext = _mainViewModel },
-            Placement = PlacementMode.Mouse,
+            Placement = PlacementMode.AbsolutePoint,
             AllowsTransparency = true,
             StaysOpen = true,
         };
@@ -405,21 +430,33 @@ public partial class App
         _timerShowTrayInfoPopup.Tick += (_, _) =>
         {
             _timerShowTrayInfoPopup.Stop();
+            PositionTrayPopup();
             _trayInfoPopup!.IsOpen = true;
-            _timerHiddenTrayInfoPopup.Start();
+            _timerPollCursor.Start();
         };
 
-        _timerHiddenTrayInfoPopup.Interval = _showTrayInfoPopup;
-        _timerHiddenTrayInfoPopup.Tick += (_, _) =>
+        _timerPollCursor.Interval = TimeSpan.FromMilliseconds(200);
+        _timerPollCursor.Tick += (_, _) =>
         {
-            _timerShowTrayInfoPopup.Stop();
-
-            if (_trayInfoPopup is { IsOpen: true })
+            if (_trayInfoPopup is not { IsOpen: true })
             {
-                _trayInfoPopup.IsOpen = false;
+                _timerPollCursor.Stop();
+                return;
             }
+            var cur = System.Windows.Forms.Cursor.Position;
+            if (IsInIconRegion(cur) || IsInPopupRegion(cur))
+                return;
+            _trayInfoPopup.IsOpen = false;
+            _timerPollCursor.Stop();
+            _tooltipCooldown = true;
+            _timerTooltipCooldown.Start();
+        };
 
-            _timerHiddenTrayInfoPopup.Stop();
+        _timerTooltipCooldown.Interval = TimeSpan.FromMilliseconds(300);
+        _timerTooltipCooldown.Tick += (_, _) =>
+        {
+            _tooltipCooldown = false;
+            _timerTooltipCooldown.Stop();
         };
 
         LanguageManager.Instance.LanguageChanged += (_, _) => UpdateTrayMenuHeaders();
@@ -485,6 +522,24 @@ public partial class App
     {
         ShowMainWindow();
         _mainViewModel?.SettingsCommand.Execute(null);
+    }
+
+    private async Task ShutdownAsync()
+    {
+        SystemEvents.SessionEnding -= OnSessionEnding;
+        _isExiting = true;
+
+        if (_mainViewModel != null)
+        {
+            _mainViewModel.IsExiting = true;
+            ShowMainWindow();
+        }
+
+        _mainViewModel?.SaveSettings();
+        _trayIcon?.Dispose();
+        _mainViewModel?.Dispose();
+        await Task.Run(() => _mountManager?.Dispose());
+        Shutdown();
     }
 
     private void UpdateTrayMenuHeaders()
