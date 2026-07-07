@@ -185,6 +185,16 @@ public partial class CloneDiskDialog
             return;
         }
 
+        if (SnapshotManager.IsSnapshotFileName(Path.GetFileName(dlg.FileName)))
+        {
+            MessageBox.Show(
+                Loc.Get("Val.ImagePathIsSnapshot"),
+                Loc.Get("Val.Title"),
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+            return;
+        }
+
         ExportPathBox.Text = dlg.FileName;
     }
 

@@ -187,6 +187,14 @@
                                                     RelativeSource={RelativeSource AncestorType=ContextMenu}}"
                                           CommandParameter="{Binding PlacementTarget.DataContext,
                                                     RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
+                                <MenuItem Header="{DynamicResource Btn.RestoreSnapshot}"
+                                          Visibility="{Binding PlacementTarget.DataContext.SnapshotsEnabled,
+                                                        RelativeSource={RelativeSource AncestorType=ContextMenu},
+                                                        Converter={StaticResource BoolToVis}}"
+                                          Command="{Binding PlacementTarget.Tag.RestoreSnapshotCommand,
+                                                    RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                          CommandParameter="{Binding PlacementTarget.DataContext,
+                                                    RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
                                 <MenuItem Header="{DynamicResource Btn.FormatDisk}"
                                           Command="{Binding PlacementTarget.Tag.FormatDiskCommand,
                                                     RelativeSource={RelativeSource AncestorType=ContextMenu}}"

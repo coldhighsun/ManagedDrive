@@ -16,14 +16,16 @@ public partial class CreateDiskDialog
         ImageCompressionLevel.SmallestSize,
     ];
 
+    private readonly ulong _importCapacityBytes;
+    private readonly string _importVolumeLabel = string.Empty;
+    private readonly bool _isImportMode;
     private readonly ulong _maxCapacityBytes;
     private readonly IReadOnlyList<DiskOptions> _otherDisks;
-    private readonly bool _isImportMode;
-    private ulong _importCapacityBytes;
-    private string _importVolumeLabel = string.Empty;
     private int _capacityMaximum;
     private int _capacityValue = 2;
     private int _intervalValue = 10;
+    private int _snapshotCountValue = 10;
+    private int _snapshotSizeValue = 2;
 
     /// <summary>
     /// Initializes the dialog in create mode.
@@ -45,6 +47,12 @@ public partial class CreateDiskDialog
         CapacityUnitBox.SelectionChanged += CapacityUnitBox_SelectionChanged;
         _capacityMaximum = GetMaxCapacityValue();
         UpdateCapacityDisplay();
+
+        SnapshotSizeUnitBox.Items.Add("MB");
+        SnapshotSizeUnitBox.Items.Add("GB");
+        SnapshotSizeUnitBox.SelectedIndex = 1;
+        UpdateSnapshotCountDisplay();
+        UpdateSnapshotSizeDisplay();
 
         foreach (var level in CompressionLevels)
         {
@@ -104,6 +112,33 @@ public partial class CreateDiskDialog
             AutoSaveIntervalPanel.IsEnabled = true;
             _intervalValue = (int)Math.Max(1, minutes);
             IntervalValue = _intervalValue;
+
+            if (existing.MaxSnapshotCount is { } maxCount)
+            {
+                SnapshotCountEnabledBox.IsChecked = true;
+                SnapshotCountPanel.IsEnabled = true;
+                SnapshotCountValue = (int)Math.Max(1, maxCount);
+            }
+
+            if (existing.MaxSnapshotSizeBytes is { } maxSizeBytes)
+            {
+                SnapshotSizeEnabledBox.IsChecked = true;
+                SnapshotSizePanel.IsEnabled = true;
+                SnapshotSizeUnitBox.IsEnabled = true;
+
+                var sizeMb = maxSizeBytes / (1024UL * 1024);
+                var sizeGb = maxSizeBytes / (1024UL * 1024 * 1024);
+                if (sizeGb > 0 && maxSizeBytes % (1024UL * 1024 * 1024) == 0)
+                {
+                    SnapshotSizeUnitBox.SelectedItem = "GB";
+                    SnapshotSizeValue = (int)sizeGb;
+                }
+                else
+                {
+                    SnapshotSizeUnitBox.SelectedItem = "MB";
+                    SnapshotSizeValue = (int)Math.Max(1, sizeMb);
+                }
+            }
         }
     }
 
@@ -187,6 +222,26 @@ public partial class CreateDiskDialog
         }
     }
 
+    private int SnapshotCountValue
+    {
+        get => _snapshotCountValue;
+        set
+        {
+            _snapshotCountValue = Math.Clamp(value, 1, 999);
+            UpdateSnapshotCountDisplay();
+        }
+    }
+
+    private int SnapshotSizeValue
+    {
+        get => _snapshotSizeValue;
+        set
+        {
+            _snapshotSizeValue = Math.Clamp(value, 1, int.MaxValue);
+            UpdateSnapshotSizeDisplay();
+        }
+    }
+
     private static string CompressionLevelKey(ImageCompressionLevel level) => level switch
     {
         ImageCompressionLevel.None => "CompressionLevel.None",
@@ -227,6 +282,7 @@ public partial class CreateDiskDialog
     private void AutoSaveBox_CheckedChanged(object sender, RoutedEventArgs e)
     {
         UpdateAutoSaveIntervalPanelState();
+        UpdateSnapshotEnabledState();
     }
 
     private void AutoSaveIntervalDown_Click(object sender, RoutedEventArgs e)
@@ -368,10 +424,57 @@ public partial class CreateDiskDialog
         }
     }
 
+    private void ParseSnapshotCountFromBox()
+    {
+        if (int.TryParse(SnapshotCountBox.Text, out var parsed))
+        {
+            _snapshotCountValue = parsed;
+        }
+    }
+
+    private void ParseSnapshotSizeFromBox()
+    {
+        if (int.TryParse(SnapshotSizeBox.Text, out var parsed))
+        {
+            _snapshotSizeValue = parsed;
+        }
+    }
+
     private void ReadOnlyBox_CheckedChanged(object sender, RoutedEventArgs e)
     {
         UpdateAutoSaveEnabledState();
         UpdateCompressionLevelState();
+    }
+
+    private void SnapshotCountDown_Click(object sender, RoutedEventArgs e)
+    {
+        ParseSnapshotCountFromBox();
+        SnapshotCountValue = _snapshotCountValue - 1;
+    }
+
+    private void SnapshotCountUp_Click(object sender, RoutedEventArgs e)
+    {
+        ParseSnapshotCountFromBox();
+        SnapshotCountValue = _snapshotCountValue + 1;
+    }
+
+    private void SnapshotLimit_CheckedChanged(object sender, RoutedEventArgs e)
+    {
+        SnapshotCountPanel.IsEnabled = SnapshotCountEnabledBox.IsChecked == true;
+        SnapshotSizePanel.IsEnabled = SnapshotSizeEnabledBox.IsChecked == true;
+        SnapshotSizeUnitBox.IsEnabled = SnapshotSizeEnabledBox.IsChecked == true;
+    }
+
+    private void SnapshotSizeDown_Click(object sender, RoutedEventArgs e)
+    {
+        ParseSnapshotSizeFromBox();
+        SnapshotSizeValue = _snapshotSizeValue - 1;
+    }
+
+    private void SnapshotSizeUp_Click(object sender, RoutedEventArgs e)
+    {
+        ParseSnapshotSizeFromBox();
+        SnapshotSizeValue = _snapshotSizeValue + 1;
     }
 
     private bool TryBuildOptions(out DiskOptions? options, out string error)
@@ -414,6 +517,12 @@ public partial class CreateDiskDialog
             if (!IsValidImagePath(imagePath))
             {
                 error = Loc.Get("Val.BadImagePath");
+                return false;
+            }
+
+            if (SnapshotManager.IsSnapshotFileName(Path.GetFileName(imagePath)))
+            {
+                error = Loc.Get("Val.ImagePathIsSnapshot");
                 return false;
             }
 
@@ -468,6 +577,38 @@ public partial class CreateDiskDialog
             autoSaveIntervalMinutes = (uint)_intervalValue;
         }
 
+        uint? maxSnapshotCount = null;
+        ulong? maxSnapshotSizeBytes = null;
+        if (autoSaveIntervalMinutes is not null)
+        {
+            if (SnapshotCountEnabledBox.IsChecked == true)
+            {
+                ParseSnapshotCountFromBox();
+                if (_snapshotCountValue < 1 || _snapshotCountValue > 999)
+                {
+                    error = Loc.Get("Val.BadSnapshotCount");
+                    return false;
+                }
+
+                maxSnapshotCount = (uint)_snapshotCountValue;
+            }
+
+            if (SnapshotSizeEnabledBox.IsChecked == true)
+            {
+                ParseSnapshotSizeFromBox();
+                if (_snapshotSizeValue < 1)
+                {
+                    error = Loc.Get("Val.BadSnapshotSize");
+                    return false;
+                }
+
+                var isSizeGb = SnapshotSizeUnitBox.SelectedItem as string == "GB";
+                maxSnapshotSizeBytes = isSizeGb
+                    ? (ulong)_snapshotSizeValue * 1024 * 1024 * 1024
+                    : (ulong)_snapshotSizeValue * 1024 * 1024;
+            }
+        }
+
         options = new()
         {
             MountPoint = mountPoint,
@@ -479,6 +620,8 @@ public partial class CreateDiskDialog
             AutoSaveIntervalMinutes = autoSaveIntervalMinutes,
             CompressionLevel = (CompressionLevelBox.SelectedItem as CompressionLevelItem)?.Level
                 ?? ImageCompressionLevel.Fastest,
+            MaxSnapshotCount = maxSnapshotCount,
+            MaxSnapshotSizeBytes = maxSnapshotSizeBytes,
         };
 
         error = string.Empty;
@@ -495,6 +638,7 @@ public partial class CreateDiskDialog
         }
 
         UpdateAutoSaveIntervalPanelState();
+        UpdateSnapshotEnabledState();
     }
 
     private void UpdateAutoSaveIntervalPanelState()
@@ -521,5 +665,29 @@ public partial class CreateDiskDialog
         var show = CompressionLevelBox.IsEnabled
                    && level is ImageCompressionLevel.Optimal or ImageCompressionLevel.SmallestSize;
         CompressionWarningText.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private void UpdateSnapshotCountDisplay()
+    {
+        SnapshotCountBox.Text = _snapshotCountValue.ToString();
+    }
+
+    private void UpdateSnapshotEnabledState()
+    {
+        var snapshotsAllowed = AutoSaveBox.IsEnabled && AutoSaveBox.IsChecked == true;
+        SnapshotCountEnabledBox.IsEnabled = snapshotsAllowed;
+        SnapshotSizeEnabledBox.IsEnabled = snapshotsAllowed;
+        if (!snapshotsAllowed)
+        {
+            SnapshotCountEnabledBox.IsChecked = false;
+            SnapshotSizeEnabledBox.IsChecked = false;
+        }
+
+        SnapshotLimit_CheckedChanged(this, new RoutedEventArgs());
+    }
+
+    private void UpdateSnapshotSizeDisplay()
+    {
+        SnapshotSizeBox.Text = _snapshotSizeValue.ToString();
     }
 }

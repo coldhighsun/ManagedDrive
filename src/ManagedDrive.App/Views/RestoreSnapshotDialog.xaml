@@ -1,0 +1,56 @@
+<Window x:Class="ManagedDrive.App.Views.RestoreSnapshotDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Style="{StaticResource AppWindow}"
+        Title="{DynamicResource RestoreSnapshot.Title}"
+        Width="440" SizeToContent="Height"
+        ResizeMode="NoResize"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False">
+
+    <Grid Margin="24">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="16"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="24"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <TextBlock Grid.Row="0"
+                   x:Name="SourceDescriptionText"
+                   Foreground="{DynamicResource AppForegroundLight}"
+                   TextWrapping="Wrap"/>
+
+        <Border Grid.Row="2" Style="{StaticResource SectionBorder}">
+            <StackPanel>
+                <TextBlock x:Name="NoSnapshotsText"
+                           Text="{DynamicResource RestoreSnapshot.NoneWarning}"
+                           Foreground="{DynamicResource AppWarning}"
+                           TextWrapping="Wrap"
+                           Visibility="Collapsed"/>
+
+                <TextBlock x:Name="SnapshotCountText"
+                           Foreground="{DynamicResource AppForegroundLight}"
+                           FontSize="11" Margin="0,0,0,4"/>
+
+                <ListBox x:Name="SnapshotListBox" MaxHeight="260"
+                         BorderThickness="0" Background="Transparent"
+                         Foreground="{DynamicResource AppForeground}"
+                         ScrollViewer.VerticalScrollBarVisibility="Auto"
+                         ScrollViewer.CanContentScroll="True"
+                         VirtualizingStackPanel.IsVirtualizing="True"/>
+            </StackPanel>
+        </Border>
+
+        <!-- OK / Cancel -->
+        <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Right">
+            <Button Content="{DynamicResource Btn.Cancel}" Width="80" IsCancel="True"
+                    Style="{StaticResource FlatButton}"
+                    Margin="0,0,8,0"/>
+            <Button Content="{DynamicResource Btn.Ok}" Width="80" IsDefault="True"
+                    Click="OK_Click"
+                    Style="{StaticResource RaisedButton}"/>
+        </StackPanel>
+    </Grid>
+</Window>

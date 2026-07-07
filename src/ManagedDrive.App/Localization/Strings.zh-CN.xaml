@@ -19,6 +19,7 @@
     <sys:String x:Key="Btn.RestoreDefaultTemp">恢复默认临时文件夹</sys:String>
     <sys:String x:Key="Btn.FormatDisk">格式化…</sys:String>
     <sys:String x:Key="Btn.CloneDisk">克隆磁盘...</sys:String>
+    <sys:String x:Key="Btn.RestoreSnapshot">恢复快照...</sys:String>
     <sys:String x:Key="Btn.Refresh">刷新</sys:String>
     <sys:String x:Key="Btn.Settings">设置</sys:String>
     <sys:String x:Key="Tip.NewDisk">创建并挂载新的 RAM 磁盘</sys:String>
@@ -69,6 +70,11 @@
     <sys:String x:Key="CreateDisk.AutoSaveInterval">间隔（分钟）</sys:String>
     <sys:String x:Key="Tip.AutoSave">挂载期间按间隔自动将磁盘内容保存到镜像文件</sys:String>
     <sys:String x:Key="Tip.AutoSaveInterval">自动保存的时间间隔（分钟）</sys:String>
+    <sys:String x:Key="CreateDisk.SnapshotMaxCount">最多保留</sys:String>
+    <sys:String x:Key="CreateDisk.SnapshotMaxSize">总大小不超过</sys:String>
+    <sys:String x:Key="Tip.SnapshotMaxCount">快照数量达到该值后，自动删除最旧的快照</sys:String>
+    <sys:String x:Key="Tip.SnapshotMaxSize">快照总大小超过该值后，自动删除最旧的快照</sys:String>
+    <sys:String x:Key="CreateDisk.SnapshotExplanation">仅启用自动保存时，只会保留当前这一份镜像文件（每次都会被覆盖）。勾选下面任一限制后，每次自动保存还会额外生成一份带时间戳的历史快照，可用于恢复到某个时间点；以下限制控制最多保留多少份：</sys:String>
     <sys:String x:Key="Card.LastWritePrefix">上次写入：{0}</sys:String>
     <sys:String x:Key="Card.NeverWritten">尚未写入</sys:String>
     <sys:String x:Key="Card.LastAutoSavePrefix">上次保存镜像：{0}</sys:String>
@@ -89,6 +95,9 @@
     <sys:String x:Key="Val.BadImagePath">镜像文件路径不合法，或所在文件夹不存在。</sys:String>
     <sys:String x:Key="Val.ReadOnlyRequiresImage">只读内存盘必须选择一个已存在的镜像文件。</sys:String>
     <sys:String x:Key="Val.ReadOnlyImageNotFound">所选镜像文件不存在。</sys:String>
+    <sys:String x:Key="Val.BadSnapshotCount">请输入 1 到 999 之间的快照数量。</sys:String>
+    <sys:String x:Key="Val.BadSnapshotSize">请输入有效的最大快照大小。</sys:String>
+    <sys:String x:Key="Val.ImagePathIsSnapshot">该路径看起来像快照文件名，请选择另一个镜像路径。</sys:String>
 
     <!-- CloneDiskDialog -->
     <sys:String x:Key="CloneDisk.Title">克隆磁盘</sys:String>
@@ -103,6 +112,17 @@
     <sys:String x:Key="Msg.CloneDiskConfirmBody">将 {0} 的内容复制到 {1}（{2}）？&#x0a;&#x0a;{1} 上现有的所有文件和文件夹将被永久替换。</sys:String>
     <sys:String x:Key="Status.DiskCloned">已将 {0} 克隆到 {1}。</sys:String>
     <sys:String x:Key="Status.DiskExported">已将 {0} 导出到 {1}。</sys:String>
+
+    <!-- RestoreSnapshotDialog -->
+    <sys:String x:Key="RestoreSnapshot.Title">恢复快照</sys:String>
+    <sys:String x:Key="RestoreSnapshot.Description">{0}（{1}）：请选择要恢复的快照。</sys:String>
+    <sys:String x:Key="RestoreSnapshot.Count">共 {0} 个快照</sys:String>
+    <sys:String x:Key="RestoreSnapshot.NoneWarning">该磁盘暂无可用快照。</sys:String>
+    <sys:String x:Key="Val.NoSnapshotSelected">请选择要恢复的快照。</sys:String>
+    <sys:String x:Key="Msg.NoSnapshotsAvailable">该磁盘暂无可用快照。</sys:String>
+    <sys:String x:Key="Msg.RestoreSnapshotConfirmTitle">恢复快照</sys:String>
+    <sys:String x:Key="Msg.RestoreSnapshotConfirmBody">从快照 {2} 恢复 {0}（{1}）？&#x0a;&#x0a;当前内容将被替换。</sys:String>
+    <sys:String x:Key="Status.SnapshotRestored">已从快照恢复 {0}。</sys:String>
 
     <!-- SettingsDialog -->
     <sys:String x:Key="Settings.Title">设置</sys:String>

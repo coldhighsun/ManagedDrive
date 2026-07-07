@@ -131,6 +131,12 @@
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="12"/>
                         <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="8"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="8"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="12"/>
+                        <RowDefinition Height="Auto"/>
                     </Grid.RowDefinitions>
 
                     <!-- Image Path -->
@@ -219,6 +225,79 @@
                         </Grid>
                         <TextBlock Grid.Column="6" Text="{DynamicResource CreateDisk.AutoSaveSuffix}"
                                    VerticalAlignment="Center"/>
+                    </Grid>
+
+                    <!-- Snapshot Explanation -->
+                    <TextBlock Grid.Row="8" Text="{DynamicResource CreateDisk.SnapshotExplanation}"
+                               Foreground="{DynamicResource AppForegroundLight}"
+                               FontSize="11" TextWrapping="Wrap"/>
+
+                    <!-- Snapshot Max Count -->
+                    <Grid Grid.Row="10" Margin="16,0,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="6"/>
+                            <ColumnDefinition Width="70"/>
+                        </Grid.ColumnDefinitions>
+                        <CheckBox Grid.Column="0" x:Name="SnapshotCountEnabledBox" VerticalAlignment="Center"
+                                  Content="{DynamicResource CreateDisk.SnapshotMaxCount}"
+                                  Foreground="{DynamicResource AppForeground}"
+                                  ToolTip="{DynamicResource Tip.SnapshotMaxCount}"
+                                  Checked="SnapshotLimit_CheckedChanged" Unchecked="SnapshotLimit_CheckedChanged"/>
+                        <Grid Grid.Column="2" x:Name="SnapshotCountPanel" IsEnabled="False" VerticalAlignment="Center">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBox x:Name="SnapshotCountBox" Text="10" MaxLength="3"
+                                     Style="{StaticResource OutlinedTextBox}"
+                                     VerticalContentAlignment="Center"
+                                     PreviewTextInput="CapacityBox_PreviewTextInput"/>
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="2,0,0,0">
+                                <RepeatButton x:Name="SnapshotCountUp" Content="&#xE70E;" FontFamily="Segoe Fluent Icons"
+                                              FontSize="8" Width="24" Height="16" Click="SnapshotCountUp_Click"
+                                              Style="{StaticResource SpinRepeatButton}"/>
+                                <RepeatButton x:Name="SnapshotCountDown" Content="&#xE70D;" FontFamily="Segoe Fluent Icons"
+                                              FontSize="8" Width="24" Height="16" Click="SnapshotCountDown_Click"
+                                              Style="{StaticResource SpinRepeatButton}"/>
+                            </StackPanel>
+                        </Grid>
+                    </Grid>
+
+                    <!-- Snapshot Max Size -->
+                    <Grid Grid.Row="12" Margin="16,0,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="6"/>
+                            <ColumnDefinition Width="70"/>
+                            <ColumnDefinition Width="6"/>
+                            <ColumnDefinition Width="70"/>
+                        </Grid.ColumnDefinitions>
+                        <CheckBox Grid.Column="0" x:Name="SnapshotSizeEnabledBox" VerticalAlignment="Center"
+                                  Content="{DynamicResource CreateDisk.SnapshotMaxSize}"
+                                  Foreground="{DynamicResource AppForeground}"
+                                  ToolTip="{DynamicResource Tip.SnapshotMaxSize}"
+                                  Checked="SnapshotLimit_CheckedChanged" Unchecked="SnapshotLimit_CheckedChanged"/>
+                        <Grid Grid.Column="2" x:Name="SnapshotSizePanel" IsEnabled="False" VerticalAlignment="Center">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBox x:Name="SnapshotSizeBox" Text="500" MaxLength="6"
+                                     Style="{StaticResource OutlinedTextBox}"
+                                     VerticalContentAlignment="Center"
+                                     PreviewTextInput="CapacityBox_PreviewTextInput"/>
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="2,0,0,0">
+                                <RepeatButton x:Name="SnapshotSizeUp" Content="&#xE70E;" FontFamily="Segoe Fluent Icons"
+                                              FontSize="8" Width="24" Height="16" Click="SnapshotSizeUp_Click"
+                                              Style="{StaticResource SpinRepeatButton}"/>
+                                <RepeatButton x:Name="SnapshotSizeDown" Content="&#xE70D;" FontFamily="Segoe Fluent Icons"
+                                              FontSize="8" Width="24" Height="16" Click="SnapshotSizeDown_Click"
+                                              Style="{StaticResource SpinRepeatButton}"/>
+                            </StackPanel>
+                        </Grid>
+                        <ComboBox Grid.Column="4" x:Name="SnapshotSizeUnitBox" IsEnabled="False" IsEditable="False"
+                                  Style="{StaticResource OutlinedComboBox}"/>
                     </Grid>
                 </Grid>
             </StackPanel>

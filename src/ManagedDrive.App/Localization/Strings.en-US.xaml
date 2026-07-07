@@ -19,6 +19,7 @@
     <sys:String x:Key="Btn.RestoreDefaultTemp">Restore Default Temp Directory</sys:String>
     <sys:String x:Key="Btn.FormatDisk">Format…</sys:String>
     <sys:String x:Key="Btn.CloneDisk">Clone Disk...</sys:String>
+    <sys:String x:Key="Btn.RestoreSnapshot">Restore Snapshot...</sys:String>
     <sys:String x:Key="Btn.Refresh">Refresh</sys:String>
     <sys:String x:Key="Btn.Settings">Settings</sys:String>
     <sys:String x:Key="Tip.NewDisk">Create and mount a new RAM disk</sys:String>
@@ -69,6 +70,11 @@
     <sys:String x:Key="CreateDisk.AutoSaveInterval">Interval (min)</sys:String>
     <sys:String x:Key="Tip.AutoSave">Periodically save the disk contents to the image file while mounted</sys:String>
     <sys:String x:Key="Tip.AutoSaveInterval">How often to auto-save, in minutes</sys:String>
+    <sys:String x:Key="CreateDisk.SnapshotMaxCount">Keep at most</sys:String>
+    <sys:String x:Key="CreateDisk.SnapshotMaxSize">Limit total size to</sys:String>
+    <sys:String x:Key="Tip.SnapshotMaxCount">Delete the oldest snapshots once this many are stored</sys:String>
+    <sys:String x:Key="Tip.SnapshotMaxSize">Delete the oldest snapshots once their combined size exceeds this limit</sys:String>
+    <sys:String x:Key="CreateDisk.SnapshotExplanation">With only auto-save enabled, just the current image file is kept (overwritten each time). Checking either limit below also creates a timestamped snapshot on every auto-save that you can restore to later; the limits control how many are kept:</sys:String>
     <sys:String x:Key="Card.LastWritePrefix">Last modified: {0}</sys:String>
     <sys:String x:Key="Card.NeverWritten">Not yet modified</sys:String>
     <sys:String x:Key="Card.LastAutoSavePrefix">Last image save: {0}</sys:String>
@@ -89,6 +95,9 @@
     <sys:String x:Key="Val.BadImagePath">The image file path is invalid or its folder does not exist.</sys:String>
     <sys:String x:Key="Val.ReadOnlyRequiresImage">Read-only disks must use an existing image file.</sys:String>
     <sys:String x:Key="Val.ReadOnlyImageNotFound">The selected image file does not exist.</sys:String>
+    <sys:String x:Key="Val.BadSnapshotCount">Enter a snapshot count between 1 and 999.</sys:String>
+    <sys:String x:Key="Val.BadSnapshotSize">Enter a valid maximum snapshot size.</sys:String>
+    <sys:String x:Key="Val.ImagePathIsSnapshot">This path looks like a snapshot file name; choose a different image path.</sys:String>
 
     <!-- CloneDiskDialog -->
     <sys:String x:Key="CloneDisk.Title">Clone Disk</sys:String>
@@ -103,6 +112,17 @@
     <sys:String x:Key="Msg.CloneDiskConfirmBody">Copy the contents of {0} to {1} ({2})?&#x0a;&#x0a;All existing files and folders on {1} will be permanently replaced.</sys:String>
     <sys:String x:Key="Status.DiskCloned">Cloned {0} to {1}.</sys:String>
     <sys:String x:Key="Status.DiskExported">Exported {0} to {1}.</sys:String>
+
+    <!-- RestoreSnapshotDialog -->
+    <sys:String x:Key="RestoreSnapshot.Title">Restore Snapshot</sys:String>
+    <sys:String x:Key="RestoreSnapshot.Description">{0} ({1}): choose a snapshot to restore.</sys:String>
+    <sys:String x:Key="RestoreSnapshot.Count">{0} snapshot(s)</sys:String>
+    <sys:String x:Key="RestoreSnapshot.NoneWarning">No snapshots are available for this disk yet.</sys:String>
+    <sys:String x:Key="Val.NoSnapshotSelected">Select a snapshot to restore.</sys:String>
+    <sys:String x:Key="Msg.NoSnapshotsAvailable">No snapshots are available for this disk yet.</sys:String>
+    <sys:String x:Key="Msg.RestoreSnapshotConfirmTitle">Restore Snapshot</sys:String>
+    <sys:String x:Key="Msg.RestoreSnapshotConfirmBody">Restore {0} ({1}) from snapshot {2}?&#x0a;&#x0a;Current contents will be replaced.</sys:String>
+    <sys:String x:Key="Status.SnapshotRestored">Restored {0} from a snapshot.</sys:String>
 
     <!-- SettingsDialog -->
     <sys:String x:Key="Settings.Title">Settings</sys:String>

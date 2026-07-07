@@ -60,4 +60,22 @@ public sealed record DiskProfile
     /// Gets or sets the compression level applied when the saved image is written.
     /// </summary>
     public ImageCompressionLevel CompressionLevel { get; init; } = ImageCompressionLevel.Fastest;
+
+    /// <summary>
+    /// Gets or sets the optional maximum number of retained snapshot images. <c>null</c>
+    /// disables count-based snapshot pruning.
+    /// </summary>
+    public uint? MaxSnapshotCount
+    {
+        get; init;
+    }
+
+    /// <summary>
+    /// Gets or sets the optional maximum total size, in bytes, of retained snapshot images.
+    /// <c>null</c> disables size-based snapshot pruning.
+    /// </summary>
+    public ulong? MaxSnapshotSizeBytes
+    {
+        get; init;
+    }
 }

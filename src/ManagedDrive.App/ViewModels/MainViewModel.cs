@@ -10,9 +10,9 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 {
     private readonly MountManager _mountManager;
     private readonly SettingsStore _settingsStore;
-    private bool _tempDirCompatWarningShown;
-    private double _highUsageWarnPercent;
     private double _highUsageResetPercent;
+    private double _highUsageWarnPercent;
+    private bool _tempDirCompatWarningShown;
 
     /// <summary>
     /// Initializes a new <see cref="MainViewModel"/> using the supplied mount manager and settings store.
@@ -52,6 +52,13 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         CloneDiskCommand = new(
             p => ExecuteCloneDisk(p as DiskViewModel ?? SelectedDisk),
             p => p is DiskViewModel || SelectedDisk != null);
+        RestoreSnapshotCommand = new(
+            p => ExecuteRestoreSnapshot(p as DiskViewModel ?? SelectedDisk),
+            p =>
+            {
+                var vm = p as DiskViewModel ?? SelectedDisk;
+                return vm is { IsReadOnly: false, HasImagePath: true };
+            });
         RefreshCommand = new(_ => RefreshAll());
         ResetTempDirsCommand = new(_ => ExecuteResetTempDirs());
         ToggleTempDirCommand = new(
@@ -65,10 +72,10 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         AboutCommand = new(_ => ExecuteAbout());
     }
 
+    public event EventHandler? ExitRequested;
+
     /// <inheritdoc />
     public event PropertyChangedEventHandler? PropertyChanged;
-
-    public event EventHandler? ExitRequested;
 
     /// <summary>
     /// Gets the command that opens the About dialog.
@@ -79,18 +86,18 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     }
 
     /// <summary>
-    /// Gets the command that opens the "Create Disk" dialog.
+    /// Gets the command that opens the "Clone Disk" dialog for the selected disk: copy its
+    /// contents onto another mounted disk, or export them to a new image file.
     /// </summary>
-    public RelayCommand CreateDiskCommand
+    public RelayCommand CloneDiskCommand
     {
         get;
     }
 
     /// <summary>
-    /// Gets the command that opens the "Import Disk" flow: pick an existing .mdr image file and
-    /// mount it, pre-filling capacity/volume label from the image itself.
+    /// Gets the command that opens the "Create Disk" dialog.
     /// </summary>
-    public RelayCommand ImportDiskCommand
+    public RelayCommand CreateDiskCommand
     {
         get;
     }
@@ -125,12 +132,25 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     }
 
     /// <summary>
-    /// Gets the command that opens the "Clone Disk" dialog for the selected disk: copy its
-    /// contents onto another mounted disk, or export them to a new image file.
+    /// Gets the command that opens the "Import Disk" flow: pick an existing .mdr image file and
+    /// mount it, pre-filling capacity/volume label from the image itself.
     /// </summary>
-    public RelayCommand CloneDiskCommand
+    public RelayCommand ImportDiskCommand
     {
         get;
+    }
+
+    /// <summary>
+    /// Gets whether the application is currently shutting down (saving disk images).
+    /// </summary>
+    public bool IsExiting
+    {
+        get;
+        set
+        {
+            field = value;
+            OnPropertyChanged(nameof(IsExiting));
+        }
     }
 
     /// <summary>
@@ -145,6 +165,15 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     /// Gets the command that resets Windows TEMP and TMP directories to their OS defaults.
     /// </summary>
     public RelayCommand ResetTempDirsCommand
+    {
+        get;
+    }
+
+    /// <summary>
+    /// Gets the command that opens the "Restore Snapshot" dialog for the selected disk: pick a
+    /// previously saved timestamped snapshot and replace the disk's live contents with it.
+    /// </summary>
+    public RelayCommand RestoreSnapshotCommand
     {
         get;
     }
@@ -176,19 +205,6 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     public RelayCommand SettingsCommand
     {
         get;
-    }
-
-    /// <summary>
-    /// Gets whether the application is currently shutting down (saving disk images).
-    /// </summary>
-    public bool IsExiting
-    {
-        get;
-        set
-        {
-            field = value;
-            OnPropertyChanged(nameof(IsExiting));
-        }
     }
 
     /// <summary>
@@ -248,6 +264,8 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             PersistImagePath = vm.Disk.Options.PersistImagePath,
             AutoSaveIntervalMinutes = vm.Disk.Options.AutoSaveIntervalMinutes,
             CompressionLevel = vm.Disk.Options.CompressionLevel,
+            MaxSnapshotCount = vm.Disk.Options.MaxSnapshotCount,
+            MaxSnapshotSizeBytes = vm.Disk.Options.MaxSnapshotSizeBytes,
         });
     }
 
@@ -285,6 +303,22 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         }
     }
 
+    internal void SaveSettings()
+    {
+        var current = _settingsStore.Load();
+        _settingsStore.Save(new()
+        {
+            RunAtStartup = StartupManager.IsEnabled,
+            StartMinimized = current.StartMinimized,
+            Language = LanguageManager.Instance.SavedLanguage,
+            Theme = ThemeManager.Instance.SavedTheme,
+            Disks = GetProfiles().ToList(),
+            TempDirCompatWarningShown = _tempDirCompatWarningShown,
+            HighUsageWarnPercent = _highUsageWarnPercent,
+            HighUsageResetPercent = _highUsageResetPercent,
+        });
+    }
+
     private static DiskOptions ProfileToOptions(DiskProfile p) => new()
     {
         MountPoint = p.MountPoint,
@@ -295,6 +329,8 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         PersistImagePath = p.PersistImagePath,
         AutoSaveIntervalMinutes = p.AutoSaveIntervalMinutes,
         CompressionLevel = p.CompressionLevel,
+        MaxSnapshotCount = p.MaxSnapshotCount,
+        MaxSnapshotSizeBytes = p.MaxSnapshotSizeBytes,
     };
 
     private void AddDiskSorted(DiskViewModel vm)
@@ -319,6 +355,73 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         dialog.ShowDialog();
     }
 
+    private async void ExecuteCloneDisk(DiskViewModel? vm)
+    {
+        if (vm == null)
+        {
+            return;
+        }
+
+        var targets = Disks.Where(d => d != vm && !d.IsReadOnly).ToList();
+
+        // Include the source disk's own options (excluding: null) so exporting to a path that
+        // the source itself is already persisting to is also rejected — that file may be
+        // concurrently written by the source's auto-save timer.
+        var dialog = new CloneDiskDialog(vm, targets, GetOtherDiskOptions(excluding: null))
+        {
+            Owner = Application.Current.MainWindow
+        };
+
+        if (dialog.ShowDialog() != true)
+        {
+            return;
+        }
+
+        if (dialog.TargetDisk is { } target)
+        {
+            var confirm = new ConfirmDialog(
+                Loc.Get("Msg.CloneDiskConfirmTitle"),
+                Loc.Format("Msg.CloneDiskConfirmBody", vm.MountPoint, target.MountPoint, target.VolumeLabel))
+            {
+                Owner = Application.Current.MainWindow
+            };
+
+            if (confirm.ShowDialog() != true)
+            {
+                return;
+            }
+
+            if (!target.Disk.TryCloneFrom(vm.Disk, out var error))
+            {
+                MessageBox.Show(
+                    error,
+                    "ManagedDrive",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Warning);
+                return;
+            }
+
+            target.Refresh();
+            StatusText = Loc.Format("Status.DiskCloned", vm.MountPoint, target.MountPoint);
+        }
+        else if (dialog.ExportPath is { } exportPath)
+        {
+            try
+            {
+                await Task.Run(() => vm.Disk.ExportToImage(exportPath, dialog.ExportCompressionLevel));
+                StatusText = Loc.Format("Status.DiskExported", vm.MountPoint, exportPath);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(
+                    Loc.Format("Msg.SaveImageFailed", ex.Message),
+                    "ManagedDrive",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Error);
+            }
+        }
+    }
+
     private async void ExecuteCreateDisk()
     {
         var dialog = new CreateDiskDialog(GetOtherDiskOptions(excluding: null))
@@ -332,85 +435,6 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         }
 
         await MountAndAddAsync(dialog.Result!);
-    }
-
-    private async void ExecuteImportDisk()
-    {
-        var openDialog = new OpenFileDialog
-        {
-            Title = Loc.Get("ImportDlg.Title"),
-            Filter = Loc.Get("SaveDlg.Filter"),
-            CheckFileExists = true,
-        };
-
-        if (openDialog.ShowDialog() != true)
-        {
-            return;
-        }
-
-        var otherDisks = GetOtherDiskOptions(excluding: null);
-        if (otherDisks.Any(d => d.PersistImagePath != null &&
-            string.Equals(d.PersistImagePath, openDialog.FileName, StringComparison.OrdinalIgnoreCase)))
-        {
-            MessageBox.Show(
-                Loc.Get("Val.ImagePathInUse"),
-                "ManagedDrive",
-                MessageBoxButton.OK,
-                MessageBoxImage.Warning);
-            return;
-        }
-
-        ulong capacityBytes;
-        string volumeLabel;
-        try
-        {
-            DiskImageSerializer.PeekHeader(openDialog.FileName, out capacityBytes, out volumeLabel);
-        }
-        catch (InvalidDataException)
-        {
-            MessageBox.Show(
-                Loc.Get("Val.ImportInvalidImage"),
-                "ManagedDrive",
-                MessageBoxButton.OK,
-                MessageBoxImage.Warning);
-            return;
-        }
-
-        var dialog = new CreateDiskDialog(openDialog.FileName, capacityBytes, volumeLabel, otherDisks)
-        {
-            Owner = Application.Current.MainWindow
-        };
-
-        if (dialog.ShowDialog() != true)
-        {
-            return;
-        }
-
-        await MountAndAddAsync(dialog.Result!);
-    }
-
-    private async Task MountAndAddAsync(DiskOptions options)
-    {
-        try
-        {
-            var disk = await Task.Run(() => _mountManager.Mount(options));
-            AddDiskSorted(new(disk)
-            {
-                HighUsageThreshold = _highUsageWarnPercent,
-                HighUsageResetThreshold = _highUsageResetPercent,
-            });
-            SaveSettings();
-            StatusText = Loc.Format("Status.MountedWithCapacity", disk.MountPoint, options.VolumeLabel, options.CapacityBytes / (1024 * 1024));
-        }
-        catch (Exception ex)
-        {
-            MessageBox.Show(
-                Loc.Format("Msg.MountFailed", ex.Message),
-                "ManagedDrive",
-                MessageBoxButton.OK,
-                MessageBoxImage.Error);
-            StatusText = Loc.Get("Status.MountFailed");
-        }
     }
 
     private async void ExecuteEditDisk(DiskViewModel? vm)
@@ -466,10 +490,10 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             {
                 var disk = await Task.Run(() => _mountManager.Mount(newOptions));
                 AddDiskSorted(new(disk)
-            {
-                HighUsageThreshold = _highUsageWarnPercent,
-                HighUsageResetThreshold = _highUsageResetPercent,
-            });
+                {
+                    HighUsageThreshold = _highUsageWarnPercent,
+                    HighUsageResetThreshold = _highUsageResetPercent,
+                });
                 SaveSettings();
                 StatusText = Loc.Format("Status.MountedWithCapacity", disk.MountPoint, newOptions.VolumeLabel, newOptions.CapacityBytes / (1024 * 1024));
             }
@@ -575,19 +599,49 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             MessageBoxImage.Information);
     }
 
-    private async void ExecuteCloneDisk(DiskViewModel? vm)
+    private async void ExecuteImportDisk()
     {
-        if (vm == null)
+        var openDialog = new OpenFileDialog
+        {
+            Title = Loc.Get("ImportDlg.Title"),
+            Filter = Loc.Get("SaveDlg.Filter"),
+            CheckFileExists = true,
+        };
+
+        if (openDialog.ShowDialog() != true)
         {
             return;
         }
 
-        var targets = Disks.Where(d => d != vm && !d.IsReadOnly).ToList();
+        var otherDisks = GetOtherDiskOptions(excluding: null);
+        if (otherDisks.Any(d => d.PersistImagePath != null &&
+            string.Equals(d.PersistImagePath, openDialog.FileName, StringComparison.OrdinalIgnoreCase)))
+        {
+            MessageBox.Show(
+                Loc.Get("Val.ImagePathInUse"),
+                "ManagedDrive",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+            return;
+        }
 
-        // Include the source disk's own options (excluding: null) so exporting to a path that
-        // the source itself is already persisting to is also rejected — that file may be
-        // concurrently written by the source's auto-save timer.
-        var dialog = new CloneDiskDialog(vm, targets, GetOtherDiskOptions(excluding: null))
+        ulong capacityBytes;
+        string volumeLabel;
+        try
+        {
+            DiskImageSerializer.PeekHeader(openDialog.FileName, out capacityBytes, out volumeLabel);
+        }
+        catch (InvalidDataException)
+        {
+            MessageBox.Show(
+                Loc.Get("Val.ImportInvalidImage"),
+                "ManagedDrive",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+            return;
+        }
+
+        var dialog = new CreateDiskDialog(openDialog.FileName, capacityBytes, volumeLabel, otherDisks)
         {
             Owner = Application.Current.MainWindow
         };
@@ -597,49 +651,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             return;
         }
 
-        if (dialog.TargetDisk is { } target)
-        {
-            var confirm = new ConfirmDialog(
-                Loc.Get("Msg.CloneDiskConfirmTitle"),
-                Loc.Format("Msg.CloneDiskConfirmBody", vm.MountPoint, target.MountPoint, target.VolumeLabel))
-            {
-                Owner = Application.Current.MainWindow
-            };
-
-            if (confirm.ShowDialog() != true)
-            {
-                return;
-            }
-
-            if (!target.Disk.TryCloneFrom(vm.Disk, out var error))
-            {
-                MessageBox.Show(
-                    error,
-                    "ManagedDrive",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Warning);
-                return;
-            }
-
-            target.Refresh();
-            StatusText = Loc.Format("Status.DiskCloned", vm.MountPoint, target.MountPoint);
-        }
-        else if (dialog.ExportPath is { } exportPath)
-        {
-            try
-            {
-                await Task.Run(() => vm.Disk.ExportToImage(exportPath, dialog.ExportCompressionLevel));
-                StatusText = Loc.Format("Status.DiskExported", vm.MountPoint, exportPath);
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show(
-                    Loc.Format("Msg.SaveImageFailed", ex.Message),
-                    "ManagedDrive",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Error);
-            }
-        }
+        await MountAndAddAsync(dialog.Result!);
     }
 
     private async void ExecuteResetTempDirs()
@@ -674,6 +686,63 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
                 MessageBoxButton.OK,
                 MessageBoxImage.Error);
         }
+    }
+
+    private async void ExecuteRestoreSnapshot(DiskViewModel? vm)
+    {
+        if (vm == null || vm.Disk.Options.PersistImagePath is not { } imagePath)
+        {
+            return;
+        }
+
+        var snapshots = await Task.Run(() => SnapshotManager.ListSnapshots(imagePath));
+        if (snapshots.Count == 0)
+        {
+            MessageBox.Show(
+                Loc.Get("Msg.NoSnapshotsAvailable"),
+                "ManagedDrive",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
+            return;
+        }
+
+        var dialog = new RestoreSnapshotDialog(vm, snapshots)
+        {
+            Owner = Application.Current.MainWindow
+        };
+
+        if (dialog.ShowDialog() != true || dialog.SelectedSnapshotPath is not { } selectedPath)
+        {
+            return;
+        }
+
+        var confirm = new ConfirmDialog(
+            Loc.Get("Msg.RestoreSnapshotConfirmTitle"),
+            Loc.Format("Msg.RestoreSnapshotConfirmBody", vm.MountPoint, vm.VolumeLabel, dialog.SelectedSnapshotLabel))
+        {
+            Owner = Application.Current.MainWindow
+        };
+
+        if (confirm.ShowDialog() != true)
+        {
+            return;
+        }
+
+        string? error = null;
+        var success = await Task.Run(() => vm.Disk.TryRestoreFromSnapshot(selectedPath, out error));
+
+        if (!success)
+        {
+            MessageBox.Show(
+                error,
+                "ManagedDrive",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+            return;
+        }
+
+        vm.Refresh();
+        StatusText = Loc.Format("Status.SnapshotRestored", vm.MountPoint);
     }
 
     private async void ExecuteSaveImage(DiskViewModel? vm)
@@ -862,6 +931,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         if (deleteImage && imagePath != null)
         {
             try { File.Delete(imagePath); } catch { }
+            await Task.Run(() => SnapshotManager.DeleteAllSnapshots(imagePath));
         }
 
         SaveSettings();
@@ -876,6 +946,30 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     private IReadOnlyList<DiskOptions> GetOtherDiskOptions(DiskViewModel? excluding) =>
         Disks.Where(d => d != excluding).Select(d => d.Disk.Options).ToList();
 
+    private async Task MountAndAddAsync(DiskOptions options)
+    {
+        try
+        {
+            var disk = await Task.Run(() => _mountManager.Mount(options));
+            AddDiskSorted(new(disk)
+            {
+                HighUsageThreshold = _highUsageWarnPercent,
+                HighUsageResetThreshold = _highUsageResetPercent,
+            });
+            SaveSettings();
+            StatusText = Loc.Format("Status.MountedWithCapacity", disk.MountPoint, options.VolumeLabel, options.CapacityBytes / (1024 * 1024));
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(
+                Loc.Format("Msg.MountFailed", ex.Message),
+                "ManagedDrive",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+            StatusText = Loc.Get("Status.MountFailed");
+        }
+    }
+
     private void OnPropertyChanged(string propertyName) =>
         PropertyChanged?.Invoke(this, new(propertyName));
 
@@ -885,21 +979,5 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         {
             vm.Refresh();
         }
-    }
-
-    internal void SaveSettings()
-    {
-        var current = _settingsStore.Load();
-        _settingsStore.Save(new()
-        {
-            RunAtStartup = StartupManager.IsEnabled,
-            StartMinimized = current.StartMinimized,
-            Language = LanguageManager.Instance.SavedLanguage,
-            Theme = ThemeManager.Instance.SavedTheme,
-            Disks = GetProfiles().ToList(),
-            TempDirCompatWarningShown = _tempDirCompatWarningShown,
-            HighUsageWarnPercent = _highUsageWarnPercent,
-            HighUsageResetPercent = _highUsageResetPercent,
-        });
     }
 }

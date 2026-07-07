@@ -1,3 +1,5 @@
+using ManagedDrive.App.Helpers;
+
 namespace ManagedDrive.App.ViewModels;
 
 /// <summary>
@@ -11,7 +13,6 @@ public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
 
     private ulong _freeBytes;
     private bool _isCurrentTempDir;
-    private bool _isSaving;
     private ulong _usedBytes;
 
     /// <summary>
@@ -50,7 +51,7 @@ public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
     /// <summary>
     /// Gets the total capacity formatted as a human-readable string.
     /// </summary>
-    public string CapacityFormatted => FormatBytes(Disk.TotalBytes);
+    public string CapacityFormatted => ByteFormatter.Format(Disk.TotalBytes);
 
     /// <summary>
     /// Gets the underlying <see cref="RamDisk"/> instance.
@@ -60,7 +61,7 @@ public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
     /// <summary>
     /// Gets the amount of free space formatted as a human-readable string.
     /// </summary>
-    public string FreeFormatted => FormatBytes(_freeBytes);
+    public string FreeFormatted => ByteFormatter.Format(_freeBytes);
 
     /// <summary>
     /// Gets the free-space percentage (0–100) for display.
@@ -69,6 +70,23 @@ public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
         Disk.TotalBytes > 0
             ? Math.Round((double)_freeBytes / Disk.TotalBytes * 100.0, 1)
             : 100.0;
+
+    /// <summary>
+    /// Gets whether this disk has a backing image file configured.
+    /// </summary>
+    public bool HasImagePath => !string.IsNullOrEmpty(PersistImagePath);
+
+    /// <summary>
+    /// Gets or sets the usage percentage (0-100) below which <see cref="IsHighUsage"/> is
+    /// cleared, re-arming the warning. Defaults to 85%.
+    /// </summary>
+    public double HighUsageResetThreshold { get; set; } = 85.0;
+
+    /// <summary>
+    /// Gets or sets the usage percentage (0-100) at which <see cref="HighUsageWarning"/> fires.
+    /// Defaults to 90%.
+    /// </summary>
+    public double HighUsageThreshold { get; set; } = 90.0;
 
     /// <summary>
     /// Gets whether the user's TEMP and TMP currently point to this disk's Temp folder.
@@ -95,40 +113,9 @@ public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
     public bool IsHighUsage { get; private set; }
 
     /// <summary>
-    /// Gets or sets the usage percentage (0-100) at which <see cref="HighUsageWarning"/> fires.
-    /// Defaults to 90%.
-    /// </summary>
-    public double HighUsageThreshold { get; set; } = 90.0;
-
-    /// <summary>
-    /// Gets or sets the usage percentage (0-100) below which <see cref="IsHighUsage"/> is
-    /// cleared, re-arming the warning. Defaults to 85%.
-    /// </summary>
-    public double HighUsageResetThreshold { get; set; } = 85.0;
-
-    /// <summary>
     /// Gets the inverse of <see cref="IsCurrentTempDir"/> for visibility binding.
     /// </summary>
     public bool IsNotCurrentTempDir => !_isCurrentTempDir;
-
-    /// <summary>
-    /// Gets or sets whether this disk's image is currently being saved, driving the
-    /// "saving" overlay on the disk card.
-    /// </summary>
-    public bool IsSaving
-    {
-        get => _isSaving;
-        set
-        {
-            if (_isSaving == value)
-            {
-                return;
-            }
-
-            _isSaving = value;
-            OnPropertyChanged(nameof(IsSaving));
-        }
-    }
 
     /// <summary>
     /// Gets the inverse of <see cref="IsReadOnly"/> for visibility binding.
@@ -139,6 +126,25 @@ public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
     /// Gets whether this disk is read-only.
     /// </summary>
     public bool IsReadOnly => Disk.Options.ReadOnly;
+
+    /// <summary>
+    /// Gets or sets whether this disk's image is currently being saved, driving the
+    /// "saving" overlay on the disk card.
+    /// </summary>
+    public bool IsSaving
+    {
+        get;
+        set
+        {
+            if (field == value)
+            {
+                return;
+            }
+
+            field = value;
+            OnPropertyChanged(nameof(IsSaving));
+        }
+    }
 
     /// <summary>
     /// Gets the timestamp of the most recent image save, formatted for display.
@@ -160,6 +166,14 @@ public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
     public string MountPoint => Disk.MountPoint;
 
     /// <summary>
+    /// Gets the command that opens this disk's backing image file directory in Windows Explorer.
+    /// </summary>
+    public RelayCommand OpenImageDirectoryCommand
+    {
+        get;
+    }
+
+    /// <summary>
     /// Gets the command that opens this disk's mount point in Windows Explorer.
     /// </summary>
     public RelayCommand OpenInExplorerCommand
@@ -173,28 +187,22 @@ public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
     public string? PersistImagePath => Disk.Options.PersistImagePath;
 
     /// <summary>
-    /// Gets whether this disk has a backing image file configured.
-    /// </summary>
-    public bool HasImagePath => !string.IsNullOrEmpty(PersistImagePath);
-
-    /// <summary>
-    /// Gets the command that opens this disk's backing image file directory in Windows Explorer.
-    /// </summary>
-    public RelayCommand OpenImageDirectoryCommand
-    {
-        get;
-    }
-
-    /// <summary>
     /// Gets whether this disk has auto-save enabled, controlling visibility of the
     /// last-image-save timestamp on the disk card.
     /// </summary>
     public bool ShowLastAutoSave => Disk.Options.AutoSaveIntervalMinutes is > 0;
 
     /// <summary>
+    /// Gets whether snapshot retention is configured for this disk, controlling visibility
+    /// of the "Restore Snapshot" context-menu entry.
+    /// </summary>
+    public bool SnapshotsEnabled =>
+        Disk.Options.MaxSnapshotCount is not null || Disk.Options.MaxSnapshotSizeBytes is not null;
+
+    /// <summary>
     /// Gets the amount of used space formatted as a human-readable string.
     /// </summary>
-    public string UsedFormatted => FormatBytes(_usedBytes);
+    public string UsedFormatted => ByteFormatter.Format(_usedBytes);
 
     /// <summary>
     /// Gets the used-space percentage (0–100) for progress-bar display.
@@ -232,6 +240,7 @@ public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
         OnPropertyChanged(nameof(LastContentWriteFormatted));
         OnPropertyChanged(nameof(LastAutoSaveFormatted));
         OnPropertyChanged(nameof(ShowLastAutoSave));
+        OnPropertyChanged(nameof(SnapshotsEnabled));
         OnPropertyChanged(nameof(PersistImagePath));
         OnPropertyChanged(nameof(HasImagePath));
 
@@ -258,26 +267,6 @@ public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
         if (elapsed.TotalMinutes < 60) return Loc.Format("Time.MinutesAgo", (int)elapsed.TotalMinutes);
         if (elapsed.TotalHours < 24) return Loc.Format("Time.HoursAgo", (int)elapsed.TotalHours);
         return Loc.Format("Time.DaysAgo", (int)elapsed.TotalDays);
-    }
-
-    private static string FormatBytes(ulong bytes)
-    {
-        if (bytes >= 1024UL * 1024 * 1024)
-        {
-            return $"{bytes / (1024.0 * 1024 * 1024):F1} GB";
-        }
-
-        if (bytes >= 1024UL * 1024)
-        {
-            return $"{bytes / (1024.0 * 1024):F1} MB";
-        }
-
-        if (bytes >= 1024UL)
-        {
-            return $"{bytes / 1024.0:F1} KB";
-        }
-
-        return $"{bytes} B";
     }
 
     private bool CheckIsCurrentTempDir()

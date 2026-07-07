@@ -174,6 +174,17 @@ public sealed class RamDisk : IDisposable
     }
 
     /// <summary>
+    /// Writes this disk's current contents to a new image file at <paramref name="imagePath"/>.
+    /// Unlike <see cref="SaveToImage"/>, this is independent of
+    /// <see cref="DiskOptions.PersistImagePath"/> and does not affect this disk's dirty or
+    /// last-saved-path tracking.
+    /// </summary>
+    /// <param name="imagePath">Destination file path.</param>
+    /// <param name="level">Compression level applied to the exported image.</param>
+    public void ExportToImage(string imagePath, ImageCompressionLevel level) =>
+        DiskImageSerializer.Save(_fs.NodeMap, Options.CapacityBytes, Options.VolumeLabel, imagePath, level);
+
+    /// <summary>
     /// Removes all files and directories from the disk, leaving it empty.
     /// Does nothing and returns <c>false</c> when the disk is read-only.
     /// </summary>
@@ -216,30 +227,6 @@ public sealed class RamDisk : IDisposable
     }
 
     /// <summary>
-    /// Replaces this disk's entire contents with a copy of <paramref name="source"/>'s current
-    /// contents. Existing files on this disk are discarded.
-    /// </summary>
-    /// <param name="source">The disk to copy content from.</param>
-    /// <param name="error">Set to a human-readable message when the method returns <c>false</c>.</param>
-    /// <returns>
-    /// <c>true</c> on success; <c>false</c> when this disk is read-only or its capacity is
-    /// smaller than the source disk's used bytes.
-    /// </returns>
-    public bool TryCloneFrom(RamDisk source, out string? error) =>
-        _fs.TryReplaceContents(source._fs.NodeMap, out error);
-
-    /// <summary>
-    /// Writes this disk's current contents to a new image file at <paramref name="imagePath"/>.
-    /// Unlike <see cref="SaveToImage"/>, this is independent of
-    /// <see cref="DiskOptions.PersistImagePath"/> and does not affect this disk's dirty or
-    /// last-saved-path tracking.
-    /// </summary>
-    /// <param name="imagePath">Destination file path.</param>
-    /// <param name="level">Compression level applied to the exported image.</param>
-    public void ExportToImage(string imagePath, ImageCompressionLevel level) =>
-        DiskImageSerializer.Save(_fs.NodeMap, Options.CapacityBytes, Options.VolumeLabel, imagePath, level);
-
-    /// <summary>
     /// Saves the disk image while holding <see cref="_autoSaveLock"/>, without unmounting.
     /// Intended for external shutdown-notification callers (e.g. Windows session-ending) that
     /// need a quick, safe save that can't race the periodic auto-save tick. Does nothing if
@@ -257,7 +244,8 @@ public sealed class RamDisk : IDisposable
     /// Applies <paramref name="newOptions"/> to the live disk without unmounting.
     /// Only <see cref="DiskOptions.VolumeLabel"/>, <see cref="DiskOptions.CapacityBytes"/>,
     /// <see cref="DiskOptions.AutoMount"/>, <see cref="DiskOptions.PersistImagePath"/>,
-    /// <see cref="DiskOptions.AutoSaveIntervalMinutes"/>, and <see cref="DiskOptions.CompressionLevel"/>
+    /// <see cref="DiskOptions.AutoSaveIntervalMinutes"/>, <see cref="DiskOptions.CompressionLevel"/>,
+    /// <see cref="DiskOptions.MaxSnapshotCount"/>, and <see cref="DiskOptions.MaxSnapshotSizeBytes"/>
     /// may be changed this way.
     /// <see cref="DiskOptions.MountPoint"/> and <see cref="DiskOptions.ReadOnly"/> require a
     /// full unmount/remount.
@@ -288,6 +276,48 @@ public sealed class RamDisk : IDisposable
         ConfigureAutoSaveTimer();
         error = null;
         return true;
+    }
+
+    /// <summary>
+    /// Replaces this disk's entire contents with a copy of <paramref name="source"/>'s current
+    /// contents. Existing files on this disk are discarded.
+    /// </summary>
+    /// <param name="source">The disk to copy content from.</param>
+    /// <param name="error">Set to a human-readable message when the method returns <c>false</c>.</param>
+    /// <returns>
+    /// <c>true</c> on success; <c>false</c> when this disk is read-only or its capacity is
+    /// smaller than the source disk's used bytes.
+    /// </returns>
+    public bool TryCloneFrom(RamDisk source, out string? error) =>
+        _fs.TryReplaceContents(source._fs.NodeMap, out error);
+
+    /// <summary>
+    /// Replaces this disk's live contents with those stored in the snapshot at
+    /// <paramref name="snapshotPath"/>. The replacement is marked dirty and will be persisted
+    /// on the next save/auto-save tick; it is not written to
+    /// <see cref="DiskOptions.PersistImagePath"/> immediately.
+    /// </summary>
+    /// <param name="snapshotPath">Path to the snapshot index file to restore from.</param>
+    /// <param name="error">Set to a human-readable message when the method returns <c>false</c>.</param>
+    /// <returns>
+    /// <c>true</c> on success; <c>false</c> when the disk is read-only, the snapshot exceeds
+    /// this disk's capacity, or the snapshot file could not be read.
+    /// </returns>
+    public bool TryRestoreFromSnapshot(string snapshotPath, out string? error)
+    {
+        lock (_autoSaveLock)
+        {
+            try
+            {
+                var nodeMap = SnapshotManager.LoadSnapshot(snapshotPath, out _, out _);
+                return _fs.TryReplaceContents(nodeMap, out error);
+            }
+            catch (Exception ex)
+            {
+                error = ex.Message;
+                return false;
+            }
+        }
     }
 
     private static void ConfigureHost(FileSystemHost host)
@@ -393,6 +423,7 @@ public sealed class RamDisk : IDisposable
             if (_fs.IsDirty || Options.PersistImagePath != _lastSavedImagePath)
             {
                 SaveToImage();
+                TryWriteSnapshot();
             }
         }
         catch
@@ -403,5 +434,34 @@ public sealed class RamDisk : IDisposable
         {
             _autoSaveLock.Exit();
         }
+    }
+
+    /// <summary>
+    /// Writes a timestamped snapshot copy of the just-saved image and prunes older snapshots
+    /// per <see cref="DiskOptions.MaxSnapshotCount"/>/<see cref="DiskOptions.MaxSnapshotSizeBytes"/>.
+    /// Does nothing if no image path is configured or neither snapshot limit is set. Must be
+    /// called while <see cref="_autoSaveLock"/> is held.
+    /// </summary>
+    private void TryWriteSnapshot()
+    {
+        if (Options.PersistImagePath is not { } path)
+        {
+            return;
+        }
+
+        if (Options.MaxSnapshotCount is null && Options.MaxSnapshotSizeBytes is null)
+        {
+            return;
+        }
+
+        SnapshotManager.WriteSnapshot(
+            _fs.NodeMap,
+            Options.CapacityBytes,
+            Options.VolumeLabel,
+            path,
+            DateTime.UtcNow,
+            Options.CompressionLevel);
+
+        SnapshotManager.Prune(path, Options.MaxSnapshotCount, Options.MaxSnapshotSizeBytes);
     }
 }

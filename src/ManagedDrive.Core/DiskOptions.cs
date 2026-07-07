@@ -92,4 +92,24 @@ public sealed record DiskOptions
     /// Compression level applied when the saved <c>.mdr</c> image is written.
     /// </summary>
     public ImageCompressionLevel CompressionLevel { get; init; } = ImageCompressionLevel.Fastest;
+
+    /// <summary>
+    /// Optional maximum number of timestamped snapshot images to retain alongside
+    /// <see cref="PersistImagePath"/>. <c>null</c> disables count-based snapshot pruning.
+    /// Snapshots are only written when auto-save is enabled.
+    /// </summary>
+    public uint? MaxSnapshotCount
+    {
+        get; init;
+    }
+
+    /// <summary>
+    /// Optional maximum total size, in bytes, of all retained snapshot images.
+    /// <c>null</c> disables size-based snapshot pruning. Snapshots are only written when
+    /// auto-save is enabled.
+    /// </summary>
+    public ulong? MaxSnapshotSizeBytes
+    {
+        get; init;
+    }
 }
