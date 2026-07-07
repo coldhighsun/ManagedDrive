@@ -433,5 +433,20 @@ public partial class CreateDiskDialog
     private void UpdateCompressionLevelState()
     {
         CompressionLevelBox.IsEnabled = !string.IsNullOrEmpty(ImagePathBox.Text) && ReadOnlyBox.IsChecked != true;
+        UpdateCompressionWarning();
+    }
+
+    private void CompressionLevelBox_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
+    {
+        UpdateCompressionWarning();
+    }
+
+    private void UpdateCompressionWarning()
+    {
+        if (CompressionWarningText is null) return;
+        var level = (CompressionLevelBox.SelectedItem as CompressionLevelItem)?.Level;
+        var show = CompressionLevelBox.IsEnabled
+                   && level is ImageCompressionLevel.Optimal or ImageCompressionLevel.SmallestSize;
+        CompressionWarningText.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
     }
 }
