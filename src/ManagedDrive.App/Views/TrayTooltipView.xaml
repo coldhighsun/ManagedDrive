@@ -30,7 +30,7 @@
                     <DataTemplate>
                         <Grid Margin="0,3">
                             <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="36" />
+                                <ColumnDefinition Width="Auto" />
                                 <ColumnDefinition Width="100" />
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
@@ -38,7 +38,8 @@
                                        FontSize="13"
                                        FontWeight="Bold"
                                        Foreground="{DynamicResource AppPrimary}"
-                                       Text="{Binding MountPoint}" />
+                                       Text="{Binding MountPoint}"
+                                       Margin="0,0,8,0" />
                             <TextBlock Grid.Column="1"
                                        FontSize="13"
                                        Foreground="{DynamicResource AppForeground}"
@@ -47,7 +48,9 @@
                             <TextBlock Grid.Column="2"
                                        FontSize="13"
                                        Foreground="{DynamicResource AppForegroundLight}"
-                                       Text="{Binding UsedPercent, StringFormat={}{0:F0}%}" />
+                                       Text="{Binding UsedPercent, StringFormat={}{0:F0}%}"
+                                       TextAlignment="Right"
+                                       MinWidth="36" />
                         </Grid>
                     </DataTemplate>
                 </ItemsControl.ItemTemplate>
