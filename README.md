@@ -27,7 +27,7 @@ Create, mount and manage in-memory volumes that appear as normal drive letters i
 - Double-click a disk card to open it in Explorer; right-click for **Open in Explorer** and **Open Image File Directory** (opens the folder containing the disk's `.mdr` image file; grayed out when the disk has no image file configured)
 - System-tray icon for quick access; minimizes to tray on window close
 - Tray icon tooltip — hover to see all mounted disks with live usage percentages
-- High-usage warning — system tray notification when a disk exceeds 90% capacity
+- High-usage warning — system tray notification when a disk exceeds a configurable usage threshold (default 90%, adjustable in Settings); the warning auto-clears once usage drops 5 points below that threshold
 - Optional start-minimized mode — launch directly to tray without showing the main window
 - Temp directory redirection — right-click a disk to set it as the Windows TEMP/TMP directory; reset to the system default from the toolbar, context menu, or tray menu; automatically resets to the system default when the disk is unmounted or remounted; on startup, if TEMP/TMP points to any RAM disk profile a warning is shown — if the disk is not set to auto-mount, TEMP is also automatically reset to the system default
 - Exit confirmation — exiting the app (toolbar button or tray menu) while any disk is mounted brings the main window to the foreground and asks for confirmation; if TEMP/TMP points to any mounted RAM disk, the confirmation also warns that TEMP will be reset, and confirming resets it before exiting; when disks with auto-save are mounted, a full-window saving overlay with a spinner is displayed while the final image save runs in the background — system-initiated shutdown bypasses the confirmation prompt
@@ -37,7 +37,7 @@ Create, mount and manage in-memory volumes that appear as normal drive letters i
 - Main window opens centered on the primary screen and is brought to the foreground on startup
 - Bilingual UI — English and Simplified Chinese, auto-detected from system locale with manual override in Settings
 - Light and dark themes — follows the Windows app theme by default, with a manual override (System Default / Light / Dark) in Settings; switches instantly without restarting
-- At-a-glance disk cards — the drive-letter badge shows small corner icons for read-only and current-TEMP-directory status; the usage bar displays its percentage and turns to a warning color (along with the free-space text) once usage crosses 90%; read-only disks collapse the usage bar into a single line showing the backing image path instead of capacity figures that never change
+- At-a-glance disk cards — the drive-letter badge shows small corner icons for read-only and current-TEMP-directory status; the usage bar displays its percentage and turns to a warning color (along with the free-space text) once usage crosses the configurable high-usage threshold; read-only disks collapse the usage bar into a single line showing the backing image path instead of capacity figures that never change
 - About dialog — accessible from the overflow menu; shows the app version and a link to the GitHub repository
 
 ### Installation
@@ -143,7 +143,7 @@ Version `1` images (no `CompressionLevel` byte, always uncompressed) remain read
 
 ### Settings & Persistence
 
-- Settings are stored as JSON at `%APPDATA%\ManagedDrive\settings.json`.
+- Settings are stored as JSON at `%APPDATA%\ManagedDrive\settings.json`, including the high-usage warning percentage threshold.
 - Windows startup registration uses `HKCU\SOFTWARE\Microsoft\Windows\CurrentVersion\Run` (no elevation required).
 - Version is derived from git tags (`v`-prefixed, e.g. `v0.1.0`) via MinVer.
 
@@ -249,7 +249,7 @@ MIT
 - 双击磁盘卡片可在资源管理器中打开对应盘符；右键菜单提供**在资源管理器中打开**和**打开镜像文件目录**（打开磁盘 `.mdr` 镜像文件所在的文件夹；若磁盘未配置镜像文件则该菜单项置灰不可点）
 - 系统托盘图标，关闭窗口时最小化到托盘
 - 托盘图标悬浮提示——鼠标悬停时显示所有已挂载磁盘及其实时使用率
-- 高用量警告——磁盘使用率超过 90% 时通过系统托盘发出通知
+- 高用量警告——磁盘使用率超过可配置的阈值（默认 90%，可在设置中调整）时通过系统托盘发出通知，使用率降至该阈值以下 5 个百分点时自动解除
 - 可选最小化启动——直接启动到托盘，不显示主窗口
 - 临时目录重定向——右键单击磁盘可将其设为 Windows TEMP/TMP 目录；通过工具栏、右键菜单或托盘菜单恢复系统默认值；卸载或重挂时自动恢复为系统默认临时目录；启动时若 TEMP/TMP 指向任一内存盘配置，均会显示警告——若该磁盘未设置自动挂载，还会自动将 TEMP 恢复为系统默认值
 - 退出确认——只要还有磁盘处于挂载状态，无论是通过工具栏按钮还是托盘菜单退出，程序都会将主窗口带到前台并要求用户确认；若 TEMP/TMP 恰好指向某个已挂载的内存盘，确认提示中还会额外警告将重置 TEMP，用户确认后先重置再退出；若有磁盘配置了自动保存，退出时会在主窗口显示全屏保存遮罩与旋转动画，待后台镜像保存完成后再关闭——系统发送关闭信号时不触发确认流程
@@ -259,7 +259,7 @@ MIT
 - 主窗口启动时居中显示于主屏幕并置于前台
 - 双语界面——中文与英文，根据系统语言自动切换，也可在设置中手动更改
 - 浅色/深色主题——默认跟随 Windows 系统主题，也可在设置中手动切换（跟随系统／浅色／深色），切换即时生效，无需重启
-- 一目了然的磁盘卡片——驱动器字母徽章上会叠加只读、当前临时目录等状态角标；用量进度条旁显示百分比，使用率超过 90% 时进度条及可用空间文字会变为警示色；只读磁盘的用量区域会替换为单行文字，显示其绑定的镜像文件路径，而非无意义的容量数字
+- 一目了然的磁盘卡片——驱动器字母徽章上会叠加只读、当前临时目录等状态角标；用量进度条旁显示百分比，使用率超过可配置的高用量阈值时进度条及可用空间文字会变为警示色；只读磁盘的用量区域会替换为单行文字，显示其绑定的镜像文件路径，而非无意义的容量数字
 - 关于对话框——可从溢出菜单打开，显示应用版本及 GitHub 仓库链接
 
 ### 安装
@@ -365,7 +365,7 @@ ManagedDrive 使用 **WinFsp**（Windows 文件系统代理）将内存目录树
 
 ### 配置与持久化
 
-- 配置以 JSON 格式存储于 `%APPDATA%\ManagedDrive\settings.json`。
+- 配置以 JSON 格式存储于 `%APPDATA%\ManagedDrive\settings.json`，包括高用量告警百分比阈值。
 - 开机自启通过 `HKCU\SOFTWARE\Microsoft\Windows\CurrentVersion\Run` 注册表项实现（无需提升权限）。
 - 版本号由 MinVer 从 git 标签派生（`v` 前缀，例如 `v0.1.0`）。
 

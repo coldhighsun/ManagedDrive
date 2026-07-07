@@ -56,4 +56,17 @@ public sealed record AppConfiguration
     {
         get; init;
     }
+
+    /// <summary>
+    /// Gets or sets the usage percentage (0-100) at which a disk is flagged as high-usage and
+    /// a tray warning is shown. Defaults to 90%.
+    /// </summary>
+    public double HighUsageWarnPercent { get; init; } = 90.0;
+
+    /// <summary>
+    /// Gets or sets the usage percentage (0-100) below which a disk's high-usage flag is
+    /// cleared, re-arming the warning. Must be lower than <see cref="HighUsageWarnPercent"/> to
+    /// provide hysteresis. Defaults to 85%.
+    /// </summary>
+    public double HighUsageResetPercent { get; init; } = 85.0;
 }

@@ -96,6 +96,8 @@
     <sys:String x:Key="Settings.Theme.Dark">Dark</sys:String>
     <sys:String x:Key="Tip.RunAtStartup">Start ManagedDrive automatically when Windows starts</sys:String>
     <sys:String x:Key="Tip.StartMinimized">Hide the main window on startup and show only the system tray icon</sys:String>
+    <sys:String x:Key="Settings.HighUsageWarnPercent">High usage warning at:</sys:String>
+    <sys:String x:Key="Tip.HighUsageWarnPercent">Flag a disk as high-usage and show a tray warning once used space reaches this percentage</sys:String>
 
     <!-- Shared buttons -->
     <sys:String x:Key="Btn.Ok">OK</sys:String>

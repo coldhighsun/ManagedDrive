@@ -7,8 +7,6 @@ namespace ManagedDrive.App.ViewModels;
 /// </summary>
 public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
 {
-    private const double HighUsageResetThreshold = 85.0;
-    private const double HighUsageThreshold = 90.0;
     private readonly DispatcherTimer _refreshTimer;
 
     private ulong _freeBytes;
@@ -41,8 +39,8 @@ public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
     }
 
     /// <summary>
-    /// Raised when disk usage first crosses the 90% threshold.
-    /// Resets (and can re-fire) only after usage drops below 85%.
+    /// Raised when disk usage first crosses <see cref="HighUsageThreshold"/>.
+    /// Resets (and can re-fire) only after usage drops below <see cref="HighUsageResetThreshold"/>.
     /// </summary>
     public event EventHandler? HighUsageWarning;
 
@@ -95,6 +93,18 @@ public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
     /// Gets whether disk usage is at or above the high-usage warning threshold.
     /// </summary>
     public bool IsHighUsage { get; private set; }
+
+    /// <summary>
+    /// Gets or sets the usage percentage (0-100) at which <see cref="HighUsageWarning"/> fires.
+    /// Defaults to 90%.
+    /// </summary>
+    public double HighUsageThreshold { get; set; } = 90.0;
+
+    /// <summary>
+    /// Gets or sets the usage percentage (0-100) below which <see cref="IsHighUsage"/> is
+    /// cleared, re-arming the warning. Defaults to 85%.
+    /// </summary>
+    public double HighUsageResetThreshold { get; set; } = 85.0;
 
     /// <summary>
     /// Gets the inverse of <see cref="IsCurrentTempDir"/> for visibility binding.

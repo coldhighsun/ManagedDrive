@@ -1,4 +1,5 @@
 using System.Windows.Controls;
+using System.Windows.Input;
 
 namespace ManagedDrive.App.Views;
 
@@ -7,7 +8,19 @@ namespace ManagedDrive.App.Views;
 /// </summary>
 public partial class SettingsDialog
 {
+    /// <summary>
+    /// Gap between the high-usage warning threshold and the (hidden) reset threshold that
+    /// re-arms the warning, providing hysteresis without exposing a second setting to the user.
+    /// </summary>
+    private const int HighUsageResetGap = 5;
+
+    /// <summary>
+    /// Minimum allowed value for the high-usage warning threshold.
+    /// </summary>
+    private const int HighUsageMinPercent = 50;
+
     private readonly AppConfiguration _original;
+    private int _highUsageWarnPercent;
 
     /// <summary>
     /// Initializes the dialog with the current application configuration.
@@ -59,6 +72,9 @@ public partial class SettingsDialog
         {
             ThemeBox.SelectedIndex = 0;
         }
+
+        _highUsageWarnPercent = (int)Math.Clamp(config.HighUsageWarnPercent, HighUsageMinPercent, 99);
+        HighUsageWarnPercentBox.Text = _highUsageWarnPercent.ToString();
     }
 
     /// <summary>
@@ -72,6 +88,8 @@ public partial class SettingsDialog
 
     private void OK_Click(object sender, RoutedEventArgs e)
     {
+        ParseHighUsagePercentBox();
+
         var runAtStartup = RunAtStartupBox.IsChecked == true;
         StartupManager.SetEnabled(runAtStartup);
 
@@ -89,8 +107,51 @@ public partial class SettingsDialog
             Theme = selectedTheme,
             Disks = _original.Disks,
             TempDirCompatWarningShown = _original.TempDirCompatWarningShown,
+            HighUsageWarnPercent = _highUsageWarnPercent,
+            HighUsageResetPercent = Math.Max(1, _highUsageWarnPercent - HighUsageResetGap),
         };
 
         DialogResult = true;
+    }
+
+    private void PercentBox_PreviewTextInput(object sender, TextCompositionEventArgs e)
+    {
+        e.Handled = !int.TryParse(e.Text, out _);
+    }
+
+    private void PercentBox_TextChanged(object sender, TextChangedEventArgs e)
+    {
+        ParseHighUsagePercentBox();
+    }
+
+    private void HighUsageWarnPercentUp_Click(object sender, RoutedEventArgs e)
+    {
+        ParseHighUsagePercentBox();
+        SetHighUsageWarnPercent(_highUsageWarnPercent + 1);
+    }
+
+    private void HighUsageWarnPercentDown_Click(object sender, RoutedEventArgs e)
+    {
+        ParseHighUsagePercentBox();
+        SetHighUsageWarnPercent(_highUsageWarnPercent - 1);
+    }
+
+    private void SetHighUsageWarnPercent(int value)
+    {
+        _highUsageWarnPercent = Math.Clamp(value, HighUsageMinPercent, 99);
+        HighUsageWarnPercentBox.Text = _highUsageWarnPercent.ToString();
+    }
+
+    private void ParseHighUsagePercentBox()
+    {
+        if (HighUsageWarnPercentBox == null)
+        {
+            return;
+        }
+
+        if (int.TryParse(HighUsageWarnPercentBox.Text, out var warn))
+        {
+            _highUsageWarnPercent = Math.Clamp(warn, HighUsageMinPercent, 99);
+        }
     }
 }
