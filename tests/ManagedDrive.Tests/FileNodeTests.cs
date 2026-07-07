@@ -66,4 +66,38 @@ public sealed class FileNodeTests
         Assert.NotEqual(a, b);
         Assert.True(b > a);
     }
+
+    [Fact]
+    public void Clone_CopiesMetadataAndBuffers()
+    {
+        var original = new FileNode
+        {
+            FilePath = "\\file.txt",
+            LeafName = "file.txt",
+            FileInfo = { FileAttributes = (uint)FileAttributes.Normal, FileSize = 3 },
+            FileData = [1, 2, 3],
+            FileSecurity = [9, 8],
+        };
+
+        var clone = original.Clone();
+
+        Assert.Equal(original.FilePath, clone.FilePath);
+        Assert.Equal(original.LeafName, clone.LeafName);
+        Assert.Equal(original.FileInfo.FileSize, clone.FileInfo.FileSize);
+        Assert.Equal(original.FileData, clone.FileData);
+        Assert.Equal(original.FileSecurity, clone.FileSecurity);
+    }
+
+    [Fact]
+    public void Clone_ReturnsIndependentBuffers()
+    {
+        var original = new FileNode { FileData = [1, 2, 3], FileSecurity = [9, 8] };
+        var clone = original.Clone();
+
+        clone.FileData![0] = 99;
+        clone.FileSecurity![0] = 77;
+
+        Assert.Equal(1, original.FileData[0]);
+        Assert.Equal(9, original.FileSecurity[0]);
+    }
 }

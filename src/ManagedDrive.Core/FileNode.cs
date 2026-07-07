@@ -75,4 +75,24 @@ public sealed class FileNode
     {
         return (ulong)Interlocked.Increment(ref _nextIndex);
     }
+
+    /// <summary>
+    /// Returns a deep copy of this node (independent <see cref="FileData"/> and
+    /// <see cref="FileSecurity"/> buffers), for copying a node into a different
+    /// <see cref="FileNodeMap"/> without the two nodes sharing mutable state.
+    /// </summary>
+    /// <returns>
+    /// A new <see cref="FileNode"/> with the same metadata and a copy of the data buffers.
+    /// </returns>
+    public FileNode Clone()
+    {
+        return new FileNode
+        {
+            FileInfo = FileInfo,
+            FileSecurity = FileSecurity?.ToArray(),
+            FileData = FileData?.ToArray(),
+            FilePath = FilePath,
+            LeafName = LeafName,
+        };
+    }
 }

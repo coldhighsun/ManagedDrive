@@ -34,6 +34,7 @@ Create, mount and manage in-memory volumes that appear as normal drive letters i
 - Exit confirmation — exiting the app (toolbar button or tray menu) while any disk is mounted brings the main window to the foreground and asks for confirmation; if TEMP/TMP points to any mounted RAM disk, the confirmation also warns that TEMP will be reset, and confirming resets it before exiting; when disks with auto-save are mounted, a full-window saving overlay with a spinner is displayed while the final image save runs in the background — system-initiated shutdown bypasses the confirmation prompt
 - NTFS-compatible volume identity — the RAM disk reports its filesystem type as NTFS, making it fully usable as a destination for tools that require an NTFS volume (e.g. WinGet, Windows Update staging, BITS downloads)
 - Format disk — right-click a disk and choose **Format** to delete all files and folders instantly (read-only disks are protected); the context menu is organized into three groups: navigation, configuration, and destructive operations
+- Clone disk — right-click a disk and choose **Clone Disk...** to copy its contents either onto another mounted, writable disk (overwriting that disk's existing contents, after a confirmation prompt) or out to a brand-new `.mdr` image file with a selectable compression level; an export path already used by another mounted disk (including the source disk's own image file) is rejected immediately after picking it
 - System tray menu — quick access to **Reset Temp Directory** (executes silently with a notification bubble result) and **Settings** in addition to Show, New Disk, and Exit
 - Main window opens centered on the primary screen and is brought to the foreground on startup
 - Bilingual UI — English and Simplified Chinese, auto-detected from system locale with manual override in Settings
@@ -93,7 +94,7 @@ ManagedDrive/
 │       ├── Models/                 #   AppConfiguration, DiskProfile
 │       ├── Services/               #   SettingsStore, StartupManager, TempDirResetService
 │       ├── ViewModels/             #   MainViewModel, DiskViewModel
-│       ├── Views/                  #   CreateDiskDialog, SettingsDialog, ConfirmDialog, AboutDialog, TrayTooltipView
+│       ├── Views/                  #   CreateDiskDialog, CloneDiskDialog, SettingsDialog, ConfirmDialog, AboutDialog, TrayTooltipView
 │       ├── MainWindow.xaml(.cs)    #   Main window
 │       └── App.xaml(.cs)           #   Startup, tray icon, auto-mount
 │
@@ -101,6 +102,7 @@ ManagedDrive/
 │   └── ManagedDrive.Tests/         # xUnit v3 unit tests (pure-managed code only)
 │       ├── FileNodeTests.cs
 │       ├── FileNodeMapTests.cs
+│       ├── MemoryFileSystemCloneTests.cs
 │       ├── DiskImageSerializerTests.cs
 │       └── WildcardMatchTests.cs
 │
@@ -196,7 +198,7 @@ Random reads are slower on the RAM disk for the same reason sequential reads are
 dotnet test tests/ManagedDrive.Tests
 ```
 
-Tests cover `FileNode` (allocation unit alignment, index numbers), `FileNodeMap` (CRUD, case-insensitive lookup, child pagination, rename, capacity tracking), `DiskImageSerializer` (save/load round-trips across every compression level, legacy version-1 images, concurrent map mutation during save), and the wildcard glob matcher used by directory listing. Mount/unmount integration tests require the WinFsp driver and must be run manually.
+Tests cover `FileNode` (allocation unit alignment, index numbers, deep-copy cloning), `FileNodeMap` (CRUD, case-insensitive lookup, child pagination, rename, capacity tracking), `MemoryFileSystem` disk-cloning (copying contents between disks, target-too-small and read-only-target rejection, clone independence), `DiskImageSerializer` (save/load round-trips across every compression level, legacy version-1 images, concurrent map mutation during save), and the wildcard glob matcher used by directory listing. Mount/unmount integration tests require the WinFsp driver and must be run manually.
 
 ### Running Benchmarks
 
@@ -257,6 +259,7 @@ MIT
 - 退出确认——只要还有磁盘处于挂载状态，无论是通过工具栏按钮还是托盘菜单退出，程序都会将主窗口带到前台并要求用户确认；若 TEMP/TMP 恰好指向某个已挂载的内存盘，确认提示中还会额外警告将重置 TEMP，用户确认后先重置再退出；若有磁盘配置了自动保存，退出时会在主窗口显示全屏保存遮罩与旋转动画，待后台镜像保存完成后再关闭——系统发送关闭信号时不触发确认流程
 - NTFS 兼容卷标识——内存盘以 NTFS 文件系统类型上报，可作为需要 NTFS 卷的工具（如 WinGet、Windows Update 暂存、BITS 下载）的目标路径
 - 磁盘格式化——右键单击磁盘并选择**格式化**可立即删除所有文件和文件夹（只读磁盘受保护）；右键菜单按导航、配置、破坏性操作三个分组排列
+- 克隆磁盘——右键单击磁盘并选择**克隆磁盘...**，可将其内容复制到另一个已挂载的可写磁盘（会覆盖该磁盘现有内容，操作前需二次确认），或导出为一个全新的 `.mdr` 镜像文件（可选择压缩级别）；若所选导出路径已被其他已挂载磁盘占用（包括源磁盘自身正在使用的镜像文件），选择后会立即提示并拒绝
 - 系统托盘菜单——在显示、新建磁盘、退出之外，新增**重置临时文件夹**（静默执行，结果通过气泡通知反馈）和**设置**快捷入口
 - 主窗口启动时居中显示于主屏幕并置于前台
 - 双语界面——中文与英文，根据系统语言自动切换，也可在设置中手动更改
@@ -316,7 +319,7 @@ ManagedDrive/
 │       ├── Models/                 #   AppConfiguration、DiskProfile
 │       ├── Services/               #   SettingsStore、StartupManager、TempDirResetService
 │       ├── ViewModels/             #   MainViewModel、DiskViewModel
-│       ├── Views/                  #   CreateDiskDialog、SettingsDialog、ConfirmDialog、AboutDialog、TrayTooltipView
+│       ├── Views/                  #   CreateDiskDialog、CloneDiskDialog、SettingsDialog、ConfirmDialog、AboutDialog、TrayTooltipView
 │       ├── MainWindow.xaml(.cs)    #   主窗口
 │       └── App.xaml(.cs)           #   启动、托盘图标、自动挂载
 │
@@ -324,6 +327,7 @@ ManagedDrive/
 │   └── ManagedDrive.Tests/         # xUnit v3 单元测试（仅纯托管代码）
 │       ├── FileNodeTests.cs
 │       ├── FileNodeMapTests.cs
+│       ├── MemoryFileSystemCloneTests.cs
 │       ├── DiskImageSerializerTests.cs
 │       └── WildcardMatchTests.cs
 │
@@ -419,7 +423,7 @@ ManagedDrive 使用 **WinFsp**（Windows 文件系统代理）将内存目录树
 dotnet test tests/ManagedDrive.Tests
 ```
 
-测试覆盖 `FileNode`（分配单元对齐、索引编号）、`FileNodeMap`（增删改查、大小写无关查找、子节点分页、重命名、容量追踪）、`DiskImageSerializer`（各压缩级别的保存/加载往返、旧版本 1 镜像、保存期间并发修改磁盘节点）以及目录枚举所用的通配符匹配逻辑。挂载/卸载集成测试需要 WinFsp 驱动程序，须手动运行。
+测试覆盖 `FileNode`（分配单元对齐、索引编号、深拷贝克隆）、`FileNodeMap`（增删改查、大小写无关查找、子节点分页、重命名、容量追踪）、`MemoryFileSystem` 的磁盘克隆逻辑（跨磁盘复制内容、目标容量不足与目标只读时的拒绝、克隆节点的独立性）、`DiskImageSerializer`（各压缩级别的保存/加载往返、旧版本 1 镜像、保存期间并发修改磁盘节点）以及目录枚举所用的通配符匹配逻辑。挂载/卸载集成测试需要 WinFsp 驱动程序，须手动运行。
 
 ### 运行基准测试
 

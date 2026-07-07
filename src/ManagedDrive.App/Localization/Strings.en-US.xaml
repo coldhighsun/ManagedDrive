@@ -18,6 +18,7 @@
     <sys:String x:Key="Btn.SetAsTempDir">Set as Temp Directory...</sys:String>
     <sys:String x:Key="Btn.RestoreDefaultTemp">Restore Default Temp Directory</sys:String>
     <sys:String x:Key="Btn.FormatDisk">Format…</sys:String>
+    <sys:String x:Key="Btn.CloneDisk">Clone Disk...</sys:String>
     <sys:String x:Key="Btn.Refresh">Refresh</sys:String>
     <sys:String x:Key="Btn.Settings">Settings</sys:String>
     <sys:String x:Key="Tip.NewDisk">Create and mount a new RAM disk</sys:String>
@@ -88,6 +89,20 @@
     <sys:String x:Key="Val.BadImagePath">The image file path is invalid or its folder does not exist.</sys:String>
     <sys:String x:Key="Val.ReadOnlyRequiresImage">Read-only disks must use an existing image file.</sys:String>
     <sys:String x:Key="Val.ReadOnlyImageNotFound">The selected image file does not exist.</sys:String>
+
+    <!-- CloneDiskDialog -->
+    <sys:String x:Key="CloneDisk.Title">Clone Disk</sys:String>
+    <sys:String x:Key="CloneDisk.SourceDescription">Copy the contents of {0} ({1}) to:</sys:String>
+    <sys:String x:Key="CloneDisk.ToDisk">Another mounted disk</sys:String>
+    <sys:String x:Key="CloneDisk.ToDiskWarning">All existing files and folders on the target disk will be permanently replaced.</sys:String>
+    <sys:String x:Key="CloneDisk.ToFile">A new image file</sys:String>
+    <sys:String x:Key="CloneDisk.ExportFile">Image File</sys:String>
+    <sys:String x:Key="Val.NoCloneTarget">Please select a target disk.</sys:String>
+    <sys:String x:Key="Val.NoExportPath">Please choose a destination image file.</sys:String>
+    <sys:String x:Key="Msg.CloneDiskConfirmTitle">Clone Disk</sys:String>
+    <sys:String x:Key="Msg.CloneDiskConfirmBody">Copy the contents of {0} to {1} ({2})?&#x0a;&#x0a;All existing files and folders on {1} will be permanently replaced.</sys:String>
+    <sys:String x:Key="Status.DiskCloned">Cloned {0} to {1}.</sys:String>
+    <sys:String x:Key="Status.DiskExported">Exported {0} to {1}.</sys:String>
 
     <!-- SettingsDialog -->
     <sys:String x:Key="Settings.Title">Settings</sys:String>

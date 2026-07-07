@@ -182,6 +182,11 @@
                                                     RelativeSource={RelativeSource AncestorType=ContextMenu}}"
                                           CommandParameter="{Binding PlacementTarget.DataContext,
                                                     RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
+                                <MenuItem Header="{DynamicResource Btn.CloneDisk}"
+                                          Command="{Binding PlacementTarget.Tag.CloneDiskCommand,
+                                                    RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                          CommandParameter="{Binding PlacementTarget.DataContext,
+                                                    RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
                                 <MenuItem Header="{DynamicResource Btn.FormatDisk}"
                                           Command="{Binding PlacementTarget.Tag.FormatDiskCommand,
                                                     RelativeSource={RelativeSource AncestorType=ContextMenu}}"

@@ -216,6 +216,30 @@ public sealed class RamDisk : IDisposable
     }
 
     /// <summary>
+    /// Replaces this disk's entire contents with a copy of <paramref name="source"/>'s current
+    /// contents. Existing files on this disk are discarded.
+    /// </summary>
+    /// <param name="source">The disk to copy content from.</param>
+    /// <param name="error">Set to a human-readable message when the method returns <c>false</c>.</param>
+    /// <returns>
+    /// <c>true</c> on success; <c>false</c> when this disk is read-only or its capacity is
+    /// smaller than the source disk's used bytes.
+    /// </returns>
+    public bool TryCloneFrom(RamDisk source, out string? error) =>
+        _fs.TryReplaceContents(source._fs.NodeMap, out error);
+
+    /// <summary>
+    /// Writes this disk's current contents to a new image file at <paramref name="imagePath"/>.
+    /// Unlike <see cref="SaveToImage"/>, this is independent of
+    /// <see cref="DiskOptions.PersistImagePath"/> and does not affect this disk's dirty or
+    /// last-saved-path tracking.
+    /// </summary>
+    /// <param name="imagePath">Destination file path.</param>
+    /// <param name="level">Compression level applied to the exported image.</param>
+    public void ExportToImage(string imagePath, ImageCompressionLevel level) =>
+        DiskImageSerializer.Save(_fs.NodeMap, Options.CapacityBytes, Options.VolumeLabel, imagePath, level);
+
+    /// <summary>
     /// Saves the disk image while holding <see cref="_autoSaveLock"/>, without unmounting.
     /// Intended for external shutdown-notification callers (e.g. Windows session-ending) that
     /// need a quick, safe save that can't race the periodic auto-save tick. Does nothing if

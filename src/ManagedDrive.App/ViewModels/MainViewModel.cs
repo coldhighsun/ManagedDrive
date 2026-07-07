@@ -49,6 +49,9 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
                 var vm = p as DiskViewModel ?? SelectedDisk;
                 return vm is { Disk.Options.ReadOnly: false };
             });
+        CloneDiskCommand = new(
+            p => ExecuteCloneDisk(p as DiskViewModel ?? SelectedDisk),
+            p => p is DiskViewModel || SelectedDisk != null);
         RefreshCommand = new(_ => RefreshAll());
         ResetTempDirsCommand = new(_ => ExecuteResetTempDirs());
         ToggleTempDirCommand = new(
@@ -117,6 +120,15 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     /// Gets the command that formats (clears all content from) the selected disk.
     /// </summary>
     public RelayCommand FormatDiskCommand
+    {
+        get;
+    }
+
+    /// <summary>
+    /// Gets the command that opens the "Clone Disk" dialog for the selected disk: copy its
+    /// contents onto another mounted disk, or export them to a new image file.
+    /// </summary>
+    public RelayCommand CloneDiskCommand
     {
         get;
     }
@@ -561,6 +573,73 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             "ManagedDrive",
             MessageBoxButton.OK,
             MessageBoxImage.Information);
+    }
+
+    private async void ExecuteCloneDisk(DiskViewModel? vm)
+    {
+        if (vm == null)
+        {
+            return;
+        }
+
+        var targets = Disks.Where(d => d != vm && !d.IsReadOnly).ToList();
+
+        // Include the source disk's own options (excluding: null) so exporting to a path that
+        // the source itself is already persisting to is also rejected — that file may be
+        // concurrently written by the source's auto-save timer.
+        var dialog = new CloneDiskDialog(vm, targets, GetOtherDiskOptions(excluding: null))
+        {
+            Owner = Application.Current.MainWindow
+        };
+
+        if (dialog.ShowDialog() != true)
+        {
+            return;
+        }
+
+        if (dialog.TargetDisk is { } target)
+        {
+            var confirm = new ConfirmDialog(
+                Loc.Get("Msg.CloneDiskConfirmTitle"),
+                Loc.Format("Msg.CloneDiskConfirmBody", vm.MountPoint, target.MountPoint, target.VolumeLabel))
+            {
+                Owner = Application.Current.MainWindow
+            };
+
+            if (confirm.ShowDialog() != true)
+            {
+                return;
+            }
+
+            if (!target.Disk.TryCloneFrom(vm.Disk, out var error))
+            {
+                MessageBox.Show(
+                    error,
+                    "ManagedDrive",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Warning);
+                return;
+            }
+
+            target.Refresh();
+            StatusText = Loc.Format("Status.DiskCloned", vm.MountPoint, target.MountPoint);
+        }
+        else if (dialog.ExportPath is { } exportPath)
+        {
+            try
+            {
+                await Task.Run(() => vm.Disk.ExportToImage(exportPath, dialog.ExportCompressionLevel));
+                StatusText = Loc.Format("Status.DiskExported", vm.MountPoint, exportPath);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(
+                    Loc.Format("Msg.SaveImageFailed", ex.Message),
+                    "ManagedDrive",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Error);
+            }
+        }
     }
 
     private async void ExecuteResetTempDirs()

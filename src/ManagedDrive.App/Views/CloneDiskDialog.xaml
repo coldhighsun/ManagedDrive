@@ -1,0 +1,89 @@
+<Window x:Class="ManagedDrive.App.Views.CloneDiskDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:helpers="clr-namespace:ManagedDrive.App.Helpers"
+        Style="{StaticResource AppWindow}"
+        Title="{DynamicResource CloneDisk.Title}"
+        Width="440" SizeToContent="Height"
+        ResizeMode="NoResize"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False">
+
+    <Grid Margin="24">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="16"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="24"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <TextBlock Grid.Row="0"
+                   x:Name="SourceDescriptionText"
+                   Foreground="{DynamicResource AppForegroundLight}"
+                   TextWrapping="Wrap"/>
+
+        <!-- Clone to another mounted disk -->
+        <Border Grid.Row="2" Style="{StaticResource SectionBorder}">
+            <StackPanel>
+                <RadioButton x:Name="CloneToDiskOption" GroupName="CloneMode"
+                             Content="{DynamicResource CloneDisk.ToDisk}"
+                             Foreground="{DynamicResource AppForeground}"
+                             Checked="ModeOption_CheckedChanged"/>
+
+                <ComboBox x:Name="TargetDiskBox" IsEditable="False" Margin="0,8,0,8"
+                          Style="{StaticResource OutlinedComboBox}"/>
+
+                <TextBlock Text="{DynamicResource CloneDisk.ToDiskWarning}"
+                           Foreground="{DynamicResource AppWarning}"
+                           FontSize="11" TextWrapping="Wrap"/>
+
+                <Separator Margin="0,16,0,16"/>
+
+                <!-- Export as a new .mdr image file -->
+                <RadioButton x:Name="ExportToFileOption" GroupName="CloneMode"
+                             Content="{DynamicResource CloneDisk.ToFile}"
+                             Foreground="{DynamicResource AppForeground}"
+                             Checked="ModeOption_CheckedChanged"/>
+
+                <Grid Margin="0,8,0,8">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="8"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBox Grid.Column="0" x:Name="ExportPathBox" IsReadOnly="True" Cursor="Hand"
+                             helpers:HintHelper.Text="{DynamicResource CloneDisk.ExportFile}"
+                             Style="{StaticResource OutlinedTextBox}"
+                             PreviewMouseLeftButtonDown="ExportPathBox_PreviewMouseLeftButtonDown"/>
+                    <Button Grid.Column="2" Content="..." Width="40"
+                            Click="BrowseExportPath_Click"
+                            Style="{StaticResource OutlinedButton}"/>
+                </Grid>
+
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="8"/>
+                        <ColumnDefinition Width="140"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" Text="{DynamicResource CreateDisk.CompressionLevel}"
+                               Foreground="{DynamicResource AppForeground}"
+                               VerticalAlignment="Center"/>
+                    <ComboBox Grid.Column="2" x:Name="CompressionLevelBox" IsEditable="False"
+                              Style="{StaticResource OutlinedComboBox}"/>
+                </Grid>
+            </StackPanel>
+        </Border>
+
+        <!-- OK / Cancel -->
+        <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Right">
+            <Button Content="{DynamicResource Btn.Cancel}" Width="80" IsCancel="True"
+                    Style="{StaticResource FlatButton}"
+                    Margin="0,0,8,0"/>
+            <Button Content="{DynamicResource Btn.Ok}" Width="80" IsDefault="True"
+                    Click="OK_Click"
+                    Style="{StaticResource RaisedButton}"/>
+        </StackPanel>
+    </Grid>
+</Window>

@@ -782,6 +782,43 @@ public sealed class MemoryFileSystem : FileSystemBase
     /// </summary>
     internal void UpdateVolumeLabel(string label) => _volumeLabel = label;
 
+    /// <summary>
+    /// Replaces this file system's entire contents with a deep copy of <paramref name="sourceMap"/>.
+    /// Used to clone one mounted disk's contents onto another. Fails without modifying this
+    /// file system when it is read-only or when the source's allocated bytes exceed this
+    /// file system's capacity.
+    /// </summary>
+    /// <param name="sourceMap">The node map to copy from.</param>
+    /// <param name="error">Set to a human-readable message when the method returns <c>false</c>.</param>
+    /// <returns>
+    /// <c>true</c> on success; <c>false</c> when the disk is read-only or too small.
+    /// </returns>
+    internal bool TryReplaceContents(FileNodeMap sourceMap, out string? error)
+    {
+        if (_readOnly)
+        {
+            error = "Cannot clone into a read-only disk.";
+            return false;
+        }
+
+        var needed = sourceMap.GetTotalAllocated();
+        if (needed > _maxCapacity)
+        {
+            error = $"Source disk uses {needed:N0} bytes, which exceeds the target disk's capacity ({_maxCapacity:N0} bytes).";
+            return false;
+        }
+
+        NodeMap.ClearAll();
+        foreach (var kvp in sourceMap.GetAllNodes())
+        {
+            NodeMap.Add(kvp.Key, kvp.Value.Clone());
+        }
+
+        MarkDirty();
+        error = null;
+        return true;
+    }
+
     private static ulong FileTimeNow() => (ulong)DateTime.UtcNow.ToFileTimeUtc();
 
     /// <summary>
