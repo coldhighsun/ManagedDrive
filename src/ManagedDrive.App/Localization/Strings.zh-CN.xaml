@@ -58,6 +58,7 @@
     <sys:String x:Key="CompressionLevel.Fastest">快速</sys:String>
     <sys:String x:Key="CompressionLevel.Optimal">均衡</sys:String>
     <sys:String x:Key="CompressionLevel.SmallestSize">最高</sys:String>
+    <sys:String x:Key="CreateDisk.CompressionWarning">均衡/最高压缩可能会显著增加保存时间，请谨慎选择。</sys:String>
     <sys:String x:Key="CreateDisk.AutoSavePrefix">每</sys:String>
     <sys:String x:Key="CreateDisk.AutoSaveSuffix">分钟自动保存镜像</sys:String>
     <sys:String x:Key="CreateDisk.AutoSaveInterval">间隔（分钟）</sys:String>

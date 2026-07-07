@@ -127,6 +127,7 @@
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="12"/>
                         <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
                         <RowDefinition Height="12"/>
                         <RowDefinition Height="Auto"/>
                     </Grid.RowDefinitions>
@@ -161,11 +162,19 @@
                                    VerticalAlignment="Center"/>
                         <ComboBox Grid.Column="2" x:Name="CompressionLevelBox" IsEditable="False"
                                   ToolTip="{DynamicResource Tip.CompressionLevel}"
-                                  Style="{StaticResource OutlinedComboBox}"/>
+                                  Style="{StaticResource OutlinedComboBox}"
+                                  SelectionChanged="CompressionLevelBox_SelectionChanged"/>
                     </Grid>
 
+                    <!-- Compression Warning -->
+                    <TextBlock Grid.Row="3" x:Name="CompressionWarningText"
+                               Text="{DynamicResource CreateDisk.CompressionWarning}"
+                               Foreground="{DynamicResource AppWarning}"
+                               FontSize="11" TextWrapping="Wrap" Margin="0,4,0,0"
+                               Visibility="Collapsed"/>
+
                     <!-- Auto Save -->
-                    <Grid Grid.Row="4">
+                    <Grid Grid.Row="5">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="6"/>

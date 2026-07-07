@@ -22,7 +22,7 @@ Create, mount and manage in-memory volumes that appear as normal drive letters i
 - Edit a mounted disk — change label, capacity, auto-mount, and image path live without data loss; changing the drive letter or read-only flag remounts the disk
 - Optional persistence — save the disk contents to a `.mdr` image file and restore it on next mount; Save Image is always available and prompts for a file path if none is set; the disk card shows a "Saving..." overlay while the save is in progress
 - Optional auto-save — periodically save the disk contents to its image file every 1–60 minutes (configurable when creating or editing a disk); a save also fires immediately when enabled and once more right before the disk is unmounted or the app exits, so nothing is lost between intervals. Periodic saves are skipped automatically when nothing has changed since the last save, avoiding unnecessary disk I/O on an idle disk. The image file must be selected through the file picker (no manual typing) and cannot be located on a RAM disk or reused across two disks. Checking Read Only, or clearing the selected image file, unchecks and disables auto-save (and Read Only also disables image compression) — a read-only disk's contents never change, so there is nothing to save or compress, an empty read-only disk would be meaningless, and auto-save has nothing to save to without an image file. The disk card shows the timestamp of the most recent content modification
-- Selectable image compression — choose a compression level (Off / Fast / Balanced / Max) for the saved `.mdr` image, trading save/load speed for file size; defaults to Fast
+- Selectable image compression — choose a compression level (Off / Fast / Balanced / Max) for the saved `.mdr` image, trading save/load speed for file size; defaults to Fast. Selecting Balanced or Max shows an inline warning that save times may increase significantly
 - Auto-mount saved profiles on application startup
 - Double-click a disk card to open it in Explorer; right-click for **Open in Explorer** and **Open Image File Directory** (opens the folder containing the disk's `.mdr` image file; grayed out when the disk has no image file configured)
 - System-tray icon for quick access; minimizes to tray on window close
@@ -244,7 +244,7 @@ MIT
 - 编辑已挂载磁盘——修改卷标、容量、自动挂载和镜像路径无需重挂即可实时生效；更改盘符或只读标志时自动重挂
 - 可选持久化——将磁盘内容保存为 `.mdr` 镜像文件，下次挂载时自动还原；保存镜像功能始终可用，未设置镜像路径时自动弹出选择对话框；保存期间磁盘卡片会显示"正在保存..."提示
 - 可选自动保存——每 1-60 分钟（创建或编辑磁盘时可配置）自动将磁盘内容保存到镜像文件；开启自动保存时会立即触发一次保存，卸载磁盘或退出应用前也会再保存一次，避免在两次定时保存之间丢失数据。若自上次保存后内容未发生变化，定时保存会自动跳过，避免不必要的磁盘 IO。镜像文件只能通过文件选择对话框设置（不可手动输入），且不能位于内存盘上，也不能与其他磁盘共用同一个镜像文件。勾选只读，或清空已选择的镜像文件，都会取消勾选并禁用自动保存（勾选只读还会同时禁用镜像压缩）——只读磁盘的内容不会变化，因此无需保存或压缩，一个没有内容的只读空盘也没有意义，而没有镜像文件时自动保存也无处可保存。磁盘卡片会显示磁盘内容最近一次被修改的时间
-- 可选镜像压缩——为保存的 `.mdr` 镜像选择压缩级别（不压缩／快速／均衡／最高），在保存/加载速度与文件大小之间取舍；默认快速
+- 可选镜像压缩——为保存的 `.mdr` 镜像选择压缩级别（不压缩／快速／均衡／最高），在保存/加载速度与文件大小之间取舍；默认快速。选择均衡或最高时会显示内联警告，提示保存时间可能显著增加
 - 应用启动时自动挂载已保存的磁盘配置
 - 双击磁盘卡片可在资源管理器中打开对应盘符；右键菜单提供**在资源管理器中打开**和**打开镜像文件目录**（打开磁盘 `.mdr` 镜像文件所在的文件夹；若磁盘未配置镜像文件则该菜单项置灰不可点）
 - 系统托盘图标，关闭窗口时最小化到托盘
