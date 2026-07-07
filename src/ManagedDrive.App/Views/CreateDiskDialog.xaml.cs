@@ -23,6 +23,7 @@ public partial class CreateDiskDialog
     private readonly IReadOnlyList<DiskOptions> _otherDisks;
     private int _capacityMaximum;
     private int _capacityValue = 2;
+    private int _highUsageWarnPercentValue = 90;
     private int _intervalValue = 10;
     private int _snapshotCountValue = 10;
     private int _snapshotSizeValue = 2;
@@ -62,6 +63,7 @@ public partial class CreateDiskDialog
         CompressionLevelBox.SelectedIndex = CompressionLevels.IndexOf(ImageCompressionLevel.Fastest);
         UpdateCompressionLevelState();
         UpdateAutoSaveEnabledState();
+        UpdateHighUsageWarnPercentState();
     }
 
     /// <summary>
@@ -140,6 +142,18 @@ public partial class CreateDiskDialog
                 }
             }
         }
+
+        if (existing.HighUsageWarnPercent is { } warnPercent)
+        {
+            HighUsageWarnBox.IsChecked = true;
+            HighUsageWarnPercentValue = (int)Math.Clamp(warnPercent, 1, 99);
+        }
+        else
+        {
+            HighUsageWarnBox.IsChecked = false;
+        }
+
+        UpdateHighUsageWarnPercentState();
     }
 
     /// <summary>
@@ -209,6 +223,16 @@ public partial class CreateDiskDialog
         {
             _capacityValue = Math.Clamp(value, 1, _capacityMaximum);
             UpdateCapacityDisplay();
+        }
+    }
+
+    private int HighUsageWarnPercentValue
+    {
+        get => _highUsageWarnPercentValue;
+        set
+        {
+            _highUsageWarnPercentValue = Math.Clamp(value, 1, 99);
+            HighUsageWarnPercentBox.Text = _highUsageWarnPercentValue.ToString();
         }
     }
 
@@ -347,6 +371,11 @@ public partial class CreateDiskDialog
         return (int)Math.Max(1, Math.Min(_maxCapacityBytes / divisor, int.MaxValue));
     }
 
+    private void HighUsageWarnBox_CheckedChanged(object sender, RoutedEventArgs e)
+    {
+        UpdateHighUsageWarnPercentState();
+    }
+
     private void ImagePathBox_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
         e.Handled = true;
@@ -413,6 +442,14 @@ public partial class CreateDiskDialog
         if (int.TryParse(CapacityBox.Text, out var parsed))
         {
             _capacityValue = parsed;
+        }
+    }
+
+    private void ParseHighUsageWarnPercentFromBox()
+    {
+        if (int.TryParse(HighUsageWarnPercentBox.Text, out var parsed))
+        {
+            _highUsageWarnPercentValue = parsed;
         }
     }
 
@@ -609,6 +646,19 @@ public partial class CreateDiskDialog
             }
         }
 
+        double? highUsageWarnPercent = null;
+        if (HighUsageWarnBox.IsChecked == true)
+        {
+            ParseHighUsageWarnPercentFromBox();
+            if (_highUsageWarnPercentValue < 1 || _highUsageWarnPercentValue > 99)
+            {
+                error = Loc.Get("Val.BadHighUsagePercent");
+                return false;
+            }
+
+            highUsageWarnPercent = _highUsageWarnPercentValue;
+        }
+
         options = new()
         {
             MountPoint = mountPoint,
@@ -622,6 +672,7 @@ public partial class CreateDiskDialog
                 ?? ImageCompressionLevel.Fastest,
             MaxSnapshotCount = maxSnapshotCount,
             MaxSnapshotSizeBytes = maxSnapshotSizeBytes,
+            HighUsageWarnPercent = highUsageWarnPercent,
         };
 
         error = string.Empty;
@@ -684,6 +735,16 @@ public partial class CreateDiskDialog
         }
 
         SnapshotLimit_CheckedChanged(this, new RoutedEventArgs());
+    }
+
+    private void UpdateHighUsageWarnPercentState()
+    {
+        if (HighUsageWarnPercentBox is null)
+        {
+            return;
+        }
+
+        HighUsageWarnPercentBox.IsEnabled = HighUsageWarnBox.IsChecked == true;
     }
 
     private void UpdateSnapshotSizeDisplay()

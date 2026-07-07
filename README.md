@@ -28,18 +28,19 @@ Create, mount and manage in-memory volumes that appear as normal drive letters i
 - Double-click a disk card to open it in Explorer; right-click for **Open in Explorer** and **Open Image File Directory** (opens the folder containing the disk's `.mdr` image file; grayed out when the disk has no image file configured)
 - System-tray icon for quick access; minimizes to tray on window close
 - Tray icon tooltip — hover to see all mounted disks with live usage percentages
-- High-usage warning — system tray notification when a disk exceeds a configurable usage threshold (default 90%, adjustable in Settings); the warning auto-clears once usage drops 5 points below that threshold
+- High-usage warning — system tray notification when a disk exceeds a per-disk usage threshold, configurable when creating or editing that disk (default 90%, on by default; can be disabled entirely for a given disk); the warning auto-clears once usage drops 5 points below that threshold
 - Optional start-minimized mode — launch directly to tray without showing the main window
 - Temp directory redirection — right-click a disk to set it as the Windows TEMP/TMP directory; reset to the system default from the toolbar, context menu, or tray menu; automatically resets to the system default when the disk is unmounted or remounted; on startup, if TEMP/TMP points to any RAM disk profile a warning is shown — if the disk is not set to auto-mount, TEMP is also automatically reset to the system default
 - Exit confirmation — exiting the app (toolbar button or tray menu) while any disk is mounted brings the main window to the foreground and asks for confirmation; if TEMP/TMP points to any mounted RAM disk, the confirmation also warns that TEMP will be reset, and confirming resets it before exiting; when disks with auto-save are mounted, a full-window saving overlay with a spinner is displayed while the final image save runs in the background — system-initiated shutdown bypasses the confirmation prompt
 - NTFS-compatible volume identity — the RAM disk reports its filesystem type as NTFS, making it fully usable as a destination for tools that require an NTFS volume (e.g. WinGet, Windows Update staging, BITS downloads)
 - Format disk — right-click a disk and choose **Format** to delete all files and folders instantly (read-only disks are protected); the context menu is organized into three groups: navigation, configuration, and destructive operations
 - Clone disk — right-click a disk and choose **Clone Disk...** to copy its contents either onto another mounted, writable disk (overwriting that disk's existing contents, after a confirmation prompt) or out to a brand-new `.mdr` image file with a selectable compression level; an export path already used by another mounted disk (including the source disk's own image file) is rejected immediately after picking it
+- Snapshot / version history — optionally cap saved snapshots by count and/or total size when creating or editing a disk; a timestamped snapshot (`{name}.yyyyMMdd-HHmmss.mdr`) is written next to the main image on every save that has content changes, alongside the main image, with older snapshots pruned automatically once a limit is exceeded. Identical file content is stored only once across all snapshots of the same disk (content-addressed, deduplicated by SHA-256), so keeping many snapshots costs far less disk space than the sum of their logical sizes. Right-click a disk and choose **Restore Snapshot...** to pick a prior point in time from a list (with timestamp and size) and replace the disk's current contents with it, after a confirmation prompt; the restored contents are saved on the next save/auto-save rather than immediately. Deleting a disk's image file also removes all of its snapshots and any now-unused deduplicated content
 - System tray menu — quick access to **Reset Temp Directory** (executes silently with a notification bubble result) and **Settings** in addition to Show, New Disk, and Exit
 - Main window opens centered on the primary screen and is brought to the foreground on startup
 - Bilingual UI — English and Simplified Chinese, auto-detected from system locale with manual override in Settings
 - Light and dark themes — follows the Windows app theme by default, with a manual override (System Default / Light / Dark) in Settings; switches instantly without restarting
-- At-a-glance disk cards — the drive-letter badge shows small corner icons for read-only, current-TEMP-directory, and has-backing-image status (hover the image icon to see the image path); the usage bar displays its percentage and turns to a warning color (along with the free-space text) once usage crosses the configurable high-usage threshold; read-only disks collapse the usage bar into a single line showing the backing image path instead of capacity figures that never change
+- At-a-glance disk cards — the drive-letter badge shows small corner icons for read-only, current-TEMP-directory, and has-backing-image status (hover the image icon to see the image path); the usage bar displays its percentage and turns to a warning color (along with the free-space text) once usage crosses that disk's configured high-usage threshold (if enabled); read-only disks collapse the usage bar into a single line showing the backing image path instead of capacity figures that never change
 - About dialog — accessible from the overflow menu; shows the app version and a link to the GitHub repository
 
 ### Installation
@@ -85,7 +86,9 @@ ManagedDrive/
 │   │   ├── MemoryFileSystem.cs     #   FileSystemBase implementation (all WinFsp callbacks)
 │   │   ├── RamDisk.cs              #   Mount/unmount lifecycle wrapper
 │   │   ├── MountManager.cs         #   Multi-disk manager
-│   │   └── DiskImageSerializer.cs  #   Binary persistence (.mdr format)
+│   │   ├── DiskImageSerializer.cs  #   Binary persistence (.mdr format)
+│   │   ├── SnapshotManager.cs      #   Timestamped snapshot naming, listing, pruning, GC
+│   │   └── SnapshotStore.cs        #   Snapshot index format + content-addressed blob store
 │   │
 │   └── ManagedDrive.App/           # WPF desktop application
 │       ├── Localization/           #   ResourceDictionary strings (en-US, zh-CN)
@@ -94,7 +97,7 @@ ManagedDrive/
 │       ├── Models/                 #   AppConfiguration, DiskProfile
 │       ├── Services/               #   SettingsStore, StartupManager, TempDirResetService
 │       ├── ViewModels/             #   MainViewModel, DiskViewModel
-│       ├── Views/                  #   CreateDiskDialog, CloneDiskDialog, SettingsDialog, ConfirmDialog, AboutDialog, TrayTooltipView
+│       ├── Views/                  #   CreateDiskDialog, CloneDiskDialog, RestoreSnapshotDialog, SettingsDialog, ConfirmDialog, AboutDialog, TrayTooltipView
 │       ├── MainWindow.xaml(.cs)    #   Main window
 │       └── App.xaml(.cs)           #   Startup, tray icon, auto-mount
 │
@@ -127,6 +130,7 @@ Key classes:
 - **`RamDisk`** — composes `MemoryFileSystem` with a `FileSystemHost`. The static `Create()` factory mounts the volume and polls until the drive letter is visible in the OS (up to 2.5 s), then broadcasts `SHCNE_DRIVEADD` to refresh Explorer. `Dispose()` unmounts. When an auto-save interval is configured, a background timer saves the image immediately and then on every interval, skipping ticks where nothing has changed since the last save; a final save (always performed, regardless of changes) runs on `Dispose()` so unmounting, remounting, or exiting never skips the latest save.
 - **`MountManager`** — thread-safe registry of active `RamDisk` instances. Fires `DiskMounted` / `DiskUnmounted` events.
 - **`DiskImageSerializer`** — reads/writes `.mdr` files (full FS state including metadata, ACLs, and file data), optionally gzip-compressed at a user-selectable level.
+- **`SnapshotManager` / `SnapshotStore`** — write a timestamped, read-only copy of the disk's contents next to the main `.mdr` image after every save (when snapshot limits are configured), list/prune them, and restore one back onto a live disk. File content is deduplicated by SHA-256 hash into a shared blob store, so snapshots of a mostly-unchanged disk cost little extra space.
 
 ### Disk Image Format (`.mdr`)
 
@@ -144,9 +148,13 @@ A little-endian binary format:
 
 Version `1` images (no `CompressionLevel` byte, always uncompressed) remain readable for backward compatibility.
 
+### Snapshot Format
+
+Snapshots use a separate, independent format from `.mdr` images. For a main image `disk.mdr`, snapshots are named `disk.yyyyMMdd-HHmmss.mdr` in the same folder, each a small binary index file (magic `MDRS`) listing every file/directory's metadata plus, for non-empty files, a SHA-256 hash. The actual file content lives in a shared, content-addressed blob store at `disk.snapblobs/` (sharded into 2-character hex subfolders), gzip-compressed per-blob at the disk's configured compression level — identical content across snapshots is stored only once. Pruning old snapshots also garbage-collects any blob no longer referenced by a remaining snapshot.
+
 ### Settings & Persistence
 
-- Settings are stored as JSON at `%APPDATA%\ManagedDrive\settings.json`, including the high-usage warning percentage threshold.
+- Settings are stored as JSON at `%APPDATA%\ManagedDrive\settings.json`, including each disk's own high-usage warning threshold (or its disabled state).
 - Windows startup registration uses `HKCU\SOFTWARE\Microsoft\Windows\CurrentVersion\Run` (no elevation required).
 - Version is derived from git tags (`v`-prefixed, e.g. `v0.1.0`) via MinVer.
 
@@ -253,18 +261,19 @@ MIT
 - 双击磁盘卡片可在资源管理器中打开对应盘符；右键菜单提供**在资源管理器中打开**和**打开镜像文件目录**（打开磁盘 `.mdr` 镜像文件所在的文件夹；若磁盘未配置镜像文件则该菜单项置灰不可点）
 - 系统托盘图标，关闭窗口时最小化到托盘
 - 托盘图标悬浮提示——鼠标悬停时显示所有已挂载磁盘及其实时使用率
-- 高用量警告——磁盘使用率超过可配置的阈值（默认 90%，可在设置中调整）时通过系统托盘发出通知，使用率降至该阈值以下 5 个百分点时自动解除
+- 高用量警告——磁盘使用率超过该磁盘自身配置的阈值时通过系统托盘发出通知，阈值在创建或编辑磁盘时设置（默认 90%，默认开启，也可针对单个磁盘完全关闭）；使用率降至该阈值以下 5 个百分点时自动解除
 - 可选最小化启动——直接启动到托盘，不显示主窗口
 - 临时目录重定向——右键单击磁盘可将其设为 Windows TEMP/TMP 目录；通过工具栏、右键菜单或托盘菜单恢复系统默认值；卸载或重挂时自动恢复为系统默认临时目录；启动时若 TEMP/TMP 指向任一内存盘配置，均会显示警告——若该磁盘未设置自动挂载，还会自动将 TEMP 恢复为系统默认值
 - 退出确认——只要还有磁盘处于挂载状态，无论是通过工具栏按钮还是托盘菜单退出，程序都会将主窗口带到前台并要求用户确认；若 TEMP/TMP 恰好指向某个已挂载的内存盘，确认提示中还会额外警告将重置 TEMP，用户确认后先重置再退出；若有磁盘配置了自动保存，退出时会在主窗口显示全屏保存遮罩与旋转动画，待后台镜像保存完成后再关闭——系统发送关闭信号时不触发确认流程
 - NTFS 兼容卷标识——内存盘以 NTFS 文件系统类型上报，可作为需要 NTFS 卷的工具（如 WinGet、Windows Update 暂存、BITS 下载）的目标路径
 - 磁盘格式化——右键单击磁盘并选择**格式化**可立即删除所有文件和文件夹（只读磁盘受保护）；右键菜单按导航、配置、破坏性操作三个分组排列
 - 克隆磁盘——右键单击磁盘并选择**克隆磁盘...**，可将其内容复制到另一个已挂载的可写磁盘（会覆盖该磁盘现有内容，操作前需二次确认），或导出为一个全新的 `.mdr` 镜像文件（可选择压缩级别）；若所选导出路径已被其他已挂载磁盘占用（包括源磁盘自身正在使用的镜像文件），选择后会立即提示并拒绝
+- 快照／版本历史——创建或编辑磁盘时，可选设置保留的快照数量上限和/或总大小上限；只要一次保存产生了内容变化，就会在主镜像旁额外写入一个带时间戳的快照（`{名称}.yyyyMMdd-HHmmss.mdr`），超出上限后会自动清理最旧的快照。同一磁盘的多个快照之间，相同的文件内容只会存储一份（基于 SHA-256 内容寻址去重），因此保留大量快照所占用的磁盘空间远小于各快照逻辑大小之和。右键单击磁盘并选择**还原快照...**，即可从列表（含时间戳与大小）中选取某个历史时间点，用其内容替换磁盘当前内容（操作前需二次确认）；还原后的内容会在下一次保存/自动保存时才写入镜像文件，而非立即写入。删除磁盘的镜像文件时，其所有快照及不再被引用的去重内容也会一并删除
 - 系统托盘菜单——在显示、新建磁盘、退出之外，新增**重置临时文件夹**（静默执行，结果通过气泡通知反馈）和**设置**快捷入口
 - 主窗口启动时居中显示于主屏幕并置于前台
 - 双语界面——中文与英文，根据系统语言自动切换，也可在设置中手动更改
 - 浅色/深色主题——默认跟随 Windows 系统主题，也可在设置中手动切换（跟随系统／浅色／深色），切换即时生效，无需重启
-- 一目了然的磁盘卡片——驱动器字母徽章上会叠加只读、当前临时目录、是否绑定镜像文件等状态角标（鼠标悬停镜像图标可查看镜像路径）；用量进度条旁显示百分比，使用率超过可配置的高用量阈值时进度条及可用空间文字会变为警示色；只读磁盘的用量区域会替换为单行文字，显示其绑定的镜像文件路径，而非无意义的容量数字
+- 一目了然的磁盘卡片——驱动器字母徽章上会叠加只读、当前临时目录、是否绑定镜像文件等状态角标（鼠标悬停镜像图标可查看镜像路径）；用量进度条旁显示百分比，使用率超过该磁盘配置的高用量阈值（若已启用）时进度条及可用空间文字会变为警示色；只读磁盘的用量区域会替换为单行文字，显示其绑定的镜像文件路径，而非无意义的容量数字
 - 关于对话框——可从溢出菜单打开，显示应用版本及 GitHub 仓库链接
 
 ### 安装
@@ -310,7 +319,9 @@ ManagedDrive/
 │   │   ├── MemoryFileSystem.cs     #   FileSystemBase 实现（所有 WinFsp 回调）
 │   │   ├── RamDisk.cs              #   挂载/卸载生命周期封装
 │   │   ├── MountManager.cs         #   多磁盘管理器
-│   │   └── DiskImageSerializer.cs  #   二进制持久化（.mdr 格式）
+│   │   ├── DiskImageSerializer.cs  #   二进制持久化（.mdr 格式）
+│   │   ├── SnapshotManager.cs      #   带时间戳的快照命名、列表、清理与垃圾回收
+│   │   └── SnapshotStore.cs        #   快照索引格式 + 内容寻址块存储
 │   │
 │   └── ManagedDrive.App/           # WPF 桌面应用程序
 │       ├── Localization/           #   ResourceDictionary 字符串（en-US、zh-CN）
@@ -319,7 +330,7 @@ ManagedDrive/
 │       ├── Models/                 #   AppConfiguration、DiskProfile
 │       ├── Services/               #   SettingsStore、StartupManager、TempDirResetService
 │       ├── ViewModels/             #   MainViewModel、DiskViewModel
-│       ├── Views/                  #   CreateDiskDialog、CloneDiskDialog、SettingsDialog、ConfirmDialog、AboutDialog、TrayTooltipView
+│       ├── Views/                  #   CreateDiskDialog、CloneDiskDialog、RestoreSnapshotDialog、SettingsDialog、ConfirmDialog、AboutDialog、TrayTooltipView
 │       ├── MainWindow.xaml(.cs)    #   主窗口
 │       └── App.xaml(.cs)           #   启动、托盘图标、自动挂载
 │
@@ -352,6 +363,7 @@ ManagedDrive 使用 **WinFsp**（Windows 文件系统代理）将内存目录树
 - **`RamDisk`** — 组合 `MemoryFileSystem` 与 `FileSystemHost`。静态工厂方法 `Create()` 挂载卷，并轮询直至驱动器号在系统中可见（最长 2.5 秒），随后向资源管理器广播 `SHCNE_DRIVEADD`。`Dispose()` 执行卸载。配置了自动保存间隔时，后台计时器会立即保存一次镜像，随后按间隔重复保存，若自上次保存后内容未变化则跳过该次保存；`Dispose()` 还会执行一次收尾保存（不受内容是否变化影响，始终执行），确保卸载、重新挂载或退出应用时不会遗漏最新的改动。
 - **`MountManager`** — 线程安全的活动 `RamDisk` 实例注册表，提供 `DiskMounted` / `DiskUnmounted` 事件。
 - **`DiskImageSerializer`** — 读写 `.mdr` 文件（保存完整文件系统状态，包含元数据、ACL 和文件数据），可选按用户指定的级别进行 gzip 压缩。
+- **`SnapshotManager` / `SnapshotStore`** — 在配置了快照上限的情况下，每次保存后都会在主 `.mdr` 镜像旁写入一份带时间戳的只读快照副本，并支持列出、清理旧快照及将某个快照还原到实时磁盘。文件内容按 SHA-256 哈希去重存储于共享的块存储中，因此对一个大部分内容未变化的磁盘做快照，额外占用的空间非常小。
 
 ### 磁盘镜像格式（`.mdr`）
 
@@ -369,9 +381,13 @@ ManagedDrive 使用 **WinFsp**（Windows 文件系统代理）将内存目录树
 
 版本 `1` 的镜像（不含压缩级别字段，始终不压缩）仍可正常读取，保持向后兼容。
 
+### 快照格式
+
+快照采用与 `.mdr` 镜像完全独立的格式。对于主镜像 `disk.mdr`，其快照命名为同目录下的 `disk.yyyyMMdd-HHmmss.mdr`，每个都是一个小型二进制索引文件（魔数 `MDRS`），列出所有文件/目录的元数据，非空文件还会记录一个 SHA-256 哈希。实际文件内容存储在共享的内容寻址块存储 `disk.snapblobs/` 中（按哈希前 2 位十六进制分片到子文件夹），按磁盘配置的压缩级别逐块 gzip 压缩——多个快照间相同的内容只保存一份。清理旧快照时，还会一并垃圾回收不再被任何剩余快照引用的块。
+
 ### 配置与持久化
 
-- 配置以 JSON 格式存储于 `%APPDATA%\ManagedDrive\settings.json`，包括高用量告警百分比阈值。
+- 配置以 JSON 格式存储于 `%APPDATA%\ManagedDrive\settings.json`，包括每个磁盘各自的高用量告警阈值（或已禁用状态）。
 - 开机自启通过 `HKCU\SOFTWARE\Microsoft\Windows\CurrentVersion\Run` 注册表项实现（无需提升权限）。
 - 版本号由 MinVer 从 git 标签派生（`v` 前缀，例如 `v0.1.0`）。
 

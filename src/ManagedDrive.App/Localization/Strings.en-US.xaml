@@ -57,6 +57,10 @@
     <sys:String x:Key="Tip.Capacity">Disk size (select unit: MB or GB)</sys:String>
     <sys:String x:Key="Tip.ReadOnly">Prevent all writes to this disk (also disables auto-save, since a read-only disk never changes)</sys:String>
     <sys:String x:Key="Tip.AutoMount">Re-mount this disk automatically on next application start</sys:String>
+    <sys:String x:Key="CreateDisk.HighUsageWarnPrefix">Warn at</sys:String>
+    <sys:String x:Key="CreateDisk.HighUsageWarnSuffix">% usage</sys:String>
+    <sys:String x:Key="Tip.HighUsageWarn">Flag this disk as high-usage and show a tray warning once used space reaches this percentage</sys:String>
+    <sys:String x:Key="Val.BadHighUsagePercent">Enter a usage warning percentage between 1 and 99.</sys:String>
     <sys:String x:Key="Tip.ImageFile">Optional: path to a .mdr image file for persistence (leave blank for volatile disk). Click to browse.</sys:String>
     <sys:String x:Key="Tip.ClearImagePath">Clear image file path</sys:String>
     <sys:String x:Key="Tip.CompressionLevel">Compress the saved image to reduce disk usage. Higher levels shrink the file more but take longer to save/load.</sys:String>
@@ -136,8 +140,6 @@
     <sys:String x:Key="Settings.Theme.Dark">Dark</sys:String>
     <sys:String x:Key="Tip.RunAtStartup">Start ManagedDrive automatically when Windows starts</sys:String>
     <sys:String x:Key="Tip.StartMinimized">Hide the main window on startup and show only the system tray icon</sys:String>
-    <sys:String x:Key="Settings.HighUsageWarnPercent">High usage warning at:</sys:String>
-    <sys:String x:Key="Tip.HighUsageWarnPercent">Flag a disk as high-usage and show a tray warning once used space reaches this percentage</sys:String>
 
     <!-- Shared buttons -->
     <sys:String x:Key="Btn.Ok">OK</sys:String>

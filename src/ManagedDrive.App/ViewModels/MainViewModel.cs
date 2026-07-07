@@ -10,8 +10,6 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 {
     private readonly MountManager _mountManager;
     private readonly SettingsStore _settingsStore;
-    private double _highUsageResetPercent;
-    private double _highUsageWarnPercent;
     private bool _tempDirCompatWarningShown;
 
     /// <summary>
@@ -25,8 +23,6 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         _mountManager = mountManager;
         _settingsStore = settingsStore;
         _tempDirCompatWarningShown = initialConfig.TempDirCompatWarningShown;
-        _highUsageWarnPercent = initialConfig.HighUsageWarnPercent;
-        _highUsageResetPercent = initialConfig.HighUsageResetPercent;
 
         StatusText = Loc.Get("Status.Ready");
 
@@ -266,6 +262,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             CompressionLevel = vm.Disk.Options.CompressionLevel,
             MaxSnapshotCount = vm.Disk.Options.MaxSnapshotCount,
             MaxSnapshotSizeBytes = vm.Disk.Options.MaxSnapshotSizeBytes,
+            HighUsageWarnPercent = vm.Disk.Options.HighUsageWarnPercent,
         });
     }
 
@@ -280,11 +277,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         {
             var options = ProfileToOptions(profile);
             var disk = await Task.Run(() => _mountManager.Mount(options));
-            AddDiskSorted(new(disk)
-            {
-                HighUsageThreshold = _highUsageWarnPercent,
-                HighUsageResetThreshold = _highUsageResetPercent,
-            });
+            AddDiskSorted(new(disk));
             StatusText = Loc.Format("Status.Mounted", disk.MountPoint, profile.VolumeLabel);
         }
         catch (Exception ex)
@@ -314,8 +307,6 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             Theme = ThemeManager.Instance.SavedTheme,
             Disks = GetProfiles().ToList(),
             TempDirCompatWarningShown = _tempDirCompatWarningShown,
-            HighUsageWarnPercent = _highUsageWarnPercent,
-            HighUsageResetPercent = _highUsageResetPercent,
         });
     }
 
@@ -331,6 +322,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         CompressionLevel = p.CompressionLevel,
         MaxSnapshotCount = p.MaxSnapshotCount,
         MaxSnapshotSizeBytes = p.MaxSnapshotSizeBytes,
+        HighUsageWarnPercent = p.HighUsageWarnPercent,
     };
 
     private void AddDiskSorted(DiskViewModel vm)
@@ -489,11 +481,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             try
             {
                 var disk = await Task.Run(() => _mountManager.Mount(newOptions));
-                AddDiskSorted(new(disk)
-                {
-                    HighUsageThreshold = _highUsageWarnPercent,
-                    HighUsageResetThreshold = _highUsageResetPercent,
-                });
+                AddDiskSorted(new(disk));
                 SaveSettings();
                 StatusText = Loc.Format("Status.MountedWithCapacity", disk.MountPoint, newOptions.VolumeLabel, newOptions.CapacityBytes / (1024 * 1024));
             }
@@ -804,14 +792,6 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             var updated = dialog.Result!;
             updated.Disks = config.Disks;
             _settingsStore.Save(updated);
-
-            _highUsageWarnPercent = updated.HighUsageWarnPercent;
-            _highUsageResetPercent = updated.HighUsageResetPercent;
-            foreach (var vm in Disks)
-            {
-                vm.HighUsageThreshold = _highUsageWarnPercent;
-                vm.HighUsageResetThreshold = _highUsageResetPercent;
-            }
         }
     }
 
@@ -951,11 +931,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         try
         {
             var disk = await Task.Run(() => _mountManager.Mount(options));
-            AddDiskSorted(new(disk)
-            {
-                HighUsageThreshold = _highUsageWarnPercent,
-                HighUsageResetThreshold = _highUsageResetPercent,
-            });
+            AddDiskSorted(new(disk));
             SaveSettings();
             StatusText = Loc.Format("Status.MountedWithCapacity", disk.MountPoint, options.VolumeLabel, options.CapacityBytes / (1024 * 1024));
         }

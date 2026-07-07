@@ -14,144 +14,179 @@
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="16"/>
             <RowDefinition Height="Auto"/>
-            <RowDefinition Height="16"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="24"/>
-            <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <!-- Basic Info -->
-        <Border Grid.Row="0" Style="{StaticResource SectionBorder}">
-            <StackPanel>
-                <TextBlock Text="{DynamicResource CreateDisk.Section.Basic}"
-                           Style="{StaticResource SectionHeaderText}"/>
+        <TabControl Grid.Row="0" x:Name="MainTabControl" Style="{StaticResource AppTabControl}" MinHeight="400">
 
+            <!-- Basic Info -->
+            <TabItem Header="{DynamicResource CreateDisk.Section.Basic}">
                 <Grid>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="12"/>
+                        <RowDefinition Height="8"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="8"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="8"/>
                         <RowDefinition Height="Auto"/>
                     </Grid.RowDefinitions>
 
-                    <!-- Drive Letter + Capacity -->
+                    <!-- Drive Letter -->
                     <Grid Grid.Row="0">
                         <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="100"/>
-                            <ColumnDefinition Width="12"/>
+                            <ColumnDefinition Width="64"/>
+                            <ColumnDefinition Width="8"/>
                             <ColumnDefinition Width="*"/>
                         </Grid.ColumnDefinitions>
-
-                        <!-- Drive Letter -->
-                        <ComboBox Grid.Column="0" x:Name="DriveLetterBox" IsEditable="False"
-                                  helpers:HintHelper.Text="{DynamicResource CreateDisk.DriveLetter}"
+                        <TextBlock Grid.Column="0" Text="{DynamicResource CreateDisk.DriveLetter}"
+                                   Foreground="{DynamicResource AppForeground}"
+                                   VerticalAlignment="Center"/>
+                        <ComboBox Grid.Column="2" x:Name="DriveLetterBox" IsEditable="False"
+                                  HorizontalAlignment="Left" Width="100"
                                   Style="{StaticResource OutlinedComboBox}"/>
+                    </Grid>
 
-                        <!-- Capacity -->
+                    <!-- Capacity -->
+                    <Grid Grid.Row="2">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="64"/>
+                            <ColumnDefinition Width="8"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="8"/>
+                            <ColumnDefinition Width="100"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="{DynamicResource CreateDisk.Capacity}"
+                                   Foreground="{DynamicResource AppForeground}"
+                                   VerticalAlignment="Center"/>
                         <Grid Grid.Column="2">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="8"/>
-                                <ColumnDefinition Width="100"/>
+                                <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
-                                <TextBox x:Name="CapacityBox" Text="2"
-                                         helpers:HintHelper.Text="{DynamicResource CreateDisk.Capacity}"
-                                         ToolTip="{DynamicResource Tip.Capacity}"
-                                         Style="{StaticResource OutlinedTextBox}"
-                                         VerticalContentAlignment="Center"
-                                         HorizontalContentAlignment="Right"
-                                         PreviewTextInput="CapacityBox_PreviewTextInput"/>
-                                <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="2,0,0,0">
-                                    <RepeatButton x:Name="CapacityUp" Content="&#xE70E;" FontFamily="Segoe Fluent Icons"
-                                                  FontSize="8" Width="24" Height="16" Click="CapacityUp_Click"
-                                                  Style="{StaticResource SpinRepeatButton}"/>
-                                    <RepeatButton x:Name="CapacityDown" Content="&#xE70D;" FontFamily="Segoe Fluent Icons"
-                                                  FontSize="8" Width="24" Height="16" Click="CapacityDown_Click"
-                                                  Style="{StaticResource SpinRepeatButton}"/>
-                                </StackPanel>
-                            </Grid>
-                            <ComboBox Grid.Column="2" x:Name="CapacityUnitBox" IsEditable="False"
-                                      Style="{StaticResource OutlinedComboBox}"/>
+                            <TextBox x:Name="CapacityBox" Text="2"
+                                     ToolTip="{DynamicResource Tip.Capacity}"
+                                     Style="{StaticResource OutlinedTextBox}"
+                                     VerticalContentAlignment="Center"
+                                     HorizontalContentAlignment="Right"
+                                     PreviewTextInput="CapacityBox_PreviewTextInput"/>
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="2,0,0,0">
+                                <RepeatButton x:Name="CapacityUp" Content="&#xE70E;" FontFamily="Segoe Fluent Icons"
+                                              FontSize="8" Width="24" Height="16" Click="CapacityUp_Click"
+                                              Style="{StaticResource SpinRepeatButton}"/>
+                                <RepeatButton x:Name="CapacityDown" Content="&#xE70D;" FontFamily="Segoe Fluent Icons"
+                                              FontSize="8" Width="24" Height="16" Click="CapacityDown_Click"
+                                              Style="{StaticResource SpinRepeatButton}"/>
+                            </StackPanel>
                         </Grid>
+                        <ComboBox Grid.Column="4" x:Name="CapacityUnitBox" IsEditable="False"
+                                  Style="{StaticResource OutlinedComboBox}"/>
                     </Grid>
 
                     <!-- Volume Label -->
-                    <TextBox Grid.Row="2" x:Name="VolumeLabelBox" MaxLength="32"
-                             helpers:HintHelper.Text="{DynamicResource CreateDisk.VolumeLabel}"
-                             Style="{StaticResource OutlinedTextBox}"/>
+                    <Grid Grid.Row="4">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="64"/>
+                            <ColumnDefinition Width="8"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="{DynamicResource CreateDisk.VolumeLabel}"
+                                   Foreground="{DynamicResource AppForeground}"
+                                   VerticalAlignment="Center"/>
+                        <TextBox Grid.Column="2" x:Name="VolumeLabelBox" MaxLength="32"
+                                 Style="{StaticResource OutlinedTextBox}"/>
+                    </Grid>
+
+                    <!-- High Usage Warning -->
+                    <Grid Grid.Row="6">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="6"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="6"/>
+                            <ColumnDefinition Width="60"/>
+                            <ColumnDefinition Width="6"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <CheckBox Grid.Column="0" x:Name="HighUsageWarnBox" IsChecked="True" VerticalAlignment="Center"
+                                  Foreground="{DynamicResource AppForeground}"
+                                  ToolTip="{DynamicResource Tip.HighUsageWarn}"
+                                  Checked="HighUsageWarnBox_CheckedChanged" Unchecked="HighUsageWarnBox_CheckedChanged"/>
+                        <TextBlock Grid.Column="2" Text="{DynamicResource CreateDisk.HighUsageWarnPrefix}"
+                                   Foreground="{DynamicResource AppForeground}"
+                                   VerticalAlignment="Center"/>
+                        <TextBox Grid.Column="4" x:Name="HighUsageWarnPercentBox" Text="90" MaxLength="2"
+                                 ToolTip="{DynamicResource Tip.HighUsageWarn}"
+                                 Style="{StaticResource OutlinedTextBox}"
+                                 VerticalContentAlignment="Center"
+                                 TextAlignment="Right"
+                                 PreviewTextInput="CapacityBox_PreviewTextInput"/>
+                        <TextBlock Grid.Column="6" Text="{DynamicResource CreateDisk.HighUsageWarnSuffix}"
+                                   Foreground="{DynamicResource AppForeground}"
+                                   VerticalAlignment="Center"/>
+                    </Grid>
                 </Grid>
-            </StackPanel>
-        </Border>
+            </TabItem>
 
-        <!-- Access -->
-        <Border Grid.Row="2" Style="{StaticResource SectionBorder}">
-            <StackPanel>
-                <TextBlock Text="{DynamicResource CreateDisk.Section.Access}"
-                           Style="{StaticResource SectionHeaderText}"/>
-
+            <!-- Access -->
+            <TabItem Header="{DynamicResource CreateDisk.Section.Access}">
                 <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto"/>
-                        <ColumnDefinition Width="16"/>
-                        <ColumnDefinition Width="Auto"/>
-                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="8"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
 
                     <!-- Auto Mount -->
-                    <CheckBox Grid.Column="0" x:Name="AutoMountBox" IsChecked="True"
+                    <CheckBox Grid.Row="0" x:Name="AutoMountBox" IsChecked="True"
                               Content="{DynamicResource CreateDisk.AutoMount}"
                               Foreground="{DynamicResource AppForeground}"
                               ToolTip="{DynamicResource Tip.AutoMount}"/>
 
                     <!-- Read Only -->
-                    <CheckBox Grid.Column="2" x:Name="ReadOnlyBox"
+                    <CheckBox Grid.Row="2" x:Name="ReadOnlyBox"
                               Content="{DynamicResource CreateDisk.ReadOnly}"
                               Foreground="{DynamicResource AppForeground}"
                               ToolTip="{DynamicResource Tip.ReadOnly}"
                               Checked="ReadOnlyBox_CheckedChanged" Unchecked="ReadOnlyBox_CheckedChanged"/>
                 </Grid>
-            </StackPanel>
-        </Border>
+            </TabItem>
 
-        <!-- Persistence -->
-        <Border Grid.Row="4" Style="{StaticResource SectionBorder}">
-            <StackPanel>
-                <TextBlock Text="{DynamicResource CreateDisk.Section.Persistence}"
-                           Style="{StaticResource SectionHeaderText}"/>
-
+            <!-- Persistence -->
+            <TabItem Header="{DynamicResource CreateDisk.Section.Persistence}">
                 <Grid>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="12"/>
+                        <RowDefinition Height="8"/>
                         <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="12"/>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="8"/>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="8"/>
                         <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="12"/>
+                        <RowDefinition Height="8"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="8"/>
                         <RowDefinition Height="Auto"/>
                     </Grid.RowDefinitions>
 
                     <!-- Image Path -->
                     <Grid Grid.Row="0">
                         <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="84"/>
+                            <ColumnDefinition Width="8"/>
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="8"/>
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
-                        <TextBox x:Name="ImagePathBox" IsReadOnly="True" Cursor="Hand"
-                                 helpers:HintHelper.Text="{DynamicResource CreateDisk.ImageFile}"
+                        <TextBlock Grid.Column="0" Text="{DynamicResource CreateDisk.ImageFile}"
+                                   Foreground="{DynamicResource AppForeground}"
+                                   VerticalAlignment="Center"/>
+                        <TextBox Grid.Column="2" x:Name="ImagePathBox" IsReadOnly="True" Cursor="Hand"
                                  ToolTip="{DynamicResource Tip.ImageFile}"
                                  Style="{StaticResource OutlinedTextBox}"
                                  PreviewMouseLeftButtonDown="ImagePathBox_PreviewMouseLeftButtonDown"/>
-                        <Button Grid.Column="2" x:Name="ClearImagePathButton" Content="&#xD7;" Width="40"
+                        <Button Grid.Column="4" x:Name="ClearImagePathButton" Content="&#xD7;" Width="40"
                                 ToolTip="{DynamicResource Tip.ClearImagePath}"
                                 Click="ClearImagePath_Click"
                                 Style="{StaticResource OutlinedButton}"/>
@@ -161,13 +196,13 @@
                     <TextBlock Grid.Row="1" x:Name="ImportNoteText"
                                Text="{DynamicResource CreateDisk.ImportNote}"
                                Foreground="{DynamicResource AppForegroundLight}"
-                               FontSize="11" TextWrapping="Wrap" Margin="0,4,0,0"
+                               FontSize="11" TextWrapping="Wrap" Margin="92,4,0,0"
                                Visibility="Collapsed"/>
 
                     <!-- Compression Level -->
                     <Grid Grid.Row="3">
                         <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="84"/>
                             <ColumnDefinition Width="8"/>
                             <ColumnDefinition Width="140"/>
                         </Grid.ColumnDefinitions>
@@ -184,14 +219,14 @@
                     <TextBlock Grid.Row="4" x:Name="CompressionWarningText"
                                Text="{DynamicResource CreateDisk.CompressionWarning}"
                                Foreground="{DynamicResource AppWarning}"
-                               FontSize="11" TextWrapping="Wrap" Margin="0,4,0,0"
+                               FontSize="11" TextWrapping="Wrap" Margin="92,4,0,0"
                                Visibility="Collapsed"/>
 
                     <!-- Auto Save -->
                     <Grid Grid.Row="6">
                         <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="6"/>
+                            <ColumnDefinition Width="84"/>
+                            <ColumnDefinition Width="8"/>
                             <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="6"/>
                             <ColumnDefinition Width="70"/>
@@ -203,6 +238,7 @@
                                   ToolTip="{DynamicResource Tip.AutoSave}"
                                   Checked="AutoSaveBox_CheckedChanged" Unchecked="AutoSaveBox_CheckedChanged"/>
                         <TextBlock Grid.Column="2" Text="{DynamicResource CreateDisk.AutoSavePrefix}"
+                                   Foreground="{DynamicResource AppForeground}"
                                    VerticalAlignment="Center"/>
                         <Grid Grid.Column="4" x:Name="AutoSaveIntervalPanel" IsEnabled="False" VerticalAlignment="Center">
                             <Grid.ColumnDefinitions>
@@ -224,6 +260,7 @@
                             </StackPanel>
                         </Grid>
                         <TextBlock Grid.Column="6" Text="{DynamicResource CreateDisk.AutoSaveSuffix}"
+                                   Foreground="{DynamicResource AppForeground}"
                                    VerticalAlignment="Center"/>
                     </Grid>
 
@@ -300,11 +337,11 @@
                                   Style="{StaticResource OutlinedComboBox}"/>
                     </Grid>
                 </Grid>
-            </StackPanel>
-        </Border>
+            </TabItem>
+        </TabControl>
 
         <!-- OK / Cancel -->
-        <StackPanel Grid.Row="6" Orientation="Horizontal" HorizontalAlignment="Right">
+        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right">
             <Button Content="{DynamicResource Btn.Cancel}" Width="80" IsCancel="True"
                     Style="{StaticResource FlatButton}"
                     Margin="0,0,8,0"/>

@@ -9,6 +9,12 @@ namespace ManagedDrive.App.ViewModels;
 /// </summary>
 public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
 {
+    /// <summary>
+    /// Gap between the high-usage warning threshold and the reset threshold that re-arms the
+    /// warning, providing hysteresis without exposing a second setting to the user.
+    /// </summary>
+    private const double HighUsageResetGap = 5.0;
+
     private readonly DispatcherTimer _refreshTimer;
 
     private ulong _freeBytes;
@@ -75,18 +81,6 @@ public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
     /// Gets whether this disk has a backing image file configured.
     /// </summary>
     public bool HasImagePath => !string.IsNullOrEmpty(PersistImagePath);
-
-    /// <summary>
-    /// Gets or sets the usage percentage (0-100) below which <see cref="IsHighUsage"/> is
-    /// cleared, re-arming the warning. Defaults to 85%.
-    /// </summary>
-    public double HighUsageResetThreshold { get; set; } = 85.0;
-
-    /// <summary>
-    /// Gets or sets the usage percentage (0-100) at which <see cref="HighUsageWarning"/> fires.
-    /// Defaults to 90%.
-    /// </summary>
-    public double HighUsageThreshold { get; set; } = 90.0;
 
     /// <summary>
     /// Gets whether the user's TEMP and TMP currently point to this disk's Temp folder.
@@ -247,13 +241,25 @@ public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
         IsCurrentTempDir = CheckIsCurrentTempDir();
 
         var used = UsedPercent;
-        if (!IsHighUsage && used >= HighUsageThreshold)
+        if (Disk.Options.HighUsageWarnPercent is not { } threshold)
+        {
+            if (IsHighUsage)
+            {
+                IsHighUsage = false;
+                OnPropertyChanged(nameof(IsHighUsage));
+            }
+
+            return;
+        }
+
+        var resetThreshold = Math.Max(1.0, threshold - HighUsageResetGap);
+        if (!IsHighUsage && used >= threshold)
         {
             IsHighUsage = true;
             OnPropertyChanged(nameof(IsHighUsage));
             HighUsageWarning?.Invoke(this, EventArgs.Empty);
         }
-        else if (IsHighUsage && used < HighUsageResetThreshold)
+        else if (IsHighUsage && used < resetThreshold)
         {
             IsHighUsage = false;
             OnPropertyChanged(nameof(IsHighUsage));

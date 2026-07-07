@@ -462,4 +462,63 @@
         <Setter Property="Margin" Value="0,0,0,10"/>
     </Style>
 
+    <!-- ========== Tabs ========== -->
+    <Style x:Key="AppTabItem" TargetType="TabItem">
+        <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+        <Setter Property="Padding" Value="0"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="TabItem">
+                    <Border x:Name="Bd" Background="Transparent">
+                        <StackPanel>
+                            <ContentPresenter x:Name="Header" ContentSource="Header"
+                                              Margin="12,8,12,10"
+                                              HorizontalAlignment="Center"
+                                              TextElement.Foreground="{DynamicResource AppForegroundLight}"/>
+                            <Border x:Name="Indicator" Height="2" Background="Transparent"/>
+                        </StackPanel>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsSelected" Value="True">
+                            <Setter TargetName="Indicator" Property="Background" Value="{DynamicResource AppPrimary}"/>
+                            <Setter TargetName="Header" Property="TextElement.Foreground" Value="{DynamicResource AppForeground}"/>
+                            <Setter TargetName="Header" Property="TextElement.FontWeight" Value="SemiBold"/>
+                        </Trigger>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource AppHover}"/>
+                            <Setter TargetName="Bd" Property="CornerRadius" Value="3,3,0,0"/>
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.4"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style x:Key="AppTabControl" TargetType="TabControl">
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="BorderThickness" Value="0"/>
+        <Setter Property="ItemContainerStyle" Value="{StaticResource AppTabItem}"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="TabControl">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
+                        <Border Grid.Row="0" BorderBrush="{DynamicResource AppDivider}" BorderThickness="0,0,0,1">
+                            <TabPanel IsItemsHost="True" HorizontalAlignment="Left"/>
+                        </Border>
+                        <Border Grid.Row="1" Background="Transparent" Padding="14,16">
+                            <ContentPresenter ContentSource="SelectedContent"/>
+                        </Border>
+                    </Grid>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
 </ResourceDictionary>

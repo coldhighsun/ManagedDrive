@@ -57,6 +57,10 @@
     <sys:String x:Key="Tip.Capacity">磁盘大小（选择单位：MB 或 GB）</sys:String>
     <sys:String x:Key="Tip.ReadOnly">禁止对此磁盘的所有写入操作（同时会禁用自动保存，因为只读磁盘的内容不会变化）</sys:String>
     <sys:String x:Key="Tip.AutoMount">下次启动时自动重新挂载此磁盘</sys:String>
+    <sys:String x:Key="CreateDisk.HighUsageWarnPrefix">使用率达到</sys:String>
+    <sys:String x:Key="CreateDisk.HighUsageWarnSuffix">% 时告警</sys:String>
+    <sys:String x:Key="Tip.HighUsageWarn">当此磁盘使用率达到该百分比时，将其标记为高使用率并在系统托盘显示警告</sys:String>
+    <sys:String x:Key="Val.BadHighUsagePercent">请输入 1 到 99 之间的使用率告警百分比。</sys:String>
     <sys:String x:Key="Tip.ImageFile">可选：.mdr 镜像文件路径，用于持久化存储（留空则为临时磁盘）。点击可打开文件选择对话框。</sys:String>
     <sys:String x:Key="Tip.ClearImagePath">清空镜像文件路径</sys:String>
     <sys:String x:Key="Tip.CompressionLevel">压缩保存的镜像以减少磁盘占用。压缩级别越高，文件越小，但保存/加载耗时也越长。</sys:String>
@@ -136,8 +140,6 @@
     <sys:String x:Key="Settings.Theme.Dark">深色</sys:String>
     <sys:String x:Key="Tip.RunAtStartup">Windows 启动时自动运行 ManagedDrive</sys:String>
     <sys:String x:Key="Tip.StartMinimized">启动时隐藏主窗口，仅显示系统托盘图标</sys:String>
-    <sys:String x:Key="Settings.HighUsageWarnPercent">使用率告警阈值：</sys:String>
-    <sys:String x:Key="Tip.HighUsageWarnPercent">当磁盘使用率达到该百分比时，标记为高使用率并在托盘显示警告</sys:String>
 
     <!-- Shared buttons -->
     <sys:String x:Key="Btn.Ok">确定</sys:String>

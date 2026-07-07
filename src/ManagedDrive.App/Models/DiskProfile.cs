@@ -78,4 +78,10 @@ public sealed record DiskProfile
     {
         get; init;
     }
+
+    /// <summary>
+    /// Gets or sets the optional usage percentage (0-100) at which this disk is flagged as
+    /// high-usage. <c>null</c> disables the warning for this disk.
+    /// </summary>
+    public double? HighUsageWarnPercent { get; init; } = 90.0;
 }

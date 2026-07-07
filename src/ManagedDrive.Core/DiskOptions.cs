@@ -112,4 +112,10 @@ public sealed record DiskOptions
     {
         get; init;
     }
+
+    /// <summary>
+    /// Optional usage percentage (0-100) at which this disk is flagged as high-usage and a tray
+    /// warning is shown. <c>null</c> disables the warning for this disk. Defaults to 90%.
+    /// </summary>
+    public double? HighUsageWarnPercent { get; init; } = 90.0;
 }

@@ -19,8 +19,6 @@
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="24"/>
             <RowDefinition Height="Auto"/>
-            <RowDefinition Height="24"/>
-            <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="160"/>
@@ -57,34 +55,8 @@
                   x:Name="ThemeBox"
                   Style="{StaticResource OutlinedComboBox}"/>
 
-        <!-- High usage warning threshold -->
-        <TextBlock Grid.Row="8" Grid.Column="0"
-                   Text="{DynamicResource Settings.HighUsageWarnPercent}"
-                   VerticalAlignment="Center"/>
-        <Grid Grid.Row="8" Grid.Column="1" VerticalAlignment="Center">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="Auto"/>
-            </Grid.ColumnDefinitions>
-            <TextBox x:Name="HighUsageWarnPercentBox" Text="90" MaxLength="2"
-                     ToolTip="{DynamicResource Tip.HighUsageWarnPercent}"
-                     Style="{StaticResource OutlinedTextBox}"
-                     VerticalContentAlignment="Center"
-                     TextAlignment="Right"
-                     PreviewTextInput="PercentBox_PreviewTextInput"
-                     TextChanged="PercentBox_TextChanged"/>
-            <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="2,0,0,0">
-                <RepeatButton x:Name="HighUsageWarnPercentUp" Content="&#xE70E;" FontFamily="Segoe Fluent Icons"
-                              FontSize="8" Width="24" Height="16" Click="HighUsageWarnPercentUp_Click"
-                              Style="{StaticResource SpinRepeatButton}"/>
-                <RepeatButton x:Name="HighUsageWarnPercentDown" Content="&#xE70D;" FontFamily="Segoe Fluent Icons"
-                              FontSize="8" Width="24" Height="16" Click="HighUsageWarnPercentDown_Click"
-                              Style="{StaticResource SpinRepeatButton}"/>
-            </StackPanel>
-        </Grid>
-
         <!-- OK / Cancel -->
-        <StackPanel Grid.Row="10" Grid.ColumnSpan="2" Grid.Column="0"
+        <StackPanel Grid.Row="8" Grid.ColumnSpan="2" Grid.Column="0"
                     Orientation="Horizontal" HorizontalAlignment="Right">
             <Button Content="{DynamicResource Btn.Cancel}" Width="80" IsCancel="True"
                     Style="{StaticResource FlatButton}"
