@@ -58,6 +58,7 @@
     <sys:String x:Key="CompressionLevel.Fastest">Fast</sys:String>
     <sys:String x:Key="CompressionLevel.Optimal">Balanced</sys:String>
     <sys:String x:Key="CompressionLevel.SmallestSize">Max</sys:String>
+    <sys:String x:Key="CreateDisk.CompressionWarning">Balanced/Max compression may significantly increase save times. Choose carefully.</sys:String>
     <sys:String x:Key="CreateDisk.AutoSavePrefix">Every</sys:String>
     <sys:String x:Key="CreateDisk.AutoSaveSuffix">minutes, auto-save the image</sys:String>
     <sys:String x:Key="CreateDisk.AutoSaveInterval">Interval (min)</sys:String>
