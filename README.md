@@ -42,7 +42,7 @@ Create, mount and manage in-memory volumes that appear as normal drive letters i
 
 ### Installation
 
-Download the latest **portable ZIP** (`ManagedDrive-vX.Y.Z-win-x64-portable.zip`) from the [Releases](https://github.com/coldhighsun/ManagedDrive/releases) page. Extract anywhere and run `ManagedDrive.exe` directly. The only registry write is the optional "Run at startup" setting; nothing else touches the registry. WinFsp must be installed separately first (see Prerequisites below).
+Download the latest **portable ZIP** (`ManagedDrive-vX.Y.Z-win-x64-portable.zip`) from the [Releases](https://github.com/coldhighsun/ManagedDrive/releases) page. Extract anywhere and run `ManagedDrive.exe` directly. `ManagedDrive.exe` is a single-file executable — the ZIP contains it plus one small companion `winfsp-msil.dll` (the managed WinFsp interop assembly, which can't be embedded in the single-file bundle) that must stay next to it. The only registry write is the optional "Run at startup" setting; nothing else touches the registry. WinFsp must be installed separately first (see Prerequisites below).
 
 ### Prerequisites
 
@@ -264,7 +264,7 @@ MIT
 
 ### 安装
 
-从 [Releases](https://github.com/coldhighsun/ManagedDrive/releases) 页面下载最新的**绿色版 ZIP**（`ManagedDrive-vX.Y.Z-win-x64-portable.zip`）。解压到任意目录后直接运行 `ManagedDrive.exe` 即可。唯一会写入注册表的操作是可选的"开机自启"设置，除此之外不会写入注册表。仍需提前单独安装 WinFsp（见下方环境要求）。
+从 [Releases](https://github.com/coldhighsun/ManagedDrive/releases) 页面下载最新的**绿色版 ZIP**（`ManagedDrive-vX.Y.Z-win-x64-portable.zip`）。解压到任意目录后直接运行 `ManagedDrive.exe` 即可。`ManagedDrive.exe` 是单文件可执行程序——ZIP 中还附带一个体积很小的 `winfsp-msil.dll`（WinFsp 托管互操作程序集，无法打包进单文件中），需与 exe 保持在同一目录下。唯一会写入注册表的操作是可选的"开机自启"设置，除此之外不会写入注册表。仍需提前单独安装 WinFsp（见下方环境要求）。
 
 ### 环境要求
 

@@ -8,11 +8,26 @@
     <ApplicationIcon>ManagedDrive.ico</ApplicationIcon>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <PublishReadyToRun>true</PublishReadyToRun>
+    <PublishSingleFile>true</PublishSingleFile>
   </PropertyGroup>
 
   <ItemGroup>
     <Using Remove="System.Windows.Forms" />
   </ItemGroup>
+
+  <!--
+    winfsp-msil.dll (from the winfsp.net package) is a mixed-mode (C++/CLI) assembly.
+    Mixed-mode assemblies cannot be loaded from the in-memory single-file bundle, so
+    Fsp.Interop.Api's static constructor throws at startup unless this file stays on
+    disk next to the exe.
+  -->
+  <Target Name="ExcludeWinFspMsilFromSingleFile" BeforeTargets="_ComputeFilesToBundle">
+    <ItemGroup>
+      <ResolvedFileToPublish Update="@(ResolvedFileToPublish)" Condition="'%(FileName)' == 'winfsp-msil'">
+        <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
+      </ResolvedFileToPublish>
+    </ItemGroup>
+  </Target>
 
   <ItemGroup>
     <Resource Include="ManagedDrive.ico" />
