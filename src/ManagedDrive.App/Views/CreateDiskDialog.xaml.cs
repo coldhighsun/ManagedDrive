@@ -220,6 +220,11 @@ public partial class CreateDiskDialog
         UpdateAutoSaveEnabledState();
     }
 
+    private void CompressionLevelBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        UpdateCompressionWarning();
+    }
+
     private int GetMaxCapacityValue()
     {
         var isGb = CapacityUnitBox.SelectedItem as string == "GB";
@@ -436,14 +441,10 @@ public partial class CreateDiskDialog
         UpdateCompressionWarning();
     }
 
-    private void CompressionLevelBox_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
-    {
-        UpdateCompressionWarning();
-    }
-
     private void UpdateCompressionWarning()
     {
-        if (CompressionWarningText is null) return;
+        if (CompressionWarningText is null)
+            return;
         var level = (CompressionLevelBox.SelectedItem as CompressionLevelItem)?.Level;
         var show = CompressionLevelBox.IsEnabled
                    && level is ImageCompressionLevel.Optimal or ImageCompressionLevel.SmallestSize;
