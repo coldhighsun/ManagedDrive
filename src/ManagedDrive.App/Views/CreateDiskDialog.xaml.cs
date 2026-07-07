@@ -18,6 +18,9 @@ public partial class CreateDiskDialog
 
     private readonly ulong _maxCapacityBytes;
     private readonly IReadOnlyList<DiskOptions> _otherDisks;
+    private readonly bool _isImportMode;
+    private ulong _importCapacityBytes;
+    private string _importVolumeLabel = string.Empty;
     private int _capacityMaximum;
     private int _capacityValue = 2;
     private int _intervalValue = 10;
@@ -102,6 +105,57 @@ public partial class CreateDiskDialog
             _intervalValue = (int)Math.Max(1, minutes);
             IntervalValue = _intervalValue;
         }
+    }
+
+    /// <summary>
+    /// Initializes the dialog in import mode: capacity and volume label are pre-filled from an
+    /// existing image file and locked, since they are read from the image at mount time.
+    /// </summary>
+    /// <param name="importImagePath">Path of the existing image file to import.</param>
+    /// <param name="importCapacityBytes">Capacity stored in the image, used to pre-fill and lock the capacity fields.</param>
+    /// <param name="importVolumeLabel">Volume label stored in the image, used to pre-fill and lock the label field.</param>
+    /// <param name="otherDisks">
+    /// Options of all other currently active disks, used to validate that the image file path
+    /// does not collide with another disk's mount point or image file.
+    /// </param>
+    public CreateDiskDialog(string importImagePath, ulong importCapacityBytes, string importVolumeLabel,
+        IReadOnlyList<DiskOptions>? otherDisks = null) : this(otherDisks)
+    {
+        _isImportMode = true;
+        _importCapacityBytes = importCapacityBytes;
+        _importVolumeLabel = importVolumeLabel;
+
+        Title = Loc.Get("CreateDisk.TitleImport");
+
+        ImagePathBox.Text = importImagePath;
+        ClearImagePathButton.IsEnabled = false;
+        ImportNoteText.Visibility = Visibility.Visible;
+
+        var capacityMb = importCapacityBytes / (1024UL * 1024);
+        var capacityGb = importCapacityBytes / (1024UL * 1024 * 1024);
+        if (capacityGb > 0 && importCapacityBytes % (1024UL * 1024 * 1024) == 0)
+        {
+            CapacityUnitBox.SelectedItem = "GB";
+            _capacityValue = (int)capacityGb;
+        }
+        else
+        {
+            CapacityUnitBox.SelectedItem = "MB";
+            _capacityValue = (int)capacityMb;
+        }
+
+        _capacityMaximum = Math.Max(_capacityValue, GetMaxCapacityValue());
+        UpdateCapacityDisplay();
+        VolumeLabelBox.Text = importVolumeLabel;
+
+        CapacityBox.IsEnabled = false;
+        CapacityUnitBox.IsEnabled = false;
+        CapacityUp.IsEnabled = false;
+        CapacityDown.IsEnabled = false;
+        VolumeLabelBox.IsEnabled = false;
+
+        UpdateCompressionLevelState();
+        UpdateAutoSaveEnabledState();
     }
 
     /// <summary>
@@ -215,6 +269,11 @@ public partial class CreateDiskDialog
 
     private void ClearImagePath_Click(object sender, RoutedEventArgs e)
     {
+        if (_isImportMode)
+        {
+            return;
+        }
+
         ImagePathBox.Text = string.Empty;
         UpdateCompressionLevelState();
         UpdateAutoSaveEnabledState();
@@ -235,6 +294,11 @@ public partial class CreateDiskDialog
     private void ImagePathBox_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
         e.Handled = true;
+        if (_isImportMode)
+        {
+            return;
+        }
+
         OpenImagePathDialog();
     }
 
@@ -320,18 +384,26 @@ public partial class CreateDiskDialog
             return false;
         }
 
-        ParseCapacityFromBox();
-        var maxCapacity = GetMaxCapacityValue();
-        if (_capacityValue <= 0 || _capacityValue > maxCapacity)
+        ulong capacityBytes;
+        if (_isImportMode)
         {
-            error = string.Format(Loc.Get("Val.BadCapacity"), maxCapacity, CapacityUnitBox.SelectedItem);
-            return false;
+            capacityBytes = _importCapacityBytes;
         }
+        else
+        {
+            ParseCapacityFromBox();
+            var maxCapacity = GetMaxCapacityValue();
+            if (_capacityValue <= 0 || _capacityValue > maxCapacity)
+            {
+                error = string.Format(Loc.Get("Val.BadCapacity"), maxCapacity, CapacityUnitBox.SelectedItem);
+                return false;
+            }
 
-        var isGb = CapacityUnitBox.SelectedItem as string == "GB";
-        var capacityBytes = isGb
-            ? (ulong)_capacityValue * 1024 * 1024 * 1024
-            : (ulong)_capacityValue * 1024 * 1024;
+            var isGb = CapacityUnitBox.SelectedItem as string == "GB";
+            capacityBytes = isGb
+                ? (ulong)_capacityValue * 1024 * 1024 * 1024
+                : (ulong)_capacityValue * 1024 * 1024;
+        }
 
         var imagePath = string.IsNullOrWhiteSpace(ImagePathBox.Text)
             ? null
@@ -399,7 +471,7 @@ public partial class CreateDiskDialog
         options = new()
         {
             MountPoint = mountPoint,
-            VolumeLabel = VolumeLabelBox.Text.Trim(),
+            VolumeLabel = _isImportMode ? _importVolumeLabel : VolumeLabelBox.Text.Trim(),
             CapacityBytes = capacityBytes,
             ReadOnly = isReadOnly,
             AutoMount = AutoMountBox.IsChecked == true,

@@ -9,6 +9,7 @@
     <sys:String x:Key="Menu.Exit">E_xit</sys:String>
     <sys:String x:Key="Menu.About">About</sys:String>
     <sys:String x:Key="Btn.NewDisk">New Disk...</sys:String>
+    <sys:String x:Key="Btn.ImportDisk">Import Disk...</sys:String>
     <sys:String x:Key="Btn.OpenInExplorer">Open in Explorer</sys:String>
     <sys:String x:Key="Btn.OpenImageDirectory">Open Image File Directory</sys:String>
     <sys:String x:Key="Btn.EditDisk">Edit Disk…</sys:String>
@@ -20,6 +21,7 @@
     <sys:String x:Key="Btn.Refresh">Refresh</sys:String>
     <sys:String x:Key="Btn.Settings">Settings</sys:String>
     <sys:String x:Key="Tip.NewDisk">Create and mount a new RAM disk</sys:String>
+    <sys:String x:Key="Tip.ImportDisk">Mount an existing .mdr image file</sys:String>
     <sys:String x:Key="Tip.Unmount">Unmount the selected disk</sys:String>
     <sys:String x:Key="Tip.SaveImage">Save the selected disk's contents to its image file</sys:String>
     <sys:String x:Key="Tip.Refresh">Refresh usage statistics</sys:String>
@@ -37,6 +39,8 @@
     <!-- CreateDiskDialog -->
     <sys:String x:Key="CreateDisk.Title">Create RAM Disk</sys:String>
     <sys:String x:Key="CreateDisk.TitleEdit">Edit RAM Disk</sys:String>
+    <sys:String x:Key="CreateDisk.TitleImport">Import Disk</sys:String>
+    <sys:String x:Key="CreateDisk.ImportNote">Capacity and volume label are read from the image file.</sys:String>
     <sys:String x:Key="CreateDisk.Section.Basic">Basic Info</sys:String>
     <sys:String x:Key="CreateDisk.Section.Access">Access</sys:String>
     <sys:String x:Key="CreateDisk.Section.Persistence">Persistence</sys:String>
@@ -79,6 +83,7 @@
     <sys:String x:Key="Val.AutoSaveNoImage">Select an image file before enabling auto-save.</sys:String>
     <sys:String x:Key="Val.ImagePathOnRamDisk">The image file cannot be located on a RAM disk.</sys:String>
     <sys:String x:Key="Val.ImagePathInUse">This image file is already used by another RAM disk.</sys:String>
+    <sys:String x:Key="Val.ImportInvalidImage">The selected file is not a valid ManagedDrive image.</sys:String>
     <sys:String x:Key="Val.BadAutoSaveInterval">Enter a valid auto-save interval (1-60 minutes).</sys:String>
     <sys:String x:Key="Val.BadImagePath">The image file path is invalid or its folder does not exist.</sys:String>
     <sys:String x:Key="Val.ReadOnlyRequiresImage">Read-only disks must use an existing image file.</sys:String>
@@ -170,6 +175,7 @@
 
     <!-- SaveFileDialog -->
     <sys:String x:Key="SaveDlg.Title">Select Image File</sys:String>
+    <sys:String x:Key="ImportDlg.Title">Select Image to Import</sys:String>
     <sys:String x:Key="SaveDlg.Filter">ManagedDrive Image (*.mdr)|*.mdr|All Files (*.*)|*.*</sys:String>
 
 </ResourceDictionary>

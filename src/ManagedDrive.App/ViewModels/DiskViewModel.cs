@@ -232,6 +232,8 @@ public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
         OnPropertyChanged(nameof(LastContentWriteFormatted));
         OnPropertyChanged(nameof(LastAutoSaveFormatted));
         OnPropertyChanged(nameof(ShowLastAutoSave));
+        OnPropertyChanged(nameof(PersistImagePath));
+        OnPropertyChanged(nameof(HasImagePath));
 
         IsCurrentTempDir = CheckIsCurrentTempDir();
 

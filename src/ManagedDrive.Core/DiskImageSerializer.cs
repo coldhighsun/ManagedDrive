@@ -80,6 +80,44 @@ public static class DiskImageSerializer
     }
 
     /// <summary>
+    /// Reads only the capacity and volume label from <paramref name="imagePath"/> without
+    /// loading any file nodes, for cheaply previewing an image before a full <see cref="Load"/>.
+    /// </summary>
+    /// <param name="imagePath">Source image file path.</param>
+    /// <param name="capacityBytes">Receives the capacity stored in the image.</param>
+    /// <param name="volumeLabel">Receives the volume label stored in the image.</param>
+    /// <exception cref="InvalidDataException">
+    /// Thrown when the file does not contain a valid ManagedDrive image or the version is
+    /// unsupported.
+    /// </exception>
+    public static void PeekHeader(string imagePath, out ulong capacityBytes, out string volumeLabel)
+    {
+        using var stream = new FileStream(imagePath, FileMode.Open, FileAccess.Read);
+        using var reader = new BinaryReader(stream, System.Text.Encoding.UTF8, leaveOpen: false);
+
+        var magic = reader.ReadBytes(4);
+        if (!magic.SequenceEqual(Magic))
+        {
+            throw new InvalidDataException("Not a valid ManagedDrive image file.");
+        }
+
+        var version = reader.ReadInt32();
+        if (version is not (1 or 2))
+        {
+            throw new InvalidDataException($"Unsupported image version: {version}.");
+        }
+
+        var compressed = version == 2 && (ImageCompressionLevel)reader.ReadByte() != ImageCompressionLevel.None;
+
+        using var payloadReader = compressed
+            ? new(new GZipStream(stream, CompressionMode.Decompress, leaveOpen: true), System.Text.Encoding.UTF8)
+            : reader;
+
+        capacityBytes = payloadReader.ReadUInt64();
+        volumeLabel = payloadReader.ReadString();
+    }
+
+    /// <summary>
     /// Writes the full contents of <paramref name="nodeMap"/> to <paramref name="imagePath"/>,
     /// creating or overwriting the file.
     /// </summary>

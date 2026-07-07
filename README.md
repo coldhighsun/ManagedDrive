@@ -21,6 +21,7 @@ Create, mount and manage in-memory volumes that appear as normal drive letters i
 - Dynamic memory allocation — disk capacity is a ceiling, not a reservation; memory is consumed only as files are written and released when files are deleted
 - Edit a mounted disk — change label, capacity, auto-mount, and image path live without data loss; changing the drive letter or read-only flag remounts the disk
 - Optional persistence — save the disk contents to a `.mdr` image file and restore it on next mount; Save Image is always available and prompts for a file path if none is set; the disk card shows a "Saving..." overlay while the save is in progress
+- Import an existing `.mdr` image — right-click the disk list and choose **Import Disk...** to pick an existing image file and mount it directly; capacity and volume label are read from the image and shown read-only (not re-entered), and a warning is shown up front if the file is invalid or already in use by another mounted disk
 - Optional auto-save — periodically save the disk contents to its image file every 1–60 minutes (configurable when creating or editing a disk); a save also fires immediately when enabled and once more right before the disk is unmounted or the app exits, so nothing is lost between intervals. Periodic saves are skipped automatically when nothing has changed since the last save, avoiding unnecessary disk I/O on an idle disk. The image file must be selected through the file picker (no manual typing) and cannot be located on a RAM disk or reused across two disks. Checking Read Only, or clearing the selected image file, unchecks and disables auto-save (and Read Only also disables image compression) — a read-only disk's contents never change, so there is nothing to save or compress, an empty read-only disk would be meaningless, and auto-save has nothing to save to without an image file. The disk card shows the timestamp of the most recent content modification
 - Selectable image compression — choose a compression level (Off / Fast / Balanced / Max) for the saved `.mdr` image, trading save/load speed for file size; defaults to Fast. Selecting Balanced or Max shows an inline warning that save times may increase significantly
 - Auto-mount saved profiles on application startup
@@ -37,7 +38,7 @@ Create, mount and manage in-memory volumes that appear as normal drive letters i
 - Main window opens centered on the primary screen and is brought to the foreground on startup
 - Bilingual UI — English and Simplified Chinese, auto-detected from system locale with manual override in Settings
 - Light and dark themes — follows the Windows app theme by default, with a manual override (System Default / Light / Dark) in Settings; switches instantly without restarting
-- At-a-glance disk cards — the drive-letter badge shows small corner icons for read-only and current-TEMP-directory status; the usage bar displays its percentage and turns to a warning color (along with the free-space text) once usage crosses the configurable high-usage threshold; read-only disks collapse the usage bar into a single line showing the backing image path instead of capacity figures that never change
+- At-a-glance disk cards — the drive-letter badge shows small corner icons for read-only, current-TEMP-directory, and has-backing-image status (hover the image icon to see the image path); the usage bar displays its percentage and turns to a warning color (along with the free-space text) once usage crosses the configurable high-usage threshold; read-only disks collapse the usage bar into a single line showing the backing image path instead of capacity figures that never change
 - About dialog — accessible from the overflow menu; shows the app version and a link to the GitHub repository
 
 ### Installation
@@ -243,6 +244,7 @@ MIT
 - 动态内存分配——磁盘容量为上限而非预分配；内存随文件写入而占用，随文件删除而释放
 - 编辑已挂载磁盘——修改卷标、容量、自动挂载和镜像路径无需重挂即可实时生效；更改盘符或只读标志时自动重挂
 - 可选持久化——将磁盘内容保存为 `.mdr` 镜像文件，下次挂载时自动还原；保存镜像功能始终可用，未设置镜像路径时自动弹出选择对话框；保存期间磁盘卡片会显示"正在保存..."提示
+- 导入已有 `.mdr` 镜像——在磁盘列表右键选择**导入磁盘...**，选取已有镜像文件后直接挂载；容量和卷标从镜像中读取并只读展示（无需重新填写），若所选文件无效或已被其他已挂载磁盘占用，会提前弹出提示
 - 可选自动保存——每 1-60 分钟（创建或编辑磁盘时可配置）自动将磁盘内容保存到镜像文件；开启自动保存时会立即触发一次保存，卸载磁盘或退出应用前也会再保存一次，避免在两次定时保存之间丢失数据。若自上次保存后内容未发生变化，定时保存会自动跳过，避免不必要的磁盘 IO。镜像文件只能通过文件选择对话框设置（不可手动输入），且不能位于内存盘上，也不能与其他磁盘共用同一个镜像文件。勾选只读，或清空已选择的镜像文件，都会取消勾选并禁用自动保存（勾选只读还会同时禁用镜像压缩）——只读磁盘的内容不会变化，因此无需保存或压缩，一个没有内容的只读空盘也没有意义，而没有镜像文件时自动保存也无处可保存。磁盘卡片会显示磁盘内容最近一次被修改的时间
 - 可选镜像压缩——为保存的 `.mdr` 镜像选择压缩级别（不压缩／快速／均衡／最高），在保存/加载速度与文件大小之间取舍；默认快速。选择均衡或最高时会显示内联警告，提示保存时间可能显著增加
 - 应用启动时自动挂载已保存的磁盘配置
@@ -259,7 +261,7 @@ MIT
 - 主窗口启动时居中显示于主屏幕并置于前台
 - 双语界面——中文与英文，根据系统语言自动切换，也可在设置中手动更改
 - 浅色/深色主题——默认跟随 Windows 系统主题，也可在设置中手动切换（跟随系统／浅色／深色），切换即时生效，无需重启
-- 一目了然的磁盘卡片——驱动器字母徽章上会叠加只读、当前临时目录等状态角标；用量进度条旁显示百分比，使用率超过可配置的高用量阈值时进度条及可用空间文字会变为警示色；只读磁盘的用量区域会替换为单行文字，显示其绑定的镜像文件路径，而非无意义的容量数字
+- 一目了然的磁盘卡片——驱动器字母徽章上会叠加只读、当前临时目录、是否绑定镜像文件等状态角标（鼠标悬停镜像图标可查看镜像路径）；用量进度条旁显示百分比，使用率超过可配置的高用量阈值时进度条及可用空间文字会变为警示色；只读磁盘的用量区域会替换为单行文字，显示其绑定的镜像文件路径，而非无意义的容量数字
 - 关于对话框——可从溢出菜单打开，显示应用版本及 GitHub 仓库链接
 
 ### 安装

@@ -112,6 +112,10 @@
                     <MenuItem Header="{DynamicResource Btn.NewDisk}"
                               Command="{Binding PlacementTarget.Tag.CreateDiskCommand,
                                         RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
+                    <MenuItem Header="{DynamicResource Btn.ImportDisk}"
+                              ToolTip="{DynamicResource Tip.ImportDisk}"
+                              Command="{Binding PlacementTarget.Tag.ImportDiskCommand,
+                                        RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
                 </ContextMenu>
             </ListBox.ContextMenu>
             <ListBox.ItemContainerStyle>
@@ -225,6 +229,14 @@
                                             Visibility="{Binding IsCurrentTempDir, Converter={StaticResource BoolToVis}}">
                                         <TextBlock Text="&#xE8B7;" Style="{StaticResource IconText}" FontSize="10"
                                                    Foreground="{DynamicResource AppPrimary}"/>
+                                    </Border>
+                                    <Border Width="18" Height="18" CornerRadius="9" Margin="2,0,0,0"
+                                            Background="{DynamicResource AppSurface}"
+                                            BorderBrush="{DynamicResource AppDivider}" BorderThickness="1"
+                                            ToolTip="{Binding PersistImagePath}"
+                                            Visibility="{Binding HasImagePath, Converter={StaticResource BoolToVis}}">
+                                        <TextBlock Text="&#xE74E;" Style="{StaticResource IconText}" FontSize="10"
+                                                   Foreground="{DynamicResource AppForegroundLight}"/>
                                     </Border>
                                 </StackPanel>
                             </Grid>

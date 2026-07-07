@@ -31,6 +31,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         StatusText = Loc.Get("Status.Ready");
 
         CreateDiskCommand = new(_ => ExecuteCreateDisk());
+        ImportDiskCommand = new(_ => ExecuteImportDisk());
         EditDiskCommand = new(
             p => ExecuteEditDisk(p as DiskViewModel ?? SelectedDisk),
             p => p is DiskViewModel || SelectedDisk != null);
@@ -78,6 +79,15 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     /// Gets the command that opens the "Create Disk" dialog.
     /// </summary>
     public RelayCommand CreateDiskCommand
+    {
+        get;
+    }
+
+    /// <summary>
+    /// Gets the command that opens the "Import Disk" flow: pick an existing .mdr image file and
+    /// mount it, pre-filling capacity/volume label from the image itself.
+    /// </summary>
+    public RelayCommand ImportDiskCommand
     {
         get;
     }
@@ -309,9 +319,68 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             return;
         }
 
+        await MountAndAddAsync(dialog.Result!);
+    }
+
+    private async void ExecuteImportDisk()
+    {
+        var openDialog = new OpenFileDialog
+        {
+            Title = Loc.Get("ImportDlg.Title"),
+            Filter = Loc.Get("SaveDlg.Filter"),
+            CheckFileExists = true,
+        };
+
+        if (openDialog.ShowDialog() != true)
+        {
+            return;
+        }
+
+        var otherDisks = GetOtherDiskOptions(excluding: null);
+        if (otherDisks.Any(d => d.PersistImagePath != null &&
+            string.Equals(d.PersistImagePath, openDialog.FileName, StringComparison.OrdinalIgnoreCase)))
+        {
+            MessageBox.Show(
+                Loc.Get("Val.ImagePathInUse"),
+                "ManagedDrive",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+            return;
+        }
+
+        ulong capacityBytes;
+        string volumeLabel;
         try
         {
-            var options = dialog.Result!;
+            DiskImageSerializer.PeekHeader(openDialog.FileName, out capacityBytes, out volumeLabel);
+        }
+        catch (InvalidDataException)
+        {
+            MessageBox.Show(
+                Loc.Get("Val.ImportInvalidImage"),
+                "ManagedDrive",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+            return;
+        }
+
+        var dialog = new CreateDiskDialog(openDialog.FileName, capacityBytes, volumeLabel, otherDisks)
+        {
+            Owner = Application.Current.MainWindow
+        };
+
+        if (dialog.ShowDialog() != true)
+        {
+            return;
+        }
+
+        await MountAndAddAsync(dialog.Result!);
+    }
+
+    private async Task MountAndAddAsync(DiskOptions options)
+    {
+        try
+        {
             var disk = await Task.Run(() => _mountManager.Mount(options));
             AddDiskSorted(new(disk)
             {
