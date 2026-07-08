@@ -207,6 +207,7 @@
         <Setter Property="BorderThickness" Value="1"/>
         <Setter Property="Background" Value="Transparent"/>
         <Setter Property="Foreground" Value="{DynamicResource AppForeground}"/>
+        <Setter Property="CaretBrush" Value="{DynamicResource AppForeground}"/>
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="TextBox">

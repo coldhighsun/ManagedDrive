@@ -90,6 +90,11 @@ public partial class App
         if (config.StartMinimized)
         {
             _trayIcon!.Visible = true;
+            _trayIcon.ShowBalloonTip(
+                5000,
+                "ManagedDrive",
+                Loc.Get("Msg.StartedMinimized"),
+                System.Windows.Forms.ToolTipIcon.Info);
         }
         else
         {
