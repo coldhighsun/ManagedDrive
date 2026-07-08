@@ -193,6 +193,7 @@
     <sys:String x:Key="Msg.ResetTempFailed">重置临时目录失败。</sys:String>
     <sys:String x:Key="Msg.SetTempDirSuccess">TEMP 和 TMP 已成功设置为：&#x0a;&#x0a;  {0}</sys:String>
     <sys:String x:Key="Msg.SetTempDirFailed">设置临时文件夹失败。</sys:String>
+    <sys:String x:Key="Msg.StartedMinimized">ManagedDrive 已在系统托盘中运行。</sys:String>
     <sys:String x:Key="Msg.SetTempDirWarningTitle">将内存盘设为临时目录 — 兼容性警告</sys:String>
     <sys:String x:Key="Msg.SetTempDirWarningBody">将 TEMP 设置为内存盘后，某些安装包在从该路径运行时可能报错。已知示例包括 WeChatWin_*.exe 等被解压到 TEMP 后由系统级服务启动的安装程序。&#x0a;&#x0a;原因：WinFsp 挂载的驱动器仅在当前用户会话中可见。若安装程序由系统级进程（如 Windows 软件包管理器服务）执行，则无法访问用户会话的驱动器号。&#x0a;&#x0a;并非所有 winget 包都受影响——大多数包可正常安装。&#x0a;&#x0a;是否仍要继续？</sys:String>
     <sys:String x:Key="Msg.StartupTempAutoMountWarning">您的 Windows 临时目录当前指向内存盘（{0}）。&#x0a;&#x0a;部分安装包（如 WeChatWin_*.exe）在被解压到此路径后由系统级进程运行时可能报错，但并非所有包都受影响。&#x0a;&#x0a;如遇安装错误，可通过工具栏恢复默认临时目录。</sys:String>

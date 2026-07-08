@@ -193,6 +193,7 @@
     <sys:String x:Key="Msg.ResetTempFailed">Failed to reset temp directories.</sys:String>
     <sys:String x:Key="Msg.SetTempDirSuccess">TEMP and TMP have been set to:&#x0a;&#x0a;  {0}</sys:String>
     <sys:String x:Key="Msg.SetTempDirFailed">Failed to set temp directory.</sys:String>
+    <sys:String x:Key="Msg.StartedMinimized">ManagedDrive is running in the system tray.</sys:String>
     <sys:String x:Key="Msg.SetTempDirWarningTitle">RAM Disk as Temp — Compatibility Warning</sys:String>
     <sys:String x:Key="Msg.SetTempDirWarningBody">Setting TEMP to a RAM disk may cause certain installers to fail when they try to run from this path. Known examples include WeChatWin_*.exe and other packages that are extracted to TEMP and launched by a system-level service.&#x0a;&#x0a;This happens because WinFsp drives are only visible within the current user session. If an installer is executed by a system-level process (such as the Windows Package Manager service), it cannot access user-session drive letters.&#x0a;&#x0a;Not all winget packages are affected — many install without issue.&#x0a;&#x0a;Do you want to continue?</sys:String>
     <sys:String x:Key="Msg.StartupTempAutoMountWarning">Your Windows Temp directory is set to a RAM disk ({0}).&#x0a;&#x0a;Some installers — such as WeChatWin_*.exe — may fail when extracted to this path and run by a system-level process. Not all packages are affected.&#x0a;&#x0a;You can restore the default Temp directory from the toolbar if you encounter installation errors.</sys:String>

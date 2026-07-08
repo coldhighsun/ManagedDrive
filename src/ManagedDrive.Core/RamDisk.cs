@@ -141,7 +141,7 @@ public sealed class RamDisk : IDisposable
     /// <summary>
     /// Unmounts the disk and releases all resources. After disposal the disk is no longer
     /// accessible from the Windows shell. If auto-save is enabled, a final save is performed
-    /// before unmounting.
+    /// before unmounting, unless nothing has changed since the last save.
     /// </summary>
     public void Dispose()
     {
@@ -158,7 +158,10 @@ public sealed class RamDisk : IDisposable
                 {
                     try
                     {
-                        SaveToImage();
+                        if (_fs.IsDirty || Options.PersistImagePath != _lastSavedImagePath)
+                        {
+                            SaveToImage();
+                        }
                     }
                     catch
                     {
