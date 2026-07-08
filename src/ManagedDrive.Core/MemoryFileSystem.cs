@@ -61,12 +61,12 @@ public sealed class MemoryFileSystem : FileSystemBase
     /// Gets the UTC timestamp of the most recent content mutation (create/write/rename/delete/etc.),
     /// or <c>null</c> if the disk's content has never changed since mount.
     /// </summary>
-    internal DateTime? LastContentWriteTimeUtc
+    internal DateTimeOffset? LastContentWriteTimeUtc
     {
         get
         {
             var ticks = Interlocked.Read(ref _lastContentWriteTicks);
-            return ticks == 0 ? null : new DateTime(ticks, DateTimeKind.Utc);
+            return ticks == 0 ? null : new DateTimeOffset(ticks, TimeSpan.Zero);
         }
     }
 
@@ -759,7 +759,7 @@ public sealed class MemoryFileSystem : FileSystemBase
     internal void MarkDirty()
     {
         _isDirty = true;
-        Interlocked.Exchange(ref _lastContentWriteTicks, DateTime.UtcNow.Ticks);
+        Interlocked.Exchange(ref _lastContentWriteTicks, DateTimeOffset.UtcNow.UtcTicks);
     }
 
     /// <summary>
@@ -819,7 +819,7 @@ public sealed class MemoryFileSystem : FileSystemBase
         return true;
     }
 
-    private static ulong FileTimeNow() => (ulong)DateTime.UtcNow.ToFileTimeUtc();
+    private static ulong FileTimeNow() => (ulong)DateTimeOffset.UtcNow.ToFileTime();
 
     /// <summary>
     /// Returns <c>true</c> when <paramref name="name"/> matches the glob

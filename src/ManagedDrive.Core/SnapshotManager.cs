@@ -16,7 +16,7 @@ public static partial class SnapshotManager
     /// <summary>
     /// Metadata for a single snapshot file.
     /// </summary>
-    public readonly record struct SnapshotInfo(string Path, DateTime TimestampUtc, long SizeBytes);
+    public readonly record struct SnapshotInfo(string Path, DateTimeOffset TimestampUtc, long SizeBytes);
 
     /// <summary>
     /// Returns <c>true</c> when <paramref name="fileName"/> matches the snapshot naming
@@ -30,7 +30,7 @@ public static partial class SnapshotManager
     /// named <c>{baseName}.{yyyyMMdd-HHmmss}.mdr</c>. Appends <c>-N</c> when a file with the
     /// same timestamp already exists (same-second collision).
     /// </summary>
-    public static string BuildSnapshotPath(string mainImagePath, DateTime timestampUtc)
+    public static string BuildSnapshotPath(string mainImagePath, DateTimeOffset timestampUtc)
     {
         var directory = Path.GetDirectoryName(mainImagePath);
         var baseName = Path.GetFileNameWithoutExtension(mainImagePath);
@@ -57,7 +57,7 @@ public static partial class SnapshotManager
         ulong capacityBytes,
         string volumeLabel,
         string mainImagePath,
-        DateTime timestampUtc,
+        DateTimeOffset timestampUtc,
         ImageCompressionLevel level)
     {
         var indexPath = BuildSnapshotPath(mainImagePath, timestampUtc);
@@ -102,14 +102,14 @@ public static partial class SnapshotManager
                 continue;
             }
 
-            var timestamp = DateTime.TryParseExact(
+            var timestamp = DateTimeOffset.TryParseExact(
                 match.Groups["ts"].Value,
                 TimestampFormat,
                 null,
                 System.Globalization.DateTimeStyles.AssumeUniversal | System.Globalization.DateTimeStyles.AdjustToUniversal,
                 out var parsed)
                 ? parsed
-                : File.GetLastWriteTimeUtc(path);
+                : new DateTimeOffset(File.GetLastWriteTimeUtc(path), TimeSpan.Zero);
 
             var logicalSize = SnapshotStore.ReadSummary(path).LogicalSizeBytes;
             snapshots.Add(new SnapshotInfo(path, timestamp, logicalSize));
