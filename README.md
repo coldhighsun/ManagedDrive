@@ -45,7 +45,12 @@ Create, mount and manage in-memory volumes that appear as normal drive letters i
 
 ### Installation
 
-Download the latest **portable ZIP** (`ManagedDrive-vX.Y.Z-win-x64-portable.zip`) from the [Releases](https://github.com/coldhighsun/ManagedDrive/releases) page. Extract anywhere and run `ManagedDrive.exe` directly. `ManagedDrive.exe` is a single-file executable — the ZIP contains it plus one small companion `winfsp-msil.dll` (the managed WinFsp interop assembly, which can't be embedded in the single-file bundle) that must stay next to it. The only registry write is the optional "Run at startup" setting; nothing else touches the registry. WinFsp must be installed separately first (see Prerequisites below).
+Two ZIPs are published on the [Releases](https://github.com/coldhighsun/ManagedDrive/releases) page for each version — pick one:
+
+- `ManagedDrive-vX.Y.Z-win-x64-portable.zip` — small download; requires the [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0) to be installed separately.
+- `ManagedDrive-vX.Y.Z-win-x64-selfcontained.zip` — larger download (bundles its own .NET runtime); no runtime install needed.
+
+Extract either one anywhere and run `ManagedDrive.exe` directly. `ManagedDrive.exe` is a single-file executable — the ZIP contains it plus one small companion `winfsp-msil.dll` (the managed WinFsp interop assembly, which can't be embedded in the single-file bundle) that must stay next to it. The only registry write is the optional "Run at startup" setting; nothing else touches the registry. WinFsp must be installed separately first in both cases (see Prerequisites below).
 
 ### Prerequisites
 
@@ -53,6 +58,7 @@ Download the latest **portable ZIP** (`ManagedDrive-vX.Y.Z-win-x64-portable.zip`
 |---|---|
 | **Windows 10 / 11 (64-bit)** | ARM64 is not currently tested |
 | **[WinFsp 2.2.26183 (2026 Beta2)](https://github.com/winfsp/winfsp/releases/tag/v2.2B2)** | Must be installed before running ManagedDrive. Download the installer directly: [winfsp-2.2.26183.msi](https://github.com/winfsp/winfsp/releases/download/v2.2B2/winfsp-2.2.26183.msi) — do not use `winget install WinFsp.WinFsp`, as the winget package lags behind the latest release. The managed assembly `winfsp-msil.dll` is installed to `C:\Program Files (x86)\WinFsp\bin\` and is referenced by the project automatically. |
+| **[.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0)** | Only required for the `-portable` ZIP (framework-dependent). Not needed for the `-selfcontained` ZIP. |
 | **.NET 10 SDK** | Required to build. |
 
 ### Getting Started

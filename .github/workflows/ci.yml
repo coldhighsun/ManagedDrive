@@ -69,12 +69,22 @@ jobs:
         with:
           dotnet-version: '10.0.x'
 
-      - name: Restore & Publish app (win-x64)
+      - name: Restore & Publish app (win-x64, framework-dependent)
         run: |
           dotnet publish src/ManagedDrive.App/ManagedDrive.App.csproj `
             -c Release `
             -r win-x64 `
-            -o publish/
+            --no-self-contained `
+            -o publish-fx/
+        shell: pwsh
+
+      - name: Publish app (win-x64, self-contained)
+        run: |
+          dotnet publish src/ManagedDrive.App/ManagedDrive.App.csproj `
+            -c Release `
+            -r win-x64 `
+            --self-contained true `
+            -o publish-sc/
         shell: pwsh
 
       - name: Resolve version from tag
@@ -84,11 +94,11 @@ jobs:
           echo "tag=$tag"   >> $env:GITHUB_OUTPUT
         shell: pwsh
 
-      - name: Build portable package
+      - name: Build portable packages
         run: |
           $tag = "${{ steps.version.outputs.tag }}"
-          $zip = "ManagedDrive-$tag-win-x64-portable.zip"
-          Compress-Archive -Path publish\* -DestinationPath $zip
+          Compress-Archive -Path publish-fx\* -DestinationPath "ManagedDrive-$tag-win-x64-portable.zip"
+          Compress-Archive -Path publish-sc\* -DestinationPath "ManagedDrive-$tag-win-x64-selfcontained.zip"
         shell: pwsh
 
       - name: Create GitHub Release
@@ -99,3 +109,4 @@ jobs:
           generate_release_notes: true
           files: |
             ManagedDrive-${{ steps.version.outputs.tag }}-win-x64-portable.zip
+            ManagedDrive-${{ steps.version.outputs.tag }}-win-x64-selfcontained.zip
