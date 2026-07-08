@@ -739,12 +739,12 @@ public partial class CreateDiskDialog
 
     private void UpdateHighUsageWarnPercentState()
     {
-        if (HighUsageWarnPercentBox is null)
+        if (HighUsageWarnPercentPanel is null)
         {
             return;
         }
 
-        HighUsageWarnPercentBox.IsEnabled = HighUsageWarnBox.IsChecked == true;
+        HighUsageWarnPercentPanel.IsEnabled = HighUsageWarnBox.IsChecked == true;
     }
 
     private void UpdateSnapshotSizeDisplay()
