@@ -35,14 +35,14 @@ public sealed class RamDisk : IDisposable
     /// Gets the UTC timestamp of the most recent content mutation (create/write/rename/delete/etc.),
     /// or <c>null</c> if the disk has never been modified since mount.
     /// </summary>
-    public DateTime? LastContentWriteTime => _fs.LastContentWriteTimeUtc;
+    public DateTimeOffset? LastContentWriteTime => _fs.LastContentWriteTimeUtc;
 
     /// <summary>
     /// Gets the UTC timestamp of the most recent successful image save (auto-save, final
     /// save on unmount, or manual save via <see cref="SaveToImage"/>). <c>null</c> if no
     /// save has occurred yet.
     /// </summary>
-    public DateTime? LastSaveTime
+    public DateTimeOffset? LastSaveTime
     {
         get;
         private set;
@@ -221,7 +221,7 @@ public sealed class RamDisk : IDisposable
             Options.PersistImagePath,
             Options.CompressionLevel);
 
-        LastSaveTime = DateTime.UtcNow;
+        LastSaveTime = DateTimeOffset.UtcNow;
         _fs.ClearDirty();
         _lastSavedImagePath = Options.PersistImagePath;
     }
@@ -331,7 +331,7 @@ public sealed class RamDisk : IDisposable
         host.UnicodeOnDisk = true;
         host.PersistentAcls = true;
         host.FileInfoTimeout = 1000;
-        host.VolumeCreationTime = (ulong)DateTime.UtcNow.ToFileTimeUtc();
+        host.VolumeCreationTime = (ulong)DateTimeOffset.UtcNow.ToFileTime();
         host.VolumeSerialNumber = (uint)new Random().Next(int.MaxValue / 2);
     }
 
@@ -459,7 +459,7 @@ public sealed class RamDisk : IDisposable
             Options.CapacityBytes,
             Options.VolumeLabel,
             path,
-            DateTime.UtcNow,
+            DateTimeOffset.UtcNow,
             Options.CompressionLevel);
 
         SnapshotManager.Prune(path, Options.MaxSnapshotCount, Options.MaxSnapshotSizeBytes);

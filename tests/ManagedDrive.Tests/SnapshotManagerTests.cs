@@ -34,7 +34,7 @@ public sealed class SnapshotManagerTests : IDisposable
     [Fact]
     public void BuildSnapshotPath_AppendsSequenceOnSameSecondCollision()
     {
-        var timestamp = new DateTime(2026, 7, 7, 22, 9, 0, DateTimeKind.Utc);
+        var timestamp = new DateTimeOffset(2026, 7, 7, 22, 9, 0, TimeSpan.Zero);
 
         var first = SnapshotManager.BuildSnapshotPath(_mainImagePath, timestamp);
         File.WriteAllBytes(first, []);
@@ -59,8 +59,8 @@ public sealed class SnapshotManagerTests : IDisposable
     [Fact]
     public void Prune_NoLimits_IsNoOp()
     {
-        WriteSnapshotWithFile(new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc), "\\a.txt", [1, 2, 3]);
-        WriteSnapshotWithFile(new DateTime(2026, 1, 2, 0, 0, 0, DateTimeKind.Utc), "\\b.txt", [4, 5, 6]);
+        WriteSnapshotWithFile(new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), "\\a.txt", [1, 2, 3]);
+        WriteSnapshotWithFile(new DateTimeOffset(2026, 1, 2, 0, 0, 0, TimeSpan.Zero), "\\b.txt", [4, 5, 6]);
 
         SnapshotManager.Prune(_mainImagePath, maxCount: null, maxTotalBytes: null);
 
@@ -70,23 +70,23 @@ public sealed class SnapshotManagerTests : IDisposable
     [Fact]
     public void Prune_CountOnly_DeletesOldestFirst()
     {
-        WriteSnapshotWithFile(new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc), "\\a.txt", new byte[10]);
-        WriteSnapshotWithFile(new DateTime(2026, 1, 2, 0, 0, 0, DateTimeKind.Utc), "\\b.txt", new byte[10]);
-        WriteSnapshotWithFile(new DateTime(2026, 1, 3, 0, 0, 0, DateTimeKind.Utc), "\\c.txt", new byte[10]);
+        WriteSnapshotWithFile(new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), "\\a.txt", new byte[10]);
+        WriteSnapshotWithFile(new DateTimeOffset(2026, 1, 2, 0, 0, 0, TimeSpan.Zero), "\\b.txt", new byte[10]);
+        WriteSnapshotWithFile(new DateTimeOffset(2026, 1, 3, 0, 0, 0, TimeSpan.Zero), "\\c.txt", new byte[10]);
 
         SnapshotManager.Prune(_mainImagePath, maxCount: 2, maxTotalBytes: null);
 
         var remaining = SnapshotManager.ListSnapshots(_mainImagePath);
         Assert.Equal(2, remaining.Count);
-        Assert.All(remaining, s => Assert.True(s.TimestampUtc >= new DateTime(2026, 1, 2, 0, 0, 0, DateTimeKind.Utc)));
+        Assert.All(remaining, s => Assert.True(s.TimestampUtc >= new DateTimeOffset(2026, 1, 2, 0, 0, 0, TimeSpan.Zero)));
     }
 
     [Fact]
     public void Prune_SizeOnly_DeletesUntilUnderLimit()
     {
-        WriteSnapshotWithFile(new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc), "\\a.txt", new byte[100]);
-        WriteSnapshotWithFile(new DateTime(2026, 1, 2, 0, 0, 0, DateTimeKind.Utc), "\\b.txt", new byte[100]);
-        WriteSnapshotWithFile(new DateTime(2026, 1, 3, 0, 0, 0, DateTimeKind.Utc), "\\c.txt", new byte[100]);
+        WriteSnapshotWithFile(new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), "\\a.txt", new byte[100]);
+        WriteSnapshotWithFile(new DateTimeOffset(2026, 1, 2, 0, 0, 0, TimeSpan.Zero), "\\b.txt", new byte[100]);
+        WriteSnapshotWithFile(new DateTimeOffset(2026, 1, 3, 0, 0, 0, TimeSpan.Zero), "\\c.txt", new byte[100]);
 
         // Deleting only the single oldest (100 bytes) still leaves 200 > 150, so a second
         // deletion is required to get down to 100 <= 150.
@@ -94,15 +94,15 @@ public sealed class SnapshotManagerTests : IDisposable
 
         var remaining = SnapshotManager.ListSnapshots(_mainImagePath);
         var single = Assert.Single(remaining);
-        Assert.Equal(new DateTime(2026, 1, 3, 0, 0, 0, DateTimeKind.Utc), single.TimestampUtc);
+        Assert.Equal(new DateTimeOffset(2026, 1, 3, 0, 0, 0, TimeSpan.Zero), single.TimestampUtc);
     }
 
     [Fact]
     public void Prune_BothLimits_EitherExceededTriggersCleanup()
     {
-        WriteSnapshotWithFile(new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc), "\\a.txt", new byte[10]);
-        WriteSnapshotWithFile(new DateTime(2026, 1, 2, 0, 0, 0, DateTimeKind.Utc), "\\b.txt", new byte[10]);
-        WriteSnapshotWithFile(new DateTime(2026, 1, 3, 0, 0, 0, DateTimeKind.Utc), "\\c.txt", new byte[10]);
+        WriteSnapshotWithFile(new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), "\\a.txt", new byte[10]);
+        WriteSnapshotWithFile(new DateTimeOffset(2026, 1, 2, 0, 0, 0, TimeSpan.Zero), "\\b.txt", new byte[10]);
+        WriteSnapshotWithFile(new DateTimeOffset(2026, 1, 3, 0, 0, 0, TimeSpan.Zero), "\\c.txt", new byte[10]);
 
         // Count limit of 5 is not exceeded, but the size limit of 15 is, so pruning must still
         // occur based on size alone.
@@ -116,7 +116,7 @@ public sealed class SnapshotManagerTests : IDisposable
     public void Prune_DoesNotTouchMainImageFile()
     {
         File.WriteAllBytes(_mainImagePath, new byte[10]);
-        WriteSnapshotWithFile(new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc), "\\a.txt", new byte[10]);
+        WriteSnapshotWithFile(new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), "\\a.txt", new byte[10]);
 
         SnapshotManager.Prune(_mainImagePath, maxCount: 0, maxTotalBytes: null);
 
@@ -135,7 +135,7 @@ public sealed class SnapshotManagerTests : IDisposable
         nodeMap.Add("\\empty.txt", MakeFile([]));
 
         SnapshotManager.WriteSnapshot(nodeMap, 1024 * 1024, "MyLabel", _mainImagePath,
-            new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc), ImageCompressionLevel.Fastest);
+            new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), ImageCompressionLevel.Fastest);
 
         var snapshot = Assert.Single(SnapshotManager.ListSnapshots(_mainImagePath));
         var loaded = SnapshotManager.LoadSnapshot(snapshot.Path, out var capacity, out var label);
@@ -161,8 +161,8 @@ public sealed class SnapshotManagerTests : IDisposable
     {
         var content = new byte[] { 9, 9, 9 };
 
-        WriteSnapshotWithFile(new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc), "\\a.txt", content);
-        WriteSnapshotWithFile(new DateTime(2026, 1, 2, 0, 0, 0, DateTimeKind.Utc), "\\b.txt", content);
+        WriteSnapshotWithFile(new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), "\\a.txt", content);
+        WriteSnapshotWithFile(new DateTimeOffset(2026, 1, 2, 0, 0, 0, TimeSpan.Zero), "\\b.txt", content);
 
         Assert.Equal(1, BlobCount);
     }
@@ -170,8 +170,8 @@ public sealed class SnapshotManagerTests : IDisposable
     [Fact]
     public void WriteSnapshot_DifferingContent_CreatesSeparateBlobs()
     {
-        WriteSnapshotWithFile(new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc), "\\a.txt", [1, 2, 3]);
-        WriteSnapshotWithFile(new DateTime(2026, 1, 2, 0, 0, 0, DateTimeKind.Utc), "\\b.txt", [4, 5, 6]);
+        WriteSnapshotWithFile(new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), "\\a.txt", [1, 2, 3]);
+        WriteSnapshotWithFile(new DateTimeOffset(2026, 1, 2, 0, 0, 0, TimeSpan.Zero), "\\b.txt", [4, 5, 6]);
 
         Assert.Equal(2, BlobCount);
     }
@@ -187,13 +187,13 @@ public sealed class SnapshotManagerTests : IDisposable
         nodeMapA.Add("\\shared.txt", MakeFile(shared));
         nodeMapA.Add("\\unique.txt", MakeFile(unique));
         SnapshotManager.WriteSnapshot(nodeMapA, 1024, "Label", _mainImagePath,
-            new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc), ImageCompressionLevel.None);
+            new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), ImageCompressionLevel.None);
 
         var nodeMapB = new FileNodeMap();
         nodeMapB.Add("\\", MakeDir());
         nodeMapB.Add("\\shared.txt", MakeFile(shared));
         SnapshotManager.WriteSnapshot(nodeMapB, 1024, "Label", _mainImagePath,
-            new DateTime(2026, 1, 2, 0, 0, 0, DateTimeKind.Utc), ImageCompressionLevel.None);
+            new DateTimeOffset(2026, 1, 2, 0, 0, 0, TimeSpan.Zero), ImageCompressionLevel.None);
 
         Assert.Equal(2, BlobCount);
 
@@ -211,8 +211,8 @@ public sealed class SnapshotManagerTests : IDisposable
     public void Prune_DeletingAllSnapshots_GcsAllBlobs()
     {
         var shared = new byte[] { 7, 7, 7 };
-        WriteSnapshotWithFile(new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc), "\\a.txt", shared);
-        WriteSnapshotWithFile(new DateTime(2026, 1, 2, 0, 0, 0, DateTimeKind.Utc), "\\b.txt", shared);
+        WriteSnapshotWithFile(new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), "\\a.txt", shared);
+        WriteSnapshotWithFile(new DateTimeOffset(2026, 1, 2, 0, 0, 0, TimeSpan.Zero), "\\b.txt", shared);
 
         Assert.Equal(1, BlobCount);
 
@@ -224,7 +224,7 @@ public sealed class SnapshotManagerTests : IDisposable
     [Fact]
     public void LoadSnapshot_MissingBlob_ReturnsClearError()
     {
-        WriteSnapshotWithFile(new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc), "\\a.txt", [1, 2, 3]);
+        WriteSnapshotWithFile(new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), "\\a.txt", [1, 2, 3]);
 
         var snapshot = Assert.Single(SnapshotManager.ListSnapshots(_mainImagePath));
 
@@ -242,7 +242,7 @@ public sealed class SnapshotManagerTests : IDisposable
         nodeMap.Add("\\empty.txt", MakeFile([]));
 
         SnapshotManager.WriteSnapshot(nodeMap, 1024, "Label", _mainImagePath,
-            new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc), ImageCompressionLevel.Fastest);
+            new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), ImageCompressionLevel.Fastest);
 
         Assert.Equal(0, BlobCount);
 
@@ -252,7 +252,7 @@ public sealed class SnapshotManagerTests : IDisposable
         Assert.Equal(0UL, node!.FileInfo.FileSize);
     }
 
-    private void WriteSnapshotWithFile(DateTime timestampUtc, string path, byte[] content)
+    private void WriteSnapshotWithFile(DateTimeOffset timestampUtc, string path, byte[] content)
     {
         var nodeMap = new FileNodeMap();
         nodeMap.Add("\\", MakeDir());
