@@ -240,6 +240,9 @@
                         <Trigger Property="IsKeyboardFocused" Value="True">
                             <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource AppPrimary}"/>
                         </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.4"/>
+                        </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
             </Setter.Value>
@@ -344,6 +347,18 @@
                 </ControlTemplate>
             </Setter.Value>
         </Setter>
+    </Style>
+
+    <!-- ========== CheckBox ========== -->
+    <!-- Implicit style (no x:Key) so every CheckBox in the app dims when disabled;
+         the default chrome's built-in disabled state is tuned for a light background
+         and is barely visible against the app's dark palette. -->
+    <Style TargetType="CheckBox">
+        <Style.Triggers>
+            <Trigger Property="IsEnabled" Value="False">
+                <Setter Property="Opacity" Value="0.4"/>
+            </Trigger>
+        </Style.Triggers>
     </Style>
 
     <!-- ========== Context menu ========== -->
@@ -484,7 +499,7 @@
                             <Setter TargetName="Header" Property="TextElement.Foreground" Value="{DynamicResource AppForeground}"/>
                             <Setter TargetName="Header" Property="TextElement.FontWeight" Value="SemiBold"/>
                         </Trigger>
-                        <Trigger Property="IsMouseOver" Value="True">
+                        <Trigger SourceName="Bd" Property="IsMouseOver" Value="True">
                             <Setter TargetName="Bd" Property="Background" Value="{DynamicResource AppHover}"/>
                             <Setter TargetName="Bd" Property="CornerRadius" Value="3,3,0,0"/>
                         </Trigger>

@@ -54,21 +54,18 @@ public partial class App
 
     private void App_Startup(object sender, StartupEventArgs e)
     {
-        if (Environment.GetEnvironmentVariable("DOTNET_ENVIRONMENT") != "Development")
+        _singleInstanceMutex = new(true, SingleInstanceMutexName, out var createdNew);
+        if (!createdNew)
         {
-            _singleInstanceMutex = new(true, SingleInstanceMutexName, out var createdNew);
-            if (!createdNew)
-            {
-                _singleInstanceMutex.Dispose();
-                _singleInstanceMutex = null;
-                MessageBox.Show(
-                    "ManagedDrive is already running.",
-                    "ManagedDrive",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Information);
-                Shutdown();
-                return;
-            }
+            _singleInstanceMutex.Dispose();
+            _singleInstanceMutex = null;
+            MessageBox.Show(
+                "ManagedDrive is already running.",
+                "ManagedDrive",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
+            Shutdown();
+            return;
         }
 
         _settings = new();

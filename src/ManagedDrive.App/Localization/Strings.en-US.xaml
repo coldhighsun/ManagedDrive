@@ -57,8 +57,7 @@
     <sys:String x:Key="Tip.Capacity">Disk size (select unit: MB or GB)</sys:String>
     <sys:String x:Key="Tip.ReadOnly">Prevent all writes to this disk (also disables auto-save, since a read-only disk never changes)</sys:String>
     <sys:String x:Key="Tip.AutoMount">Re-mount this disk automatically on next application start</sys:String>
-    <sys:String x:Key="CreateDisk.HighUsageWarnPrefix">Warn at</sys:String>
-    <sys:String x:Key="CreateDisk.HighUsageWarnSuffix">% usage</sys:String>
+    <sys:String x:Key="CreateDisk.HighUsageWarn">Warn when usage reaches this percentage:</sys:String>
     <sys:String x:Key="Tip.HighUsageWarn">Flag this disk as high-usage and show a tray warning once used space reaches this percentage</sys:String>
     <sys:String x:Key="Val.BadHighUsagePercent">Enter a usage warning percentage between 1 and 99.</sys:String>
     <sys:String x:Key="Tip.ImageFile">Optional: path to a .mdr image file for persistence (leave blank for volatile disk). Click to browse.</sys:String>
@@ -69,12 +68,11 @@
     <sys:String x:Key="CompressionLevel.Optimal">Balanced</sys:String>
     <sys:String x:Key="CompressionLevel.SmallestSize">Max</sys:String>
     <sys:String x:Key="CreateDisk.CompressionWarning">Balanced/Max compression may significantly increase save times. Choose carefully.</sys:String>
-    <sys:String x:Key="CreateDisk.AutoSavePrefix">Every</sys:String>
-    <sys:String x:Key="CreateDisk.AutoSaveSuffix">minutes, auto-save the image</sys:String>
+    <sys:String x:Key="CreateDisk.AutoSave">Auto-save the image, interval (minutes):</sys:String>
     <sys:String x:Key="CreateDisk.AutoSaveInterval">Interval (min)</sys:String>
     <sys:String x:Key="Tip.AutoSave">Periodically save the disk contents to the image file while mounted</sys:String>
     <sys:String x:Key="Tip.AutoSaveInterval">How often to auto-save, in minutes</sys:String>
-    <sys:String x:Key="CreateDisk.SnapshotMaxCount">Keep at most</sys:String>
+    <sys:String x:Key="CreateDisk.SnapshotMaxCount">Max number of snapshots to keep:</sys:String>
     <sys:String x:Key="CreateDisk.SnapshotMaxSize">Limit total size to</sys:String>
     <sys:String x:Key="Tip.SnapshotMaxCount">Delete the oldest snapshots once this many are stored</sys:String>
     <sys:String x:Key="Tip.SnapshotMaxSize">Delete the oldest snapshots once their combined size exceeds this limit</sys:String>

@@ -46,8 +46,7 @@ public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
     }
 
     /// <summary>
-    /// Raised when disk usage first crosses <see cref="HighUsageThreshold"/>.
-    /// Resets (and can re-fire) only after usage drops below <see cref="HighUsageResetThreshold"/>.
+    /// Occurs when disk usage reaches or exceeds the configured high-usage warning threshold.
     /// </summary>
     public event EventHandler? HighUsageWarning;
 
@@ -62,7 +61,10 @@ public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
     /// <summary>
     /// Gets the underlying <see cref="RamDisk"/> instance.
     /// </summary>
-    public RamDisk Disk { get; }
+    public RamDisk Disk
+    {
+        get;
+    }
 
     /// <summary>
     /// Gets the amount of free space formatted as a human-readable string.
@@ -104,7 +106,10 @@ public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
     /// <summary>
     /// Gets whether disk usage is at or above the high-usage warning threshold.
     /// </summary>
-    public bool IsHighUsage { get; private set; }
+    public bool IsHighUsage
+    {
+        get; private set;
+    }
 
     /// <summary>
     /// Gets the inverse of <see cref="IsCurrentTempDir"/> for visibility binding.
@@ -269,9 +274,12 @@ public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
     private static string FormatRelativeTime(DateTimeOffset timestamp)
     {
         var elapsed = DateTimeOffset.UtcNow - timestamp;
-        if (elapsed.TotalMinutes < 1) return Loc.Get("Time.JustNow");
-        if (elapsed.TotalMinutes < 60) return Loc.Format("Time.MinutesAgo", (int)elapsed.TotalMinutes);
-        if (elapsed.TotalHours < 24) return Loc.Format("Time.HoursAgo", (int)elapsed.TotalHours);
+        if (elapsed.TotalMinutes < 1)
+            return Loc.Get("Time.JustNow");
+        if (elapsed.TotalMinutes < 60)
+            return Loc.Format("Time.MinutesAgo", (int)elapsed.TotalMinutes);
+        if (elapsed.TotalHours < 24)
+            return Loc.Format("Time.HoursAgo", (int)elapsed.TotalHours);
         return Loc.Format("Time.DaysAgo", (int)elapsed.TotalDays);
     }
 
