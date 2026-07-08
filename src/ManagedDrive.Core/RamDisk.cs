@@ -244,6 +244,20 @@ public sealed class RamDisk : IDisposable
     }
 
     /// <summary>
+    /// Saves the disk image and, if snapshot retention is configured, writes a snapshot
+    /// afterward. Coordinates with the periodic auto-save timer via <see cref="_autoSaveLock"/>
+    /// so a manual save and a periodic auto-save never write/prune snapshots concurrently.
+    /// </summary>
+    public void SaveToImageWithSnapshot()
+    {
+        lock (_autoSaveLock)
+        {
+            SaveToImage();
+            TryWriteSnapshot();
+        }
+    }
+
+    /// <summary>
     /// Applies <paramref name="newOptions"/> to the live disk without unmounting.
     /// Only <see cref="DiskOptions.VolumeLabel"/>, <see cref="DiskOptions.CapacityBytes"/>,
     /// <see cref="DiskOptions.AutoMount"/>, <see cref="DiskOptions.PersistImagePath"/>,
