@@ -1,5 +1,4 @@
 using System.Reflection;
-using System.Windows.Input;
 using System.Windows.Navigation;
 
 namespace ManagedDrive.App.Views;
@@ -34,13 +33,5 @@ public partial class AboutDialog
     {
         Process.Start(new ProcessStartInfo(e.Uri.AbsoluteUri) { UseShellExecute = true });
         e.Handled = true;
-    }
-
-    private void Window_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
-    {
-        if (e.ButtonState == MouseButtonState.Pressed)
-        {
-            DragMove();
-        }
     }
 }

@@ -7,6 +7,8 @@
         mc:Ignorable="d"
         Style="{StaticResource AppWindow}"
         WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
         Icon="pack://application:,,,/ManagedDrive.ico"
         Title="{DynamicResource Window.Title}"
         Height="480" Width="760"
@@ -29,16 +31,19 @@
                       NonClientFrameEdges="None"/>
     </WindowChrome.WindowChrome>
 
+    <Border Background="{DynamicResource AppBackground}"
+            BorderBrush="{DynamicResource AppDivider}"
+            BorderThickness="1"
+            CornerRadius="10"
+            ClipToBounds="True">
     <Grid>
     <DockPanel>
 
         <!-- App bar -->
         <Border DockPanel.Dock="Top"
                 Background="{DynamicResource AppBarBackground}"
+                CornerRadius="9,9,0,0"
                 Padding="4,4,4,4">
-            <Border.Effect>
-                <DropShadowEffect ShadowDepth="2" BlurRadius="4" Opacity="0.2"/>
-            </Border.Effect>
             <DockPanel>
                 <StackPanel DockPanel.Dock="Right" Orientation="Horizontal"
                             WindowChrome.IsHitTestVisibleInChrome="True">
@@ -76,7 +81,7 @@
                     </Button>
                     <Button Style="{StaticResource IconButton}"
                             Click="CloseButton_Click"
-                            ToolTip="{DynamicResource Tip.Close}">
+                            ToolTip="{DynamicResource Tip.HideToTray}">
                         <TextBlock Style="{StaticResource IconText}" Text="&#xE8BB;"/>
                     </Button>
                 </StackPanel>
@@ -93,6 +98,7 @@
                 Background="{DynamicResource AppToolBarBackground}"
                 BorderBrush="{DynamicResource AppDivider}"
                 BorderThickness="0,1,0,0"
+                CornerRadius="0,0,9,9"
                 Padding="12,4">
             <TextBlock Text="{Binding StatusText}"
                        FontSize="11"
@@ -217,10 +223,10 @@
                             <!-- Drive letter badge, with read-only/temp-dir status corner icons -->
                             <Grid Width="48" Height="48" VerticalAlignment="Center">
                                 <Border CornerRadius="8"
-                                        Background="{DynamicResource AppBarBackground}">
+                                        Background="{DynamicResource AppPrimary}">
                                     <TextBlock Text="{Binding MountPoint}"
                                                FontSize="18" FontWeight="SemiBold"
-                                               Foreground="{DynamicResource AppBarForeground}"
+                                               Foreground="{DynamicResource AppPrimaryForeground}"
                                                HorizontalAlignment="Center"
                                                VerticalAlignment="Center"/>
                                 </Border>
@@ -241,7 +247,7 @@
                                             ToolTip="{DynamicResource Btn.RestoreDefaultTemp}"
                                             Visibility="{Binding IsCurrentTempDir, Converter={StaticResource BoolToVis}}">
                                         <TextBlock Text="&#xE8B7;" Style="{StaticResource IconText}" FontSize="10"
-                                                   Foreground="{DynamicResource AppPrimary}"/>
+                                                   Foreground="{DynamicResource AppForeground}"/>
                                     </Border>
                                     <Border Width="18" Height="18" CornerRadius="9" Margin="2,0,0,0"
                                             Background="{DynamicResource AppSurface}"
@@ -430,4 +436,5 @@
         </StackPanel>
     </Border>
     </Grid>
+    </Border>
 </Window>

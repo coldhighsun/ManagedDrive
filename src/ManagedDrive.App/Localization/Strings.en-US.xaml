@@ -4,9 +4,7 @@
 
     <!-- MainWindow -->
     <sys:String x:Key="Window.Title">ManagedDrive – RAM Disk Manager</sys:String>
-    <sys:String x:Key="Menu.File">_File</sys:String>
-    <sys:String x:Key="Menu.Tools">_Tools</sys:String>
-    <sys:String x:Key="Menu.Exit">E_xit</sys:String>
+    <sys:String x:Key="Menu.Exit">Exit</sys:String>
     <sys:String x:Key="Menu.About">About</sys:String>
     <sys:String x:Key="Btn.NewDisk">New Disk...</sys:String>
     <sys:String x:Key="Btn.ImportDisk">Import Disk...</sys:String>
@@ -30,7 +28,8 @@
     <sys:String x:Key="Tip.Settings">Application settings</sys:String>
     <sys:String x:Key="Tip.ResetTempDirs">Reset Windows Temp Directories to defaults</sys:String>
     <sys:String x:Key="Tip.Minimize">Minimize</sys:String>
-    <sys:String x:Key="Tip.Close">Hide to tray</sys:String>
+    <sys:String x:Key="Tip.HideToTray">Hide to tray</sys:String>
+    <sys:String x:Key="Tip.CloseDialog">Close</sys:String>
     <sys:String x:Key="Col.MountPoint">Mount Point</sys:String>
     <sys:String x:Key="Col.Label">Label</sys:String>
     <sys:String x:Key="Col.Capacity">Capacity</sys:String>
