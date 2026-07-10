@@ -99,11 +99,13 @@ ManagedDrive/
 │   └── ManagedDrive.App/           # WPF desktop application
 │       ├── Localization/           #   ResourceDictionary strings (en-US, zh-CN)
 │       ├── Themes/                 #   AppTheme.xaml styles + light/dark color palettes, ThemeManager
+│       ├── Helpers/                #   ByteFormatter, HintHelper (watermark/placeholder text)
 │       ├── Infrastructure/         #   RelayCommand
 │       ├── Models/                 #   AppConfiguration, DiskProfile
 │       ├── Services/               #   SettingsStore, StartupManager, TempDirResetService
 │       ├── ViewModels/             #   MainViewModel, DiskViewModel
 │       ├── Views/                  #   CreateDiskDialog, CloneDiskDialog, RestoreSnapshotDialog, SettingsDialog, ConfirmDialog, AboutDialog, TrayTooltipView
+│       ├── GlobalUsings.cs         #   Project-wide global using directives
 │       ├── MainWindow.xaml(.cs)    #   Main window
 │       └── App.xaml(.cs)           #   Startup, tray icon, auto-mount
 │
@@ -113,6 +115,8 @@ ManagedDrive/
 │       ├── FileNodeMapTests.cs
 │       ├── MemoryFileSystemCloneTests.cs
 │       ├── DiskImageSerializerTests.cs
+│       ├── RamDiskCapacityTests.cs
+│       ├── SnapshotManagerTests.cs
 │       └── WildcardMatchTests.cs
 │
 └── benchmarks/
@@ -228,7 +232,7 @@ BenchmarkDotNet will prompt you to pick which benchmark class(es) to run (`Seque
 
 #### Certain installers may fail when TEMP is set to a RAM disk
 
-WinFsp mounts drives in the **current user's session device namespace**. If an installer is extracted to TEMP and then launched by a system-level process — such as the Windows Package Manager service used by winget — that process operates in the global device namespace and cannot resolve user-session drive letters. Attempting to execute such an installer from a path like `Z:\Temp\WinGet\...\setup.exe` fails with:
+The core issue is that the installer **executable itself is running from the RAM disk** — not merely that files were extracted there. WinFsp mounts drives in the **current user's session device namespace**. If an installer is extracted to TEMP and then launched by a system-level process — such as the Windows Package Manager service used by winget — that process operates in the global device namespace and cannot resolve user-session drive letters. Attempting to execute such an installer from a path like `Z:\Temp\WinGet\...\setup.exe` fails with:
 
 > `0x800704b3` — The network path was not found
 
@@ -467,7 +471,7 @@ BenchmarkDotNet 会提示你选择要运行的基准测试类（`SequentialReadW
 
 #### 将 TEMP 设为内存盘后，某些安装包可能报错
 
-WinFsp 将驱动器挂载在**当前用户的会话设备命名空间**中。若安装包被解压到 TEMP 后由系统级进程启动（例如 winget 所使用的 Windows 软件包管理器服务），该进程运行于全局设备命名空间，无法解析用户会话级别的驱动器号。尝试从 `Z:\Temp\WinGet\...\setup.exe` 之类的路径执行安装程序时，会报错：
+核心问题在于安装程序**本身正是从内存盘路径运行**，而不仅仅是文件被解压到了内存盘上。WinFsp 将驱动器挂载在**当前用户的会话设备命名空间**中。若安装包被解压到 TEMP 后由系统级进程启动（例如 winget 所使用的 Windows 软件包管理器服务），该进程运行于全局设备命名空间，无法解析用户会话级别的驱动器号。尝试从 `Z:\Temp\WinGet\...\setup.exe` 之类的路径执行安装程序时，会报错：
 
 > `0x800704b3` — 网络路径键入不正确 / The network path was not found
 
