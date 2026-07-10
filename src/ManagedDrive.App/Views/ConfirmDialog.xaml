@@ -4,53 +4,65 @@
         Style="{StaticResource AppWindow}"
         Width="400" SizeToContent="Height"
         ResizeMode="NoResize"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
         WindowStartupLocation="CenterOwner"
         ShowInTaskbar="False">
 
-    <Grid Margin="24">
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="16"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="24"/>
-            <RowDefinition Height="Auto"/>
-        </Grid.RowDefinitions>
+    <Border Background="{DynamicResource AppBackground}"
+            BorderBrush="{DynamicResource AppDivider}"
+            BorderThickness="1"
+            CornerRadius="10">
+        <Border.Effect>
+            <DropShadowEffect Color="#000000" Opacity="0.25" BlurRadius="18" ShadowDepth="2"/>
+        </Border.Effect>
 
-        <!-- Icon + title -->
-        <StackPanel Grid.Row="0" Orientation="Horizontal">
-            <TextBlock FontFamily="Segoe Fluent Icons" FontSize="24"
-                       Text="&#xE7BA;"
-                       VerticalAlignment="Center"
-                       Foreground="{DynamicResource AppWarning}"/>
-            <TextBlock x:Name="TitleText"
-                       VerticalAlignment="Center"
-                       Margin="10,0,0,0"
-                       FontSize="16" FontWeight="Medium"/>
-        </StackPanel>
+        <Grid Margin="24">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="16"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="24"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
 
-        <!-- Body text -->
-        <TextBlock x:Name="BodyText"
-                   Grid.Row="2"
-                   TextWrapping="Wrap"
-                   LineHeight="20"
-                   Foreground="{DynamicResource AppForegroundLight}"/>
+            <!-- Icon + title -->
+            <StackPanel Grid.Row="0" Orientation="Horizontal">
+                <TextBlock FontFamily="Segoe Fluent Icons" FontSize="24"
+                           Text="&#xE7BA;"
+                           VerticalAlignment="Center"
+                           Foreground="{DynamicResource AppWarning}"/>
+                <TextBlock x:Name="TitleText"
+                           VerticalAlignment="Center"
+                           Margin="10,0,0,0"
+                           FontSize="16" FontWeight="Medium"/>
+            </StackPanel>
 
-        <!-- Optional checkbox -->
-        <CheckBox x:Name="OptionCheckBox"
-                  Grid.Row="3"
-                  Visibility="Collapsed"
-                  Foreground="{DynamicResource AppForeground}"
-                  Margin="0,8,0,0"/>
+            <!-- Body text -->
+            <TextBlock x:Name="BodyText"
+                       Grid.Row="2"
+                       TextWrapping="Wrap"
+                       LineHeight="20"
+                       Foreground="{DynamicResource AppForegroundLight}"/>
 
-        <!-- Buttons -->
-        <StackPanel Grid.Row="5" Orientation="Horizontal" HorizontalAlignment="Right">
-            <Button Content="{DynamicResource Btn.Cancel}" Width="80" IsCancel="True"
-                    Style="{StaticResource FlatButton}"
-                    Margin="0,0,8,0"/>
-            <Button Content="{DynamicResource Btn.Ok}" Width="80" IsDefault="True"
-                    Click="OkButton_Click"
-                    Style="{StaticResource RaisedButton}"/>
-        </StackPanel>
-    </Grid>
+            <!-- Optional checkbox -->
+            <CheckBox x:Name="OptionCheckBox"
+                      Grid.Row="3"
+                      Visibility="Collapsed"
+                      Foreground="{DynamicResource AppForeground}"
+                      Margin="0,8,0,0"/>
+
+            <!-- Buttons -->
+            <StackPanel Grid.Row="5" Orientation="Horizontal" HorizontalAlignment="Right">
+                <Button Content="{DynamicResource Btn.Cancel}" Width="80" IsCancel="True"
+                        Style="{StaticResource FlatButton}"
+                        Margin="0,0,8,0"/>
+                <Button Content="{DynamicResource Btn.Ok}" Width="80" IsDefault="True"
+                        Click="OkButton_Click"
+                        Style="{StaticResource RaisedButton}"/>
+            </StackPanel>
+        </Grid>
+    </Border>
 </Window>

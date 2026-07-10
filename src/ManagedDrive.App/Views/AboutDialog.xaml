@@ -1,25 +1,13 @@
-<Window x:Class="ManagedDrive.App.Views.AboutDialog"
+<views:DialogWindowBase x:Class="ManagedDrive.App.Views.AboutDialog"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Style="{StaticResource AppWindow}"
+        xmlns:views="clr-namespace:ManagedDrive.App.Views"
+        Style="{StaticResource DialogWindowStyle}"
+        Title="{DynamicResource Window.Title}"
         Width="420" SizeToContent="Height"
-        ResizeMode="NoResize"
-        WindowStyle="None"
-        AllowsTransparency="True"
-        Background="Transparent"
-        WindowStartupLocation="CenterOwner"
-        ShowInTaskbar="False"
-        MouseLeftButtonDown="Window_MouseLeftButtonDown">
+        WindowStartupLocation="CenterOwner">
 
-    <Border Background="{DynamicResource AppBackground}"
-            BorderBrush="{DynamicResource AppDivider}"
-            BorderThickness="1"
-            CornerRadius="10">
-        <Border.Effect>
-            <DropShadowEffect Color="#000000" Opacity="0.25" BlurRadius="18" ShadowDepth="2"/>
-        </Border.Effect>
-
-        <Grid Margin="28,24,28,24">
+        <Grid Margin="4,0,4,0">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="20"/>
@@ -31,7 +19,7 @@
             <!-- Icon + app name -->
             <StackPanel Grid.Row="0" Orientation="Horizontal" VerticalAlignment="Center">
                 <Image Source="pack://application:,,,/ManagedDrive.ico"
-                       Width="40" Height="40"
+                       Width="64" Height="64"
                        VerticalAlignment="Center"
                        RenderOptions.BitmapScalingMode="HighQuality"/>
                 <StackPanel Margin="14,0,0,0" VerticalAlignment="Center">
@@ -76,5 +64,4 @@
                     HorizontalAlignment="Right"
                     Style="{StaticResource RaisedButton}"/>
         </Grid>
-    </Border>
-</Window>
+</views:DialogWindowBase>

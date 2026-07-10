@@ -13,6 +13,7 @@ public partial class ConfirmDialog
     public ConfirmDialog(string title, string body)
     {
         InitializeComponent();
+        Title = title;
         TitleText.Text = title;
         BodyText.Text = body;
     }

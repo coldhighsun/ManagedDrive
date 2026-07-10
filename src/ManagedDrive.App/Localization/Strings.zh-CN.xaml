@@ -4,9 +4,7 @@
 
     <!-- MainWindow -->
     <sys:String x:Key="Window.Title">ManagedDrive – RAM 虚拟磁盘管理器</sys:String>
-    <sys:String x:Key="Menu.File">文件(_F)</sys:String>
-    <sys:String x:Key="Menu.Tools">工具(_T)</sys:String>
-    <sys:String x:Key="Menu.Exit">退出(_X)</sys:String>
+    <sys:String x:Key="Menu.Exit">退出</sys:String>
     <sys:String x:Key="Menu.About">关于</sys:String>
     <sys:String x:Key="Btn.NewDisk">新建磁盘...</sys:String>
     <sys:String x:Key="Btn.ImportDisk">导入磁盘...</sys:String>
@@ -30,7 +28,8 @@
     <sys:String x:Key="Tip.Settings">应用程序设置</sys:String>
     <sys:String x:Key="Tip.ResetTempDirs">将 Windows 临时目录重置为默认值</sys:String>
     <sys:String x:Key="Tip.Minimize">最小化</sys:String>
-    <sys:String x:Key="Tip.Close">最小化到系统托盘</sys:String>
+    <sys:String x:Key="Tip.HideToTray">最小化到系统托盘</sys:String>
+    <sys:String x:Key="Tip.CloseDialog">关闭</sys:String>
     <sys:String x:Key="Col.MountPoint">挂载点</sys:String>
     <sys:String x:Key="Col.Label">卷标</sys:String>
     <sys:String x:Key="Col.Capacity">容量</sys:String>
