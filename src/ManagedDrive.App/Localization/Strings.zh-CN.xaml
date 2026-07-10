@@ -156,6 +156,8 @@
     <sys:String x:Key="Tray.HighUsageBody">{0}（{1}）已使用 {2:F0}%。</sys:String>
     <sys:String x:Key="Tray.SaveFailedTitle">保存失败</sys:String>
     <sys:String x:Key="Tray.SaveFailedBody">{0}（{1}）：{2}</sys:String>
+    <sys:String x:Key="Tray.CapacityAdjustedTitle">容量已自动调整</sys:String>
+    <sys:String x:Key="Tray.CapacityAdjustedBody">{0}（{1}）：配置容量 {2} MB 小于已加载镜像的实际占用（{3} MB），已临时提升容量以容纳现有数据。</sys:String>
 
     <!-- Status bar -->
     <sys:String x:Key="Status.Ready">就绪。</sys:String>
@@ -165,6 +167,7 @@
     <sys:String x:Key="Status.MountFailed">挂载失败。</sys:String>
     <sys:String x:Key="Status.ImageSaved">已保存 {0} 的镜像。</sys:String>
     <sys:String x:Key="Status.SaveFailed">{0} 保存失败：{1}</sys:String>
+    <sys:String x:Key="Status.CapacityAdjusted">{0}：容量已从 {1} MB 自动提升到 {2} MB，以容纳已加载的镜像。</sys:String>
     <sys:String x:Key="Status.Unmounted">已卸载 {0}。</sys:String>
     <sys:String x:Key="Status.TempDirSet">临时文件夹已设置为 {0}。</sys:String>
 

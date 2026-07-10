@@ -63,6 +63,19 @@ public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
     public event PropertyChangedEventHandler? PropertyChanged;
 
     /// <summary>
+    /// Gets whether this disk's effective capacity was automatically raised at mount time
+    /// because the loaded image's actual content exceeded the configured capacity. This is a
+    /// one-time fact determined during mount, not an ongoing event.
+    /// </summary>
+    public bool CapacityAdjustedOnLoad => Disk.OriginalCapacityBytesOnLoad.HasValue;
+
+    /// <summary>
+    /// Gets the capacity (in bytes) that was configured before the automatic raise described
+    /// by <see cref="CapacityAdjustedOnLoad"/>, or <c>null</c> if no adjustment occurred.
+    /// </summary>
+    public ulong? OriginalCapacityBytesOnLoad => Disk.OriginalCapacityBytesOnLoad;
+
+    /// <summary>
     /// Gets the total capacity formatted as a human-readable string.
     /// </summary>
     public string CapacityFormatted => ByteFormatter.Format(Disk.TotalBytes);
