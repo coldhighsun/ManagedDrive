@@ -16,33 +16,32 @@ Create, mount and manage in-memory volumes that appear as normal drive letters i
 
 ### Features
 
-- Mount multiple RAM disks simultaneously, each with its own drive letter
-- Configurable capacity, volume label and read-only flag
-- Dynamic memory allocation — disk capacity is a ceiling, not a reservation; memory is consumed only as files are written and released when files are deleted
-- Edit a mounted disk — change label, capacity, auto-mount, and image path live without data loss; changing the drive letter or read-only flag remounts the disk
-- Optional persistence — save the disk contents to a `.mdr` image file and restore it on next mount; Save Image is always available and prompts for a file path if none is set; the disk card shows a "Saving..." overlay while the save is in progress. Whenever an image file is configured, a final save also runs right before the disk is unmounted or the app exits — regardless of whether auto-save is enabled — so manual edits since the last save are never lost; this final save is skipped automatically when nothing has changed since the last save
-- Import an existing `.mdr` image — right-click the disk list and choose **Import Disk...** to pick an existing image file and mount it directly; capacity and volume label are read from the image and shown read-only (not re-entered), and a warning is shown up front if the file is invalid or already in use by another mounted disk
-- Optional auto-save — periodically save the disk contents to its image file every 1–60 minutes (configurable when creating or editing a disk); a save also fires immediately when enabled, so nothing is lost between intervals. Periodic saves are skipped automatically when nothing has changed since the last save, avoiding unnecessary disk I/O on an idle disk. The image file must be selected through the file picker (no manual typing) and cannot be located on a RAM disk or reused across two disks. Checking Read Only, or clearing the selected image file, unchecks and disables auto-save (and Read Only also disables image compression) — a read-only disk's contents never change, so there is nothing to save or compress, an empty read-only disk would be meaningless, and auto-save has nothing to save to without an image file. The disk card shows the timestamp of the most recent content modification
-- Selectable image compression — choose a compression level (Off / Fast / Balanced / Max) for the saved `.mdr` image, trading save/load speed for file size; defaults to Fast. Selecting Balanced or Max shows an inline warning that save times may increase significantly
-- Save/snapshot failure notifications — if an image save or snapshot write fails (manual, periodic auto-save, or the final save on unmount/exit), a tray balloon notification is shown when the tray icon is present, and the error is written to the main window's status bar when it is present
-- Auto-mount saved profiles on application startup
-- Double-click a disk card to open it in Explorer; right-click for **Open in Explorer** and **Open Image File Directory** (opens the folder containing the disk's `.mdr` image file; grayed out when the disk has no image file configured)
-- System-tray icon for quick access; minimizes to tray on window close
-- Tray icon tooltip — hover to see all mounted disks with live usage percentages
-- High-usage warning — system tray notification when a disk exceeds a per-disk usage threshold, configurable when creating or editing that disk (default 90%, on by default; can be disabled entirely for a given disk); the warning auto-clears once usage drops 5 points below that threshold
-- Optional start-minimized mode — launch directly to tray without showing the main window; shows a one-time tray balloon notification on that startup so the app's presence isn't missed
-- Temp directory redirection — right-click a disk to set it as the Windows TEMP/TMP directory; reset to the system default from the toolbar, context menu, or tray menu; automatically resets to the system default when the disk is unmounted or remounted; on startup, if TEMP/TMP points to any RAM disk profile a warning is shown — if the disk is not set to auto-mount, TEMP is also automatically reset to the system default
-- Exit confirmation — exiting the app (toolbar button or tray menu) while any disk is mounted brings the main window to the foreground and asks for confirmation; if TEMP/TMP points to any mounted RAM disk, the confirmation also warns that TEMP will be reset, and confirming resets it before exiting; while any disk is mounted, a full-window saving overlay with a spinner is displayed during exit while any final image saves run in the background — system-initiated shutdown bypasses the confirmation prompt
-- NTFS-compatible volume identity — the RAM disk reports its filesystem type as NTFS, making it fully usable as a destination for tools that require an NTFS volume (e.g. WinGet, Windows Update staging, BITS downloads)
-- Format disk — right-click a disk and choose **Format** to delete all files and folders instantly (read-only disks are protected); the context menu is organized into three groups: navigation, configuration, and destructive operations
-- Clone disk — right-click a disk and choose **Clone Disk...** to copy its contents either onto another mounted, writable disk (overwriting that disk's existing contents, after a confirmation prompt) or out to a brand-new `.mdr` image file with a selectable compression level; an export path already used by another mounted disk (including the source disk's own image file) is rejected immediately after picking it
-- Snapshot / version history — optionally cap saved snapshots by count and/or total size when creating or editing a disk; a timestamped snapshot (`{name}.yyyyMMdd-HHmmss.mdr`) is written next to the main image on every save that has content changes, alongside the main image, with older snapshots pruned automatically once a limit is exceeded. Identical file content is stored only once across all snapshots of the same disk (content-addressed, deduplicated by SHA-256), so keeping many snapshots costs far less disk space than the sum of their logical sizes. Right-click a disk and choose **Restore Snapshot...** to pick a prior point in time from a list (with timestamp and size) and replace the disk's current contents with it, after a confirmation prompt; the restored contents are saved on the next save/auto-save rather than immediately. Deleting a disk's image file also removes all of its snapshots and any now-unused deduplicated content
-- System tray menu — quick access to **Reset Temp Directory** (executes silently with a notification bubble result) and **Settings** in addition to Show, New Disk, and Exit
-- Main window opens centered on the primary screen and is brought to the foreground on startup
-- Bilingual UI — English and Simplified Chinese, auto-detected from system locale with manual override in Settings
-- Light and dark themes — follows the Windows app theme by default, with a manual override (System Default / Light / Dark) in Settings; switches instantly without restarting
-- At-a-glance disk cards — the drive-letter badge shows small corner icons for read-only, current-TEMP-directory, and has-backing-image status (hover the image icon to see the image path); the usage bar displays its percentage and turns to a warning color (along with the free-space text) once usage crosses that disk's configured high-usage threshold (if enabled); read-only disks collapse the usage bar into a single line showing the backing image path instead of capacity figures that never change
-- About dialog — accessible from the overflow menu; shows the app version and a link to the GitHub repository
+**Core**
+- Mount multiple RAM disks simultaneously, each with its own drive letter, capacity, volume label and read-only flag
+- Dynamic memory allocation — capacity is a ceiling, not a reservation; memory is used only by actual file data
+- Edit a mounted disk live (label, capacity, auto-mount, image path) without losing data; changing the drive letter or read-only flag remounts the disk
+- NTFS-compatible volume identity, so RAM disks work as targets for tools that require NTFS (e.g. WinGet, Windows Update staging, BITS)
+- Auto-mount saved profiles on startup
+
+**Persistence, snapshots & cloning**
+- Save disk contents to a `.mdr` image file and restore it on next mount, or import an existing image directly (**Import Disk...**)
+- Optional auto-save on a 1–60 minute interval, plus an automatic final save before unmount/exit; both are skipped when nothing has changed, and failures raise a tray/status-bar notification
+- Selectable image compression (Off / Fast / Balanced / Max, default Fast)
+- Snapshot / version history — cap retained snapshots by count and/or size; deduplicated by content hash so many snapshots cost little extra space; restore any snapshot via **Restore Snapshot...**
+- Clone a disk onto another mounted disk or export it to a new `.mdr` file (**Clone Disk...**)
+- Format a disk to instantly delete all its contents (**Format**; read-only disks are protected)
+
+**Convenience & safety**
+- System tray icon with hover tooltip (live usage per disk), quick-access menu, and optional start-minimized mode
+- High-usage warning per disk (configurable threshold, default 90%, with hysteresis)
+- Temp directory redirection — point Windows TEMP/TMP at a disk's `Temp` folder, with automatic reset on unmount/remount and startup warnings if TEMP is left pointing at a RAM disk
+- Exit confirmation with a saving overlay while pending image saves complete; TEMP is reset first if it points at a mounted disk
+- Double-click a disk to open it in Explorer; right-click for Explorer/image-folder shortcuts
+
+**UI**
+- Bilingual (English / Simplified Chinese) and light/dark themes, both auto-detected with manual override in Settings, switching instantly without restart
+- At-a-glance disk cards with status badges (read-only, current-TEMP, backing image) and a usage bar that turns warning-colored past the high-usage threshold
+- About dialog with app version and GitHub link
 
 ### Installation
 
@@ -256,37 +255,41 @@ MIT
 
 ### 功能特性
 
-- 同时挂载多个 RAM 磁盘，每个磁盘拥有独立的驱动器号
-- 可配置容量、卷标和只读标志
-- 动态内存分配——磁盘容量为上限而非预分配；内存随文件写入而占用，随文件删除而释放
-- 编辑已挂载磁盘——修改卷标、容量、自动挂载和镜像路径无需重挂即可实时生效；更改盘符或只读标志时自动重挂
-- 可选持久化——将磁盘内容保存为 `.mdr` 镜像文件，下次挂载时自动还原；保存镜像功能始终可用，未设置镜像路径时自动弹出选择对话框；保存期间磁盘卡片会显示"正在保存..."提示。只要磁盘配置了镜像文件，卸载磁盘或退出应用前都会执行一次收尾保存——无论是否开启了自动保存，从而不会丢失自上次保存以来的修改；若自上次保存后内容未发生变化，该收尾保存会自动跳过
-- 导入已有 `.mdr` 镜像——在磁盘列表右键选择**导入磁盘...**，选取已有镜像文件后直接挂载；容量和卷标从镜像中读取并只读展示（无需重新填写），若所选文件无效或已被其他已挂载磁盘占用，会提前弹出提示
-- 可选自动保存——每 1-60 分钟（创建或编辑磁盘时可配置）自动将磁盘内容保存到镜像文件；开启自动保存时会立即触发一次保存，避免在两次定时保存之间丢失数据。若自上次保存后内容未发生变化，定时保存会自动跳过，避免不必要的磁盘 IO。镜像文件只能通过文件选择对话框设置（不可手动输入），且不能位于内存盘上，也不能与其他磁盘共用同一个镜像文件。勾选只读，或清空已选择的镜像文件，都会取消勾选并禁用自动保存（勾选只读还会同时禁用镜像压缩）——只读磁盘的内容不会变化，因此无需保存或压缩，一个没有内容的只读空盘也没有意义，而没有镜像文件时自动保存也无处可保存。磁盘卡片会显示磁盘内容最近一次被修改的时间
-- 可选镜像压缩——为保存的 `.mdr` 镜像选择压缩级别（不压缩／快速／均衡／最高），在保存/加载速度与文件大小之间取舍；默认快速。选择均衡或最高时会显示内联警告，提示保存时间可能显著增加
-- 保存/快照失败通知——无论是手动保存、定时自动保存，还是卸载/退出时的收尾保存，只要镜像保存或快照写入失败，存在托盘图标时会弹出气泡通知，存在主窗口时会在状态栏输出错误信息
+**核心功能**
+- 同时挂载多个 RAM 磁盘，每个磁盘拥有独立的驱动器号、容量、卷标和只读标志
+- 动态内存分配——磁盘容量为上限而非预分配，内存只随实际文件数据占用
+- 实时编辑已挂载磁盘（卷标、容量、自动挂载、镜像路径）无需重挂即可生效；更改盘符或只读标志时自动重挂
+- NTFS 兼容卷标识，使内存盘可作为需要 NTFS 卷的工具（如 WinGet、Windows Update 暂存、BITS 下载）的目标路径
 - 应用启动时自动挂载已保存的磁盘配置
-- 双击磁盘卡片可在资源管理器中打开对应盘符；右键菜单提供**在资源管理器中打开**和**打开镜像文件目录**（打开磁盘 `.mdr` 镜像文件所在的文件夹；若磁盘未配置镜像文件则该菜单项置灰不可点）
-- 系统托盘图标，关闭窗口时最小化到托盘
-- 托盘图标悬浮提示——鼠标悬停时显示所有已挂载磁盘及其实时使用率
-- 高用量警告——磁盘使用率超过该磁盘自身配置的阈值时通过系统托盘发出通知，阈值在创建或编辑磁盘时设置（默认 90%，默认开启，也可针对单个磁盘完全关闭）；使用率降至该阈值以下 5 个百分点时自动解除
-- 可选最小化启动——直接启动到托盘，不显示主窗口；启动时会弹出一次性托盘气泡通知，避免用户误以为程序未启动成功
-- 临时目录重定向——右键单击磁盘可将其设为 Windows TEMP/TMP 目录；通过工具栏、右键菜单或托盘菜单恢复系统默认值；卸载或重挂时自动恢复为系统默认临时目录；启动时若 TEMP/TMP 指向任一内存盘配置，均会显示警告——若该磁盘未设置自动挂载，还会自动将 TEMP 恢复为系统默认值
-- 退出确认——只要还有磁盘处于挂载状态，无论是通过工具栏按钮还是托盘菜单退出，程序都会将主窗口带到前台并要求用户确认；若 TEMP/TMP 恰好指向某个已挂载的内存盘，确认提示中还会额外警告将重置 TEMP，用户确认后先重置再退出；只要还有磁盘处于挂载状态，退出时都会在主窗口显示全屏保存遮罩与旋转动画，待后台的镜像保存完成后再关闭——系统发送关闭信号时不触发确认流程
-- NTFS 兼容卷标识——内存盘以 NTFS 文件系统类型上报，可作为需要 NTFS 卷的工具（如 WinGet、Windows Update 暂存、BITS 下载）的目标路径
-- 磁盘格式化——右键单击磁盘并选择**格式化**可立即删除所有文件和文件夹（只读磁盘受保护）；右键菜单按导航、配置、破坏性操作三个分组排列
-- 克隆磁盘——右键单击磁盘并选择**克隆磁盘...**，可将其内容复制到另一个已挂载的可写磁盘（会覆盖该磁盘现有内容，操作前需二次确认），或导出为一个全新的 `.mdr` 镜像文件（可选择压缩级别）；若所选导出路径已被其他已挂载磁盘占用（包括源磁盘自身正在使用的镜像文件），选择后会立即提示并拒绝
-- 快照／版本历史——创建或编辑磁盘时，可选设置保留的快照数量上限和/或总大小上限；只要一次保存产生了内容变化，就会在主镜像旁额外写入一个带时间戳的快照（`{名称}.yyyyMMdd-HHmmss.mdr`），超出上限后会自动清理最旧的快照。同一磁盘的多个快照之间，相同的文件内容只会存储一份（基于 SHA-256 内容寻址去重），因此保留大量快照所占用的磁盘空间远小于各快照逻辑大小之和。右键单击磁盘并选择**还原快照...**，即可从列表（含时间戳与大小）中选取某个历史时间点，用其内容替换磁盘当前内容（操作前需二次确认）；还原后的内容会在下一次保存/自动保存时才写入镜像文件，而非立即写入。删除磁盘的镜像文件时，其所有快照及不再被引用的去重内容也会一并删除
-- 系统托盘菜单——在显示、新建磁盘、退出之外，新增**重置临时文件夹**（静默执行，结果通过气泡通知反馈）和**设置**快捷入口
-- 主窗口启动时居中显示于主屏幕并置于前台
-- 双语界面——中文与英文，根据系统语言自动切换，也可在设置中手动更改
-- 浅色/深色主题——默认跟随 Windows 系统主题，也可在设置中手动切换（跟随系统／浅色／深色），切换即时生效，无需重启
-- 一目了然的磁盘卡片——驱动器字母徽章上会叠加只读、当前临时目录、是否绑定镜像文件等状态角标（鼠标悬停镜像图标可查看镜像路径）；用量进度条旁显示百分比，使用率超过该磁盘配置的高用量阈值（若已启用）时进度条及可用空间文字会变为警示色；只读磁盘的用量区域会替换为单行文字，显示其绑定的镜像文件路径，而非无意义的容量数字
-- 关于对话框——可从溢出菜单打开，显示应用版本及 GitHub 仓库链接
+
+**持久化、快照与克隆**
+- 将磁盘内容保存为 `.mdr` 镜像文件，下次挂载时自动还原；也可直接导入已有镜像（**导入磁盘...**）
+- 可选自动保存（1-60 分钟间隔），并在卸载/退出前自动执行一次收尾保存；内容未变化时自动跳过，保存失败会通过托盘/状态栏提示
+- 可选镜像压缩级别（不压缩／快速／均衡／最高，默认快速）
+- 快照／版本历史——按数量和/或大小上限保留快照，相同内容跨快照去重存储，占用空间远小于逻辑大小之和；可随时通过**还原快照...**还原到某个历史版本
+- 克隆磁盘到另一已挂载磁盘，或导出为新的 `.mdr` 文件（**克隆磁盘...**）
+- 格式化磁盘可立即清空所有内容（**格式化**；只读磁盘受保护）
+
+**便利与安全**
+- 系统托盘图标，悬浮显示所有磁盘实时使用率，提供快捷菜单及可选的最小化启动模式
+- 每磁盘可配置的高用量警告（默认阈值 90%，带回滞防抖）
+- 临时目录重定向——将 Windows TEMP/TMP 指向某磁盘的 `Temp` 文件夹，卸载/重挂时自动恢复默认值，TEMP 遗留指向内存盘时会在启动时提示
+- 退出确认，并在待处理的镜像保存完成前显示保存遮罩；若 TEMP 指向已挂载磁盘会先重置
+- 双击磁盘在资源管理器中打开；右键提供资源管理器/镜像文件夹等快捷方式
+
+**界面**
+- 双语界面（中文/英文）与浅色/深色主题，均可自动检测或在设置中手动切换，即时生效无需重启
+- 一目了然的磁盘卡片，带状态角标（只读、当前临时目录、是否绑定镜像）及使用率超阈值时变色的进度条
+- 关于对话框，显示应用版本及 GitHub 仓库链接
 
 ### 安装
 
-从 [Releases](https://github.com/coldhighsun/ManagedDrive/releases) 页面下载最新的**绿色版 ZIP**（`ManagedDrive-vX.Y.Z-win-x64-portable.zip`）。解压到任意目录后直接运行 `ManagedDrive.exe` 即可。`ManagedDrive.exe` 是单文件可执行程序——ZIP 中还附带一个体积很小的 `winfsp-msil.dll`（WinFsp 托管互操作程序集，无法打包进单文件中），需与 exe 保持在同一目录下。唯一会写入注册表的操作是可选的"开机自启"设置，除此之外不会写入注册表。仍需提前单独安装 WinFsp（见下方环境要求）。
+[Releases](https://github.com/coldhighsun/ManagedDrive/releases) 页面为每个版本发布了两个 ZIP，任选其一：
+
+- `ManagedDrive-vX.Y.Z-win-x64-portable.zip` —— 体积较小；需要单独安装 [.NET 10 桌面运行时](https://dotnet.microsoft.com/download/dotnet/10.0)。
+- `ManagedDrive-vX.Y.Z-win-x64-selfcontained.zip` —— 体积较大（内置完整运行时）；无需安装运行时。
+
+解压到任意目录后直接运行 `ManagedDrive.exe` 即可。`ManagedDrive.exe` 是单文件可执行程序——ZIP 中还附带一个体积很小的 `winfsp-msil.dll`（WinFsp 托管互操作程序集，无法打包进单文件中），需与 exe 保持在同一目录下。唯一会写入注册表的操作是可选的"开机自启"设置，除此之外不会写入注册表。两种方式都仍需提前单独安装 WinFsp（见下方环境要求）。
 
 ### 环境要求
 
@@ -294,6 +297,7 @@ MIT
 |---|---|
 | **Windows 10 / 11（64 位）** | 暂未测试 ARM64 |
 | **[WinFsp 2.2.26183（2026 Beta2）](https://github.com/winfsp/winfsp/releases/tag/v2.2B2)** | 必须安装此版本才能运行 ManagedDrive。请直接下载安装包：[winfsp-2.2.26183.msi](https://github.com/winfsp/winfsp/releases/download/v2.2B2/winfsp-2.2.26183.msi)——不要使用 `winget install WinFsp.WinFsp` 安装，因为该 winget 包更新不及时，落后于最新发布版本。托管程序集 `winfsp-msil.dll` 将安装至 `C:\Program Files (x86)\WinFsp\bin\`，项目会自动引用。 |
+| **[.NET 10 桌面运行时](https://dotnet.microsoft.com/download/dotnet/10.0)** | 仅"绿色版"（框架依赖型）ZIP 需要。使用"自包含版" ZIP 时无需安装。 |
 | **.NET 10 SDK** | 编译所需。 |
 
 ### 快速开始
