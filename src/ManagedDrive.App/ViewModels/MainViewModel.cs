@@ -209,7 +209,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     public string StatusText
     {
         get;
-        private set
+        internal set
         {
             field = value;
             OnPropertyChanged(nameof(StatusText));
@@ -765,7 +765,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         vm.IsSaving = true;
         try
         {
-            await Task.Run(() => vm.Disk.SaveToImage());
+            await Task.Run(() => vm.Disk.SaveToImageWithSnapshot());
             StatusText = Loc.Format("Status.ImageSaved", vm.MountPoint);
         }
         catch (Exception ex)

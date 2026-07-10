@@ -316,10 +316,7 @@ public partial class App
 
         e.Cancel = true;
         _mainWindow!.Hide();
-        if (_trayIcon != null)
-        {
-            _trayIcon.Visible = true;
-        }
+        _trayIcon?.Visible = true;
     }
 
     private void OnDiskHighUsageWarning(object? sender, EventArgs e)
@@ -332,6 +329,26 @@ public partial class App
         var title = Loc.Get("Tray.HighUsageTitle");
         var body = Loc.Format("Tray.HighUsageBody", vm.VolumeLabel, vm.MountPoint, vm.UsedPercent);
         _trayIcon.ShowBalloonTip(5000, title, body, System.Windows.Forms.ToolTipIcon.Warning);
+    }
+
+    private void OnDiskSaveFailed(object? sender, Exception ex)
+    {
+        if (sender is not DiskViewModel vm)
+        {
+            return;
+        }
+
+        if (_trayIcon != null)
+        {
+            var title = Loc.Get("Tray.SaveFailedTitle");
+            var body = Loc.Format("Tray.SaveFailedBody", vm.VolumeLabel, vm.MountPoint, ex.Message);
+            _trayIcon.ShowBalloonTip(5000, title, body, System.Windows.Forms.ToolTipIcon.Error);
+        }
+
+        if (_mainViewModel != null)
+        {
+            _mainViewModel.StatusText = Loc.Format("Status.SaveFailed", vm.MountPoint, ex.Message);
+        }
     }
 
     /// <summary>
@@ -480,6 +497,7 @@ public partial class App
                 foreach (DiskViewModel vm in e.NewItems)
                 {
                     vm.HighUsageWarning += OnDiskHighUsageWarning;
+                    vm.SaveFailed += OnDiskSaveFailed;
                 }
             }
 
@@ -488,6 +506,7 @@ public partial class App
                 foreach (DiskViewModel vm in e.OldItems)
                 {
                     vm.HighUsageWarning -= OnDiskHighUsageWarning;
+                    vm.SaveFailed -= OnDiskSaveFailed;
                 }
             }
         };
@@ -508,10 +527,7 @@ public partial class App
     {
         _mainWindow?.Show();
         _mainWindow?.Activate();
-        if (_trayIcon != null)
-        {
-            _trayIcon.Visible = false;
-        }
+        _trayIcon?.Visible = false;
     }
 
     private void ShowMainWindowAndCreate()

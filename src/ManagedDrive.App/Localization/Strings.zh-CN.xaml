@@ -70,6 +70,7 @@
     <sys:String x:Key="CreateDisk.CompressionWarning">均衡/最高压缩可能会显著增加保存时间，请谨慎选择。</sys:String>
     <sys:String x:Key="CreateDisk.AutoSave">自动保存镜像，间隔（分钟）：</sys:String>
     <sys:String x:Key="CreateDisk.AutoSaveInterval">间隔（分钟）</sys:String>
+    <sys:String x:Key="CreateDisk.MinutesValue">{0} 分钟</sys:String>
     <sys:String x:Key="Tip.AutoSave">挂载期间按间隔自动将磁盘内容保存到镜像文件</sys:String>
     <sys:String x:Key="Tip.AutoSaveInterval">自动保存的时间间隔（分钟）</sys:String>
     <sys:String x:Key="CreateDisk.SnapshotMaxCount">最多保留的快照数量：</sys:String>
@@ -97,7 +98,7 @@
     <sys:String x:Key="Val.BadImagePath">镜像文件路径不合法，或所在文件夹不存在。</sys:String>
     <sys:String x:Key="Val.ReadOnlyRequiresImage">只读内存盘必须选择一个已存在的镜像文件。</sys:String>
     <sys:String x:Key="Val.ReadOnlyImageNotFound">所选镜像文件不存在。</sys:String>
-    <sys:String x:Key="Val.BadSnapshotCount">请输入 1 到 999 之间的快照数量。</sys:String>
+    <sys:String x:Key="Val.BadSnapshotCount">请输入 1 到 20 之间的快照数量。</sys:String>
     <sys:String x:Key="Val.BadSnapshotSize">请输入有效的最大快照大小。</sys:String>
     <sys:String x:Key="Val.ImagePathIsSnapshot">该路径看起来像快照文件名，请选择另一个镜像路径。</sys:String>
 
@@ -153,6 +154,8 @@
     <sys:String x:Key="Tray.NoDisksMounted">暂无已挂载的磁盘</sys:String>
     <sys:String x:Key="Tray.HighUsageTitle">RAM 磁盘空间不足</sys:String>
     <sys:String x:Key="Tray.HighUsageBody">{0}（{1}）已使用 {2:F0}%。</sys:String>
+    <sys:String x:Key="Tray.SaveFailedTitle">保存失败</sys:String>
+    <sys:String x:Key="Tray.SaveFailedBody">{0}（{1}）：{2}</sys:String>
 
     <!-- Status bar -->
     <sys:String x:Key="Status.Ready">就绪。</sys:String>
@@ -161,6 +164,7 @@
     <sys:String x:Key="Status.AutoMountFailed">自动挂载"{0}"失败：{1}</sys:String>
     <sys:String x:Key="Status.MountFailed">挂载失败。</sys:String>
     <sys:String x:Key="Status.ImageSaved">已保存 {0} 的镜像。</sys:String>
+    <sys:String x:Key="Status.SaveFailed">{0} 保存失败：{1}</sys:String>
     <sys:String x:Key="Status.Unmounted">已卸载 {0}。</sys:String>
     <sys:String x:Key="Status.TempDirSet">临时文件夹已设置为 {0}。</sys:String>
 

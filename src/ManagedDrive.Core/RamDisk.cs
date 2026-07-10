@@ -27,6 +27,16 @@ public sealed class RamDisk : IDisposable
     }
 
     /// <summary>
+    /// Occurs whenever an image save or snapshot write fails, whether triggered manually,
+    /// by the periodic auto-save timer, or by the final save on unmount/dispose. The
+    /// exception is also rethrown to the caller for saves that are awaited synchronously
+    /// (e.g. a manual save); this event exists so background failures that would otherwise
+    /// be swallowed (auto-save ticks, the final save in <see cref="Dispose"/>) can still be
+    /// surfaced to the UI.
+    /// </summary>
+    public event EventHandler<Exception>? SaveFailed;
+
+    /// <summary>
     /// Gets the number of bytes currently available on this RAM disk.
     /// </summary>
     public ulong FreeBytes => TotalBytes > UsedBytes ? TotalBytes - UsedBytes : 0;
@@ -140,8 +150,8 @@ public sealed class RamDisk : IDisposable
 
     /// <summary>
     /// Unmounts the disk and releases all resources. After disposal the disk is no longer
-    /// accessible from the Windows shell. If auto-save is enabled, a final save is performed
-    /// before unmounting, unless nothing has changed since the last save.
+    /// accessible from the Windows shell. If an image path is configured, a final save is
+    /// performed before unmounting, unless nothing has changed since the last save.
     /// </summary>
     public void Dispose()
     {
@@ -150,7 +160,7 @@ public sealed class RamDisk : IDisposable
             _autoSaveTimer?.Dispose();
             _autoSaveTimer = null;
 
-            if (Options.AutoSaveIntervalMinutes is > 0)
+            if (Options.PersistImagePath != null)
             {
                 // Wait for any in-flight periodic save to finish, then perform the final save,
                 // so the two never write to the image file concurrently.
@@ -217,12 +227,20 @@ public sealed class RamDisk : IDisposable
             return;
         }
 
-        DiskImageSerializer.Save(
-            _fs.NodeMap,
-            Options.CapacityBytes,
-            Options.VolumeLabel,
-            Options.PersistImagePath,
-            Options.CompressionLevel);
+        try
+        {
+            DiskImageSerializer.Save(
+                _fs.NodeMap,
+                Options.CapacityBytes,
+                Options.VolumeLabel,
+                Options.PersistImagePath,
+                Options.CompressionLevel);
+        }
+        catch (Exception ex)
+        {
+            SaveFailed?.Invoke(this, ex);
+            throw;
+        }
 
         LastSaveTime = DateTimeOffset.UtcNow;
         _fs.ClearDirty();
@@ -240,6 +258,20 @@ public sealed class RamDisk : IDisposable
         lock (_autoSaveLock)
         {
             SaveToImage();
+        }
+    }
+
+    /// <summary>
+    /// Saves the disk image and, if snapshot retention is configured, writes a snapshot
+    /// afterward. Coordinates with the periodic auto-save timer via <see cref="_autoSaveLock"/>
+    /// so a manual save and a periodic auto-save never write/prune snapshots concurrently.
+    /// </summary>
+    public void SaveToImageWithSnapshot()
+    {
+        lock (_autoSaveLock)
+        {
+            SaveToImage();
+            TryWriteSnapshot();
         }
     }
 
@@ -457,14 +489,22 @@ public sealed class RamDisk : IDisposable
             return;
         }
 
-        SnapshotManager.WriteSnapshot(
-            _fs.NodeMap,
-            Options.CapacityBytes,
-            Options.VolumeLabel,
-            path,
-            DateTimeOffset.UtcNow,
-            Options.CompressionLevel);
+        try
+        {
+            SnapshotManager.WriteSnapshot(
+                _fs.NodeMap,
+                Options.CapacityBytes,
+                Options.VolumeLabel,
+                path,
+                DateTimeOffset.UtcNow,
+                Options.CompressionLevel);
 
-        SnapshotManager.Prune(path, Options.MaxSnapshotCount, Options.MaxSnapshotSizeBytes);
+            SnapshotManager.Prune(path, Options.MaxSnapshotCount, Options.MaxSnapshotSizeBytes);
+        }
+        catch (Exception ex)
+        {
+            SaveFailed?.Invoke(this, ex);
+            throw;
+        }
     }
 }

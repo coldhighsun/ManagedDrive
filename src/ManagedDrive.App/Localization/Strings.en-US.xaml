@@ -70,6 +70,7 @@
     <sys:String x:Key="CreateDisk.CompressionWarning">Balanced/Max compression may significantly increase save times. Choose carefully.</sys:String>
     <sys:String x:Key="CreateDisk.AutoSave">Auto-save the image, interval (minutes):</sys:String>
     <sys:String x:Key="CreateDisk.AutoSaveInterval">Interval (min)</sys:String>
+    <sys:String x:Key="CreateDisk.MinutesValue">{0} min</sys:String>
     <sys:String x:Key="Tip.AutoSave">Periodically save the disk contents to the image file while mounted</sys:String>
     <sys:String x:Key="Tip.AutoSaveInterval">How often to auto-save, in minutes</sys:String>
     <sys:String x:Key="CreateDisk.SnapshotMaxCount">Max number of snapshots to keep:</sys:String>
@@ -97,7 +98,7 @@
     <sys:String x:Key="Val.BadImagePath">The image file path is invalid or its folder does not exist.</sys:String>
     <sys:String x:Key="Val.ReadOnlyRequiresImage">Read-only disks must use an existing image file.</sys:String>
     <sys:String x:Key="Val.ReadOnlyImageNotFound">The selected image file does not exist.</sys:String>
-    <sys:String x:Key="Val.BadSnapshotCount">Enter a snapshot count between 1 and 999.</sys:String>
+    <sys:String x:Key="Val.BadSnapshotCount">Enter a snapshot count between 1 and 20.</sys:String>
     <sys:String x:Key="Val.BadSnapshotSize">Enter a valid maximum snapshot size.</sys:String>
     <sys:String x:Key="Val.ImagePathIsSnapshot">This path looks like a snapshot file name; choose a different image path.</sys:String>
 
@@ -153,6 +154,8 @@
     <sys:String x:Key="Tray.NoDisksMounted">No disks mounted</sys:String>
     <sys:String x:Key="Tray.HighUsageTitle">RAM Disk Nearly Full</sys:String>
     <sys:String x:Key="Tray.HighUsageBody">{0} ({1}) is {2:F0}% full.</sys:String>
+    <sys:String x:Key="Tray.SaveFailedTitle">Save Failed</sys:String>
+    <sys:String x:Key="Tray.SaveFailedBody">{0} ({1}): {2}</sys:String>
 
     <!-- Status bar -->
     <sys:String x:Key="Status.Ready">Ready.</sys:String>
@@ -161,6 +164,7 @@
     <sys:String x:Key="Status.AutoMountFailed">Auto-mount '{0}' failed: {1}</sys:String>
     <sys:String x:Key="Status.MountFailed">Mount failed.</sys:String>
     <sys:String x:Key="Status.ImageSaved">Image saved for {0}.</sys:String>
+    <sys:String x:Key="Status.SaveFailed">Save failed for {0}: {1}</sys:String>
     <sys:String x:Key="Status.Unmounted">Unmounted {0}.</sys:String>
     <sys:String x:Key="Status.TempDirSet">Temp directory set to {0}.</sys:String>
 

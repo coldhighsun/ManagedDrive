@@ -43,12 +43,21 @@ public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
         };
         _refreshTimer.Tick += OnRefreshTick;
         _refreshTimer.Start();
+
+        Disk.SaveFailed += OnDiskSaveFailed;
     }
 
     /// <summary>
     /// Occurs when disk usage reaches or exceeds the configured high-usage warning threshold.
     /// </summary>
     public event EventHandler? HighUsageWarning;
+
+    /// <summary>
+    /// Occurs when an image save or snapshot write fails for this disk. Always raised on the
+    /// UI dispatcher thread, since the underlying <see cref="RamDisk.SaveFailed"/> event may
+    /// originate from a background auto-save timer thread.
+    /// </summary>
+    public event EventHandler<Exception>? SaveFailed;
 
     /// <inheritdoc />
     public event PropertyChangedEventHandler? PropertyChanged;
@@ -221,6 +230,7 @@ public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
     {
         _refreshTimer.Stop();
         _refreshTimer.Tick -= OnRefreshTick;
+        Disk.SaveFailed -= OnDiskSaveFailed;
     }
 
     /// <summary>
@@ -289,6 +299,9 @@ public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
         var diskTemp = Path.Combine(MountPoint, "Temp");
         return string.Equals(userTemp, diskTemp, StringComparison.OrdinalIgnoreCase);
     }
+
+    private void OnDiskSaveFailed(object? sender, Exception ex) =>
+        Application.Current?.Dispatcher.Invoke(() => SaveFailed?.Invoke(this, ex));
 
     private void OnPropertyChanged(string propertyName) =>
         PropertyChanged?.Invoke(this, new(propertyName));
