@@ -316,10 +316,7 @@ public partial class App
 
         e.Cancel = true;
         _mainWindow!.Hide();
-        if (_trayIcon != null)
-        {
-            _trayIcon.Visible = true;
-        }
+        _trayIcon?.Visible = true;
     }
 
     private void OnDiskHighUsageWarning(object? sender, EventArgs e)
@@ -508,10 +505,7 @@ public partial class App
     {
         _mainWindow?.Show();
         _mainWindow?.Activate();
-        if (_trayIcon != null)
-        {
-            _trayIcon.Visible = false;
-        }
+        _trayIcon?.Visible = false;
     }
 
     private void ShowMainWindowAndCreate()
