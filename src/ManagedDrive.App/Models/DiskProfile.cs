@@ -44,6 +44,15 @@ public sealed record DiskProfile
     }
 
     /// <summary>
+    /// Gets or sets the optional path to an archive file whose contents are extracted into this
+    /// disk on every mount. Mutually exclusive with <see cref="PersistImagePath"/>.
+    /// </summary>
+    public string? SourceArchivePath
+    {
+        get; init;
+    }
+
+    /// <summary>
     /// Gets or sets the NTFS volume label.
     /// </summary>
     public string VolumeLabel { get; init; } = "RAM Disk";

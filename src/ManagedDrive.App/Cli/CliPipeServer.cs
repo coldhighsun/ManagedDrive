@@ -15,9 +15,17 @@ public sealed class CliPipeServer(MainViewModel mainViewModel) : IDisposable
     private readonly CancellationTokenSource _cts = new();
     private readonly ICliDiskController _diskController = new MainViewModelCliDiskController(mainViewModel);
     private Task? _acceptLoop;
+    private bool _disposed;
 
     public void Dispose()
     {
+        if (_disposed)
+        {
+            return;
+        }
+
+        _disposed = true;
+
         _cts.Cancel();
 
         try
@@ -63,7 +71,7 @@ public sealed class CliPipeServer(MainViewModel mainViewModel) : IDisposable
 
             try
             {
-                await HandleConnectionAsync(pipe);
+                await HandleConnectionAsync(pipe, ct);
             }
             catch
             {
@@ -73,13 +81,13 @@ public sealed class CliPipeServer(MainViewModel mainViewModel) : IDisposable
         }
     }
 
-    private async Task HandleConnectionAsync(NamedPipeServerStream pipe)
+    private async Task HandleConnectionAsync(NamedPipeServerStream pipe, CancellationToken ct)
     {
         using var reader = new StreamReader(pipe, leaveOpen: true);
         await using var writer = new StreamWriter(pipe, leaveOpen: true);
         writer.AutoFlush = true;
 
-        var requestJson = await reader.ReadLineAsync();
+        var requestJson = await reader.ReadLineAsync(ct);
         if (requestJson == null)
         {
             return;

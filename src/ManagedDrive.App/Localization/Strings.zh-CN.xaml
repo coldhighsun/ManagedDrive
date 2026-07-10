@@ -8,6 +8,7 @@
     <sys:String x:Key="Menu.About">关于</sys:String>
     <sys:String x:Key="Btn.NewDisk">新建磁盘...</sys:String>
     <sys:String x:Key="Btn.ImportDisk">导入磁盘...</sys:String>
+    <sys:String x:Key="Btn.ImportArchive">导入压缩包...</sys:String>
     <sys:String x:Key="Btn.OpenInExplorer">在资源管理器中打开</sys:String>
     <sys:String x:Key="Btn.OpenImageDirectory">打开镜像文件目录</sys:String>
     <sys:String x:Key="Btn.EditDisk">编辑磁盘…</sys:String>
@@ -22,6 +23,7 @@
     <sys:String x:Key="Btn.Settings">设置</sys:String>
     <sys:String x:Key="Tip.NewDisk">创建并挂载新的 RAM 磁盘</sys:String>
     <sys:String x:Key="Tip.ImportDisk">挂载一个已有的 .mdr 镜像文件</sys:String>
+    <sys:String x:Key="Tip.ImportArchive">将压缩包（zip、7z、rar、tar 等）的内容挂载为一个只读磁盘</sys:String>
     <sys:String x:Key="Tip.Unmount">卸载所选磁盘</sys:String>
     <sys:String x:Key="Tip.SaveImage">将所选磁盘内容保存到镜像文件</sys:String>
     <sys:String x:Key="Tip.Refresh">刷新使用情况统计</sys:String>
@@ -41,7 +43,10 @@
     <sys:String x:Key="CreateDisk.Title">创建 RAM 磁盘</sys:String>
     <sys:String x:Key="CreateDisk.TitleEdit">编辑 RAM 磁盘</sys:String>
     <sys:String x:Key="CreateDisk.TitleImport">导入磁盘</sys:String>
+    <sys:String x:Key="CreateDisk.TitleImportArchive">导入压缩包</sys:String>
     <sys:String x:Key="CreateDisk.ImportNote">容量和卷标已从镜像文件中读取。</sys:String>
+    <sys:String x:Key="CreateDisk.ArchiveImportNote">容量和卷标已从压缩包中读取。该磁盘将为只读。</sys:String>
+    <sys:String x:Key="CreateDisk.ArchiveFile">压缩包文件</sys:String>
     <sys:String x:Key="CreateDisk.Section.Basic">基本信息</sys:String>
     <sys:String x:Key="CreateDisk.Section.Access">访问权限</sys:String>
     <sys:String x:Key="CreateDisk.Section.Persistence">镜像持久化</sys:String>
@@ -93,6 +98,8 @@
     <sys:String x:Key="Val.ImagePathOnRamDisk">镜像文件不能位于内存盘上。</sys:String>
     <sys:String x:Key="Val.ImagePathInUse">该镜像文件已被其他内存盘使用。</sys:String>
     <sys:String x:Key="Val.ImportInvalidImage">所选文件不是有效的 ManagedDrive 镜像文件。</sys:String>
+    <sys:String x:Key="Val.ArchivePathInUse">该压缩包已被其他内存盘挂载。</sys:String>
+    <sys:String x:Key="Val.ImportInvalidArchive">所选文件不是受支持或有效的压缩包。</sys:String>
     <sys:String x:Key="Val.BadAutoSaveInterval">请输入有效的自动保存间隔（1-60 分钟）。</sys:String>
     <sys:String x:Key="Val.BadImagePath">镜像文件路径不合法，或所在文件夹不存在。</sys:String>
     <sys:String x:Key="Val.ReadOnlyRequiresImage">只读内存盘必须选择一个已存在的镜像文件。</sys:String>
@@ -216,10 +223,13 @@
     <sys:String x:Key="About.Copyright">© 2026 coldhighsun</sys:String>
     <sys:String x:Key="About.ViewOnGitHub">在 GitHub 上查看</sys:String>
     <sys:String x:Key="About.ViewWinFsp">基于 WinFsp 构建</sys:String>
+    <sys:String x:Key="About.ViewSharpCompress">基于 SharpCompress 构建</sys:String>
 
     <!-- SaveFileDialog -->
     <sys:String x:Key="SaveDlg.Title">选择镜像文件</sys:String>
     <sys:String x:Key="ImportDlg.Title">选择要导入的镜像文件</sys:String>
     <sys:String x:Key="SaveDlg.Filter">ManagedDrive 镜像 (*.mdr)|*.mdr|所有文件 (*.*)|*.*</sys:String>
+    <sys:String x:Key="ImportArchiveDlg.Title">选择要导入的压缩包</sys:String>
+    <sys:String x:Key="ArchiveDlg.Filter">压缩包 (*.zip;*.7z;*.rar;*.tar;*.gz;*.tgz;*.bz2;*.lz)|*.zip;*.7z;*.rar;*.tar;*.gz;*.tgz;*.bz2;*.lz|所有文件 (*.*)|*.*</sys:String>
 
 </ResourceDictionary>

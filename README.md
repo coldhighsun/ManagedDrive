@@ -25,6 +25,7 @@ Create, mount and manage in-memory volumes that appear as normal drive letters i
 
 **Persistence, snapshots & cloning**
 - Save disk contents to a `.mdr` image file and restore it on next mount, or import an existing image directly (**Import Disk...**)
+- Import an archive (zip, 7z, rar, tar, and other formats [SharpCompress](https://github.com/adamhathcock/sharpcompress) can read) directly as a read-only disk (**Import Archive...**) — capacity and label are derived from the archive up front
 - Optional auto-save on a 1–60 minute interval, plus an automatic final save before unmount/exit; both are skipped when nothing has changed, and failures raise a tray/status-bar notification
 - Selectable image compression (Off / Fast / Balanced / Max, default Fast)
 - Snapshot / version history — cap retained snapshots by count and/or size; deduplicated by content hash so many snapshots cost little extra space; restore any snapshot via **Restore Snapshot...**
@@ -100,7 +101,8 @@ ManagedDrive/
 │   │   ├── MountManager.cs         #   Multi-disk manager
 │   │   ├── DiskImageSerializer.cs  #   Binary persistence (.mdr format)
 │   │   ├── SnapshotManager.cs      #   Timestamped snapshot naming, listing, pruning, GC
-│   │   └── SnapshotStore.cs        #   Snapshot index format + content-addressed blob store
+│   │   ├── SnapshotStore.cs        #   Snapshot index format + content-addressed blob store
+│   │   └── ArchiveNodeMapBuilder.cs #  Extracts zip/7z/rar/tar (via SharpCompress) into a FileNodeMap for read-only import
 │   │
 │   └── ManagedDrive.App/           # WPF desktop application
 │       ├── Localization/           #   ResourceDictionary strings (en-US, zh-CN)
@@ -135,6 +137,7 @@ ManagedDrive/
 │       ├── DiskImageSerializerTests.cs
 │       ├── RamDiskCapacityTests.cs
 │       ├── SnapshotManagerTests.cs
+│       ├── ArchiveNodeMapBuilderTests.cs
 │       └── WildcardMatchTests.cs
 │
 └── benchmarks/
@@ -310,6 +313,7 @@ MIT
 
 **持久化、快照与克隆**
 - 将磁盘内容保存为 `.mdr` 镜像文件，下次挂载时自动还原；也可直接导入已有镜像（**导入磁盘...**）
+- 直接导入压缩包（zip、7z、rar、tar 等 [SharpCompress](https://github.com/adamhathcock/sharpcompress) 支持的格式）作为只读磁盘（**导入压缩包...**）——容量与卷标从压缩包内容自动推算
 - 可选自动保存（1-60 分钟间隔），并在卸载/退出前自动执行一次收尾保存；内容未变化时自动跳过，保存失败会通过托盘/状态栏提示
 - 可选镜像压缩级别（不压缩／快速／均衡／最高，默认快速）
 - 快照／版本历史——按数量和/或大小上限保留快照，相同内容跨快照去重存储，占用空间远小于逻辑大小之和；可随时通过**还原快照...**还原到某个历史版本
@@ -385,11 +389,13 @@ ManagedDrive/
 │   │   ├── MountManager.cs         #   多磁盘管理器
 │   │   ├── DiskImageSerializer.cs  #   二进制持久化（.mdr 格式）
 │   │   ├── SnapshotManager.cs      #   带时间戳的快照命名、列表、清理与垃圾回收
-│   │   └── SnapshotStore.cs        #   快照索引格式 + 内容寻址块存储
+│   │   ├── SnapshotStore.cs        #   快照索引格式 + 内容寻址块存储
+│   │   └── ArchiveNodeMapBuilder.cs #  通过 SharpCompress 解压 zip/7z/rar/tar 为 FileNodeMap，用于只读导入
 │   │
 │   └── ManagedDrive.App/           # WPF 桌面应用程序
 │       ├── Localization/           #   ResourceDictionary 字符串（en-US、zh-CN）
 │       ├── Themes/                 #   AppTheme.xaml 样式 + 浅色/深色配色字典、ThemeManager
+│       ├── Helpers/                #   ByteFormatter、HintHelper（水印/占位文本）
 │       ├── Infrastructure/         #   RelayCommand
 │       ├── Models/                 #   AppConfiguration、DiskProfile
 │       ├── Services/               #   SettingsStore、StartupManager、TempDirResetService
@@ -416,6 +422,9 @@ ManagedDrive/
 │       ├── FileNodeMapTests.cs
 │       ├── MemoryFileSystemCloneTests.cs
 │       ├── DiskImageSerializerTests.cs
+│       ├── RamDiskCapacityTests.cs
+│       ├── SnapshotManagerTests.cs
+│       ├── ArchiveNodeMapBuilderTests.cs
 │       └── WildcardMatchTests.cs
 │
 └── benchmarks/

@@ -53,6 +53,11 @@
                         <Run Text="{DynamicResource About.ViewWinFsp}"/>
                     </Hyperlink>
                 </TextBlock>
+                <TextBlock FontSize="12" Margin="0,4,0,0">
+                    <Hyperlink x:Name="SharpCompressLink" RequestNavigate="Hyperlink_RequestNavigate">
+                        <Run Text="{DynamicResource About.ViewSharpCompress}"/>
+                    </Hyperlink>
+                </TextBlock>
             </StackPanel>
 
             <!-- OK button -->

@@ -1,3 +1,5 @@
+using System.Security.AccessControl;
+
 namespace ManagedDrive.Core;
 
 /// <summary>
@@ -32,6 +34,13 @@ public sealed class FileNode
     /// should not be changed.
     /// </summary>
     internal const uint InvalidFileAttributes = 0xFFFF_FFFF;
+
+    /// <summary>
+    /// Default security descriptor (full access for System/Administrators/Everyone) applied to
+    /// nodes that don't carry their own security information, such as the auto-created root
+    /// directory or nodes synthesized from an imported archive.
+    /// </summary>
+    internal static readonly byte[] DefaultSecurityDescriptorBytes = BuildDefaultSecurityDescriptorBytes();
 
     private static long _nextIndex = 1;
 
@@ -94,5 +103,13 @@ public sealed class FileNode
             FilePath = FilePath,
             LeafName = LeafName,
         };
+    }
+
+    private static byte[] BuildDefaultSecurityDescriptorBytes()
+    {
+        var sd = new RawSecurityDescriptor("O:BAG:BAD:P(A;;FA;;;SY)(A;;FA;;;BA)(A;;FA;;;WD)");
+        var bytes = new byte[sd.BinaryLength];
+        sd.GetBinaryForm(bytes, 0);
+        return bytes;
     }
 }

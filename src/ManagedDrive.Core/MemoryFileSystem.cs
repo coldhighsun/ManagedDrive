@@ -346,14 +346,9 @@ public sealed class MemoryFileSystem : FileSystemBase
         {
             var now = FileTimeNow();
 
-            var sd = new RawSecurityDescriptor(
-                "O:BAG:BAD:P(A;;FA;;;SY)(A;;FA;;;BA)(A;;FA;;;WD)");
-            var sdBytes = new byte[sd.BinaryLength];
-            sd.GetBinaryForm(sdBytes, 0);
-
             var root = new FileNode
             {
-                FileSecurity = sdBytes,
+                FileSecurity = FileNode.DefaultSecurityDescriptorBytes,
                 FileInfo =
                 {
                     FileAttributes = (uint)FileAttributes.Directory,
@@ -748,94 +743,6 @@ public sealed class MemoryFileSystem : FileSystemBase
         return STATUS_SUCCESS;
     }
 
-    /// <summary>
-    /// Marks the disk's content as up to date with the on-disk image.
-    /// </summary>
-    internal void ClearDirty() => _isDirty = false;
-
-    /// <summary>
-    /// Marks the disk's content as changed since the last save.
-    /// </summary>
-    internal void MarkDirty()
-    {
-        _isDirty = true;
-        Interlocked.Exchange(ref _lastContentWriteTicks, DateTimeOffset.UtcNow.UtcTicks);
-    }
-
-    /// <summary>
-    /// Attempts to update the capacity ceiling.
-    /// Returns <c>false</c> if the new capacity is smaller than the bytes currently allocated.
-    /// </summary>
-    internal bool TryUpdateCapacity(ulong newCapacity)
-    {
-        if (NodeMap.GetTotalAllocated() > newCapacity)
-        {
-            return false;
-        }
-
-        _maxCapacity = newCapacity;
-        return true;
-    }
-
-    /// <summary>
-    /// Updates the volume label reported by <see cref="GetVolumeInfo"/>.
-    /// </summary>
-    internal void UpdateVolumeLabel(string label) => _volumeLabel = label;
-
-    /// <summary>
-    /// Replaces this file system's entire contents with a deep copy of <paramref name="sourceMap"/>.
-    /// Used to clone one mounted disk's contents onto another. Fails without modifying this
-    /// file system when it is read-only or when the source's allocated bytes exceed this
-    /// file system's capacity.
-    /// </summary>
-    /// <param name="sourceMap">The node map to copy from.</param>
-    /// <param name="error">Set to a human-readable message when the method returns <c>false</c>.</param>
-    /// <returns>
-    /// <c>true</c> on success; <c>false</c> when the disk is read-only or too small.
-    /// </returns>
-    internal bool TryReplaceContents(FileNodeMap sourceMap, out string? error)
-    {
-        if (_readOnly)
-        {
-            error = "Cannot clone into a read-only disk.";
-            return false;
-        }
-
-        var needed = sourceMap.GetTotalAllocated();
-        if (needed > _maxCapacity)
-        {
-            error = $"Source disk uses {needed:N0} bytes, which exceeds the target disk's capacity ({_maxCapacity:N0} bytes).";
-            return false;
-        }
-
-        NodeMap.ClearAll();
-        foreach (var kvp in sourceMap.GetAllNodes())
-        {
-            NodeMap.Add(kvp.Key, kvp.Value.Clone());
-        }
-
-        MarkDirty();
-        error = null;
-        return true;
-    }
-
-    private static ulong FileTimeNow() => (ulong)DateTimeOffset.UtcNow.ToFileTime();
-
-    /// <summary>
-    /// Returns <c>true</c> when <paramref name="name"/> matches the glob
-    /// <paramref name="pattern"/> (case-insensitive, supporting <c>*</c> and <c>?</c>).
-    /// A null or <c>*</c> pattern matches everything.
-    /// </summary>
-    private static bool MatchesPattern(string? pattern, string name)
-    {
-        if (string.IsNullOrEmpty(pattern) || pattern == "*")
-        {
-            return true;
-        }
-
-        return WildcardMatch(pattern.AsSpan(), name.AsSpan());
-    }
-
     internal static bool WildcardMatch(ReadOnlySpan<char> pattern, ReadOnlySpan<char> name)
     {
         var p = 0;
@@ -875,6 +782,94 @@ public sealed class MemoryFileSystem : FileSystemBase
         }
 
         return p == pattern.Length;
+    }
+
+    /// <summary>
+    /// Marks the disk's content as up to date with the on-disk image.
+    /// </summary>
+    internal void ClearDirty() => _isDirty = false;
+
+    /// <summary>
+    /// Marks the disk's content as changed since the last save.
+    /// </summary>
+    internal void MarkDirty()
+    {
+        _isDirty = true;
+        Interlocked.Exchange(ref _lastContentWriteTicks, DateTimeOffset.UtcNow.UtcTicks);
+    }
+
+    /// <summary>
+    /// Replaces this file system's entire contents with a deep copy of <paramref name="sourceMap"/>.
+    /// Used to clone one mounted disk's contents onto another. Fails without modifying this
+    /// file system when it is read-only or when the source's allocated bytes exceed this
+    /// file system's capacity.
+    /// </summary>
+    /// <param name="sourceMap">The node map to copy from.</param>
+    /// <param name="error">Set to a human-readable message when the method returns <c>false</c>.</param>
+    /// <returns>
+    /// <c>true</c> on success; <c>false</c> when the disk is read-only or too small.
+    /// </returns>
+    internal bool TryReplaceContents(FileNodeMap sourceMap, out string? error)
+    {
+        if (_readOnly)
+        {
+            error = "Cannot clone into a read-only disk.";
+            return false;
+        }
+
+        var needed = sourceMap.GetTotalAllocated();
+        if (needed > _maxCapacity)
+        {
+            error = $"Source disk uses {needed:N0} bytes, which exceeds the target disk's capacity ({_maxCapacity:N0} bytes).";
+            return false;
+        }
+
+        NodeMap.ClearAll();
+        foreach (var kvp in sourceMap.GetAllNodes())
+        {
+            NodeMap.Add(kvp.Key, kvp.Value.Clone());
+        }
+
+        MarkDirty();
+        error = null;
+        return true;
+    }
+
+    /// <summary>
+    /// Attempts to update the capacity ceiling.
+    /// Returns <c>false</c> if the new capacity is smaller than the bytes currently allocated.
+    /// </summary>
+    internal bool TryUpdateCapacity(ulong newCapacity)
+    {
+        if (NodeMap.GetTotalAllocated() > newCapacity)
+        {
+            return false;
+        }
+
+        _maxCapacity = newCapacity;
+        return true;
+    }
+
+    /// <summary>
+    /// Updates the volume label reported by <see cref="GetVolumeInfo"/>.
+    /// </summary>
+    internal void UpdateVolumeLabel(string label) => _volumeLabel = label;
+
+    private static ulong FileTimeNow() => (ulong)DateTimeOffset.UtcNow.ToFileTime();
+
+    /// <summary>
+    /// Returns <c>true</c> when <paramref name="name"/> matches the glob
+    /// <paramref name="pattern"/> (case-insensitive, supporting <c>*</c> and <c>?</c>).
+    /// A null or <c>*</c> pattern matches everything.
+    /// </summary>
+    private static bool MatchesPattern(string? pattern, string name)
+    {
+        if (string.IsNullOrEmpty(pattern) || pattern == "*")
+        {
+            return true;
+        }
+
+        return WildcardMatch(pattern.AsSpan(), name.AsSpan());
     }
 
     /// <summary>

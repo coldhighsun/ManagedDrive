@@ -32,7 +32,7 @@ public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
 
         OpenInExplorerCommand = new(_ => Process.Start("explorer.exe", MountPoint));
         OpenImageDirectoryCommand = new(
-            _ => Process.Start("explorer.exe", Path.GetDirectoryName(PersistImagePath)!),
+            _ => Process.Start("explorer.exe", Path.GetDirectoryName(SourcePath)!),
             _ => HasImagePath);
 
         _refreshTimer = new()
@@ -100,9 +100,9 @@ public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
             : 100.0;
 
     /// <summary>
-    /// Gets whether this disk has a backing image file configured.
+    /// Gets whether this disk has a backing image file or source archive configured.
     /// </summary>
-    public bool HasImagePath => !string.IsNullOrEmpty(PersistImagePath);
+    public bool HasImagePath => !string.IsNullOrEmpty(SourcePath);
 
     /// <summary>
     /// Gets whether the user's TEMP and TMP currently point to this disk's Temp folder.
@@ -206,6 +206,12 @@ public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
     public string? PersistImagePath => Disk.Options.PersistImagePath;
 
     /// <summary>
+    /// Gets this disk's content source for display: its backing image file, or its source
+    /// archive if it was mounted via "Import Archive", or <c>null</c> if it has neither.
+    /// </summary>
+    public string? SourcePath => Disk.Options.SourceArchivePath ?? Disk.Options.PersistImagePath;
+
+    /// <summary>
     /// Gets whether this disk has auto-save enabled, controlling visibility of the
     /// last-image-save timestamp on the disk card.
     /// </summary>
@@ -262,9 +268,15 @@ public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
         OnPropertyChanged(nameof(ShowLastAutoSave));
         OnPropertyChanged(nameof(SnapshotsEnabled));
         OnPropertyChanged(nameof(PersistImagePath));
+        OnPropertyChanged(nameof(SourcePath));
         OnPropertyChanged(nameof(HasImagePath));
 
         IsCurrentTempDir = CheckIsCurrentTempDir();
+
+        if (Disk.Options.SourceArchivePath != null)
+        {
+            return;
+        }
 
         var used = UsedPercent;
         if (Disk.Options.HighUsageWarnPercent is not { } threshold)

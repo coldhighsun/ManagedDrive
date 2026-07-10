@@ -72,6 +72,19 @@ public sealed record DiskOptions
     }
 
     /// <summary>
+    /// Optional path to an archive file (zip, 7z, rar, tar, or any other format
+    /// <c>SharpCompress</c> can read) whose contents are extracted into this disk on every mount
+    /// via <see cref="ArchiveNodeMapBuilder"/>. Mutually exclusive with
+    /// <see cref="PersistImagePath"/> — a disk has at most one content source. Disks with a
+    /// non-null <see cref="SourceArchivePath"/> are always mounted read-only, since none of the
+    /// supported archive formats support writing changes back.
+    /// </summary>
+    public string? SourceArchivePath
+    {
+        get; init;
+    }
+
+    /// <summary>
     /// When <c>true</c> this disk is re-mounted automatically on next application startup.
     /// </summary>
     public bool AutoMount

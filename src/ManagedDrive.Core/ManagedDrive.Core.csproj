@@ -2,6 +2,7 @@
 
   <ItemGroup>
     <PackageReference Include="winfsp.net" />
+    <PackageReference Include="SharpCompress" />
   </ItemGroup>
 
   <ItemGroup>

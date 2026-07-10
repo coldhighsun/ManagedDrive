@@ -48,7 +48,7 @@
                     </Grid>
 
                     <!-- Capacity -->
-                    <Grid Grid.Row="2">
+                    <Grid Grid.Row="2" x:Name="CapacityRow" Style="{StaticResource DimWhenDisabled}">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="64"/>
                             <ColumnDefinition Width="8"/>
@@ -134,7 +134,7 @@
             </TabItem>
 
             <!-- Persistence -->
-            <TabItem Header="{DynamicResource CreateDisk.Section.Persistence}">
+            <TabItem x:Name="PersistenceTabItem" Header="{DynamicResource CreateDisk.Section.Persistence}">
                 <Grid>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
@@ -161,7 +161,7 @@
                             <ColumnDefinition Width="8"/>
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
-                        <TextBlock Grid.Column="0" Text="{DynamicResource CreateDisk.ImageFile}"
+                        <TextBlock Grid.Column="0" x:Name="ImagePathLabel" Text="{DynamicResource CreateDisk.ImageFile}"
                                    Foreground="{DynamicResource AppForeground}"
                                    VerticalAlignment="Center"/>
                         <TextBox Grid.Column="2" x:Name="ImagePathBox" IsReadOnly="True" Cursor="Hand"
@@ -177,6 +177,13 @@
                     <!-- Import Note -->
                     <TextBlock Grid.Row="1" x:Name="ImportNoteText"
                                Text="{DynamicResource CreateDisk.ImportNote}"
+                               Foreground="{DynamicResource AppForegroundLight}"
+                               FontSize="11" TextWrapping="Wrap" Margin="92,4,0,0"
+                               Visibility="Collapsed"/>
+
+                    <!-- Archive Import Note -->
+                    <TextBlock Grid.Row="1" x:Name="ArchiveImportNoteText"
+                               Text="{DynamicResource CreateDisk.ArchiveImportNote}"
                                Foreground="{DynamicResource AppForegroundLight}"
                                FontSize="11" TextWrapping="Wrap" Margin="92,4,0,0"
                                Visibility="Collapsed"/>
