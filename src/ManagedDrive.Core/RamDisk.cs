@@ -140,8 +140,8 @@ public sealed class RamDisk : IDisposable
 
     /// <summary>
     /// Unmounts the disk and releases all resources. After disposal the disk is no longer
-    /// accessible from the Windows shell. If auto-save is enabled, a final save is performed
-    /// before unmounting, unless nothing has changed since the last save.
+    /// accessible from the Windows shell. If an image path is configured, a final save is
+    /// performed before unmounting, unless nothing has changed since the last save.
     /// </summary>
     public void Dispose()
     {
@@ -150,7 +150,7 @@ public sealed class RamDisk : IDisposable
             _autoSaveTimer?.Dispose();
             _autoSaveTimer = null;
 
-            if (Options.AutoSaveIntervalMinutes is > 0)
+            if (Options.PersistImagePath != null)
             {
                 // Wait for any in-flight periodic save to finish, then perform the final save,
                 // so the two never write to the image file concurrently.
