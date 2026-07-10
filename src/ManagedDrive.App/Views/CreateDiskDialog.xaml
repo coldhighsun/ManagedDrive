@@ -55,32 +55,22 @@
                             <ColumnDefinition Width="8"/>
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="8"/>
-                            <ColumnDefinition Width="100"/>
+                            <ColumnDefinition Width="70"/>
+                            <ColumnDefinition Width="8"/>
+                            <ColumnDefinition Width="70"/>
                         </Grid.ColumnDefinitions>
                         <TextBlock Grid.Column="0" Text="{DynamicResource CreateDisk.Capacity}"
                                    Foreground="{DynamicResource AppForeground}"
                                    VerticalAlignment="Center"/>
-                        <Grid Grid.Column="2">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
-                            <TextBox x:Name="CapacityBox" Text="2"
-                                     ToolTip="{DynamicResource Tip.Capacity}"
-                                     Style="{StaticResource OutlinedTextBox}"
-                                     VerticalContentAlignment="Center"
-                                     HorizontalContentAlignment="Right"
-                                     PreviewTextInput="CapacityBox_PreviewTextInput"/>
-                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="2,0,0,0">
-                                <RepeatButton x:Name="CapacityUp" Content="&#xE70E;" FontFamily="Segoe Fluent Icons"
-                                              FontSize="8" Width="24" Height="16" Click="CapacityUp_Click"
-                                              Style="{StaticResource SpinRepeatButton}"/>
-                                <RepeatButton x:Name="CapacityDown" Content="&#xE70D;" FontFamily="Segoe Fluent Icons"
-                                              FontSize="8" Width="24" Height="16" Click="CapacityDown_Click"
-                                              Style="{StaticResource SpinRepeatButton}"/>
-                            </StackPanel>
-                        </Grid>
-                        <ComboBox Grid.Column="4" x:Name="CapacityUnitBox" IsEditable="False"
+                        <Slider Grid.Column="2" x:Name="CapacitySlider"
+                                ToolTip="{DynamicResource Tip.Capacity}"
+                                Style="{StaticResource AppSlider}"
+                                Minimum="1" Maximum="999999" Value="2"
+                                ValueChanged="CapacitySlider_ValueChanged"/>
+                        <TextBlock Grid.Column="4" x:Name="CapacityValueText"
+                                   Foreground="{DynamicResource AppForeground}"
+                                   VerticalAlignment="Center" TextAlignment="Right"/>
+                        <ComboBox Grid.Column="6" x:Name="CapacityUnitBox" IsEditable="False"
                                   Style="{StaticResource OutlinedComboBox}"/>
                     </Grid>
 
@@ -111,20 +101,21 @@
                                   Foreground="{DynamicResource AppForeground}"
                                   ToolTip="{DynamicResource Tip.HighUsageWarn}"
                                   Checked="HighUsageWarnBox_CheckedChanged" Unchecked="HighUsageWarnBox_CheckedChanged"/>
-                        <Grid Grid.Column="2" x:Name="HighUsageWarnPercentPanel" IsEnabled="False" VerticalAlignment="Center">
+                        <Grid Grid.Column="2" x:Name="HighUsageWarnPercentPanel" IsEnabled="False" VerticalAlignment="Center"
+                              Style="{StaticResource DimWhenDisabled}">
                             <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="50"/>
+                                <ColumnDefinition Width="120"/>
+                                <ColumnDefinition Width="8"/>
                                 <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
-                            <TextBox Grid.Column="0" x:Name="HighUsageWarnPercentBox" Text="90" MaxLength="2"
+                            <Slider Grid.Column="0" x:Name="HighUsageWarnPercentSlider"
                                      ToolTip="{DynamicResource Tip.HighUsageWarn}"
-                                     Style="{StaticResource OutlinedTextBox}"
-                                     VerticalContentAlignment="Center"
-                                     TextAlignment="Right"
-                                     PreviewTextInput="CapacityBox_PreviewTextInput"/>
-                            <TextBlock Grid.Column="1" Text="%"
+                                     Style="{StaticResource AppSlider}"
+                                     Minimum="1" Maximum="99" Value="90"
+                                     ValueChanged="HighUsageWarnPercentSlider_ValueChanged"/>
+                            <TextBlock Grid.Column="2" x:Name="HighUsageWarnPercentValueText"
                                        Foreground="{DynamicResource AppForeground}"
-                                       VerticalAlignment="Center" Margin="6,0,0,0"/>
+                                       VerticalAlignment="Center"/>
                         </Grid>
                     </Grid>
 
@@ -223,31 +214,28 @@
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="8"/>
-                            <ColumnDefinition Width="70"/>
+                            <ColumnDefinition Width="*"/>
                         </Grid.ColumnDefinitions>
                         <CheckBox Grid.Column="0" x:Name="AutoSaveBox" VerticalAlignment="Center"
                                   Content="{DynamicResource CreateDisk.AutoSave}"
                                   Foreground="{DynamicResource AppForeground}"
                                   ToolTip="{DynamicResource Tip.AutoSave}"
                                   Checked="AutoSaveBox_CheckedChanged" Unchecked="AutoSaveBox_CheckedChanged"/>
-                        <Grid Grid.Column="2" x:Name="AutoSaveIntervalPanel" IsEnabled="False" VerticalAlignment="Center">
+                        <Grid Grid.Column="2" x:Name="AutoSaveIntervalPanel" IsEnabled="False" VerticalAlignment="Center"
+                              Style="{StaticResource DimWhenDisabled}">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="8"/>
                                 <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
-                            <TextBox x:Name="AutoSaveIntervalBox" Text="10" MaxLength="2"
+                            <Slider Grid.Column="0" x:Name="AutoSaveIntervalSlider"
                                      ToolTip="{DynamicResource Tip.AutoSaveInterval}"
-                                     Style="{StaticResource OutlinedTextBox}"
-                                     VerticalContentAlignment="Center"
-                                     PreviewTextInput="CapacityBox_PreviewTextInput"/>
-                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="2,0,0,0">
-                                <RepeatButton x:Name="AutoSaveIntervalUp" Content="&#xE70E;" FontFamily="Segoe Fluent Icons"
-                                              FontSize="8" Width="24" Height="16" Click="AutoSaveIntervalUp_Click"
-                                              Style="{StaticResource SpinRepeatButton}"/>
-                                <RepeatButton x:Name="AutoSaveIntervalDown" Content="&#xE70D;" FontFamily="Segoe Fluent Icons"
-                                              FontSize="8" Width="24" Height="16" Click="AutoSaveIntervalDown_Click"
-                                              Style="{StaticResource SpinRepeatButton}"/>
-                            </StackPanel>
+                                     Style="{StaticResource AppSlider}"
+                                     Minimum="1" Maximum="60" Value="10"
+                                     ValueChanged="AutoSaveIntervalSlider_ValueChanged"/>
+                            <TextBlock Grid.Column="2" x:Name="AutoSaveIntervalValueText"
+                                       Foreground="{DynamicResource AppForeground}"
+                                       VerticalAlignment="Center"/>
                         </Grid>
                     </Grid>
 
@@ -261,67 +249,61 @@
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="8"/>
-                            <ColumnDefinition Width="70"/>
+                            <ColumnDefinition Width="*"/>
                         </Grid.ColumnDefinitions>
                         <CheckBox Grid.Column="0" x:Name="SnapshotCountEnabledBox" VerticalAlignment="Center"
                                   Content="{DynamicResource CreateDisk.SnapshotMaxCount}"
                                   Foreground="{DynamicResource AppForeground}"
                                   ToolTip="{DynamicResource Tip.SnapshotMaxCount}"
                                   Checked="SnapshotLimit_CheckedChanged" Unchecked="SnapshotLimit_CheckedChanged"/>
-                        <Grid Grid.Column="2" x:Name="SnapshotCountPanel" IsEnabled="False" VerticalAlignment="Center">
+                        <Grid Grid.Column="2" x:Name="SnapshotCountPanel" IsEnabled="False" VerticalAlignment="Center"
+                              Style="{StaticResource DimWhenDisabled}">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="8"/>
                                 <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
-                            <TextBox x:Name="SnapshotCountBox" Text="10" MaxLength="3"
-                                     Style="{StaticResource OutlinedTextBox}"
-                                     VerticalContentAlignment="Center"
-                                     PreviewTextInput="CapacityBox_PreviewTextInput"/>
-                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="2,0,0,0">
-                                <RepeatButton x:Name="SnapshotCountUp" Content="&#xE70E;" FontFamily="Segoe Fluent Icons"
-                                              FontSize="8" Width="24" Height="16" Click="SnapshotCountUp_Click"
-                                              Style="{StaticResource SpinRepeatButton}"/>
-                                <RepeatButton x:Name="SnapshotCountDown" Content="&#xE70D;" FontFamily="Segoe Fluent Icons"
-                                              FontSize="8" Width="24" Height="16" Click="SnapshotCountDown_Click"
-                                              Style="{StaticResource SpinRepeatButton}"/>
-                            </StackPanel>
+                            <Slider Grid.Column="0" x:Name="SnapshotCountSlider"
+                                     Style="{StaticResource AppSlider}"
+                                     Minimum="1" Maximum="20" Value="10"
+                                     ValueChanged="SnapshotCountSlider_ValueChanged"/>
+                            <TextBlock Grid.Column="2" x:Name="SnapshotCountValueText"
+                                       Foreground="{DynamicResource AppForeground}"
+                                       VerticalAlignment="Center"/>
                         </Grid>
                     </Grid>
 
                     <!-- Snapshot Max Size -->
                     <Grid Grid.Row="12" Margin="16,0,0,0">
                         <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="140"/>
+                            <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="8"/>
-                            <ColumnDefinition Width="70"/>
-                            <ColumnDefinition Width="8"/>
-                            <ColumnDefinition Width="90"/>
+                            <ColumnDefinition Width="*"/>
                         </Grid.ColumnDefinitions>
                         <CheckBox Grid.Column="0" x:Name="SnapshotSizeEnabledBox" VerticalAlignment="Center"
                                   Content="{DynamicResource CreateDisk.SnapshotMaxSize}"
                                   Foreground="{DynamicResource AppForeground}"
                                   ToolTip="{DynamicResource Tip.SnapshotMaxSize}"
                                   Checked="SnapshotLimit_CheckedChanged" Unchecked="SnapshotLimit_CheckedChanged"/>
-                        <Grid Grid.Column="2" x:Name="SnapshotSizePanel" IsEnabled="False" VerticalAlignment="Center">
+                        <Grid Grid.Column="2" x:Name="SnapshotSizePanel" IsEnabled="False" VerticalAlignment="Center"
+                              Style="{StaticResource DimWhenDisabled}">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="8"/>
+                                <ColumnDefinition Width="70"/>
+                                <ColumnDefinition Width="8"/>
+                                <ColumnDefinition Width="70"/>
                             </Grid.ColumnDefinitions>
-                            <TextBox x:Name="SnapshotSizeBox" Text="500" MaxLength="6"
-                                     Style="{StaticResource OutlinedTextBox}"
-                                     VerticalContentAlignment="Center"
-                                     PreviewTextInput="CapacityBox_PreviewTextInput"/>
-                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="2,0,0,0">
-                                <RepeatButton x:Name="SnapshotSizeUp" Content="&#xE70E;" FontFamily="Segoe Fluent Icons"
-                                              FontSize="8" Width="24" Height="16" Click="SnapshotSizeUp_Click"
-                                              Style="{StaticResource SpinRepeatButton}"/>
-                                <RepeatButton x:Name="SnapshotSizeDown" Content="&#xE70D;" FontFamily="Segoe Fluent Icons"
-                                              FontSize="8" Width="24" Height="16" Click="SnapshotSizeDown_Click"
-                                              Style="{StaticResource SpinRepeatButton}"/>
-                            </StackPanel>
+                            <Slider Grid.Column="0" x:Name="SnapshotSizeSlider"
+                                    Style="{StaticResource AppSlider}"
+                                    Minimum="1" Maximum="999999" Value="500"
+                                    ValueChanged="SnapshotSizeSlider_ValueChanged"/>
+                            <TextBlock Grid.Column="2" x:Name="SnapshotSizeValueText"
+                                       Foreground="{DynamicResource AppForeground}"
+                                       VerticalAlignment="Center" TextAlignment="Right"/>
+                            <ComboBox Grid.Column="4" x:Name="SnapshotSizeUnitBox" IsEditable="False"
+                                      Style="{StaticResource OutlinedComboBox}"/>
                         </Grid>
-                        <ComboBox Grid.Column="4" x:Name="SnapshotSizeUnitBox" IsEnabled="False" IsEditable="False"
-                                  Style="{StaticResource OutlinedComboBox}"/>
                     </Grid>
                 </Grid>
             </TabItem>

@@ -21,7 +21,7 @@ public partial class CreateDiskDialog
     private readonly bool _isImportMode;
     private readonly ulong _maxCapacityBytes;
     private readonly IReadOnlyList<DiskOptions> _otherDisks;
-    private int _capacityMaximum;
+    private int _capacityMaximum = 99999999;
     private int _capacityValue = 2;
     private int _highUsageWarnPercentValue = 90;
     private int _intervalValue = 10;
@@ -47,13 +47,18 @@ public partial class CreateDiskDialog
         CapacityUnitBox.SelectedIndex = 1;
         CapacityUnitBox.SelectionChanged += CapacityUnitBox_SelectionChanged;
         _capacityMaximum = GetMaxCapacityValue();
+        CapacitySlider.Maximum = _capacityMaximum;
         UpdateCapacityDisplay();
 
         SnapshotSizeUnitBox.Items.Add("MB");
         SnapshotSizeUnitBox.Items.Add("GB");
         SnapshotSizeUnitBox.SelectedIndex = 1;
+        SnapshotSizeUnitBox.SelectionChanged += SnapshotSizeUnitBox_SelectionChanged;
+        SnapshotSizeSlider.Maximum = GetMaxSnapshotSizeValue();
         UpdateSnapshotCountDisplay();
         UpdateSnapshotSizeDisplay();
+        IntervalValue = _intervalValue;
+        HighUsageWarnPercentValue = _highUsageWarnPercentValue;
 
         foreach (var level in CompressionLevels)
         {
@@ -99,6 +104,7 @@ public partial class CreateDiskDialog
         }
 
         _capacityMaximum = GetMaxCapacityValue();
+        CapacitySlider.Maximum = _capacityMaximum;
         UpdateCapacityDisplay();
 
         ReadOnlyBox.IsChecked = existing.ReadOnly;
@@ -112,8 +118,7 @@ public partial class CreateDiskDialog
         {
             AutoSaveBox.IsChecked = true;
             AutoSaveIntervalPanel.IsEnabled = true;
-            _intervalValue = (int)Math.Max(1, minutes);
-            IntervalValue = _intervalValue;
+            IntervalValue = (int)Math.Max(1, minutes);
 
             if (existing.MaxSnapshotCount is { } maxCount)
             {
@@ -126,18 +131,19 @@ public partial class CreateDiskDialog
             {
                 SnapshotSizeEnabledBox.IsChecked = true;
                 SnapshotSizePanel.IsEnabled = true;
-                SnapshotSizeUnitBox.IsEnabled = true;
 
                 var sizeMb = maxSizeBytes / (1024UL * 1024);
                 var sizeGb = maxSizeBytes / (1024UL * 1024 * 1024);
                 if (sizeGb > 0 && maxSizeBytes % (1024UL * 1024 * 1024) == 0)
                 {
                     SnapshotSizeUnitBox.SelectedItem = "GB";
+                    SnapshotSizeSlider.Maximum = GetMaxSnapshotSizeValue();
                     SnapshotSizeValue = (int)sizeGb;
                 }
                 else
                 {
                     SnapshotSizeUnitBox.SelectedItem = "MB";
+                    SnapshotSizeSlider.Maximum = GetMaxSnapshotSizeValue();
                     SnapshotSizeValue = (int)Math.Max(1, sizeMb);
                 }
             }
@@ -194,13 +200,12 @@ public partial class CreateDiskDialog
         }
 
         _capacityMaximum = Math.Max(_capacityValue, GetMaxCapacityValue());
+        CapacitySlider.Maximum = _capacityMaximum;
         UpdateCapacityDisplay();
         VolumeLabelBox.Text = importVolumeLabel;
 
-        CapacityBox.IsEnabled = false;
+        CapacitySlider.IsEnabled = false;
         CapacityUnitBox.IsEnabled = false;
-        CapacityUp.IsEnabled = false;
-        CapacityDown.IsEnabled = false;
         VolumeLabelBox.IsEnabled = false;
 
         UpdateCompressionLevelState();
@@ -232,7 +237,8 @@ public partial class CreateDiskDialog
         set
         {
             _highUsageWarnPercentValue = Math.Clamp(value, 1, 99);
-            HighUsageWarnPercentBox.Text = _highUsageWarnPercentValue.ToString();
+            HighUsageWarnPercentSlider.Value = _highUsageWarnPercentValue;
+            HighUsageWarnPercentValueText?.Text = $"{_highUsageWarnPercentValue}%";
         }
     }
 
@@ -242,7 +248,8 @@ public partial class CreateDiskDialog
         set
         {
             _intervalValue = Math.Clamp(value, 1, 60);
-            AutoSaveIntervalBox.Text = _intervalValue.ToString();
+            AutoSaveIntervalSlider.Value = _intervalValue;
+            AutoSaveIntervalValueText?.Text = Loc.Format("CreateDisk.MinutesValue", _intervalValue);
         }
     }
 
@@ -251,7 +258,7 @@ public partial class CreateDiskDialog
         get => _snapshotCountValue;
         set
         {
-            _snapshotCountValue = Math.Clamp(value, 1, 999);
+            _snapshotCountValue = Math.Clamp(value, 1, 20);
             UpdateSnapshotCountDisplay();
         }
     }
@@ -261,7 +268,7 @@ public partial class CreateDiskDialog
         get => _snapshotSizeValue;
         set
         {
-            _snapshotSizeValue = Math.Clamp(value, 1, int.MaxValue);
+            _snapshotSizeValue = Math.Clamp(value, 1, (int)SnapshotSizeSlider.Maximum);
             UpdateSnapshotSizeDisplay();
         }
     }
@@ -309,42 +316,24 @@ public partial class CreateDiskDialog
         UpdateSnapshotEnabledState();
     }
 
-    private void AutoSaveIntervalDown_Click(object sender, RoutedEventArgs e)
+    private void AutoSaveIntervalSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
     {
-        ParseIntervalFromBox();
-        IntervalValue = _intervalValue - 1;
+        IntervalValue = (int)e.NewValue;
     }
 
-    private void AutoSaveIntervalUp_Click(object sender, RoutedEventArgs e)
+    private void CapacitySlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
     {
-        ParseIntervalFromBox();
-        IntervalValue = _intervalValue + 1;
-    }
-
-    private void CapacityBox_PreviewTextInput(object sender, TextCompositionEventArgs e)
-    {
-        e.Handled = !int.TryParse(e.Text, out _);
-    }
-
-    private void CapacityDown_Click(object sender, RoutedEventArgs e)
-    {
-        ParseCapacityFromBox();
-        CapacityValue = _capacityValue - 1;
+        CapacityValue = (int)e.NewValue;
     }
 
     private void CapacityUnitBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         _capacityMaximum = GetMaxCapacityValue();
+        CapacitySlider.Maximum = _capacityMaximum;
         if (_capacityValue > _capacityMaximum)
         {
             CapacityValue = _capacityMaximum;
         }
-    }
-
-    private void CapacityUp_Click(object sender, RoutedEventArgs e)
-    {
-        ParseCapacityFromBox();
-        CapacityValue = _capacityValue + 1;
     }
 
     private void ClearImagePath_Click(object sender, RoutedEventArgs e)
@@ -364,16 +353,32 @@ public partial class CreateDiskDialog
         UpdateCompressionWarning();
     }
 
+    private int ComputeMaxValueForUnit(bool isGb)
+    {
+        var divisor = isGb ? 1024UL * 1024 * 1024 : 1024UL * 1024;
+        return (int)Math.Max(1, Math.Min(_maxCapacityBytes / divisor, int.MaxValue));
+    }
+
     private int GetMaxCapacityValue()
     {
         var isGb = CapacityUnitBox.SelectedItem as string == "GB";
-        var divisor = isGb ? 1024UL * 1024 * 1024 : 1024UL * 1024;
-        return (int)Math.Max(1, Math.Min(_maxCapacityBytes / divisor, int.MaxValue));
+        return ComputeMaxValueForUnit(isGb);
+    }
+
+    private int GetMaxSnapshotSizeValue()
+    {
+        var isGb = SnapshotSizeUnitBox.SelectedItem as string == "GB";
+        return ComputeMaxValueForUnit(isGb);
     }
 
     private void HighUsageWarnBox_CheckedChanged(object sender, RoutedEventArgs e)
     {
         UpdateHighUsageWarnPercentState();
+    }
+
+    private void HighUsageWarnPercentSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+    {
+        HighUsageWarnPercentValue = (int)e.NewValue;
     }
 
     private void ImagePathBox_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
@@ -437,81 +442,35 @@ public partial class CreateDiskDialog
         }
     }
 
-    private void ParseCapacityFromBox()
-    {
-        if (int.TryParse(CapacityBox.Text, out var parsed))
-        {
-            _capacityValue = parsed;
-        }
-    }
-
-    private void ParseHighUsageWarnPercentFromBox()
-    {
-        if (int.TryParse(HighUsageWarnPercentBox.Text, out var parsed))
-        {
-            _highUsageWarnPercentValue = parsed;
-        }
-    }
-
-    private void ParseIntervalFromBox()
-    {
-        if (int.TryParse(AutoSaveIntervalBox.Text, out var parsed))
-        {
-            _intervalValue = parsed;
-        }
-    }
-
-    private void ParseSnapshotCountFromBox()
-    {
-        if (int.TryParse(SnapshotCountBox.Text, out var parsed))
-        {
-            _snapshotCountValue = parsed;
-        }
-    }
-
-    private void ParseSnapshotSizeFromBox()
-    {
-        if (int.TryParse(SnapshotSizeBox.Text, out var parsed))
-        {
-            _snapshotSizeValue = parsed;
-        }
-    }
-
     private void ReadOnlyBox_CheckedChanged(object sender, RoutedEventArgs e)
     {
         UpdateAutoSaveEnabledState();
         UpdateCompressionLevelState();
     }
 
-    private void SnapshotCountDown_Click(object sender, RoutedEventArgs e)
+    private void SnapshotCountSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
     {
-        ParseSnapshotCountFromBox();
-        SnapshotCountValue = _snapshotCountValue - 1;
-    }
-
-    private void SnapshotCountUp_Click(object sender, RoutedEventArgs e)
-    {
-        ParseSnapshotCountFromBox();
-        SnapshotCountValue = _snapshotCountValue + 1;
+        SnapshotCountValue = (int)e.NewValue;
     }
 
     private void SnapshotLimit_CheckedChanged(object sender, RoutedEventArgs e)
     {
         SnapshotCountPanel.IsEnabled = SnapshotCountEnabledBox.IsChecked == true;
         SnapshotSizePanel.IsEnabled = SnapshotSizeEnabledBox.IsChecked == true;
-        SnapshotSizeUnitBox.IsEnabled = SnapshotSizeEnabledBox.IsChecked == true;
     }
 
-    private void SnapshotSizeDown_Click(object sender, RoutedEventArgs e)
+    private void SnapshotSizeSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
     {
-        ParseSnapshotSizeFromBox();
-        SnapshotSizeValue = _snapshotSizeValue - 1;
+        SnapshotSizeValue = (int)e.NewValue;
     }
 
-    private void SnapshotSizeUp_Click(object sender, RoutedEventArgs e)
+    private void SnapshotSizeUnitBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        ParseSnapshotSizeFromBox();
-        SnapshotSizeValue = _snapshotSizeValue + 1;
+        SnapshotSizeSlider.Maximum = GetMaxSnapshotSizeValue();
+        if (_snapshotSizeValue > SnapshotSizeSlider.Maximum)
+        {
+            SnapshotSizeValue = (int)SnapshotSizeSlider.Maximum;
+        }
     }
 
     private bool TryBuildOptions(out DiskOptions? options, out string error)
@@ -531,7 +490,6 @@ public partial class CreateDiskDialog
         }
         else
         {
-            ParseCapacityFromBox();
             var maxCapacity = GetMaxCapacityValue();
             if (_capacityValue <= 0 || _capacityValue > maxCapacity)
             {
@@ -604,7 +562,6 @@ public partial class CreateDiskDialog
                 return false;
             }
 
-            ParseIntervalFromBox();
             if (_intervalValue < 1 || _intervalValue > 60)
             {
                 error = Loc.Get("Val.BadAutoSaveInterval");
@@ -620,8 +577,7 @@ public partial class CreateDiskDialog
         {
             if (SnapshotCountEnabledBox.IsChecked == true)
             {
-                ParseSnapshotCountFromBox();
-                if (_snapshotCountValue < 1 || _snapshotCountValue > 999)
+                if (_snapshotCountValue < 1 || _snapshotCountValue > 20)
                 {
                     error = Loc.Get("Val.BadSnapshotCount");
                     return false;
@@ -632,7 +588,6 @@ public partial class CreateDiskDialog
 
             if (SnapshotSizeEnabledBox.IsChecked == true)
             {
-                ParseSnapshotSizeFromBox();
                 if (_snapshotSizeValue < 1)
                 {
                     error = Loc.Get("Val.BadSnapshotSize");
@@ -649,7 +604,6 @@ public partial class CreateDiskDialog
         double? highUsageWarnPercent = null;
         if (HighUsageWarnBox.IsChecked == true)
         {
-            ParseHighUsageWarnPercentFromBox();
             if (_highUsageWarnPercentValue < 1 || _highUsageWarnPercentValue > 99)
             {
                 error = Loc.Get("Val.BadHighUsagePercent");
@@ -699,7 +653,14 @@ public partial class CreateDiskDialog
 
     private void UpdateCapacityDisplay()
     {
-        CapacityBox.Text = _capacityValue.ToString();
+        CapacitySlider.Value = _capacityValue;
+        if (CapacityValueText is null || CapacityUnitBox is null)
+        {
+            return;
+        }
+
+        var unit = CapacityUnitBox.SelectedItem as string ?? "GB";
+        CapacityValueText.Text = $"{_capacityValue} {unit}";
     }
 
     private void UpdateCompressionLevelState()
@@ -718,9 +679,16 @@ public partial class CreateDiskDialog
         CompressionWarningText.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
     }
 
+    private void UpdateHighUsageWarnPercentState()
+    {
+        HighUsageWarnPercentPanel?.IsEnabled = HighUsageWarnBox.IsChecked == true;
+    }
+
     private void UpdateSnapshotCountDisplay()
     {
-        SnapshotCountBox.Text = _snapshotCountValue.ToString();
+        SnapshotCountSlider.Value = _snapshotCountValue;
+
+        SnapshotCountValueText?.Text = _snapshotCountValue.ToString();
     }
 
     private void UpdateSnapshotEnabledState()
@@ -737,18 +705,15 @@ public partial class CreateDiskDialog
         SnapshotLimit_CheckedChanged(this, new RoutedEventArgs());
     }
 
-    private void UpdateHighUsageWarnPercentState()
+    private void UpdateSnapshotSizeDisplay()
     {
-        if (HighUsageWarnPercentPanel is null)
+        SnapshotSizeSlider.Value = _snapshotSizeValue;
+        if (SnapshotSizeValueText is null || SnapshotSizeUnitBox is null)
         {
             return;
         }
 
-        HighUsageWarnPercentPanel.IsEnabled = HighUsageWarnBox.IsChecked == true;
-    }
-
-    private void UpdateSnapshotSizeDisplay()
-    {
-        SnapshotSizeBox.Text = _snapshotSizeValue.ToString();
+        var unit = SnapshotSizeUnitBox.SelectedItem as string ?? "MB";
+        SnapshotSizeValueText.Text = $"{_snapshotSizeValue} {unit}";
     }
 }
