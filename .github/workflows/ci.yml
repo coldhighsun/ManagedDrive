@@ -87,6 +87,24 @@ jobs:
             -o publish-sc/
         shell: pwsh
 
+      - name: Publish CLI (win-x64, framework-dependent)
+        run: |
+          dotnet publish src/ManagedDrive.Cli/ManagedDrive.Cli.csproj `
+            -c Release `
+            -r win-x64 `
+            --no-self-contained `
+            -o publish-fx/
+        shell: pwsh
+
+      - name: Publish CLI (win-x64, self-contained)
+        run: |
+          dotnet publish src/ManagedDrive.Cli/ManagedDrive.Cli.csproj `
+            -c Release `
+            -r win-x64 `
+            --self-contained true `
+            -o publish-sc/
+        shell: pwsh
+
       - name: Resolve version from tag
         id: version
         run: |

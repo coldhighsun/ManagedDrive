@@ -11,6 +11,8 @@
   </Folder>
   <Folder Name="/src/">
     <Project Path="src/ManagedDrive.App/ManagedDrive.App.csproj" />
+    <Project Path="src/ManagedDrive.Cli/ManagedDrive.Cli.csproj" />
+    <Project Path="src/ManagedDrive.Cli.Core/ManagedDrive.Cli.Core.csproj" />
     <Project Path="src/ManagedDrive.Core/ManagedDrive.Core.csproj" />
   </Folder>
   <Folder Name="/benchmarks/">

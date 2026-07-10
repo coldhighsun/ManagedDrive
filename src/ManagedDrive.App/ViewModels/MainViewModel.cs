@@ -271,7 +271,11 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     /// Errors are surfaced via <see cref="StatusText"/>.
     /// </summary>
     /// <param name="profile">The profile to mount.</param>
-    public async void MountFromProfile(DiskProfile profile)
+    /// <returns>
+    /// <c>true</c> if the disk was mounted successfully; <c>false</c> if mounting failed
+    /// (the failure reason is surfaced via <see cref="StatusText"/>).
+    /// </returns>
+    public async Task<bool> MountFromProfileAsync(DiskProfile profile)
     {
         try
         {
@@ -279,6 +283,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             var disk = await Task.Run(() => _mountManager.Mount(options));
             AddDiskSorted(new(disk));
             StatusText = Loc.Format("Status.Mounted", disk.MountPoint, profile.VolumeLabel);
+            return true;
         }
         catch (Exception ex)
         {
@@ -293,7 +298,196 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
                     TempDirResetService.Reset();
                 }
             }
+
+            return false;
         }
+    }
+
+    /// <summary>
+    /// Mounts an existing <c>.mdr</c> disk image at <paramref name="mountPoint"/>, without any
+    /// interactive dialogs, for use by the CLI command channel. Capacity and volume label are
+    /// read directly from the image header (mirrors <c>ExecuteImportDisk</c>'s non-interactive
+    /// steps). If a saved profile referencing this exact <paramref name="imagePath"/> is found in
+    /// settings, its other options (read-only, auto-mount, auto-save interval, compression level,
+    /// snapshot limits, high-usage threshold) are reused instead of falling back to
+    /// <see cref="DiskOptions"/> defaults; <paramref name="mountPoint"/> and the header-derived
+    /// capacity/label always win over the profile's stored values. Any non-null field on
+    /// <paramref name="overrides"/> wins over both the saved profile and the built-in default for
+    /// that field.
+    /// </summary>
+    /// <param name="imagePath">Path to an existing <c>.mdr</c> image file.</param>
+    /// <param name="mountPoint">The drive letter to mount at (e.g. <c>"R:"</c>).</param>
+    /// <param name="overrides">
+    /// Per-field values the user explicitly passed via CLI flags; <c>null</c> fields defer to the
+    /// saved profile or built-in default.
+    /// </param>
+    /// <returns>
+    /// <c>(true, message)</c> on success; <c>(false, message)</c> with a human-readable reason
+    /// otherwise (mount point already in use, image already in use by another disk, invalid
+    /// image file, or a mount failure).
+    /// </returns>
+    public async Task<(bool Success, string Message)> MountImageAsync(string imagePath, string mountPoint, CliMountOverrides overrides)
+    {
+        if (Disks.Any(d => string.Equals(d.MountPoint, mountPoint, StringComparison.OrdinalIgnoreCase)))
+        {
+            return (false, Loc.Format("Val.MountPointAlreadyMounted", mountPoint));
+        }
+
+        var otherDisks = GetOtherDiskOptions(excluding: null);
+        if (otherDisks.Any(d => d.PersistImagePath != null &&
+            string.Equals(d.PersistImagePath, imagePath, StringComparison.OrdinalIgnoreCase)))
+        {
+            return (false, Loc.Get("Val.ImagePathInUse"));
+        }
+
+        ulong capacityBytes;
+        string volumeLabel;
+        try
+        {
+            DiskImageSerializer.PeekHeader(imagePath, out capacityBytes, out volumeLabel);
+        }
+        catch (InvalidDataException)
+        {
+            return (false, Loc.Get("Val.ImportInvalidImage"));
+        }
+
+        var savedProfile = _settingsStore.Load().Disks
+            .FirstOrDefault(p => p.PersistImagePath != null &&
+                string.Equals(p.PersistImagePath, imagePath, StringComparison.OrdinalIgnoreCase));
+
+        var options = savedProfile != null
+            ? ProfileToOptions(savedProfile) with
+            {
+                MountPoint = mountPoint,
+                CapacityBytes = capacityBytes,
+                VolumeLabel = volumeLabel,
+            }
+            : new DiskOptions
+            {
+                MountPoint = mountPoint,
+                CapacityBytes = capacityBytes,
+                VolumeLabel = volumeLabel,
+                PersistImagePath = imagePath,
+            };
+
+        options = options with
+        {
+            ReadOnly = overrides.ReadOnly ?? options.ReadOnly,
+            AutoMount = overrides.AutoMount ?? options.AutoMount,
+            AutoSaveIntervalMinutes = overrides.AutoSaveIntervalMinutes ?? options.AutoSaveIntervalMinutes,
+            CompressionLevel = overrides.CompressionLevel ?? options.CompressionLevel,
+            MaxSnapshotCount = overrides.MaxSnapshotCount ?? options.MaxSnapshotCount,
+            MaxSnapshotSizeBytes = overrides.MaxSnapshotSizeBytes ?? options.MaxSnapshotSizeBytes,
+            HighUsageWarnPercent = overrides.HighUsageWarnPercent ?? options.HighUsageWarnPercent,
+        };
+
+        try
+        {
+            var disk = await Task.Run(() => _mountManager.Mount(options));
+            AddDiskSorted(new(disk));
+            SaveSettings();
+            StatusText = Loc.Format("Status.MountedWithCapacity", disk.MountPoint, options.VolumeLabel, options.CapacityBytes / (1024 * 1024));
+            return (true, StatusText);
+        }
+        catch (Exception ex)
+        {
+            return (false, Loc.Format("Msg.MountFailed", ex.Message));
+        }
+    }
+
+    /// <summary>
+    /// Unmounts the disk currently mounted at <paramref name="mountPoint"/> without any
+    /// interactive confirmation, for use by the CLI command channel. Resets TEMP first if it
+    /// currently points into the disk being unmounted.
+    /// </summary>
+    /// <param name="mountPoint">The mount point to unmount (e.g. <c>"R:"</c>).</param>
+    /// <returns>
+    /// <c>true</c> if a mounted disk was found and unmounted; <c>false</c> if no disk is
+    /// currently mounted at <paramref name="mountPoint"/>.
+    /// </returns>
+    public async Task<bool> UnmountByMountPointAsync(string mountPoint)
+    {
+        var vm = Disks.FirstOrDefault(d => string.Equals(d.MountPoint, mountPoint, StringComparison.OrdinalIgnoreCase));
+        if (vm == null)
+        {
+            return false;
+        }
+
+        if (vm.IsCurrentTempDir)
+        {
+            await Task.Run(TempDirResetService.Reset);
+        }
+
+        vm.Dispose();
+        Disks.Remove(vm);
+        await Task.Run(() => _mountManager.Unmount(mountPoint));
+
+        SaveSettings();
+        StatusText = Loc.Format("Status.Unmounted", mountPoint);
+        return true;
+    }
+
+    /// <summary>
+    /// Formats the disk currently mounted at <paramref name="mountPoint"/> without any
+    /// interactive confirmation, for use by the CLI command channel.
+    /// </summary>
+    /// <param name="mountPoint">The mount point to format (e.g. <c>"R:"</c>).</param>
+    /// <returns>
+    /// <c>(true, message)</c> on success; <c>(false, message)</c> if the disk is read-only; or
+    /// <c>(false, string.Empty)</c> if no disk is currently mounted at <paramref name="mountPoint"/>.
+    /// </returns>
+    public Task<(bool Success, string Message)> FormatByMountPointAsync(string mountPoint)
+    {
+        var vm = Disks.FirstOrDefault(d => string.Equals(d.MountPoint, mountPoint, StringComparison.OrdinalIgnoreCase));
+        if (vm == null)
+        {
+            return Task.FromResult((false, string.Empty));
+        }
+
+        if (!vm.Disk.Format())
+        {
+            return Task.FromResult((false, Loc.Get("Msg.FormatDiskReadOnly")));
+        }
+
+        vm.Refresh();
+        StatusText = Loc.Format("Status.FormatDisk", mountPoint);
+        return Task.FromResult((true, StatusText));
+    }
+
+    /// <summary>
+    /// Saves the disk currently mounted at <paramref name="mountPoint"/> to its backing image
+    /// file immediately, for use by the CLI command channel.
+    /// </summary>
+    /// <param name="mountPoint">The mount point to save (e.g. <c>"R:"</c>).</param>
+    /// <returns>
+    /// <c>(true, message)</c> on success; <c>(false, message)</c> if no image path is configured
+    /// or the save failed; or <c>(false, string.Empty)</c> if no disk is currently mounted at
+    /// <paramref name="mountPoint"/>.
+    /// </returns>
+    public async Task<(bool Success, string Message)> SaveByMountPointAsync(string mountPoint)
+    {
+        var vm = Disks.FirstOrDefault(d => string.Equals(d.MountPoint, mountPoint, StringComparison.OrdinalIgnoreCase));
+        if (vm == null)
+        {
+            return (false, string.Empty);
+        }
+
+        if (vm.Disk.Options.PersistImagePath == null)
+        {
+            return (false, Loc.Get("Msg.SaveImageNoPath"));
+        }
+
+        try
+        {
+            await Task.Run(() => vm.Disk.SaveToImageWithSnapshot());
+        }
+        catch (Exception ex)
+        {
+            return (false, Loc.Format("Msg.SaveImageFailed", ex.Message));
+        }
+
+        StatusText = Loc.Format("Status.ImageSaved", mountPoint);
+        return (true, StatusText);
     }
 
     internal void SaveSettings()
@@ -521,10 +715,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             return;
         }
 
-        var userTemp = Environment.GetEnvironmentVariable("TEMP", EnvironmentVariableTarget.User);
-        var expandedTemp = string.IsNullOrEmpty(userTemp) ? null : Environment.ExpandEnvironmentVariables(userTemp);
-        var tempOnRamDisk = expandedTemp != null &&
-            Disks.Any(d => expandedTemp.StartsWith(d.MountPoint, StringComparison.OrdinalIgnoreCase));
+        var tempOnRamDisk = IsTempOnAnyRamDisk();
 
         var body = Loc.Get("Msg.ExitConfirmBody");
         if (tempOnRamDisk)
@@ -547,6 +738,30 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             }
             ExitRequested?.Invoke(this, EventArgs.Empty);
         }
+    }
+
+    /// <summary>
+    /// Exits the application without the interactive confirmation dialog used by
+    /// <see cref="ExecuteExit"/> — for callers (the CLI) that have already committed to exiting
+    /// and have no dialog to show. Still resets TEMP first if it points at a mounted RAM disk,
+    /// same as the confirmed interactive path.
+    /// </summary>
+    public void ExitWithoutConfirmation()
+    {
+        if (IsTempOnAnyRamDisk())
+        {
+            TempDirResetService.Reset();
+        }
+
+        ExitRequested?.Invoke(this, EventArgs.Empty);
+    }
+
+    private bool IsTempOnAnyRamDisk()
+    {
+        var userTemp = Environment.GetEnvironmentVariable("TEMP", EnvironmentVariableTarget.User);
+        var expandedTemp = string.IsNullOrEmpty(userTemp) ? null : Environment.ExpandEnvironmentVariables(userTemp);
+        return expandedTemp != null &&
+            Disks.Any(d => expandedTemp.StartsWith(d.MountPoint, StringComparison.OrdinalIgnoreCase));
     }
 
     private void ExecuteFormatDisk(DiskViewModel? vm)

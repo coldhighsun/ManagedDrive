@@ -100,6 +100,7 @@
     <sys:String x:Key="Val.BadSnapshotCount">请输入 1 到 20 之间的快照数量。</sys:String>
     <sys:String x:Key="Val.BadSnapshotSize">请输入有效的最大快照大小。</sys:String>
     <sys:String x:Key="Val.ImagePathIsSnapshot">该路径看起来像快照文件名，请选择另一个镜像路径。</sys:String>
+    <sys:String x:Key="Val.MountPointAlreadyMounted">{0} 已挂载。</sys:String>
 
     <!-- CloneDiskDialog -->
     <sys:String x:Key="CloneDisk.Title">克隆磁盘</sys:String>
@@ -179,6 +180,7 @@
     <sys:String x:Key="Msg.ExitConfirmBody">所有已挂载的 RAM 磁盘将被卸载，其中未挂载镜像的数据将丢失。&#x0a;&#x0a;确认退出？</sys:String>
     <sys:String x:Key="Msg.MountFailed">挂载磁盘失败：&#x0a;{0}</sys:String>
     <sys:String x:Key="Msg.SaveImageFailed">保存镜像失败：&#x0a;{0}</sys:String>
+    <sys:String x:Key="Msg.SaveImageNoPath">该磁盘未配置镜像路径。</sys:String>
     <sys:String x:Key="Msg.FormatDiskConfirmTitle">格式化磁盘</sys:String>
     <sys:String x:Key="Msg.FormatDiskConfirmBody">确认格式化 {0}（{1}）？&#x0a;&#x0a;该磁盘上的所有文件和文件夹将被永久删除。</sys:String>
     <sys:String x:Key="Msg.FormatDiskReadOnly">只读磁盘无法格式化。</sys:String>
