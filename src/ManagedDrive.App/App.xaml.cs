@@ -14,6 +14,7 @@ public partial class App
     private readonly DispatcherTimer _timerShowTrayInfoPopup = new();
     private readonly DispatcherTimer _timerTooltipCooldown = new();
     private System.Drawing.Point _iconScreenPoint;
+    private CliPipeServer? _cliPipeServer;
     private bool _isExiting;
     private MainViewModel? _mainViewModel;
     private MainWindow? _mainWindow;
@@ -42,6 +43,8 @@ public partial class App
         _mainViewModel?.SaveSettings();
         _trayIcon?.Dispose();
         _mainViewModel?.Dispose();
+
+        _cliPipeServer?.Dispose();
 
         // Safety net: if ShutdownAsync already disposed the mount manager, this is a no-op.
         Task.Run(() => _mountManager?.Dispose()).Wait();
@@ -86,6 +89,9 @@ public partial class App
         SetupUsageWarnings();
         CheckTempDirectoryOnStartup(config);
         AutoMountDisks();
+
+        _cliPipeServer = new(_mainViewModel);
+        _cliPipeServer.Start();
 
         if (config.StartMinimized)
         {
@@ -139,7 +145,7 @@ public partial class App
         {
             if (profile.AutoMount)
             {
-                _mainViewModel.MountFromProfile(profile);
+                _ = _mainViewModel.MountFromProfileAsync(profile);
             }
         }
     }
@@ -576,6 +582,7 @@ public partial class App
             ShowMainWindow();
         }
 
+        _cliPipeServer?.Dispose();
         _mainViewModel?.SaveSettings();
         _trayIcon?.Dispose();
         _mainViewModel?.Dispose();

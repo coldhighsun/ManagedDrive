@@ -1,4 +1,4 @@
-namespace ManagedDrive.App.Helpers;
+namespace ManagedDrive.Cli.Core;
 
 /// <summary>
 /// Formats byte counts as human-readable strings (e.g. "12.3 MB").

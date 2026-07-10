@@ -35,6 +35,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\ManagedDrive.Core\ManagedDrive.Core.csproj" />
+    <ProjectReference Include="..\ManagedDrive.Cli.Core\ManagedDrive.Cli.Core.csproj" />
   </ItemGroup>
 
   <ItemGroup>

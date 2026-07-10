@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="System.CommandLine" />
+    <PackageReference Include="Spectre.Console" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../ManagedDrive.Core/ManagedDrive.Core.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -31,6 +31,10 @@ Create, mount and manage in-memory volumes that appear as normal drive letters i
 - Clone a disk onto another mounted disk or export it to a new `.mdr` file (**Clone Disk...**)
 - Format a disk to instantly delete all its contents (**Format**; read-only disks are protected)
 
+**CLI**
+- `mdrive` command-line tool (ships alongside `ManagedDrive.exe`) for scripting mount/unmount/format/save/list/exit against the running app, forwarded over a named pipe
+- Auto-launches `ManagedDrive.exe` if it isn't already running and waits for it to become ready before sending the command
+
 **Convenience & safety**
 - System tray icon with hover tooltip (live usage per disk), quick-access menu, and optional start-minimized mode
 - High-usage warning per disk (configurable threshold, default 90%, with hysteresis)
@@ -51,6 +55,8 @@ Two ZIPs are published on the [Releases](https://github.com/coldhighsun/ManagedD
 - `ManagedDrive-vX.Y.Z-win-x64-selfcontained.zip` — larger download (bundles its own .NET runtime); no runtime install needed.
 
 Extract either one anywhere and run `ManagedDrive.exe` directly. `ManagedDrive.exe` is a single-file executable — the ZIP contains it plus one small companion `winfsp-msil.dll` (the managed WinFsp interop assembly, which can't be embedded in the single-file bundle) that must stay next to it. The only registry write is the optional "Run at startup" setting; nothing else touches the registry. WinFsp must be installed separately first in both cases (see Prerequisites below).
+
+Each ZIP also includes `mdrive.exe`, a companion CLI (see [CLI Usage](#cli-usage) below). Add the extraction folder to your `PATH` to run `mdrive` from any shell.
 
 ### Prerequisites
 
@@ -107,7 +113,19 @@ ManagedDrive/
 │       ├── Views/                  #   CreateDiskDialog, CloneDiskDialog, RestoreSnapshotDialog, SettingsDialog, ConfirmDialog, AboutDialog, TrayTooltipView
 │       ├── GlobalUsings.cs         #   Project-wide global using directives
 │       ├── MainWindow.xaml(.cs)    #   Main window
-│       └── App.xaml(.cs)           #   Startup, tray icon, auto-mount
+│       ├── App.xaml(.cs)           #   Startup, tray icon, auto-mount
+│       └── Cli/                    #   Named-pipe server forwarding CLI commands into the running app
+│
+│   ├── ManagedDrive.Cli.Core/      # Shared CLI parsing/protocol library
+│   │   ├── CliCommandProcessor.cs  #   System.CommandLine subcommands (mount/unmount/format/save/list/exit)
+│   │   ├── ICliDiskController.cs   #   Abstraction the App layer implements to execute CLI commands
+│   │   ├── CliPipeClient.cs        #   Sends a command to the running app's named pipe
+│   │   ├── CliPipeProtocol.cs      #   Wire format shared by client and server
+│   │   ├── CliMountOverrides.cs    #   Optional per-mount overrides parsed from CLI flags
+│   │   └── ByteFormatter.cs        #   Human-readable byte-size formatting (shared with the App layer)
+│   │
+│   └── ManagedDrive.Cli/           # `mdrive` console-subsystem entry point
+│       └── Program.cs              #   Forwards args over the pipe, auto-launching ManagedDrive.exe if needed
 │
 ├── tests/
 │   └── ManagedDrive.Tests/         # xUnit v3 unit tests (pure-managed code only)
@@ -228,6 +246,30 @@ dotnet run --project benchmarks/ManagedDrive.Benchmarks -c Release
 
 BenchmarkDotNet will prompt you to pick which benchmark class(es) to run (`SequentialReadWriteBenchmarks`, `RandomAccessBenchmarks`, `ConcurrentAccessBenchmarks`, or any combination). Results are written to `BenchmarkDotNet.Artifacts/results/` in the working directory.
 
+### CLI Usage
+
+`mdrive.exe` ships alongside `ManagedDrive.exe` and forwards commands to the running app over a named pipe, so scripts can drive ManagedDrive without opening the UI. If the app isn't already running, `mdrive` launches it and retries for up to 10 seconds before giving up.
+
+```powershell
+mdrive mount C:\disks\scratch.mdr R: --auto-mount --compression Optimal
+mdrive list
+mdrive save R:
+mdrive format R: --yes
+mdrive unmount R:
+mdrive exit
+```
+
+| Command | Description |
+|---|---|
+| `mount <image-path> <drive-letter> [options]` | Mounts an existing `.mdr` image at a drive letter. Options: `--read-only`, `--auto-mount`, `--auto-save-minutes`, `--compression <None\|Fastest\|Optimal\|SmallestSize>`, `--max-snapshot-count`, `--max-snapshot-size-mb`, `--high-usage-warn-percent`. Any option left unset keeps the image's saved profile value (or its default). |
+| `unmount <drive-letter>` | Unmounts a mounted disk. |
+| `format <drive-letter> --yes` | Deletes all files on a mounted disk. Requires `--yes`/`-y` to confirm. |
+| `save <drive-letter>` | Saves a mounted disk's contents to its backing image immediately. |
+| `list` | Lists currently mounted disks with usage and capacity. |
+| `exit` | Exits the running ManagedDrive application. |
+
+Run `mdrive --help` or `mdrive <command> --help` for the full option list.
+
 ### Known Issues
 
 #### Certain installers may fail when TEMP is set to a RAM disk
@@ -286,6 +328,10 @@ MIT
 - 一目了然的磁盘卡片，带状态角标（只读、当前临时目录、是否绑定镜像）及使用率超阈值时变色的进度条
 - 关于对话框，显示应用版本及 GitHub 仓库链接
 
+**命令行**
+- `mdrive` 命令行工具（随 `ManagedDrive.exe` 一同发布），可通过命名管道对运行中的应用执行 mount/unmount/format/save/list/exit 等脚本化操作
+- 若 `ManagedDrive.exe` 尚未运行，会自动启动并等待其就绪后再发送命令
+
 ### 安装
 
 [Releases](https://github.com/coldhighsun/ManagedDrive/releases) 页面为每个版本发布了两个 ZIP，任选其一：
@@ -294,6 +340,8 @@ MIT
 - `ManagedDrive-vX.Y.Z-win-x64-selfcontained.zip` —— 体积较大（内置完整运行时）；无需安装运行时。
 
 解压到任意目录后直接运行 `ManagedDrive.exe` 即可。`ManagedDrive.exe` 是单文件可执行程序——ZIP 中还附带一个体积很小的 `winfsp-msil.dll`（WinFsp 托管互操作程序集，无法打包进单文件中），需与 exe 保持在同一目录下。唯一会写入注册表的操作是可选的"开机自启"设置，除此之外不会写入注册表。两种方式都仍需提前单独安装 WinFsp（见下方环境要求）。
+
+每个 ZIP 中还包含 `mdrive.exe`，一个配套的命令行工具（见下方[命令行用法](#命令行用法)）。将解压目录加入 `PATH` 后即可在任意终端中运行 `mdrive`。
 
 ### 环境要求
 
@@ -348,7 +396,19 @@ ManagedDrive/
 │       ├── ViewModels/             #   MainViewModel、DiskViewModel
 │       ├── Views/                  #   CreateDiskDialog、CloneDiskDialog、RestoreSnapshotDialog、SettingsDialog、ConfirmDialog、AboutDialog、TrayTooltipView
 │       ├── MainWindow.xaml(.cs)    #   主窗口
-│       └── App.xaml(.cs)           #   启动、托盘图标、自动挂载
+│       ├── App.xaml(.cs)           #   启动、托盘图标、自动挂载
+│       └── Cli/                    #   将 CLI 命令转发进运行中应用的命名管道服务端
+│
+│   ├── ManagedDrive.Cli.Core/      # 共享的 CLI 解析/协议库
+│   │   ├── CliCommandProcessor.cs  #   System.CommandLine 子命令（mount/unmount/format/save/list/exit）
+│   │   ├── ICliDiskController.cs   #   App 层实现的接口，用于执行 CLI 命令
+│   │   ├── CliPipeClient.cs        #   向运行中应用的命名管道发送命令
+│   │   ├── CliPipeProtocol.cs      #   客户端与服务端共用的线上协议格式
+│   │   ├── CliMountOverrides.cs    #   由 CLI 参数解析出的可选挂载覆盖项
+│   │   └── ByteFormatter.cs        #   人类可读的字节大小格式化（与 App 层共用）
+│   │
+│   └── ManagedDrive.Cli/           # `mdrive` 控制台子系统入口点
+│       └── Program.cs              #   将参数通过管道转发，必要时自动启动 ManagedDrive.exe
 │
 ├── tests/
 │   └── ManagedDrive.Tests/         # xUnit v3 单元测试（仅纯托管代码）
@@ -466,6 +526,30 @@ dotnet run --project benchmarks/ManagedDrive.Benchmarks -c Release
 ```
 
 BenchmarkDotNet 会提示你选择要运行的基准测试类（`SequentialReadWriteBenchmarks`、`RandomAccessBenchmarks`、`ConcurrentAccessBenchmarks`，或任意组合）。结果将写入工作目录下的 `BenchmarkDotNet.Artifacts/results/`。
+
+### 命令行用法
+
+`mdrive.exe` 随 `ManagedDrive.exe` 一同发布，通过命名管道将命令转发给正在运行的应用，因此脚本无需打开界面即可操作 ManagedDrive。若应用尚未运行，`mdrive` 会自动启动它，并在最长 10 秒内重试。
+
+```powershell
+mdrive mount C:\disks\scratch.mdr R: --auto-mount --compression Optimal
+mdrive list
+mdrive save R:
+mdrive format R: --yes
+mdrive unmount R:
+mdrive exit
+```
+
+| 命令 | 说明 |
+|---|---|
+| `mount <镜像路径> <盘符> [选项]` | 将已有的 `.mdr` 镜像挂载到指定盘符。可选项：`--read-only`、`--auto-mount`、`--auto-save-minutes`、`--compression <None\|Fastest\|Optimal\|SmallestSize>`、`--max-snapshot-count`、`--max-snapshot-size-mb`、`--high-usage-warn-percent`。未指定的选项沿用该镜像已保存的配置值（或其默认值）。 |
+| `unmount <盘符>` | 卸载已挂载的磁盘。 |
+| `format <盘符> --yes` | 清空已挂载磁盘上的所有文件，须加 `--yes`/`-y` 确认。 |
+| `save <盘符>` | 立即将已挂载磁盘的内容保存到其绑定的镜像文件。 |
+| `list` | 列出当前已挂载的磁盘及其用量与容量。 |
+| `exit` | 退出正在运行的 ManagedDrive 应用。 |
+
+运行 `mdrive --help` 或 `mdrive <命令> --help` 可查看完整的选项列表。
 
 ### 已知问题
 

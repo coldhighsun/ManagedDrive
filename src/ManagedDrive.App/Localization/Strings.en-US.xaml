@@ -100,6 +100,7 @@
     <sys:String x:Key="Val.BadSnapshotCount">Enter a snapshot count between 1 and 20.</sys:String>
     <sys:String x:Key="Val.BadSnapshotSize">Enter a valid maximum snapshot size.</sys:String>
     <sys:String x:Key="Val.ImagePathIsSnapshot">This path looks like a snapshot file name; choose a different image path.</sys:String>
+    <sys:String x:Key="Val.MountPointAlreadyMounted">{0} is already mounted.</sys:String>
 
     <!-- CloneDiskDialog -->
     <sys:String x:Key="CloneDisk.Title">Clone Disk</sys:String>
@@ -179,6 +180,7 @@
     <sys:String x:Key="Msg.ExitConfirmBody">All mounted RAM disks will be unmounted and any unimaged data will be lost.&#x0a;&#x0a;Exit anyway?</sys:String>
     <sys:String x:Key="Msg.MountFailed">Failed to mount disk:&#x0a;{0}</sys:String>
     <sys:String x:Key="Msg.SaveImageFailed">Failed to save image:&#x0a;{0}</sys:String>
+    <sys:String x:Key="Msg.SaveImageNoPath">No image path is configured for this disk.</sys:String>
     <sys:String x:Key="Msg.FormatDiskConfirmTitle">Format Disk</sys:String>
     <sys:String x:Key="Msg.FormatDiskConfirmBody">Format {0} ({1})?&#x0a;&#x0a;All files and folders on this disk will be permanently deleted.</sys:String>
     <sys:String x:Key="Msg.FormatDiskReadOnly">Cannot format a read-only disk.</sys:String>
