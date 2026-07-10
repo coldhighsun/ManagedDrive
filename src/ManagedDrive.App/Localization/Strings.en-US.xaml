@@ -8,6 +8,7 @@
     <sys:String x:Key="Menu.About">About</sys:String>
     <sys:String x:Key="Btn.NewDisk">New Disk...</sys:String>
     <sys:String x:Key="Btn.ImportDisk">Import Disk...</sys:String>
+    <sys:String x:Key="Btn.ImportArchive">Import Archive...</sys:String>
     <sys:String x:Key="Btn.OpenInExplorer">Open in Explorer</sys:String>
     <sys:String x:Key="Btn.OpenImageDirectory">Open Image File Directory</sys:String>
     <sys:String x:Key="Btn.EditDisk">Edit Disk…</sys:String>
@@ -22,6 +23,7 @@
     <sys:String x:Key="Btn.Settings">Settings</sys:String>
     <sys:String x:Key="Tip.NewDisk">Create and mount a new RAM disk</sys:String>
     <sys:String x:Key="Tip.ImportDisk">Mount an existing .mdr image file</sys:String>
+    <sys:String x:Key="Tip.ImportArchive">Mount the contents of an archive file (zip, 7z, rar, tar, ...) as a read-only disk</sys:String>
     <sys:String x:Key="Tip.Unmount">Unmount the selected disk</sys:String>
     <sys:String x:Key="Tip.SaveImage">Save the selected disk's contents to its image file</sys:String>
     <sys:String x:Key="Tip.Refresh">Refresh usage statistics</sys:String>
@@ -41,7 +43,10 @@
     <sys:String x:Key="CreateDisk.Title">Create RAM Disk</sys:String>
     <sys:String x:Key="CreateDisk.TitleEdit">Edit RAM Disk</sys:String>
     <sys:String x:Key="CreateDisk.TitleImport">Import Disk</sys:String>
+    <sys:String x:Key="CreateDisk.TitleImportArchive">Import Archive</sys:String>
     <sys:String x:Key="CreateDisk.ImportNote">Capacity and volume label are read from the image file.</sys:String>
+    <sys:String x:Key="CreateDisk.ArchiveImportNote">Capacity and volume label are read from the archive. The disk will be read-only.</sys:String>
+    <sys:String x:Key="CreateDisk.ArchiveFile">Archive File</sys:String>
     <sys:String x:Key="CreateDisk.Section.Basic">Basic Info</sys:String>
     <sys:String x:Key="CreateDisk.Section.Access">Access</sys:String>
     <sys:String x:Key="CreateDisk.Section.Persistence">Persistence</sys:String>
@@ -93,6 +98,8 @@
     <sys:String x:Key="Val.ImagePathOnRamDisk">The image file cannot be located on a RAM disk.</sys:String>
     <sys:String x:Key="Val.ImagePathInUse">This image file is already used by another RAM disk.</sys:String>
     <sys:String x:Key="Val.ImportInvalidImage">The selected file is not a valid ManagedDrive image.</sys:String>
+    <sys:String x:Key="Val.ArchivePathInUse">This archive file is already mounted by another RAM disk.</sys:String>
+    <sys:String x:Key="Val.ImportInvalidArchive">The selected file is not a supported or valid archive.</sys:String>
     <sys:String x:Key="Val.BadAutoSaveInterval">Enter a valid auto-save interval (1-60 minutes).</sys:String>
     <sys:String x:Key="Val.BadImagePath">The image file path is invalid or its folder does not exist.</sys:String>
     <sys:String x:Key="Val.ReadOnlyRequiresImage">Read-only disks must use an existing image file.</sys:String>
@@ -216,10 +223,13 @@
     <sys:String x:Key="About.Copyright">© 2026 coldhighsun</sys:String>
     <sys:String x:Key="About.ViewOnGitHub">View on GitHub</sys:String>
     <sys:String x:Key="About.ViewWinFsp">Powered by WinFsp</sys:String>
+    <sys:String x:Key="About.ViewSharpCompress">Powered by SharpCompress</sys:String>
 
     <!-- SaveFileDialog -->
     <sys:String x:Key="SaveDlg.Title">Select Image File</sys:String>
     <sys:String x:Key="ImportDlg.Title">Select Image to Import</sys:String>
     <sys:String x:Key="SaveDlg.Filter">ManagedDrive Image (*.mdr)|*.mdr|All Files (*.*)|*.*</sys:String>
+    <sys:String x:Key="ImportArchiveDlg.Title">Select Archive to Import</sys:String>
+    <sys:String x:Key="ArchiveDlg.Filter">Archives (*.zip;*.7z;*.rar;*.tar;*.gz;*.tgz;*.bz2;*.lz)|*.zip;*.7z;*.rar;*.tar;*.gz;*.tgz;*.bz2;*.lz|All Files (*.*)|*.*</sys:String>
 
 </ResourceDictionary>

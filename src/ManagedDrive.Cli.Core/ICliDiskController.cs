@@ -24,6 +24,23 @@ public interface ICliDiskController
     IReadOnlyList<CliDiskInfo> ListDisks();
 
     /// <summary>
+    /// Mounts the contents of an archive file (zip, 7z, rar, tar, or any other format
+    /// <c>SharpCompress</c> can read) at <paramref name="mountPoint"/> as a new read-only disk.
+    /// </summary>
+    /// <param name="archivePath">Path to an existing archive file.</param>
+    /// <param name="mountPoint">The drive letter to mount at.</param>
+    /// <param name="overrides">
+    /// Per-field values the user explicitly passed via CLI flags; only <see cref="CliMountOverrides.AutoMount"/>
+    /// applies to an archive-sourced disk. Any other field is ignored, since an archive-sourced
+    /// disk is always read-only and has no backing image to configure persistence for.
+    /// </param>
+    /// <returns>
+    /// <c>(true, message)</c> on success; <c>(false, message)</c> with a human-readable reason
+    /// otherwise.
+    /// </returns>
+    Task<(bool Success, string Message)> MountArchiveAsync(string archivePath, string mountPoint, CliMountOverrides overrides);
+
+    /// <summary>
     /// Mounts an existing disk image at <paramref name="mountPoint"/>.
     /// </summary>
     /// <param name="imagePath">Path to an existing <c>.mdr</c> disk image.</param>
@@ -60,11 +77,16 @@ public interface ICliDiskController
     /// <summary>
     /// Unmounts the disk currently mounted at <paramref name="mountPoint"/>.
     /// </summary>
+    /// <param name="mountPoint">The mount point to unmount (e.g. <c>"R:"</c>).</param>
+    /// <param name="deleteImage">
+    /// If <c>true</c>, also deletes the disk's backing image file (and any snapshots) or source
+    /// archive file after unmounting.
+    /// </param>
     /// <returns>
     /// <c>true</c> if a mounted disk was found and unmounted; <c>false</c> if no disk is
     /// currently mounted at <paramref name="mountPoint"/>.
     /// </returns>
-    Task<bool> UnmountAsync(string mountPoint);
+    Task<bool> UnmountAsync(string mountPoint, bool deleteImage);
 }
 
 /// <summary>

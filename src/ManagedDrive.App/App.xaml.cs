@@ -523,7 +523,7 @@ public partial class App
                     vm.HighUsageWarning += OnDiskHighUsageWarning;
                     vm.SaveFailed += OnDiskSaveFailed;
 
-                    if (vm.CapacityAdjustedOnLoad)
+                    if (vm.CapacityAdjustedOnLoad && vm.Disk.Options.SourceArchivePath is null)
                     {
                         OnDiskCapacityAdjusted(vm);
                     }

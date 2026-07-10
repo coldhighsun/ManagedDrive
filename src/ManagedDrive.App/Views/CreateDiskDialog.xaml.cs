@@ -16,8 +16,10 @@ public partial class CreateDiskDialog
         ImageCompressionLevel.SmallestSize,
     ];
 
+    private readonly string _importArchivePath = string.Empty;
     private readonly ulong _importCapacityBytes;
     private readonly string _importVolumeLabel = string.Empty;
+    private readonly bool _isArchiveImportMode;
     private readonly bool _isImportMode;
     private readonly ulong _maxCapacityBytes;
     private readonly IReadOnlyList<DiskOptions> _otherDisks;
@@ -160,6 +162,35 @@ public partial class CreateDiskDialog
         }
 
         UpdateHighUsageWarnPercentState();
+
+        if (existing.SourceArchivePath is { } sourceArchivePath)
+        {
+            // Archive-sourced disks keep the same restrictions as the "Import Archive" flow:
+            // capacity/label/read-only are locked to the archive's own values, there's no
+            // backing image file to configure persistence for, and the high-usage warning is
+            // unavailable (forced off) rather than just defaulted.
+            _isImportMode = true;
+            _isArchiveImportMode = true;
+            _importArchivePath = sourceArchivePath;
+            _importCapacityBytes = existing.CapacityBytes;
+            _importVolumeLabel = existing.VolumeLabel;
+
+            ImagePathLabel.Text = Loc.Get("CreateDisk.ArchiveFile");
+            ImagePathBox.Text = sourceArchivePath;
+            ClearImagePathButton.IsEnabled = false;
+            ArchiveImportNoteText.Visibility = Visibility.Visible;
+
+            CapacityRow.IsEnabled = false;
+            VolumeLabelBox.IsEnabled = false;
+
+            ReadOnlyBox.IsChecked = true;
+            ReadOnlyBox.IsEnabled = false;
+            PersistenceTabItem.IsEnabled = false;
+
+            HighUsageWarnBox.IsChecked = false;
+            HighUsageWarnBox.IsEnabled = false;
+            UpdateHighUsageWarnPercentState();
+        }
     }
 
     /// <summary>
@@ -207,6 +238,70 @@ public partial class CreateDiskDialog
         CapacitySlider.IsEnabled = false;
         CapacityUnitBox.IsEnabled = false;
         VolumeLabelBox.IsEnabled = false;
+
+        UpdateCompressionLevelState();
+        UpdateAutoSaveEnabledState();
+    }
+
+    /// <summary>
+    /// Initializes the dialog in archive-import mode: capacity and volume label are pre-filled
+    /// from the archive's contents and locked, the disk is forced read-only (archive formats
+    /// don't support writing changes back), and the entire Persistence tab is disabled since an
+    /// archive-sourced disk has no backing image file to save to.
+    /// </summary>
+    /// <param name="importArchivePath">Path of the archive file to import.</param>
+    /// <param name="importTotalBytes">Total uncompressed size of the archive's contents, used to pre-fill and lock the capacity fields.</param>
+    /// <param name="importVolumeLabel">Suggested volume label (derived from the archive's file name), used to pre-fill and lock the label field.</param>
+    /// <param name="otherDisks">
+    /// Options of all other currently active disks, used to validate that the archive file path
+    /// does not collide with another disk's mount point.
+    /// </param>
+    /// <param name="isArchiveImport">Always <c>true</c>; disambiguates this overload from the image-import constructor.</param>
+    public CreateDiskDialog(string importArchivePath, ulong importTotalBytes, string importVolumeLabel,
+        IReadOnlyList<DiskOptions> otherDisks, bool isArchiveImport) : this(otherDisks)
+    {
+        _ = isArchiveImport;
+        _isImportMode = true;
+        _isArchiveImportMode = true;
+        _importArchivePath = importArchivePath;
+        _importCapacityBytes = importTotalBytes;
+        _importVolumeLabel = importVolumeLabel;
+
+        Title = Loc.Get("CreateDisk.TitleImportArchive");
+
+        ImagePathLabel.Text = Loc.Get("CreateDisk.ArchiveFile");
+        ImagePathBox.Text = importArchivePath;
+        ClearImagePathButton.IsEnabled = false;
+        ArchiveImportNoteText.Visibility = Visibility.Visible;
+
+        var capacityMb = importTotalBytes / (1024UL * 1024);
+        var capacityGb = importTotalBytes / (1024UL * 1024 * 1024);
+        if (capacityGb > 0 && importTotalBytes % (1024UL * 1024 * 1024) == 0)
+        {
+            CapacityUnitBox.SelectedItem = "GB";
+            _capacityValue = (int)capacityGb;
+        }
+        else
+        {
+            CapacityUnitBox.SelectedItem = "MB";
+            _capacityValue = (int)capacityMb;
+        }
+
+        _capacityMaximum = Math.Max(_capacityValue, GetMaxCapacityValue());
+        CapacitySlider.Maximum = _capacityMaximum;
+        UpdateCapacityDisplay();
+        VolumeLabelBox.Text = importVolumeLabel;
+
+        CapacityRow.IsEnabled = false;
+        VolumeLabelBox.IsEnabled = false;
+
+        ReadOnlyBox.IsChecked = true;
+        ReadOnlyBox.IsEnabled = false;
+        PersistenceTabItem.IsEnabled = false;
+
+        HighUsageWarnBox.IsChecked = false;
+        HighUsageWarnBox.IsEnabled = false;
+        UpdateHighUsageWarnPercentState();
 
         UpdateCompressionLevelState();
         UpdateAutoSaveEnabledState();
@@ -483,6 +578,11 @@ public partial class CreateDiskDialog
             return false;
         }
 
+        if (_isArchiveImportMode)
+        {
+            return TryBuildArchiveImportOptions(mountPoint, out options, out error);
+        }
+
         ulong capacityBytes;
         if (_isImportMode)
         {
@@ -626,6 +726,37 @@ public partial class CreateDiskDialog
                 ?? ImageCompressionLevel.Fastest,
             MaxSnapshotCount = maxSnapshotCount,
             MaxSnapshotSizeBytes = maxSnapshotSizeBytes,
+            HighUsageWarnPercent = highUsageWarnPercent,
+        };
+
+        error = string.Empty;
+        return true;
+    }
+
+    private bool TryBuildArchiveImportOptions(string mountPoint, out DiskOptions? options, out string error)
+    {
+        options = null;
+
+        double? highUsageWarnPercent = null;
+        if (HighUsageWarnBox.IsChecked == true)
+        {
+            if (_highUsageWarnPercentValue < 1 || _highUsageWarnPercentValue > 99)
+            {
+                error = Loc.Get("Val.BadHighUsagePercent");
+                return false;
+            }
+
+            highUsageWarnPercent = _highUsageWarnPercentValue;
+        }
+
+        options = new()
+        {
+            MountPoint = mountPoint,
+            VolumeLabel = _importVolumeLabel,
+            CapacityBytes = _importCapacityBytes,
+            ReadOnly = true,
+            AutoMount = AutoMountBox.IsChecked == true,
+            SourceArchivePath = _importArchivePath,
             HighUsageWarnPercent = highUsageWarnPercent,
         };
 

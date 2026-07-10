@@ -42,19 +42,6 @@ public sealed class RamDisk : IDisposable
     public ulong FreeBytes => TotalBytes > UsedBytes ? TotalBytes - UsedBytes : 0;
 
     /// <summary>
-    /// Gets the configured capacity (in bytes) that was in effect before <see cref="Create"/>
-    /// auto-raised it to fit a loaded image whose actual content exceeded that capacity, or
-    /// <c>null</c> if no such adjustment occurred at mount time. This is a one-time diagnostic
-    /// snapshot taken during <see cref="Create"/> and does not change afterward; it is not
-    /// persisted back to <see cref="Options"/> or any saved profile.
-    /// </summary>
-    public ulong? OriginalCapacityBytesOnLoad
-    {
-        get;
-        private set;
-    }
-
-    /// <summary>
     /// Gets the UTC timestamp of the most recent content mutation (create/write/rename/delete/etc.),
     /// or <c>null</c> if the disk has never been modified since mount.
     /// </summary>
@@ -86,6 +73,19 @@ public sealed class RamDisk : IDisposable
     }
 
     /// <summary>
+    /// Gets the configured capacity (in bytes) that was in effect before <see cref="Create"/>
+    /// auto-raised it to fit a loaded image whose actual content exceeded that capacity, or
+    /// <c>null</c> if no such adjustment occurred at mount time. This is a one-time diagnostic
+    /// snapshot taken during <see cref="Create"/> and does not change afterward; it is not
+    /// persisted back to <see cref="Options"/> or any saved profile.
+    /// </summary>
+    public ulong? OriginalCapacityBytesOnLoad
+    {
+        get;
+        private set;
+    }
+
+    /// <summary>
     /// Gets the total configured capacity of this RAM disk in bytes.
     /// </summary>
     public ulong TotalBytes => Options.CapacityBytes;
@@ -97,11 +97,13 @@ public sealed class RamDisk : IDisposable
 
     /// <summary>
     /// Creates and mounts a new RAM disk according to the supplied options.
-    /// If <see cref="DiskOptions.PersistImagePath"/> points to an existing file,
-    /// its contents are restored into the new disk. If the loaded image's actual content
-    /// exceeds the capacity that would otherwise apply, the effective capacity is silently
-    /// raised to fit the existing data (see <see cref="OriginalCapacityBytesOnLoad"/>) rather
-    /// than failing the mount or leaving the disk permanently over capacity.
+    /// If <see cref="DiskOptions.SourceArchivePath"/> points to an existing archive file, it is
+    /// extracted into the new disk (read-only). Otherwise, if
+    /// <see cref="DiskOptions.PersistImagePath"/> points to an existing file, its contents are
+    /// restored into the new disk. If the loaded content's actual size exceeds the capacity that
+    /// would otherwise apply, the effective capacity is silently raised to fit the existing data
+    /// (see <see cref="OriginalCapacityBytesOnLoad"/>) rather than failing the mount or leaving
+    /// the disk permanently over capacity.
     /// </summary>
     /// <param name="options">Mount configuration.</param>
     /// <returns>
@@ -115,7 +117,31 @@ public sealed class RamDisk : IDisposable
         MemoryFileSystem fs;
         ulong? originalCapacity = null;
 
-        if (options.PersistImagePath != null &&
+        if (options.SourceArchivePath != null &&
+            File.Exists(options.SourceArchivePath))
+        {
+            var nodeMap = ArchiveNodeMapBuilder.BuildNodeMap(options.SourceArchivePath);
+
+            var actualUsed = nodeMap.GetTotalAllocated();
+            var capacity = ResolveEffectiveCapacity(options.CapacityBytes, actualUsed);
+            if (capacity != options.CapacityBytes)
+            {
+                originalCapacity = options.CapacityBytes;
+            }
+
+            // Archive-sourced disks are always read-only: none of the supported archive
+            // formats support writing changes back, regardless of what options.ReadOnly says.
+            fs = new(capacity, options.VolumeLabel, nodeMap, readOnly: true);
+
+            if (originalCapacity.HasValue)
+            {
+                options = options with
+                {
+                    CapacityBytes = capacity
+                };
+            }
+        }
+        else if (options.PersistImagePath != null &&
             File.Exists(options.PersistImagePath))
         {
             var nodeMap = DiskImageSerializer.Load(
@@ -137,7 +163,10 @@ public sealed class RamDisk : IDisposable
 
             if (originalCapacity.HasValue)
             {
-                options = options with { CapacityBytes = capacity };
+                options = options with
+                {
+                    CapacityBytes = capacity
+                };
             }
         }
         else

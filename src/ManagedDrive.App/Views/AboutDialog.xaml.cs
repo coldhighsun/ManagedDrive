@@ -10,6 +10,7 @@ public partial class AboutDialog
 {
     private const string GitHubUrl = "https://github.com/coldhighsun/ManagedDrive";
     private const string WinFspUrl = "https://winfsp.dev/";
+    private const string SharpCompressUrl = "https://github.com/adamhathcock/sharpcompress";
 
     public AboutDialog()
     {
@@ -27,6 +28,7 @@ public partial class AboutDialog
         VersionText.Text = version;
         GitHubLink.NavigateUri = new(GitHubUrl);
         WinFspLink.NavigateUri = new(WinFspUrl);
+        SharpCompressLink.NavigateUri = new(SharpCompressUrl);
     }
 
     private void Hyperlink_RequestNavigate(object sender, RequestNavigateEventArgs e)

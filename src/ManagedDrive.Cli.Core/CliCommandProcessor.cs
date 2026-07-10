@@ -94,14 +94,55 @@ public static class CliCommandProcessor
                 console);
         });
 
+        var mountArchiveArgument = new Argument<string>("archive-path")
+        {
+            Description = "Path to an archive file (zip, 7z, rar, tar, ...) to mount as a read-only disk.",
+        };
+        var mountArchiveDriveArgument = new Argument<string>("drive-letter")
+        {
+            Description = "Drive letter to mount at, e.g. R:",
+        };
+        var mountArchiveAutoMountOption = new Option<bool?>("--auto-mount")
+        {
+            Description = "Re-mount this disk automatically on next app startup. If omitted, keeps the saved profile's value (or the default: off).",
+        };
+
+        var mountArchiveCommand = new Command("mount-archive", "Mounts the contents of an archive file as a new read-only disk.");
+        mountArchiveCommand.Arguments.Add(mountArchiveArgument);
+        mountArchiveCommand.Arguments.Add(mountArchiveDriveArgument);
+        mountArchiveCommand.Options.Add(mountArchiveAutoMountOption);
+        mountArchiveCommand.SetAction((parseResult, _) =>
+        {
+            var overrides = new CliMountOverrides
+            {
+                AutoMount = parseResult.GetValue(mountArchiveAutoMountOption),
+            };
+
+            return MountArchiveAsync(
+                parseResult.GetValue(mountArchiveArgument)!,
+                parseResult.GetValue(mountArchiveDriveArgument)!,
+                overrides,
+                diskController,
+                console);
+        });
+
         var unmountDriveArgument = new Argument<string>("drive-letter")
         {
             Description = "Drive letter of a currently mounted disk, e.g. R:",
         };
+        var unmountDeleteImageOption = new Option<bool>("--delete-image")
+        {
+            Description = "Also delete the disk's backing image file (and any snapshots) after unmounting.",
+        };
         var unmountCommand = new Command("unmount", "Unmounts a mounted disk by drive letter.");
         unmountCommand.Arguments.Add(unmountDriveArgument);
+        unmountCommand.Options.Add(unmountDeleteImageOption);
         unmountCommand.SetAction((parseResult, _) =>
-            UnmountAsync(parseResult.GetValue(unmountDriveArgument)!, diskController, console));
+            UnmountAsync(
+                parseResult.GetValue(unmountDriveArgument)!,
+                parseResult.GetValue(unmountDeleteImageOption),
+                diskController,
+                console));
 
         var formatDriveArgument = new Argument<string>("drive-letter")
         {
@@ -138,6 +179,7 @@ public static class CliCommandProcessor
 
         var rootCommand = new RootCommand("ManagedDrive CLI — quick mount/unmount for RAM disks.");
         rootCommand.Subcommands.Add(mountCommand);
+        rootCommand.Subcommands.Add(mountArchiveCommand);
         rootCommand.Subcommands.Add(unmountCommand);
         rootCommand.Subcommands.Add(formatCommand);
         rootCommand.Subcommands.Add(saveCommand);
@@ -195,6 +237,21 @@ public static class CliCommandProcessor
         }
 
         var (success, message) = await diskController.MountImageAsync(imagePath, driveLetter, overrides);
+        console.MarkupLine(success ? $"[green]{Markup.Escape(message)}[/]" : $"[red]{Markup.Escape(message)}[/]");
+        return success ? 0 : 1;
+    }
+
+    private static async Task<int> MountArchiveAsync(string archivePath, string driveLetter, CliMountOverrides overrides, ICliDiskController diskController, IAnsiConsole console)
+    {
+        driveLetter = NormalizeDriveLetter(driveLetter);
+
+        if (!File.Exists(archivePath))
+        {
+            console.MarkupLine($"[red]Archive file not found: {Markup.Escape(archivePath)}[/]");
+            return 1;
+        }
+
+        var (success, message) = await diskController.MountArchiveAsync(archivePath, driveLetter, overrides);
         console.MarkupLine(success ? $"[green]{Markup.Escape(message)}[/]" : $"[red]{Markup.Escape(message)}[/]");
         return success ? 0 : 1;
     }
@@ -260,14 +317,16 @@ public static class CliCommandProcessor
         return 1;
     }
 
-    private static async Task<int> UnmountAsync(string driveLetter, ICliDiskController diskController, IAnsiConsole console)
+    private static async Task<int> UnmountAsync(string driveLetter, bool deleteImage, ICliDiskController diskController, IAnsiConsole console)
     {
         driveLetter = NormalizeDriveLetter(driveLetter);
 
-        var unmounted = await diskController.UnmountAsync(driveLetter);
+        var unmounted = await diskController.UnmountAsync(driveLetter, deleteImage);
         if (unmounted)
         {
-            console.MarkupLine($"[green]Unmounted {driveLetter}.[/]");
+            console.MarkupLine(deleteImage
+                ? $"[green]Unmounted {driveLetter} and deleted its image file.[/]"
+                : $"[green]Unmounted {driveLetter}.[/]");
             return 0;
         }
 
