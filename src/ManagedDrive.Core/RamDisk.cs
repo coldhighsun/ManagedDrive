@@ -42,6 +42,19 @@ public sealed class RamDisk : IDisposable
     public ulong FreeBytes => TotalBytes > UsedBytes ? TotalBytes - UsedBytes : 0;
 
     /// <summary>
+    /// Gets the configured capacity (in bytes) that was in effect before <see cref="Create"/>
+    /// auto-raised it to fit a loaded image whose actual content exceeded that capacity, or
+    /// <c>null</c> if no such adjustment occurred at mount time. This is a one-time diagnostic
+    /// snapshot taken during <see cref="Create"/> and does not change afterward; it is not
+    /// persisted back to <see cref="Options"/> or any saved profile.
+    /// </summary>
+    public ulong? OriginalCapacityBytesOnLoad
+    {
+        get;
+        private set;
+    }
+
+    /// <summary>
     /// Gets the UTC timestamp of the most recent content mutation (create/write/rename/delete/etc.),
     /// or <c>null</c> if the disk has never been modified since mount.
     /// </summary>
@@ -85,7 +98,10 @@ public sealed class RamDisk : IDisposable
     /// <summary>
     /// Creates and mounts a new RAM disk according to the supplied options.
     /// If <see cref="DiskOptions.PersistImagePath"/> points to an existing file,
-    /// its contents are restored into the new disk.
+    /// its contents are restored into the new disk. If the loaded image's actual content
+    /// exceeds the capacity that would otherwise apply, the effective capacity is silently
+    /// raised to fit the existing data (see <see cref="OriginalCapacityBytesOnLoad"/>) rather
+    /// than failing the mount or leaving the disk permanently over capacity.
     /// </summary>
     /// <param name="options">Mount configuration.</param>
     /// <returns>
@@ -97,6 +113,7 @@ public sealed class RamDisk : IDisposable
     public static RamDisk Create(DiskOptions options)
     {
         MemoryFileSystem fs;
+        ulong? originalCapacity = null;
 
         if (options.PersistImagePath != null &&
             File.Exists(options.PersistImagePath))
@@ -106,9 +123,22 @@ public sealed class RamDisk : IDisposable
                 out var savedCapacity,
                 out var savedLabel);
 
-            var capacity = savedCapacity > 0 ? savedCapacity : options.CapacityBytes;
+            var configuredCapacity = savedCapacity > 0 ? savedCapacity : options.CapacityBytes;
             var label = string.IsNullOrEmpty(savedLabel) ? options.VolumeLabel : savedLabel;
+
+            var actualUsed = nodeMap.GetTotalAllocated();
+            var capacity = ResolveEffectiveCapacity(configuredCapacity, actualUsed);
+            if (capacity != configuredCapacity)
+            {
+                originalCapacity = configuredCapacity;
+            }
+
             fs = new(capacity, label, nodeMap, options.ReadOnly);
+
+            if (originalCapacity.HasValue)
+            {
+                options = options with { CapacityBytes = capacity };
+            }
         }
         else
         {
@@ -143,7 +173,10 @@ public sealed class RamDisk : IDisposable
             NotifyShellDriveAdded(options.MountPoint);
         }
 
-        var disk = new RamDisk(fs, host, options);
+        var disk = new RamDisk(fs, host, options)
+        {
+            OriginalCapacityBytesOnLoad = originalCapacity,
+        };
         disk.ConfigureAutoSaveTimer();
         return disk;
     }
@@ -354,6 +387,14 @@ public sealed class RamDisk : IDisposable
             }
         }
     }
+
+    /// <summary>
+    /// Determines the capacity a disk should mount with given its configured capacity and the
+    /// actual bytes allocated by a loaded image, raising the configured value when the image's
+    /// content would otherwise exceed it.
+    /// </summary>
+    internal static ulong ResolveEffectiveCapacity(ulong configuredCapacity, ulong actualUsed) =>
+        Math.Max(configuredCapacity, actualUsed);
 
     private static void ConfigureHost(FileSystemHost host)
     {

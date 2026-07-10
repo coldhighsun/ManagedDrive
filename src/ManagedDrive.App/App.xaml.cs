@@ -331,6 +331,24 @@ public partial class App
         _trayIcon.ShowBalloonTip(5000, title, body, System.Windows.Forms.ToolTipIcon.Warning);
     }
 
+    private void OnDiskCapacityAdjusted(DiskViewModel vm)
+    {
+        var originalMb = vm.OriginalCapacityBytesOnLoad!.Value / (1024 * 1024);
+        var newMb = vm.Disk.TotalBytes / (1024 * 1024);
+
+        if (_trayIcon != null)
+        {
+            var title = Loc.Get("Tray.CapacityAdjustedTitle");
+            var body = Loc.Format("Tray.CapacityAdjustedBody", vm.VolumeLabel, vm.MountPoint, originalMb, newMb);
+            _trayIcon.ShowBalloonTip(5000, title, body, System.Windows.Forms.ToolTipIcon.Warning);
+        }
+
+        if (_mainViewModel != null)
+        {
+            _mainViewModel.StatusText = Loc.Format("Status.CapacityAdjusted", vm.MountPoint, originalMb, newMb);
+        }
+    }
+
     private void OnDiskSaveFailed(object? sender, Exception ex)
     {
         if (sender is not DiskViewModel vm)
@@ -498,6 +516,11 @@ public partial class App
                 {
                     vm.HighUsageWarning += OnDiskHighUsageWarning;
                     vm.SaveFailed += OnDiskSaveFailed;
+
+                    if (vm.CapacityAdjustedOnLoad)
+                    {
+                        OnDiskCapacityAdjusted(vm);
+                    }
                 }
             }
 
