@@ -27,6 +27,16 @@ public sealed class RamDisk : IDisposable
     }
 
     /// <summary>
+    /// Occurs whenever an image save or snapshot write fails, whether triggered manually,
+    /// by the periodic auto-save timer, or by the final save on unmount/dispose. The
+    /// exception is also rethrown to the caller for saves that are awaited synchronously
+    /// (e.g. a manual save); this event exists so background failures that would otherwise
+    /// be swallowed (auto-save ticks, the final save in <see cref="Dispose"/>) can still be
+    /// surfaced to the UI.
+    /// </summary>
+    public event EventHandler<Exception>? SaveFailed;
+
+    /// <summary>
     /// Gets the number of bytes currently available on this RAM disk.
     /// </summary>
     public ulong FreeBytes => TotalBytes > UsedBytes ? TotalBytes - UsedBytes : 0;
@@ -217,12 +227,20 @@ public sealed class RamDisk : IDisposable
             return;
         }
 
-        DiskImageSerializer.Save(
-            _fs.NodeMap,
-            Options.CapacityBytes,
-            Options.VolumeLabel,
-            Options.PersistImagePath,
-            Options.CompressionLevel);
+        try
+        {
+            DiskImageSerializer.Save(
+                _fs.NodeMap,
+                Options.CapacityBytes,
+                Options.VolumeLabel,
+                Options.PersistImagePath,
+                Options.CompressionLevel);
+        }
+        catch (Exception ex)
+        {
+            SaveFailed?.Invoke(this, ex);
+            throw;
+        }
 
         LastSaveTime = DateTimeOffset.UtcNow;
         _fs.ClearDirty();
@@ -471,14 +489,22 @@ public sealed class RamDisk : IDisposable
             return;
         }
 
-        SnapshotManager.WriteSnapshot(
-            _fs.NodeMap,
-            Options.CapacityBytes,
-            Options.VolumeLabel,
-            path,
-            DateTimeOffset.UtcNow,
-            Options.CompressionLevel);
+        try
+        {
+            SnapshotManager.WriteSnapshot(
+                _fs.NodeMap,
+                Options.CapacityBytes,
+                Options.VolumeLabel,
+                path,
+                DateTimeOffset.UtcNow,
+                Options.CompressionLevel);
 
-        SnapshotManager.Prune(path, Options.MaxSnapshotCount, Options.MaxSnapshotSizeBytes);
+            SnapshotManager.Prune(path, Options.MaxSnapshotCount, Options.MaxSnapshotSizeBytes);
+        }
+        catch (Exception ex)
+        {
+            SaveFailed?.Invoke(this, ex);
+            throw;
+        }
     }
 }

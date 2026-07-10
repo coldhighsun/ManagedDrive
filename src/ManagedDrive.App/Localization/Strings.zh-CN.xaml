@@ -154,6 +154,8 @@
     <sys:String x:Key="Tray.NoDisksMounted">暂无已挂载的磁盘</sys:String>
     <sys:String x:Key="Tray.HighUsageTitle">RAM 磁盘空间不足</sys:String>
     <sys:String x:Key="Tray.HighUsageBody">{0}（{1}）已使用 {2:F0}%。</sys:String>
+    <sys:String x:Key="Tray.SaveFailedTitle">保存失败</sys:String>
+    <sys:String x:Key="Tray.SaveFailedBody">{0}（{1}）：{2}</sys:String>
 
     <!-- Status bar -->
     <sys:String x:Key="Status.Ready">就绪。</sys:String>
@@ -162,6 +164,7 @@
     <sys:String x:Key="Status.AutoMountFailed">自动挂载"{0}"失败：{1}</sys:String>
     <sys:String x:Key="Status.MountFailed">挂载失败。</sys:String>
     <sys:String x:Key="Status.ImageSaved">已保存 {0} 的镜像。</sys:String>
+    <sys:String x:Key="Status.SaveFailed">{0} 保存失败：{1}</sys:String>
     <sys:String x:Key="Status.Unmounted">已卸载 {0}。</sys:String>
     <sys:String x:Key="Status.TempDirSet">临时文件夹已设置为 {0}。</sys:String>
 

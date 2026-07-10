@@ -209,7 +209,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     public string StatusText
     {
         get;
-        private set
+        internal set
         {
             field = value;
             OnPropertyChanged(nameof(StatusText));

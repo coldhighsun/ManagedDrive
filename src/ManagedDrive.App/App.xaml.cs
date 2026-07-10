@@ -331,6 +331,26 @@ public partial class App
         _trayIcon.ShowBalloonTip(5000, title, body, System.Windows.Forms.ToolTipIcon.Warning);
     }
 
+    private void OnDiskSaveFailed(object? sender, Exception ex)
+    {
+        if (sender is not DiskViewModel vm)
+        {
+            return;
+        }
+
+        if (_trayIcon != null)
+        {
+            var title = Loc.Get("Tray.SaveFailedTitle");
+            var body = Loc.Format("Tray.SaveFailedBody", vm.VolumeLabel, vm.MountPoint, ex.Message);
+            _trayIcon.ShowBalloonTip(5000, title, body, System.Windows.Forms.ToolTipIcon.Error);
+        }
+
+        if (_mainViewModel != null)
+        {
+            _mainViewModel.StatusText = Loc.Format("Status.SaveFailed", vm.MountPoint, ex.Message);
+        }
+    }
+
     /// <summary>
     /// Fires when Windows is logging off, shutting down, or restarting. WPF's own
     /// <c>Exit</c> event does not fire in this case, and the OS may kill the process shortly
@@ -477,6 +497,7 @@ public partial class App
                 foreach (DiskViewModel vm in e.NewItems)
                 {
                     vm.HighUsageWarning += OnDiskHighUsageWarning;
+                    vm.SaveFailed += OnDiskSaveFailed;
                 }
             }
 
@@ -485,6 +506,7 @@ public partial class App
                 foreach (DiskViewModel vm in e.OldItems)
                 {
                     vm.HighUsageWarning -= OnDiskHighUsageWarning;
+                    vm.SaveFailed -= OnDiskSaveFailed;
                 }
             }
         };

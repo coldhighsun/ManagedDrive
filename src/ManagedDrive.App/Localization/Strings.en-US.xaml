@@ -154,6 +154,8 @@
     <sys:String x:Key="Tray.NoDisksMounted">No disks mounted</sys:String>
     <sys:String x:Key="Tray.HighUsageTitle">RAM Disk Nearly Full</sys:String>
     <sys:String x:Key="Tray.HighUsageBody">{0} ({1}) is {2:F0}% full.</sys:String>
+    <sys:String x:Key="Tray.SaveFailedTitle">Save Failed</sys:String>
+    <sys:String x:Key="Tray.SaveFailedBody">{0} ({1}): {2}</sys:String>
 
     <!-- Status bar -->
     <sys:String x:Key="Status.Ready">Ready.</sys:String>
@@ -162,6 +164,7 @@
     <sys:String x:Key="Status.AutoMountFailed">Auto-mount '{0}' failed: {1}</sys:String>
     <sys:String x:Key="Status.MountFailed">Mount failed.</sys:String>
     <sys:String x:Key="Status.ImageSaved">Image saved for {0}.</sys:String>
+    <sys:String x:Key="Status.SaveFailed">Save failed for {0}: {1}</sys:String>
     <sys:String x:Key="Status.Unmounted">Unmounted {0}.</sys:String>
     <sys:String x:Key="Status.TempDirSet">Temp directory set to {0}.</sys:String>
 
