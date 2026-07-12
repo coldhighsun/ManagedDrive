@@ -223,7 +223,9 @@
     <sys:String x:Key="About.Copyright">© 2026 coldhighsun</sys:String>
     <sys:String x:Key="About.ViewOnGitHub">在 GitHub 上查看</sys:String>
     <sys:String x:Key="About.ViewWinFsp">基于 WinFsp 构建</sys:String>
+    <sys:String x:Key="About.WinFspLicense">© 2015-2026 Bill Zissimopoulos — GNU GPLv2（附 FUSE 例外）或商业许可</sys:String>
     <sys:String x:Key="About.ViewSharpCompress">基于 SharpCompress 构建</sys:String>
+    <sys:String x:Key="About.SharpCompressLicense">© 2025 Adam Hathcock — MIT 许可证</sys:String>
 
     <!-- SaveFileDialog -->
     <sys:String x:Key="SaveDlg.Title">选择镜像文件</sys:String>

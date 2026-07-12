@@ -295,6 +295,8 @@ ManagedDrive will warn you when you attempt to set a RAM disk as TEMP. On every 
 
 MIT
 
+This project bundles [WinFsp](https://winfsp.dev/) and [SharpCompress](https://github.com/adamhathcock/sharpcompress); see [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) for their copyright and license information.
+
 ---
 
 ## 中文
@@ -581,3 +583,5 @@ mdrive exit
 ### 许可证
 
 MIT
+
+本项目内置了 [WinFsp](https://winfsp.dev/) 和 [SharpCompress](https://github.com/adamhathcock/sharpcompress)，其版权与许可证信息见 [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md)。

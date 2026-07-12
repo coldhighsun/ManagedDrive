@@ -223,7 +223,9 @@
     <sys:String x:Key="About.Copyright">© 2026 coldhighsun</sys:String>
     <sys:String x:Key="About.ViewOnGitHub">View on GitHub</sys:String>
     <sys:String x:Key="About.ViewWinFsp">Powered by WinFsp</sys:String>
+    <sys:String x:Key="About.WinFspLicense">© 2015-2026 Bill Zissimopoulos — GNU GPLv2 (FUSE exception) or commercial license</sys:String>
     <sys:String x:Key="About.ViewSharpCompress">Powered by SharpCompress</sys:String>
+    <sys:String x:Key="About.SharpCompressLicense">© 2025 Adam Hathcock — MIT License</sys:String>
 
     <!-- SaveFileDialog -->
     <sys:String x:Key="SaveDlg.Title">Select Image File</sys:String>
