@@ -4,7 +4,7 @@
         xmlns:views="clr-namespace:ManagedDrive.App.Views"
         Style="{StaticResource DialogWindowStyle}"
         Title="{DynamicResource Window.Title}"
-        Width="420" SizeToContent="Height"
+        Width="460" SizeToContent="Height"
         WindowStartupLocation="CenterOwner">
 
         <Grid Margin="4,0,4,0">
@@ -53,11 +53,21 @@
                         <Run Text="{DynamicResource About.ViewWinFsp}"/>
                     </Hyperlink>
                 </TextBlock>
-                <TextBlock FontSize="12" Margin="0,4,0,0">
+                <TextBlock Text="{DynamicResource About.WinFspLicense}"
+                           FontSize="11"
+                           TextWrapping="Wrap"
+                           Foreground="{DynamicResource AppForegroundLight}"
+                           Margin="0,1,0,0"/>
+                <TextBlock FontSize="12" Margin="0,6,0,0">
                     <Hyperlink x:Name="SharpCompressLink" RequestNavigate="Hyperlink_RequestNavigate">
                         <Run Text="{DynamicResource About.ViewSharpCompress}"/>
                     </Hyperlink>
                 </TextBlock>
+                <TextBlock Text="{DynamicResource About.SharpCompressLicense}"
+                           FontSize="11"
+                           TextWrapping="Wrap"
+                           Foreground="{DynamicResource AppForegroundLight}"
+                           Margin="0,1,0,0"/>
             </StackPanel>
 
             <!-- OK button -->
