@@ -37,7 +37,7 @@ Create, mount and manage in-memory volumes that appear as normal drive letters i
 - Auto-launches `ManagedDrive.exe` if it isn't already running and waits for it to become ready before sending the command
 
 **Convenience & safety**
-- Optional Explorer right-click integration: enable the setting to add **"Mount as RAM disk (ManagedDrive)"** to the right-click menu for zip/7z/rar/tar archives, mounting one with a single click — no need to open the app first — launches `ManagedDrive.exe` automatically if it isn't already running
+- Optional Explorer right-click integration: enable the setting to add **"Mount as RAM disk (ManagedDrive)"** to the right-click menu for zip/7z/rar/tar archives, mounting one with a single click — no need to open the app first — launches `ManagedDrive.exe` automatically if it isn't already running, and opens the new drive in Explorer as soon as it's mounted
 - System tray icon with hover tooltip (live usage per disk), quick-access menu, and optional start-minimized mode
 - High-usage warning per disk (configurable threshold, default 90%, with hysteresis)
 - Temp directory redirection — point Windows TEMP/TMP at a disk's `Temp` folder, with automatic reset on unmount/remount and startup warnings if TEMP is left pointing at a RAM disk
@@ -65,15 +65,15 @@ Each ZIP also includes `mdrive.exe`, a companion CLI (see [CLI Usage](#cli-usage
 | Requirement | Notes |
 |---|---|
 | **Windows 10 / 11 (64-bit)** | ARM64 is not currently tested |
-| **[WinFsp 2.2.26183 (2026 Beta2)](https://github.com/winfsp/winfsp/releases/tag/v2.2B2)** | Must be installed before running ManagedDrive. Download the installer directly: [winfsp-2.2.26183.msi](https://github.com/winfsp/winfsp/releases/download/v2.2B2/winfsp-2.2.26183.msi) — do not use `winget install WinFsp.WinFsp`, as the winget package lags behind the latest release. The managed assembly `winfsp-msil.dll` is installed to `C:\Program Files (x86)\WinFsp\bin\` and is referenced by the project automatically. |
+| **[WinFsp 2.2.26194 (2026 Beta3)](https://github.com/winfsp/winfsp/releases/tag/v2.2B3)** | Must be installed before running ManagedDrive. Download the installer directly: [winfsp-2.2.26194.msi](https://github.com/winfsp/winfsp/releases/download/v2.2B3/winfsp-2.2.26194.msi) — do not use `winget install WinFsp.WinFsp`, as the winget package lags behind the latest release. The managed assembly `winfsp-msil.dll` is installed to `C:\Program Files (x86)\WinFsp\bin\` and is referenced by the project automatically. |
 | **[.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0)** | Only required for the `-portable` ZIP (framework-dependent). Not needed for the `-selfcontained` ZIP. |
 | **.NET 10 SDK** | Required to build. |
 
 ### Getting Started
 
 ```powershell
-# 1. Download and install WinFsp 2.2.26183 (2026 Beta2)
-# https://github.com/winfsp/winfsp/releases/download/v2.2B2/winfsp-2.2.26183.msi
+# 1. Download and install WinFsp 2.2.26194 (2026 Beta3)
+# https://github.com/winfsp/winfsp/releases/download/v2.2B3/winfsp-2.2.26194.msi
 
 # 2. Clone the repository
 git clone https://github.com/coldhighsun/ManagedDrive
@@ -268,7 +268,7 @@ mdrive exit
 | Command | Description |
 |---|---|
 | `mount <image-path> <drive-letter> [options]` | Mounts an existing `.mdr` image at a drive letter. Options: `--read-only`, `--auto-mount`, `--auto-save-minutes`, `--compression <None\|Fastest\|Optimal\|SmallestSize>`, `--max-snapshot-count`, `--max-snapshot-size-mb`, `--high-usage-warn-percent`. Any option left unset keeps the image's saved profile value (or its default). |
-| `mount-archive <archive-path> [drive-letter]` | Imports an archive (zip/7z/rar/tar/...) as a read-only disk. `drive-letter` is optional — if omitted, the first free letter from `Z:` down to `D:` is used. Used internally by the Explorer right-click menu entry. |
+| `mount-archive <archive-path> [drive-letter]` | Imports an archive (zip/7z/rar/tar/...) as a read-only disk and opens it in Explorer once mounted. `drive-letter` is optional — if omitted, the first free letter from `Z:` down to `D:` is used. Used internally by the Explorer right-click menu entry. |
 | `unmount <drive-letter>` | Unmounts a mounted disk. |
 | `format <drive-letter> --yes` | Deletes all files on a mounted disk. Requires `--yes`/`-y` to confirm. |
 | `save <drive-letter>` | Saves a mounted disk's contents to its backing image immediately. |
@@ -327,7 +327,7 @@ This project bundles [WinFsp](https://winfsp.dev/) and [SharpCompress](https://g
 - 克隆磁盘到另一已挂载磁盘，或导出为新的 `.mdr` 文件（**克隆磁盘...**）
 
 **便利与安全**
-- 可选的资源管理器右键集成：在设置中启用后，会为 zip/7z/rar/tar 压缩包添加右键菜单项**"挂载为内存盘 (ManagedDrive)"**，一键挂载，无需先打开应用——若 `ManagedDrive.exe` 尚未运行会自动启动
+- 可选的资源管理器右键集成：在设置中启用后，会为 zip/7z/rar/tar 压缩包添加右键菜单项**"挂载为内存盘 (ManagedDrive)"**，一键挂载，无需先打开应用——若 `ManagedDrive.exe` 尚未运行会自动启动，挂载完成后会自动打开该盘符的资源管理器窗口
 - 系统托盘图标，悬浮显示所有磁盘实时使用率，提供快捷菜单及可选的最小化启动模式
 - 每磁盘可配置的高用量警告（默认阈值 90%，带回滞防抖）
 - 临时目录重定向——将 Windows TEMP/TMP 指向某磁盘的 `Temp` 文件夹，卸载/重挂时自动恢复默认值，TEMP 遗留指向内存盘时会在启动时提示
@@ -359,15 +359,15 @@ This project bundles [WinFsp](https://winfsp.dev/) and [SharpCompress](https://g
 | 要求 | 说明 |
 |---|---|
 | **Windows 10 / 11（64 位）** | 暂未测试 ARM64 |
-| **[WinFsp 2.2.26183（2026 Beta2）](https://github.com/winfsp/winfsp/releases/tag/v2.2B2)** | 必须安装此版本才能运行 ManagedDrive。请直接下载安装包：[winfsp-2.2.26183.msi](https://github.com/winfsp/winfsp/releases/download/v2.2B2/winfsp-2.2.26183.msi)——不要使用 `winget install WinFsp.WinFsp` 安装，因为该 winget 包更新不及时，落后于最新发布版本。托管程序集 `winfsp-msil.dll` 将安装至 `C:\Program Files (x86)\WinFsp\bin\`，项目会自动引用。 |
+| **[WinFsp 2.2.26194（2026 Beta3）](https://github.com/winfsp/winfsp/releases/tag/v2.2B3)** | 必须安装此版本才能运行 ManagedDrive。请直接下载安装包：[winfsp-2.2.26194.msi](https://github.com/winfsp/winfsp/releases/download/v2.2B3/winfsp-2.2.26194.msi)——不要使用 `winget install WinFsp.WinFsp` 安装，因为该 winget 包更新不及时，落后于最新发布版本。托管程序集 `winfsp-msil.dll` 将安装至 `C:\Program Files (x86)\WinFsp\bin\`，项目会自动引用。 |
 | **[.NET 10 桌面运行时](https://dotnet.microsoft.com/download/dotnet/10.0)** | 仅"绿色版"（框架依赖型）ZIP 需要。使用"自包含版" ZIP 时无需安装。 |
 | **.NET 10 SDK** | 编译所需。 |
 
 ### 快速开始
 
 ```powershell
-# 1. 下载并安装 WinFsp 2.2.26183（2026 Beta2）
-# https://github.com/winfsp/winfsp/releases/download/v2.2B2/winfsp-2.2.26183.msi
+# 1. 下载并安装 WinFsp 2.2.26194（2026 Beta3）
+# https://github.com/winfsp/winfsp/releases/download/v2.2B3/winfsp-2.2.26194.msi
 
 # 2. 克隆仓库
 git clone https://github.com/coldhighsun/ManagedDrive
@@ -561,7 +561,7 @@ mdrive exit
 | 命令 | 说明 |
 |---|---|
 | `mount <镜像路径> <盘符> [选项]` | 将已有的 `.mdr` 镜像挂载到指定盘符。可选项：`--read-only`、`--auto-mount`、`--auto-save-minutes`、`--compression <None\|Fastest\|Optimal\|SmallestSize>`、`--max-snapshot-count`、`--max-snapshot-size-mb`、`--high-usage-warn-percent`。未指定的选项沿用该镜像已保存的配置值（或其默认值）。 |
-| `mount-archive <压缩包路径> [盘符]` | 将压缩包（zip/7z/rar/tar 等）作为只读磁盘导入挂载。`盘符`可省略——省略时自动从 `Z:` 向下查找第一个可用盘符。资源管理器右键菜单项内部即调用此命令。 |
+| `mount-archive <压缩包路径> [盘符]` | 将压缩包（zip/7z/rar/tar 等）作为只读磁盘导入挂载，挂载完成后会自动在资源管理器中打开该盘符。`盘符`可省略——省略时自动从 `Z:` 向下查找第一个可用盘符。资源管理器右键菜单项内部即调用此命令。 |
 | `unmount <盘符>` | 卸载已挂载的磁盘。 |
 | `format <盘符> --yes` | 清空已挂载磁盘上的所有文件，须加 `--yes`/`-y` 确认。 |
 | `save <盘符>` | 立即将已挂载磁盘的内容保存到其绑定的镜像文件。 |
