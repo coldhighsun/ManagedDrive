@@ -55,13 +55,28 @@ public partial class App
         }
     }
 
-    private void App_Startup(object sender, StartupEventArgs e)
+    private async void App_Startup(object sender, StartupEventArgs e)
     {
         _singleInstanceMutex = new(true, SingleInstanceMutexName, out var createdNew);
         if (!createdNew)
         {
             _singleInstanceMutex.Dispose();
             _singleInstanceMutex = null;
+
+            if (e.Args.Length > 0)
+            {
+                // Launched with CLI-style args (e.g. from the Explorer context menu) while
+                // another instance is already running: forward the command to it instead of
+                // showing the "already running" dialog.
+                if (CliPipeClient.TrySend(e.Args, out var output, out var exitCode) && exitCode != 0)
+                {
+                    MessageBox.Show(output, "ManagedDrive", MessageBoxButton.OK, MessageBoxImage.Warning);
+                }
+
+                Shutdown();
+                return;
+            }
+
             MessageBox.Show(
                 "ManagedDrive is already running.",
                 "ManagedDrive",
@@ -88,10 +103,6 @@ public partial class App
         SetupTrayIcon();
         SetupUsageWarnings();
         CheckTempDirectoryOnStartup(config);
-        AutoMountDisks();
-
-        _cliPipeServer = new(_mainViewModel);
-        _cliPipeServer.Start();
 
         if (config.StartMinimized)
         {
@@ -108,6 +119,23 @@ public partial class App
             _mainWindow.Show();
             _mainWindow.Activate();
             _mainWindow.Topmost = false;
+        }
+
+        await AutoMountDisksAsync();
+
+        _cliPipeServer = new(_mainViewModel);
+        _cliPipeServer.Start();
+
+        if (e.Args.Length > 0)
+        {
+            // Launched with CLI-style args (e.g. from the Explorer context menu) as the first
+            // instance: execute the command directly against this instance's MainViewModel.
+            var controller = new MainViewModelCliDiskController(_mainViewModel);
+            var result = await CliCommandProcessor.ExecuteAsync(e.Args, controller);
+            if (result.ExitCode != 0)
+            {
+                MessageBox.Show(result.Output, "ManagedDrive", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
         }
     }
 
@@ -134,20 +162,18 @@ public partial class App
         }
     }
 
-    private void AutoMountDisks()
+    private Task AutoMountDisksAsync()
     {
         if (_settings == null || _mainViewModel == null)
         {
-            return;
+            return Task.CompletedTask;
         }
 
-        foreach (var profile in _settings.Load().Disks)
-        {
-            if (profile.AutoMount)
-            {
-                _ = _mainViewModel.MountFromProfileAsync(profile);
-            }
-        }
+        var tasks = _settings.Load().Disks
+            .Where(p => p.AutoMount)
+            .Select(_mainViewModel.MountFromProfileAsync);
+
+        return Task.WhenAll(tasks);
     }
 
     private void CheckTempDirectoryOnStartup(AppConfiguration config)
