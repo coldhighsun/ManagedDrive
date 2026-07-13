@@ -6,7 +6,6 @@
 
   <ItemGroup>
     <PackageReference Include="System.CommandLine" />
-    <PackageReference Include="Spectre.Console" />
   </ItemGroup>
 
   <ItemGroup>

@@ -18,10 +18,9 @@ public static class CliPipeClient
     /// <c>true</c> if a running instance answered the request (regardless of the command's own
     /// exit code); <c>false</c> if no instance is currently listening on the pipe.
     /// </returns>
-    public static bool TrySend(string[] args, out string output, out int exitCode)
+    public static bool TrySend(string[] args, out CliResponse response)
     {
-        output = string.Empty;
-        exitCode = 1;
+        response = new CliResponse(false, string.Empty, null, 1);
 
         using var pipe = new NamedPipeClientStream(".", CliPipeProtocol.PipeName, PipeDirection.InOut);
 
@@ -46,9 +45,7 @@ public static class CliPipeClient
             return false;
         }
 
-        var response = CliPipeProtocol.DeserializeResponse(responseJson);
-        output = response.Output;
-        exitCode = response.ExitCode;
+        response = CliPipeProtocol.DeserializeResponse(responseJson);
         return true;
     }
 }

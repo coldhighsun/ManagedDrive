@@ -13,8 +13,8 @@ public partial class App
     private readonly DispatcherTimer _timerPollCursor = new();
     private readonly DispatcherTimer _timerShowTrayInfoPopup = new();
     private readonly DispatcherTimer _timerTooltipCooldown = new();
-    private System.Drawing.Point _iconScreenPoint;
     private CliPipeServer? _cliPipeServer;
+    private System.Drawing.Point _iconScreenPoint;
     private bool _isExiting;
     private MainViewModel? _mainViewModel;
     private MainWindow? _mainWindow;
@@ -68,9 +68,9 @@ public partial class App
                 // Launched with CLI-style args (e.g. from the Explorer context menu) while
                 // another instance is already running: forward the command to it instead of
                 // showing the "already running" dialog.
-                if (CliPipeClient.TrySend(e.Args, out var output, out var exitCode) && exitCode != 0)
+                if (CliPipeClient.TrySend(e.Args, out var response) && response.ExitCode != 0)
                 {
-                    MessageBox.Show(output, "ManagedDrive", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    MessageBox.Show(response.Message, "ManagedDrive", MessageBoxButton.OK, MessageBoxImage.Warning);
                 }
 
                 Shutdown();
@@ -134,7 +134,7 @@ public partial class App
             var result = await CliCommandProcessor.ExecuteAsync(e.Args, controller);
             if (result.ExitCode != 0)
             {
-                MessageBox.Show(result.Output, "ManagedDrive", MessageBoxButton.OK, MessageBoxImage.Warning);
+                MessageBox.Show(result.Message, "ManagedDrive", MessageBoxButton.OK, MessageBoxImage.Warning);
             }
         }
     }
@@ -351,18 +351,6 @@ public partial class App
         _trayIcon?.Visible = true;
     }
 
-    private void OnDiskHighUsageWarning(object? sender, EventArgs e)
-    {
-        if (sender is not DiskViewModel vm || _trayIcon == null)
-        {
-            return;
-        }
-
-        var title = Loc.Get("Tray.HighUsageTitle");
-        var body = Loc.Format("Tray.HighUsageBody", vm.VolumeLabel, vm.MountPoint, vm.UsedPercent);
-        _trayIcon.ShowBalloonTip(5000, title, body, System.Windows.Forms.ToolTipIcon.Warning);
-    }
-
     private void OnDiskCapacityAdjusted(DiskViewModel vm)
     {
         var originalMb = vm.OriginalCapacityBytesOnLoad!.Value / (1024 * 1024);
@@ -379,6 +367,18 @@ public partial class App
         {
             _mainViewModel.StatusText = Loc.Format("Status.CapacityAdjusted", vm.MountPoint, originalMb, newMb);
         }
+    }
+
+    private void OnDiskHighUsageWarning(object? sender, EventArgs e)
+    {
+        if (sender is not DiskViewModel vm || _trayIcon == null)
+        {
+            return;
+        }
+
+        var title = Loc.Get("Tray.HighUsageTitle");
+        var body = Loc.Format("Tray.HighUsageBody", vm.VolumeLabel, vm.MountPoint, vm.UsedPercent);
+        _trayIcon.ShowBalloonTip(5000, title, body, System.Windows.Forms.ToolTipIcon.Warning);
     }
 
     private void OnDiskSaveFailed(object? sender, Exception ex)
@@ -549,7 +549,7 @@ public partial class App
                     vm.HighUsageWarning += OnDiskHighUsageWarning;
                     vm.SaveFailed += OnDiskSaveFailed;
 
-                    if (vm.CapacityAdjustedOnLoad && vm.Disk.Options.SourceArchivePath is null)
+                    if (vm is { CapacityAdjustedOnLoad: true, Disk.Options.SourceArchivePath: null })
                     {
                         OnDiskCapacityAdjusted(vm);
                     }
