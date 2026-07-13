@@ -1,3 +1,5 @@
+using ManagedDrive.Cli.Core;
+
 namespace ManagedDrive.App.Cli;
 
 /// <summary>

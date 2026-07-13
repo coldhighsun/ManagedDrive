@@ -43,67 +43,6 @@ internal static class SnapshotStore
     }
 
     /// <summary>
-    /// Writes <paramref name="nodeMap"/> as a snapshot index file at <paramref name="indexPath"/>,
-    /// writing any not-yet-seen file content to <paramref name="blobDirectory"/> as a
-    /// content-addressed blob.
-    /// </summary>
-    internal static void Write(
-        FileNodeMap nodeMap,
-        ulong capacityBytes,
-        string volumeLabel,
-        string indexPath,
-        string blobDirectory,
-        ImageCompressionLevel level)
-    {
-        Directory.CreateDirectory(blobDirectory);
-
-        var tempPath = indexPath + ".tmp";
-
-        try
-        {
-            using (var stream = new FileStream(tempPath, FileMode.Create, FileAccess.Write))
-            {
-                using (var writer = new BinaryWriter(stream, System.Text.Encoding.UTF8, leaveOpen: true))
-                {
-                    writer.Write(Magic);
-                    writer.Write(Version);
-                    writer.Write((byte)0); // reserved
-
-                    writer.Write(capacityBytes);
-                    writer.Write(volumeLabel);
-
-                    var nodes = nodeMap.GetAllNodes();
-                    writer.Write(nodes.Count);
-
-                    foreach (var kvp in nodes)
-                    {
-                        WriteNode(writer, kvp.Key, kvp.Value, blobDirectory, level);
-                    }
-
-                    writer.Flush();
-                }
-
-                stream.Flush(flushToDisk: true);
-            }
-
-            File.Move(tempPath, indexPath, overwrite: true);
-        }
-        catch
-        {
-            try
-            {
-                File.Delete(tempPath);
-            }
-            catch
-            {
-                // Best-effort cleanup of the partial temp file.
-            }
-
-            throw;
-        }
-    }
-
-    /// <summary>
     /// Reads the snapshot index file at <paramref name="indexPath"/>, resolving every
     /// referenced blob from <paramref name="blobDirectory"/>, and returns a populated
     /// <see cref="FileNodeMap"/>.
@@ -193,108 +132,68 @@ internal static class SnapshotStore
             }
         }
 
-        return new SnapshotSummary(logicalSize, referenced);
+        return new(logicalSize, referenced);
     }
 
-    private static void ReadHeader(BinaryReader reader)
+    /// <summary>
+    /// Writes <paramref name="nodeMap"/> as a snapshot index file at <paramref name="indexPath"/>,
+    /// writing any not-yet-seen file content to <paramref name="blobDirectory"/> as a
+    /// content-addressed blob.
+    /// </summary>
+    internal static void Write(
+        FileNodeMap nodeMap,
+        ulong capacityBytes,
+        string volumeLabel,
+        string indexPath,
+        string blobDirectory,
+        ImageCompressionLevel level)
     {
-        var magic = reader.ReadBytes(4);
-        if (!magic.SequenceEqual(Magic))
+        Directory.CreateDirectory(blobDirectory);
+
+        var tempPath = indexPath + ".tmp";
+
+        try
         {
-            throw new InvalidDataException("Not a valid ManagedDrive snapshot file.");
+            using (var stream = new FileStream(tempPath, FileMode.Create, FileAccess.Write))
+            {
+                using (var writer = new BinaryWriter(stream, System.Text.Encoding.UTF8, leaveOpen: true))
+                {
+                    writer.Write(Magic);
+                    writer.Write(Version);
+                    writer.Write((byte)0); // reserved
+
+                    writer.Write(capacityBytes);
+                    writer.Write(volumeLabel);
+
+                    var nodes = nodeMap.GetAllNodes();
+                    writer.Write(nodes.Count);
+
+                    foreach (var kvp in nodes)
+                    {
+                        WriteNode(writer, kvp.Key, kvp.Value, blobDirectory, level);
+                    }
+
+                    writer.Flush();
+                }
+
+                stream.Flush(flushToDisk: true);
+            }
+
+            File.Move(tempPath, indexPath, overwrite: true);
         }
-
-        var version = reader.ReadInt32();
-        if (version != Version)
+        catch
         {
-            throw new InvalidDataException($"Unsupported snapshot version: {version}.");
+            try
+            {
+                File.Delete(tempPath);
+            }
+            catch
+            {
+                // Best-effort cleanup of the partial temp file.
+            }
+
+            throw;
         }
-
-        _ = reader.ReadByte(); // reserved
-    }
-
-    private readonly record struct NodeHeader(
-        uint FileAttributes,
-        ulong AllocationSize,
-        ulong FileSize,
-        ulong CreationTime,
-        ulong LastAccessTime,
-        ulong LastWriteTime,
-        ulong ChangeTime,
-        ulong IndexNumber,
-        uint HardLinks,
-        byte[]? Security)
-    {
-        public Fsp.Interop.FileInfo ToFileInfo() => new()
-        {
-            FileAttributes = FileAttributes,
-            AllocationSize = AllocationSize,
-            FileSize = FileSize,
-            CreationTime = CreationTime,
-            LastAccessTime = LastAccessTime,
-            LastWriteTime = LastWriteTime,
-            ChangeTime = ChangeTime,
-            IndexNumber = IndexNumber,
-            HardLinks = HardLinks,
-        };
-    }
-
-    private static (string Path, NodeHeader Header) ReadNodeHeader(BinaryReader reader)
-    {
-        var path = reader.ReadString();
-
-        var header = new NodeHeader(
-            FileAttributes: reader.ReadUInt32(),
-            AllocationSize: reader.ReadUInt64(),
-            FileSize: reader.ReadUInt64(),
-            CreationTime: reader.ReadUInt64(),
-            LastAccessTime: reader.ReadUInt64(),
-            LastWriteTime: reader.ReadUInt64(),
-            ChangeTime: reader.ReadUInt64(),
-            IndexNumber: reader.ReadUInt64(),
-            HardLinks: reader.ReadUInt32(),
-            Security: null);
-
-        var secLen = reader.ReadInt32();
-        var security = secLen > 0 ? reader.ReadBytes(secLen) : null;
-
-        return (path, header with { Security = security });
-    }
-
-    private static void WriteNode(BinaryWriter writer, string path, FileNode node, string blobDirectory, ImageCompressionLevel level)
-    {
-        writer.Write(path);
-        writer.Write(node.FileInfo.FileAttributes);
-        writer.Write(node.FileInfo.AllocationSize);
-        writer.Write(node.FileInfo.FileSize);
-        writer.Write(node.FileInfo.CreationTime);
-        writer.Write(node.FileInfo.LastAccessTime);
-        writer.Write(node.FileInfo.LastWriteTime);
-        writer.Write(node.FileInfo.ChangeTime);
-        writer.Write(node.FileInfo.IndexNumber);
-        writer.Write(node.FileInfo.HardLinks);
-
-        var security = node.FileSecurity ?? [];
-        writer.Write(security.Length);
-        writer.Write(security);
-
-        if (node.IsDirectory)
-        {
-            return;
-        }
-
-        if (node.FileInfo.FileSize == 0 || node.FileData is null)
-        {
-            writer.Write((byte)0); // EmptyFile marker
-            return;
-        }
-
-        var fileSize = (int)Math.Min(node.FileInfo.FileSize, (ulong)node.FileData.Length);
-        var hash = SHA256.HashData(node.FileData.AsSpan(0, fileSize));
-        EnsureBlobWritten(blobDirectory, hash, node.FileData, fileSize, level);
-
-        writer.Write((byte)1); // HasBlob marker
-        writer.Write(hash);
     }
 
     private static void EnsureBlobWritten(string blobDirectory, byte[] hash, byte[] data, int length, ImageCompressionLevel level)
@@ -386,10 +285,114 @@ internal static class SnapshotStore
         return fileData;
     }
 
+    private static void ReadHeader(BinaryReader reader)
+    {
+        var magic = reader.ReadBytes(4);
+        if (!magic.SequenceEqual(Magic))
+        {
+            throw new InvalidDataException("Not a valid ManagedDrive snapshot file.");
+        }
+
+        var version = reader.ReadInt32();
+        if (version != Version)
+        {
+            throw new InvalidDataException($"Unsupported snapshot version: {version}.");
+        }
+
+        _ = reader.ReadByte(); // reserved
+    }
+
+    private readonly record struct NodeHeader(
+        uint FileAttributes,
+        ulong AllocationSize,
+        ulong FileSize,
+        ulong CreationTime,
+        ulong LastAccessTime,
+        ulong LastWriteTime,
+        ulong ChangeTime,
+        ulong IndexNumber,
+        uint HardLinks,
+        byte[]? Security)
+    {
+        public Fsp.Interop.FileInfo ToFileInfo() => new()
+        {
+            FileAttributes = FileAttributes,
+            AllocationSize = AllocationSize,
+            FileSize = FileSize,
+            CreationTime = CreationTime,
+            LastAccessTime = LastAccessTime,
+            LastWriteTime = LastWriteTime,
+            ChangeTime = ChangeTime,
+            IndexNumber = IndexNumber,
+            HardLinks = HardLinks,
+        };
+    }
+
+    private static (string Path, NodeHeader Header) ReadNodeHeader(BinaryReader reader)
+    {
+        var path = reader.ReadString();
+
+        var header = new NodeHeader(
+            FileAttributes: reader.ReadUInt32(),
+            AllocationSize: reader.ReadUInt64(),
+            FileSize: reader.ReadUInt64(),
+            CreationTime: reader.ReadUInt64(),
+            LastAccessTime: reader.ReadUInt64(),
+            LastWriteTime: reader.ReadUInt64(),
+            ChangeTime: reader.ReadUInt64(),
+            IndexNumber: reader.ReadUInt64(),
+            HardLinks: reader.ReadUInt32(),
+            Security: null);
+
+        var secLen = reader.ReadInt32();
+        var security = secLen > 0 ? reader.ReadBytes(secLen) : null;
+
+        return (path, header with
+        {
+            Security = security
+        });
+    }
+
     private static CompressionLevel ToCompressionLevel(ImageCompressionLevel level) => level switch
     {
         ImageCompressionLevel.Fastest => CompressionLevel.Fastest,
         ImageCompressionLevel.SmallestSize => CompressionLevel.SmallestSize,
         _ => CompressionLevel.Optimal,
     };
+
+    private static void WriteNode(BinaryWriter writer, string path, FileNode node, string blobDirectory, ImageCompressionLevel level)
+    {
+        writer.Write(path);
+        writer.Write(node.FileInfo.FileAttributes);
+        writer.Write(node.FileInfo.AllocationSize);
+        writer.Write(node.FileInfo.FileSize);
+        writer.Write(node.FileInfo.CreationTime);
+        writer.Write(node.FileInfo.LastAccessTime);
+        writer.Write(node.FileInfo.LastWriteTime);
+        writer.Write(node.FileInfo.ChangeTime);
+        writer.Write(node.FileInfo.IndexNumber);
+        writer.Write(node.FileInfo.HardLinks);
+
+        var security = node.FileSecurity ?? [];
+        writer.Write(security.Length);
+        writer.Write(security);
+
+        if (node.IsDirectory)
+        {
+            return;
+        }
+
+        if (node.FileInfo.FileSize == 0 || node.FileData is null)
+        {
+            writer.Write((byte)0); // EmptyFile marker
+            return;
+        }
+
+        var fileSize = (int)Math.Min(node.FileInfo.FileSize, (ulong)node.FileData.Length);
+        var hash = SHA256.HashData(node.FileData.AsSpan(0, fileSize));
+        EnsureBlobWritten(blobDirectory, hash, node.FileData, fileSize, level);
+
+        writer.Write((byte)1); // HasBlob marker
+        writer.Write(hash);
+    }
 }

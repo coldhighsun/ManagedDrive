@@ -1,3 +1,4 @@
+using ManagedDrive.Cli.Core;
 using System.Collections.ObjectModel;
 
 namespace ManagedDrive.App.ViewModels;
@@ -129,20 +130,20 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     }
 
     /// <summary>
-    /// Gets the command that opens the "Import Disk" flow: pick an existing .mdr image file and
-    /// mount it, pre-filling capacity/volume label from the image itself.
-    /// </summary>
-    public RelayCommand ImportDiskCommand
-    {
-        get;
-    }
-
-    /// <summary>
     /// Gets the command that opens the "Import Archive" flow: pick an archive file (zip, 7z,
     /// rar, tar, or any other format SharpCompress can read) and mount its contents as a new
     /// read-only disk.
     /// </summary>
     public RelayCommand ImportArchiveCommand
+    {
+        get;
+    }
+
+    /// <summary>
+    /// Gets the command that opens the "Import Disk" flow: pick an existing .mdr image file and
+    /// mount it, pre-filling capacity/volume label from the image itself.
+    /// </summary>
+    public RelayCommand ImportDiskCommand
     {
         get;
     }
@@ -254,6 +255,49 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     }
 
     /// <summary>
+    /// Exits the application without the interactive confirmation dialog used by
+    /// <see cref="ExecuteExit"/> — for callers (the CLI) that have already committed to exiting
+    /// and have no dialog to show. Still resets TEMP first if it points at a mounted RAM disk,
+    /// same as the confirmed interactive path.
+    /// </summary>
+    public void ExitWithoutConfirmation()
+    {
+        if (IsTempOnAnyRamDisk())
+        {
+            TempDirResetService.Reset();
+        }
+
+        ExitRequested?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>
+    /// Formats the disk currently mounted at <paramref name="mountPoint"/> without any
+    /// interactive confirmation, for use by the CLI command channel.
+    /// </summary>
+    /// <param name="mountPoint">The mount point to format (e.g. <c>"R:"</c>).</param>
+    /// <returns>
+    /// <c>(true, message)</c> on success; <c>(false, message)</c> if the disk is read-only; or
+    /// <c>(false, string.Empty)</c> if no disk is currently mounted at <paramref name="mountPoint"/>.
+    /// </returns>
+    public Task<(bool Success, string Message)> FormatByMountPointAsync(string mountPoint)
+    {
+        var vm = Disks.FirstOrDefault(d => string.Equals(d.MountPoint, mountPoint, StringComparison.OrdinalIgnoreCase));
+        if (vm == null)
+        {
+            return Task.FromResult((false, string.Empty));
+        }
+
+        if (!vm.Disk.Format())
+        {
+            return Task.FromResult((false, Loc.Get("Msg.FormatDiskReadOnly")));
+        }
+
+        vm.Refresh();
+        StatusText = Loc.Format("Status.FormatDisk", mountPoint);
+        return Task.FromResult((true, StatusText));
+    }
+
+    /// <summary>
     /// Returns a <see cref="DiskProfile"/> snapshot for every currently active disk.
     /// </summary>
     /// <returns>
@@ -276,6 +320,102 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             MaxSnapshotSizeBytes = vm.Disk.Options.MaxSnapshotSizeBytes,
             HighUsageWarnPercent = vm.Disk.Options.HighUsageWarnPercent,
         });
+    }
+
+    /// <summary>
+    /// Mounts the contents of an archive file as a new read-only disk, for use by the CLI
+    /// command channel (<c>mdrive mount-archive</c>). Mirrors <see cref="MountImageAsync"/> but
+    /// sources content from <see cref="ArchiveNodeMapBuilder.PeekArchive"/> instead of
+    /// <see cref="DiskImageSerializer.PeekHeader"/>, and forces the disk read-only since none of
+    /// the supported archive formats support writing changes back.
+    /// </summary>
+    /// <param name="archivePath">Path to an existing archive file.</param>
+    /// <param name="mountPoint">
+    /// The drive letter to mount at (e.g. <c>"R:"</c>), or <c>null</c> to automatically pick the
+    /// first free letter searching from <c>Z:</c> down to <c>D:</c> (used when the caller — e.g.
+    /// the Explorer right-click context menu — has no way to prompt for one).
+    /// </param>
+    /// <param name="overrides">
+    /// Per-field values the user explicitly passed via CLI flags; only
+    /// <see cref="CliMountOverrides.AutoMount"/> applies here — every other field is meaningless
+    /// for an archive-sourced disk and is ignored even if set.
+    /// </param>
+    /// <returns>
+    /// <c>(true, message)</c> on success; <c>(false, message)</c> with a human-readable reason
+    /// otherwise (mount point already in use, no free drive letter, archive already mounted by
+    /// another disk, invalid archive file, or a mount failure).
+    /// </returns>
+    public async Task<(bool Success, string Message)> MountArchiveAsync(string archivePath, string? mountPoint, CliMountOverrides overrides)
+    {
+        if (mountPoint == null)
+        {
+            mountPoint = FindFreeDriveLetter();
+            if (mountPoint == null)
+            {
+                return (false, Loc.Get("Val.NoFreeDriveLetter"));
+            }
+        }
+        else if (Disks.Any(d => string.Equals(d.MountPoint, mountPoint, StringComparison.OrdinalIgnoreCase)))
+        {
+            return (false, Loc.Format("Val.MountPointAlreadyMounted", mountPoint));
+        }
+
+        var otherDisks = GetOtherDiskOptions(excluding: null);
+        if (otherDisks.Any(d => d.SourceArchivePath != null &&
+            string.Equals(d.SourceArchivePath, archivePath, StringComparison.OrdinalIgnoreCase)))
+        {
+            return (false, Loc.Get("Val.ArchivePathInUse"));
+        }
+
+        ulong capacityBytes;
+        string volumeLabel;
+        try
+        {
+            ArchiveNodeMapBuilder.PeekArchive(archivePath, out capacityBytes, out volumeLabel);
+        }
+        catch (InvalidDataException)
+        {
+            return (false, Loc.Get("Val.ImportInvalidArchive"));
+        }
+
+        var savedProfile = _settingsStore.Load().Disks
+            .FirstOrDefault(p => p.SourceArchivePath != null &&
+                string.Equals(p.SourceArchivePath, archivePath, StringComparison.OrdinalIgnoreCase));
+
+        var options = savedProfile != null
+            ? ProfileToOptions(savedProfile) with
+            {
+                MountPoint = mountPoint,
+                CapacityBytes = capacityBytes,
+                VolumeLabel = volumeLabel,
+            }
+            : new()
+            {
+                MountPoint = mountPoint,
+                CapacityBytes = capacityBytes,
+                VolumeLabel = volumeLabel,
+                SourceArchivePath = archivePath,
+            };
+
+        options = options with
+        {
+            ReadOnly = true,
+            SourceArchivePath = archivePath,
+            AutoMount = overrides.AutoMount ?? options.AutoMount,
+        };
+
+        try
+        {
+            var disk = await Task.Run(() => _mountManager.Mount(options));
+            AddDiskSorted(new(disk));
+            SaveSettings();
+            StatusText = Loc.Format("Status.MountedWithCapacity", disk.MountPoint, options.VolumeLabel, options.CapacityBytes / (1024 * 1024));
+            return (true, StatusText);
+        }
+        catch (Exception ex)
+        {
+            return (false, Loc.Format("Msg.MountFailed", ex.Message));
+        }
     }
 
     /// <summary>
@@ -374,7 +514,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
                 CapacityBytes = capacityBytes,
                 VolumeLabel = volumeLabel,
             }
-            : new DiskOptions
+            : new()
             {
                 MountPoint = mountPoint,
                 CapacityBytes = capacityBytes,
@@ -387,7 +527,9 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             ReadOnly = overrides.ReadOnly ?? options.ReadOnly,
             AutoMount = overrides.AutoMount ?? options.AutoMount,
             AutoSaveIntervalMinutes = overrides.AutoSaveIntervalMinutes ?? options.AutoSaveIntervalMinutes,
-            CompressionLevel = overrides.CompressionLevel ?? options.CompressionLevel,
+            CompressionLevel = overrides.CompressionLevel is { } compressionLevel
+                ? (Core.ImageCompressionLevel)compressionLevel
+                : options.CompressionLevel,
             MaxSnapshotCount = overrides.MaxSnapshotCount ?? options.MaxSnapshotCount,
             MaxSnapshotSizeBytes = overrides.MaxSnapshotSizeBytes ?? options.MaxSnapshotSizeBytes,
             HighUsageWarnPercent = overrides.HighUsageWarnPercent ?? options.HighUsageWarnPercent,
@@ -408,99 +550,39 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     }
 
     /// <summary>
-    /// Mounts the contents of an archive file as a new read-only disk, for use by the CLI
-    /// command channel (<c>mdrive mount-archive</c>). Mirrors <see cref="MountImageAsync"/> but
-    /// sources content from <see cref="ArchiveNodeMapBuilder.PeekArchive"/> instead of
-    /// <see cref="DiskImageSerializer.PeekHeader"/>, and forces the disk read-only since none of
-    /// the supported archive formats support writing changes back.
+    /// Saves the disk currently mounted at <paramref name="mountPoint"/> to its backing image
+    /// file immediately, for use by the CLI command channel.
     /// </summary>
-    /// <param name="archivePath">Path to an existing archive file.</param>
-    /// <param name="mountPoint">
-    /// The drive letter to mount at (e.g. <c>"R:"</c>), or <c>null</c> to automatically pick the
-    /// first free letter searching from <c>Z:</c> down to <c>D:</c> (used when the caller — e.g.
-    /// the Explorer right-click context menu — has no way to prompt for one).
-    /// </param>
-    /// <param name="overrides">
-    /// Per-field values the user explicitly passed via CLI flags; only
-    /// <see cref="CliMountOverrides.AutoMount"/> applies here — every other field is meaningless
-    /// for an archive-sourced disk and is ignored even if set.
-    /// </param>
+    /// <param name="mountPoint">The mount point to save (e.g. <c>"R:"</c>).</param>
     /// <returns>
-    /// <c>(true, message)</c> on success; <c>(false, message)</c> with a human-readable reason
-    /// otherwise (mount point already in use, no free drive letter, archive already mounted by
-    /// another disk, invalid archive file, or a mount failure).
+    /// <c>(true, message)</c> on success; <c>(false, message)</c> if no image path is configured
+    /// or the save failed; or <c>(false, string.Empty)</c> if no disk is currently mounted at
+    /// <paramref name="mountPoint"/>.
     /// </returns>
-    public async Task<(bool Success, string Message)> MountArchiveAsync(string archivePath, string? mountPoint, CliMountOverrides overrides)
+    public async Task<(bool Success, string Message)> SaveByMountPointAsync(string mountPoint)
     {
-        if (mountPoint == null)
+        var vm = Disks.FirstOrDefault(d => string.Equals(d.MountPoint, mountPoint, StringComparison.OrdinalIgnoreCase));
+        if (vm == null)
         {
-            mountPoint = FindFreeDriveLetter();
-            if (mountPoint == null)
-            {
-                return (false, Loc.Get("Val.NoFreeDriveLetter"));
-            }
-        }
-        else if (Disks.Any(d => string.Equals(d.MountPoint, mountPoint, StringComparison.OrdinalIgnoreCase)))
-        {
-            return (false, Loc.Format("Val.MountPointAlreadyMounted", mountPoint));
+            return (false, string.Empty);
         }
 
-        var otherDisks = GetOtherDiskOptions(excluding: null);
-        if (otherDisks.Any(d => d.SourceArchivePath != null &&
-            string.Equals(d.SourceArchivePath, archivePath, StringComparison.OrdinalIgnoreCase)))
+        if (vm.Disk.Options.PersistImagePath == null)
         {
-            return (false, Loc.Get("Val.ArchivePathInUse"));
+            return (false, Loc.Get("Msg.SaveImageNoPath"));
         }
-
-        ulong capacityBytes;
-        string volumeLabel;
-        try
-        {
-            ArchiveNodeMapBuilder.PeekArchive(archivePath, out capacityBytes, out volumeLabel);
-        }
-        catch (InvalidDataException)
-        {
-            return (false, Loc.Get("Val.ImportInvalidArchive"));
-        }
-
-        var savedProfile = _settingsStore.Load().Disks
-            .FirstOrDefault(p => p.SourceArchivePath != null &&
-                string.Equals(p.SourceArchivePath, archivePath, StringComparison.OrdinalIgnoreCase));
-
-        var options = savedProfile != null
-            ? ProfileToOptions(savedProfile) with
-            {
-                MountPoint = mountPoint,
-                CapacityBytes = capacityBytes,
-                VolumeLabel = volumeLabel,
-            }
-            : new DiskOptions
-            {
-                MountPoint = mountPoint,
-                CapacityBytes = capacityBytes,
-                VolumeLabel = volumeLabel,
-                SourceArchivePath = archivePath,
-            };
-
-        options = options with
-        {
-            ReadOnly = true,
-            SourceArchivePath = archivePath,
-            AutoMount = overrides.AutoMount ?? options.AutoMount,
-        };
 
         try
         {
-            var disk = await Task.Run(() => _mountManager.Mount(options));
-            AddDiskSorted(new(disk));
-            SaveSettings();
-            StatusText = Loc.Format("Status.MountedWithCapacity", disk.MountPoint, options.VolumeLabel, options.CapacityBytes / (1024 * 1024));
-            return (true, StatusText);
+            await Task.Run(() => vm.Disk.SaveToImageWithSnapshot());
         }
         catch (Exception ex)
         {
-            return (false, Loc.Format("Msg.MountFailed", ex.Message));
+            return (false, Loc.Format("Msg.SaveImageFailed", ex.Message));
         }
+
+        StatusText = Loc.Format("Status.ImageSaved", mountPoint);
+        return (true, StatusText);
     }
 
     /// <summary>
@@ -544,88 +626,6 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         return true;
     }
 
-    /// <summary>
-    /// Deletes a disk's backing <c>.mdr</c> image (plus its snapshots) or source archive file, if
-    /// <paramref name="deleteImage"/> is set and the corresponding path is non-null. Shared by the
-    /// interactive unmount flow (<see cref="ExecuteUnmount"/>) and the CLI unmount command
-    /// (<see cref="UnmountByMountPointAsync"/>).
-    /// </summary>
-    private static async Task DeleteDiskImageIfRequestedAsync(bool deleteImage, string? persistImagePath, string? sourceArchivePath)
-    {
-        if (deleteImage && persistImagePath != null)
-        {
-            try { File.Delete(persistImagePath); } catch { }
-            await Task.Run(() => SnapshotManager.DeleteAllSnapshots(persistImagePath));
-        }
-        else if (deleteImage && sourceArchivePath != null)
-        {
-            try { File.Delete(sourceArchivePath); } catch { }
-        }
-    }
-
-    /// <summary>
-    /// Formats the disk currently mounted at <paramref name="mountPoint"/> without any
-    /// interactive confirmation, for use by the CLI command channel.
-    /// </summary>
-    /// <param name="mountPoint">The mount point to format (e.g. <c>"R:"</c>).</param>
-    /// <returns>
-    /// <c>(true, message)</c> on success; <c>(false, message)</c> if the disk is read-only; or
-    /// <c>(false, string.Empty)</c> if no disk is currently mounted at <paramref name="mountPoint"/>.
-    /// </returns>
-    public Task<(bool Success, string Message)> FormatByMountPointAsync(string mountPoint)
-    {
-        var vm = Disks.FirstOrDefault(d => string.Equals(d.MountPoint, mountPoint, StringComparison.OrdinalIgnoreCase));
-        if (vm == null)
-        {
-            return Task.FromResult((false, string.Empty));
-        }
-
-        if (!vm.Disk.Format())
-        {
-            return Task.FromResult((false, Loc.Get("Msg.FormatDiskReadOnly")));
-        }
-
-        vm.Refresh();
-        StatusText = Loc.Format("Status.FormatDisk", mountPoint);
-        return Task.FromResult((true, StatusText));
-    }
-
-    /// <summary>
-    /// Saves the disk currently mounted at <paramref name="mountPoint"/> to its backing image
-    /// file immediately, for use by the CLI command channel.
-    /// </summary>
-    /// <param name="mountPoint">The mount point to save (e.g. <c>"R:"</c>).</param>
-    /// <returns>
-    /// <c>(true, message)</c> on success; <c>(false, message)</c> if no image path is configured
-    /// or the save failed; or <c>(false, string.Empty)</c> if no disk is currently mounted at
-    /// <paramref name="mountPoint"/>.
-    /// </returns>
-    public async Task<(bool Success, string Message)> SaveByMountPointAsync(string mountPoint)
-    {
-        var vm = Disks.FirstOrDefault(d => string.Equals(d.MountPoint, mountPoint, StringComparison.OrdinalIgnoreCase));
-        if (vm == null)
-        {
-            return (false, string.Empty);
-        }
-
-        if (vm.Disk.Options.PersistImagePath == null)
-        {
-            return (false, Loc.Get("Msg.SaveImageNoPath"));
-        }
-
-        try
-        {
-            await Task.Run(() => vm.Disk.SaveToImageWithSnapshot());
-        }
-        catch (Exception ex)
-        {
-            return (false, Loc.Format("Msg.SaveImageFailed", ex.Message));
-        }
-
-        StatusText = Loc.Format("Status.ImageSaved", mountPoint);
-        return (true, StatusText);
-    }
-
     internal void SaveSettings()
     {
         var current = _settingsStore.Load();
@@ -638,6 +638,55 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             Disks = GetProfiles().ToList(),
             TempDirCompatWarningShown = _tempDirCompatWarningShown,
         });
+    }
+
+    /// <summary>
+    /// Deletes a disk's backing <c>.mdr</c> image (plus its snapshots) or source archive file, if
+    /// <paramref name="deleteImage"/> is set and the corresponding path is non-null. Shared by the
+    /// interactive unmount flow (<see cref="ExecuteUnmount"/>) and the CLI unmount command
+    /// (<see cref="UnmountByMountPointAsync"/>).
+    /// </summary>
+    private static async Task DeleteDiskImageIfRequestedAsync(bool deleteImage, string? persistImagePath, string? sourceArchivePath)
+    {
+        if (deleteImage && persistImagePath != null)
+        {
+            try
+            {
+                File.Delete(persistImagePath);
+            }
+            catch { }
+            await Task.Run(() => SnapshotManager.DeleteAllSnapshots(persistImagePath));
+        }
+        else if (deleteImage && sourceArchivePath != null)
+        {
+            try
+            {
+                File.Delete(sourceArchivePath);
+            }
+            catch { }
+        }
+    }
+
+    /// <summary>
+    /// Finds the first free drive letter searching from <c>Z:</c> down to <c>D:</c>, skipping
+    /// letters already in use by any Windows drive (mounted RAM disks included, since they show
+    /// up in <see cref="DriveInfo.GetDrives"/> like any other volume).
+    /// </summary>
+    /// <returns>A free mount point (e.g. <c>"Z:"</c>), or <c>null</c> if none is free.</returns>
+    private static string? FindFreeDriveLetter()
+    {
+        var usedLetters = new HashSet<char>(
+            DriveInfo.GetDrives().Select(d => char.ToUpperInvariant(d.Name[0])));
+
+        for (var c = 'Z'; c >= 'D'; c--)
+        {
+            if (!usedLetters.Contains(c))
+            {
+                return $"{c}:";
+            }
+        }
+
+        return null;
     }
 
     private static DiskOptions ProfileToOptions(DiskProfile p) => new()
@@ -877,30 +926,6 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         }
     }
 
-    /// <summary>
-    /// Exits the application without the interactive confirmation dialog used by
-    /// <see cref="ExecuteExit"/> — for callers (the CLI) that have already committed to exiting
-    /// and have no dialog to show. Still resets TEMP first if it points at a mounted RAM disk,
-    /// same as the confirmed interactive path.
-    /// </summary>
-    public void ExitWithoutConfirmation()
-    {
-        if (IsTempOnAnyRamDisk())
-        {
-            TempDirResetService.Reset();
-        }
-
-        ExitRequested?.Invoke(this, EventArgs.Empty);
-    }
-
-    private bool IsTempOnAnyRamDisk()
-    {
-        var userTemp = Environment.GetEnvironmentVariable("TEMP", EnvironmentVariableTarget.User);
-        var expandedTemp = string.IsNullOrEmpty(userTemp) ? null : Environment.ExpandEnvironmentVariables(userTemp);
-        return expandedTemp != null &&
-            Disks.Any(d => expandedTemp.StartsWith(d.MountPoint, StringComparison.OrdinalIgnoreCase));
-    }
-
     private void ExecuteFormatDisk(DiskViewModel? vm)
     {
         if (vm == null)
@@ -937,61 +962,6 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             "ManagedDrive",
             MessageBoxButton.OK,
             MessageBoxImage.Information);
-    }
-
-    private async void ExecuteImportDisk()
-    {
-        var openDialog = new OpenFileDialog
-        {
-            Title = Loc.Get("ImportDlg.Title"),
-            Filter = Loc.Get("SaveDlg.Filter"),
-            CheckFileExists = true,
-        };
-
-        if (openDialog.ShowDialog() != true)
-        {
-            return;
-        }
-
-        var otherDisks = GetOtherDiskOptions(excluding: null);
-        if (otherDisks.Any(d => d.PersistImagePath != null &&
-            string.Equals(d.PersistImagePath, openDialog.FileName, StringComparison.OrdinalIgnoreCase)))
-        {
-            MessageBox.Show(
-                Loc.Get("Val.ImagePathInUse"),
-                "ManagedDrive",
-                MessageBoxButton.OK,
-                MessageBoxImage.Warning);
-            return;
-        }
-
-        ulong capacityBytes;
-        string volumeLabel;
-        try
-        {
-            DiskImageSerializer.PeekHeader(openDialog.FileName, out capacityBytes, out volumeLabel);
-        }
-        catch (InvalidDataException)
-        {
-            MessageBox.Show(
-                Loc.Get("Val.ImportInvalidImage"),
-                "ManagedDrive",
-                MessageBoxButton.OK,
-                MessageBoxImage.Warning);
-            return;
-        }
-
-        var dialog = new CreateDiskDialog(openDialog.FileName, capacityBytes, volumeLabel, otherDisks)
-        {
-            Owner = Application.Current.MainWindow
-        };
-
-        if (dialog.ShowDialog() != true)
-        {
-            return;
-        }
-
-        await MountAndAddAsync(dialog.Result!);
     }
 
     private async void ExecuteImportArchive()
@@ -1037,6 +1007,61 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         }
 
         var dialog = new CreateDiskDialog(openDialog.FileName, totalBytes, suggestedLabel, otherDisks, isArchiveImport: true)
+        {
+            Owner = Application.Current.MainWindow
+        };
+
+        if (dialog.ShowDialog() != true)
+        {
+            return;
+        }
+
+        await MountAndAddAsync(dialog.Result!);
+    }
+
+    private async void ExecuteImportDisk()
+    {
+        var openDialog = new OpenFileDialog
+        {
+            Title = Loc.Get("ImportDlg.Title"),
+            Filter = Loc.Get("SaveDlg.Filter"),
+            CheckFileExists = true,
+        };
+
+        if (openDialog.ShowDialog() != true)
+        {
+            return;
+        }
+
+        var otherDisks = GetOtherDiskOptions(excluding: null);
+        if (otherDisks.Any(d => d.PersistImagePath != null &&
+            string.Equals(d.PersistImagePath, openDialog.FileName, StringComparison.OrdinalIgnoreCase)))
+        {
+            MessageBox.Show(
+                Loc.Get("Val.ImagePathInUse"),
+                "ManagedDrive",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+            return;
+        }
+
+        ulong capacityBytes;
+        string volumeLabel;
+        try
+        {
+            DiskImageSerializer.PeekHeader(openDialog.FileName, out capacityBytes, out volumeLabel);
+        }
+        catch (InvalidDataException)
+        {
+            MessageBox.Show(
+                Loc.Get("Val.ImportInvalidImage"),
+                "ManagedDrive",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+            return;
+        }
+
+        var dialog = new CreateDiskDialog(openDialog.FileName, capacityBytes, volumeLabel, otherDisks)
         {
             Owner = Application.Current.MainWindow
         };
@@ -1330,26 +1355,12 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     private IReadOnlyList<DiskOptions> GetOtherDiskOptions(DiskViewModel? excluding) =>
         Disks.Where(d => d != excluding).Select(d => d.Disk.Options).ToList();
 
-    /// <summary>
-    /// Finds the first free drive letter searching from <c>Z:</c> down to <c>D:</c>, skipping
-    /// letters already in use by any Windows drive (mounted RAM disks included, since they show
-    /// up in <see cref="DriveInfo.GetDrives"/> like any other volume).
-    /// </summary>
-    /// <returns>A free mount point (e.g. <c>"Z:"</c>), or <c>null</c> if none is free.</returns>
-    private static string? FindFreeDriveLetter()
+    private bool IsTempOnAnyRamDisk()
     {
-        var usedLetters = new HashSet<char>(
-            DriveInfo.GetDrives().Select(d => char.ToUpperInvariant(d.Name[0])));
-
-        for (var c = 'Z'; c >= 'D'; c--)
-        {
-            if (!usedLetters.Contains(c))
-            {
-                return $"{c}:";
-            }
-        }
-
-        return null;
+        var userTemp = Environment.GetEnvironmentVariable("TEMP", EnvironmentVariableTarget.User);
+        var expandedTemp = string.IsNullOrEmpty(userTemp) ? null : Environment.ExpandEnvironmentVariables(userTemp);
+        return expandedTemp != null &&
+            Disks.Any(d => expandedTemp.StartsWith(d.MountPoint, StringComparison.OrdinalIgnoreCase));
     }
 
     private async Task MountAndAddAsync(DiskOptions options)

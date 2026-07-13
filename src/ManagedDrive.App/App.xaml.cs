@@ -1,3 +1,4 @@
+using ManagedDrive.Cli.Core;
 using System.Windows.Controls.Primitives;
 
 namespace ManagedDrive.App;
@@ -432,7 +433,7 @@ public partial class App
     {
         var workArea = SystemParameters.WorkArea;
         var child = _trayInfoPopup!.Child as FrameworkElement;
-        child?.Measure(new System.Windows.Size(double.PositiveInfinity, double.PositiveInfinity));
+        child?.Measure(new(double.PositiveInfinity, double.PositiveInfinity));
         var popupHeight = child?.DesiredSize.Height ?? 80;
         var popupWidth = child?.DesiredSize.Width ?? 200;
 

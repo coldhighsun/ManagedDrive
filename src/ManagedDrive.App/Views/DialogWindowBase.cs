@@ -24,15 +24,15 @@ public class DialogWindowBase : Window
     /// </summary>
     protected DialogWindowBase()
     {
-        WindowChrome.SetWindowChrome(this, new WindowChrome
+        WindowChrome.SetWindowChrome(this, new()
         {
             CaptionHeight = 40,
-            ResizeBorderThickness = new Thickness(0),
-            GlassFrameThickness = new Thickness(0),
+            ResizeBorderThickness = new(0),
+            GlassFrameThickness = new(0),
             NonClientFrameEdges = NonClientFrameEdges.None,
         });
 
-        CommandBindings.Add(new CommandBinding(CloseDialogCommand, CloseButton_Click));
+        CommandBindings.Add(new(CloseDialogCommand, CloseButton_Click));
     }
 
     private void CloseButton_Click(object sender, RoutedEventArgs e)

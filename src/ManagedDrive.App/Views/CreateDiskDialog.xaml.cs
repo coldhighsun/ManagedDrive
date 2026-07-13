@@ -833,7 +833,7 @@ public partial class CreateDiskDialog
             SnapshotSizeEnabledBox.IsChecked = false;
         }
 
-        SnapshotLimit_CheckedChanged(this, new RoutedEventArgs());
+        SnapshotLimit_CheckedChanged(this, new());
     }
 
     private void UpdateSnapshotSizeDisplay()

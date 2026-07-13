@@ -1,4 +1,3 @@
-using ManagedDrive.Core;
 using System.CommandLine;
 
 namespace ManagedDrive.Cli.Core;
@@ -173,7 +172,7 @@ public static class CliCommandProcessor
         listCommand.SetAction((_, _) =>
         {
             var disks = diskController.ListDisks();
-            outcome = new CliOutcome(true, string.Empty, disks, 0);
+            outcome = new(true, string.Empty, disks, 0);
             return Task.FromResult(0);
         });
 
@@ -181,7 +180,7 @@ public static class CliCommandProcessor
         exitCommand.SetAction(async (_, _) =>
         {
             await diskController.RequestExitAsync();
-            outcome = new CliOutcome(true, "ManagedDrive is exiting.", null, 0);
+            outcome = new(true, "ManagedDrive is exiting.", null, 0);
             return 0;
         });
 
@@ -209,7 +208,7 @@ public static class CliCommandProcessor
 
         // No handler ran to completion (parse error, --help, unknown subcommand, etc.) — fall
         // back to whatever System.CommandLine wrote to the buffer.
-        return new CliOutcome(exitCode == 0, buffer.ToString(), null, exitCode);
+        return new(exitCode == 0, buffer.ToString(), null, exitCode);
     }
 
     private static async Task<int> FormatAsync(string driveLetter, bool confirmed, ICliDiskController diskController, Action<CliOutcome> setOutcome)
@@ -218,18 +217,18 @@ public static class CliCommandProcessor
 
         if (!confirmed)
         {
-            setOutcome(new CliOutcome(false, $"Formatting {driveLetter} will permanently delete all files. Re-run with --yes to confirm.", null, 1));
+            setOutcome(new(false, $"Formatting {driveLetter} will permanently delete all files. Re-run with --yes to confirm.", null, 1));
             return 1;
         }
 
         var (success, message) = await diskController.FormatAsync(driveLetter);
         if (success)
         {
-            setOutcome(new CliOutcome(true, message, null, 0));
+            setOutcome(new(true, message, null, 0));
             return 0;
         }
 
-        setOutcome(new CliOutcome(
+        setOutcome(new(
             false,
             string.IsNullOrEmpty(message) ? $"No disk is currently mounted at {driveLetter}." : message,
             null,
@@ -243,12 +242,12 @@ public static class CliCommandProcessor
 
         if (!File.Exists(archivePath))
         {
-            setOutcome(new CliOutcome(false, $"Archive file not found: {archivePath}", null, 1));
+            setOutcome(new(false, $"Archive file not found: {archivePath}", null, 1));
             return 1;
         }
 
         var (success, message) = await diskController.MountArchiveAsync(archivePath, driveLetter, overrides);
-        setOutcome(new CliOutcome(success, message, null, success ? 0 : 1));
+        setOutcome(new(success, message, null, success ? 0 : 1));
         return success ? 0 : 1;
     }
 
@@ -258,12 +257,12 @@ public static class CliCommandProcessor
 
         if (!File.Exists(imagePath))
         {
-            setOutcome(new CliOutcome(false, $"Image file not found: {imagePath}", null, 1));
+            setOutcome(new(false, $"Image file not found: {imagePath}", null, 1));
             return 1;
         }
 
         var (success, message) = await diskController.MountImageAsync(imagePath, driveLetter, overrides);
-        setOutcome(new CliOutcome(success, message, null, success ? 0 : 1));
+        setOutcome(new(success, message, null, success ? 0 : 1));
         return success ? 0 : 1;
     }
 
@@ -290,11 +289,11 @@ public static class CliCommandProcessor
         var (success, message) = await diskController.SaveAsync(driveLetter);
         if (success)
         {
-            setOutcome(new CliOutcome(true, message, null, 0));
+            setOutcome(new(true, message, null, 0));
             return 0;
         }
 
-        setOutcome(new CliOutcome(
+        setOutcome(new(
             false,
             string.IsNullOrEmpty(message) ? $"No disk is currently mounted at {driveLetter}." : message,
             null,
@@ -309,7 +308,7 @@ public static class CliCommandProcessor
         var unmounted = await diskController.UnmountAsync(driveLetter, deleteImage);
         if (unmounted)
         {
-            setOutcome(new CliOutcome(
+            setOutcome(new(
                 true,
                 deleteImage ? $"Unmounted {driveLetter} and deleted its image file." : $"Unmounted {driveLetter}.",
                 null,
@@ -317,7 +316,7 @@ public static class CliCommandProcessor
             return 0;
         }
 
-        setOutcome(new CliOutcome(false, $"No disk is currently mounted at {driveLetter}.", null, 1));
+        setOutcome(new(false, $"No disk is currently mounted at {driveLetter}.", null, 1));
         return 1;
     }
 }

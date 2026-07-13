@@ -1,13 +1,7 @@
-using ManagedDrive.Core;
-
 namespace ManagedDrive.Cli.Core;
 
 /// <summary>
-/// Optional per-field overrides for the <c>mount</c> CLI command. Every field is nullable: a
-/// <c>null</c> value means the user did not pass the corresponding flag, so the host application
-/// should keep whatever value it would otherwise use (a matching saved disk profile if one exists
-/// for the image path, or the <see cref="DiskOptions"/> default). A non-null value means the user
-/// explicitly passed the flag, and it must win over any saved profile or default.
+/// Overrides for mount options that can be specified via the CLI. These overrides take precedence over the default mount options and any previously saved mount options for a disk.
 /// </summary>
 public sealed record CliMountOverrides
 {

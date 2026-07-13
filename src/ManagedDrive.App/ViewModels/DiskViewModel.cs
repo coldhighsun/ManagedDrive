@@ -1,3 +1,5 @@
+using ManagedDrive.Cli.Core;
+
 namespace ManagedDrive.App.ViewModels;
 
 /// <summary>
@@ -50,6 +52,9 @@ public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
     /// </summary>
     public event EventHandler? HighUsageWarning;
 
+    /// <inheritdoc />
+    public event PropertyChangedEventHandler? PropertyChanged;
+
     /// <summary>
     /// Occurs when an image save or snapshot write fails for this disk. Always raised on the
     /// UI dispatcher thread, since the underlying <see cref="RamDisk.SaveFailed"/> event may
@@ -57,21 +62,12 @@ public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
     /// </summary>
     public event EventHandler<Exception>? SaveFailed;
 
-    /// <inheritdoc />
-    public event PropertyChangedEventHandler? PropertyChanged;
-
     /// <summary>
     /// Gets whether this disk's effective capacity was automatically raised at mount time
     /// because the loaded image's actual content exceeded the configured capacity. This is a
     /// one-time fact determined during mount, not an ongoing event.
     /// </summary>
     public bool CapacityAdjustedOnLoad => Disk.OriginalCapacityBytesOnLoad.HasValue;
-
-    /// <summary>
-    /// Gets the capacity (in bytes) that was configured before the automatic raise described
-    /// by <see cref="CapacityAdjustedOnLoad"/>, or <c>null</c> if no adjustment occurred.
-    /// </summary>
-    public ulong? OriginalCapacityBytesOnLoad => Disk.OriginalCapacityBytesOnLoad;
 
     /// <summary>
     /// Gets the total capacity formatted as a human-readable string.
@@ -201,15 +197,15 @@ public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
     }
 
     /// <summary>
+    /// Gets the capacity (in bytes) that was configured before the automatic raise described
+    /// by <see cref="CapacityAdjustedOnLoad"/>, or <c>null</c> if no adjustment occurred.
+    /// </summary>
+    public ulong? OriginalCapacityBytesOnLoad => Disk.OriginalCapacityBytesOnLoad;
+
+    /// <summary>
     /// Gets the backing image file path, or <c>null</c> if this disk has none.
     /// </summary>
     public string? PersistImagePath => Disk.Options.PersistImagePath;
-
-    /// <summary>
-    /// Gets this disk's content source for display: its backing image file, or its source
-    /// archive if it was mounted via "Import Archive", or <c>null</c> if it has neither.
-    /// </summary>
-    public string? SourcePath => Disk.Options.SourceArchivePath ?? Disk.Options.PersistImagePath;
 
     /// <summary>
     /// Gets whether this disk has auto-save enabled, controlling visibility of the
@@ -223,6 +219,12 @@ public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
     /// </summary>
     public bool SnapshotsEnabled =>
         Disk.Options.MaxSnapshotCount is not null || Disk.Options.MaxSnapshotSizeBytes is not null;
+
+    /// <summary>
+    /// Gets this disk's content source for display: its backing image file, or its source
+    /// archive if it was mounted via "Import Archive", or <c>null</c> if it has neither.
+    /// </summary>
+    public string? SourcePath => Disk.Options.SourceArchivePath ?? Disk.Options.PersistImagePath;
 
     /// <summary>
     /// Gets the amount of used space formatted as a human-readable string.

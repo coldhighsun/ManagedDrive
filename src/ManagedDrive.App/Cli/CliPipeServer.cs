@@ -1,3 +1,4 @@
+using ManagedDrive.Cli.Core;
 using System.IO.Pipes;
 
 namespace ManagedDrive.App.Cli;
