@@ -22,22 +22,22 @@ Create, mount and manage in-memory volumes that appear as normal drive letters i
 - Edit a mounted disk live (label, capacity, auto-mount, image path) without losing data; changing the drive letter or read-only flag remounts the disk
 - NTFS-compatible volume identity, so RAM disks work as targets for tools that require NTFS (e.g. WinGet, Windows Update staging, BITS)
 - Auto-mount saved profiles on startup
+- Format a disk to instantly delete all its contents (**Format**; read-only disks are protected)
 
 **Persistence, snapshots & cloning**
 - Save disk contents to a `.mdr` image file and restore it on next mount, or import an existing image directly (**Import Disk...**)
 - Import an archive (zip, 7z, rar, tar, and other formats [SharpCompress](https://github.com/adamhathcock/sharpcompress) can read) directly as a read-only disk (**Import Archive...**) — capacity and label are derived from the archive up front
-- Optional Explorer right-click integration: enable the setting to add **"Mount as RAM disk (ManagedDrive)"** to the right-click menu for zip/7z/rar/tar archives, mounting one with a single click — no need to open the app first — launches `ManagedDrive.exe` automatically if it isn't already running
 - Optional auto-save on a 1–60 minute interval, plus an automatic final save before unmount/exit; both are skipped when nothing has changed, and failures raise a tray/status-bar notification
 - Selectable image compression (Off / Fast / Balanced / Max, default Fast)
 - Snapshot / version history — cap retained snapshots by count and/or size; deduplicated by content hash so many snapshots cost little extra space; restore any snapshot via **Restore Snapshot...**
 - Clone a disk onto another mounted disk or export it to a new `.mdr` file (**Clone Disk...**)
-- Format a disk to instantly delete all its contents (**Format**; read-only disks are protected)
 
 **CLI**
 - `mdrive` command-line tool (ships alongside `ManagedDrive.exe`) for scripting mount/unmount/format/save/list/exit against the running app, forwarded over a named pipe
 - Auto-launches `ManagedDrive.exe` if it isn't already running and waits for it to become ready before sending the command
 
 **Convenience & safety**
+- Optional Explorer right-click integration: enable the setting to add **"Mount as RAM disk (ManagedDrive)"** to the right-click menu for zip/7z/rar/tar archives, mounting one with a single click — no need to open the app first — launches `ManagedDrive.exe` automatically if it isn't already running
 - System tray icon with hover tooltip (live usage per disk), quick-access menu, and optional start-minimized mode
 - High-usage warning per disk (configurable threshold, default 90%, with hysteresis)
 - Temp directory redirection — point Windows TEMP/TMP at a disk's `Temp` folder, with automatic reset on unmount/remount and startup warnings if TEMP is left pointing at a RAM disk
@@ -314,18 +314,18 @@ This project bundles [WinFsp](https://winfsp.dev/) and [SharpCompress](https://g
 - 实时编辑已挂载磁盘（卷标、容量、自动挂载、镜像路径）无需重挂即可生效；更改盘符或只读标志时自动重挂
 - NTFS 兼容卷标识，使内存盘可作为需要 NTFS 卷的工具（如 WinGet、Windows Update 暂存、BITS 下载）的目标路径
 - 应用启动时自动挂载已保存的磁盘配置
+- 格式化磁盘可立即清空所有内容（**格式化**；只读磁盘受保护）
 
 **持久化、快照与克隆**
 - 将磁盘内容保存为 `.mdr` 镜像文件，下次挂载时自动还原；也可直接导入已有镜像（**导入磁盘...**）
 - 直接导入压缩包（zip、7z、rar、tar 等 [SharpCompress](https://github.com/adamhathcock/sharpcompress) 支持的格式）作为只读磁盘（**导入压缩包...**）——容量与卷标从压缩包内容自动推算
-- 可选的资源管理器右键集成：在设置中启用后，会为 zip/7z/rar/tar 压缩包添加右键菜单项**"挂载为内存盘 (ManagedDrive)"**，一键挂载，无需先打开应用——若 `ManagedDrive.exe` 尚未运行会自动启动
 - 可选自动保存（1-60 分钟间隔），并在卸载/退出前自动执行一次收尾保存；内容未变化时自动跳过，保存失败会通过托盘/状态栏提示
 - 可选镜像压缩级别（不压缩／快速／均衡／最高，默认快速）
 - 快照／版本历史——按数量和/或大小上限保留快照，相同内容跨快照去重存储，占用空间远小于逻辑大小之和；可随时通过**还原快照...**还原到某个历史版本
 - 克隆磁盘到另一已挂载磁盘，或导出为新的 `.mdr` 文件（**克隆磁盘...**）
-- 格式化磁盘可立即清空所有内容（**格式化**；只读磁盘受保护）
 
 **便利与安全**
+- 可选的资源管理器右键集成：在设置中启用后，会为 zip/7z/rar/tar 压缩包添加右键菜单项**"挂载为内存盘 (ManagedDrive)"**，一键挂载，无需先打开应用——若 `ManagedDrive.exe` 尚未运行会自动启动
 - 系统托盘图标，悬浮显示所有磁盘实时使用率，提供快捷菜单及可选的最小化启动模式
 - 每磁盘可配置的高用量警告（默认阈值 90%，带回滞防抖）
 - 临时目录重定向——将 Windows TEMP/TMP 指向某磁盘的 `Temp` 文件夹，卸载/重挂时自动恢复默认值，TEMP 遗留指向内存盘时会在启动时提示
