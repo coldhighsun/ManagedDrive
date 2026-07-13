@@ -23,7 +23,7 @@ internal sealed class MainViewModelCliDiskController(MainViewModel mainViewModel
             .Select(vm => new CliDiskInfo(vm.MountPoint, vm.VolumeLabel, vm.Disk.UsedBytes, vm.Disk.TotalBytes))
             .ToList();
 
-    public Task<(bool Success, string Message)> MountArchiveAsync(string archivePath, string mountPoint, CliMountOverrides overrides) =>
+    public Task<(bool Success, string Message)> MountArchiveAsync(string archivePath, string? mountPoint, CliMountOverrides overrides) =>
         mainViewModel.MountArchiveAsync(archivePath, mountPoint, overrides);
 
     public Task<(bool Success, string Message)> MountImageAsync(string imagePath, string mountPoint, CliMountOverrides overrides) =>

@@ -415,7 +415,11 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     /// the supported archive formats support writing changes back.
     /// </summary>
     /// <param name="archivePath">Path to an existing archive file.</param>
-    /// <param name="mountPoint">The drive letter to mount at (e.g. <c>"R:"</c>).</param>
+    /// <param name="mountPoint">
+    /// The drive letter to mount at (e.g. <c>"R:"</c>), or <c>null</c> to automatically pick the
+    /// first free letter searching from <c>Z:</c> down to <c>D:</c> (used when the caller — e.g.
+    /// the Explorer right-click context menu — has no way to prompt for one).
+    /// </param>
     /// <param name="overrides">
     /// Per-field values the user explicitly passed via CLI flags; only
     /// <see cref="CliMountOverrides.AutoMount"/> applies here — every other field is meaningless
@@ -423,12 +427,20 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     /// </param>
     /// <returns>
     /// <c>(true, message)</c> on success; <c>(false, message)</c> with a human-readable reason
-    /// otherwise (mount point already in use, archive already mounted by another disk, invalid
-    /// archive file, or a mount failure).
+    /// otherwise (mount point already in use, no free drive letter, archive already mounted by
+    /// another disk, invalid archive file, or a mount failure).
     /// </returns>
-    public async Task<(bool Success, string Message)> MountArchiveAsync(string archivePath, string mountPoint, CliMountOverrides overrides)
+    public async Task<(bool Success, string Message)> MountArchiveAsync(string archivePath, string? mountPoint, CliMountOverrides overrides)
     {
-        if (Disks.Any(d => string.Equals(d.MountPoint, mountPoint, StringComparison.OrdinalIgnoreCase)))
+        if (mountPoint == null)
+        {
+            mountPoint = FindFreeDriveLetter();
+            if (mountPoint == null)
+            {
+                return (false, Loc.Get("Val.NoFreeDriveLetter"));
+            }
+        }
+        else if (Disks.Any(d => string.Equals(d.MountPoint, mountPoint, StringComparison.OrdinalIgnoreCase)))
         {
             return (false, Loc.Format("Val.MountPointAlreadyMounted", mountPoint));
         }
@@ -1317,6 +1329,28 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     /// </summary>
     private IReadOnlyList<DiskOptions> GetOtherDiskOptions(DiskViewModel? excluding) =>
         Disks.Where(d => d != excluding).Select(d => d.Disk.Options).ToList();
+
+    /// <summary>
+    /// Finds the first free drive letter searching from <c>Z:</c> down to <c>D:</c>, skipping
+    /// letters already in use by any Windows drive (mounted RAM disks included, since they show
+    /// up in <see cref="DriveInfo.GetDrives"/> like any other volume).
+    /// </summary>
+    /// <returns>A free mount point (e.g. <c>"Z:"</c>), or <c>null</c> if none is free.</returns>
+    private static string? FindFreeDriveLetter()
+    {
+        var usedLetters = new HashSet<char>(
+            DriveInfo.GetDrives().Select(d => char.ToUpperInvariant(d.Name[0])));
+
+        for (var c = 'Z'; c >= 'D'; c--)
+        {
+            if (!usedLetters.Contains(c))
+            {
+                return $"{c}:";
+            }
+        }
+
+        return null;
+    }
 
     private async Task MountAndAddAsync(DiskOptions options)
     {

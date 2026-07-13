@@ -98,9 +98,10 @@ public static class CliCommandProcessor
         {
             Description = "Path to an archive file (zip, 7z, rar, tar, ...) to mount as a read-only disk.",
         };
-        var mountArchiveDriveArgument = new Argument<string>("drive-letter")
+        var mountArchiveDriveArgument = new Argument<string?>("drive-letter")
         {
-            Description = "Drive letter to mount at, e.g. R:",
+            Description = "Drive letter to mount at, e.g. R:. If omitted, the first free letter from Z: down to D: is picked automatically.",
+            Arity = ArgumentArity.ZeroOrOne,
         };
         var mountArchiveAutoMountOption = new Option<bool?>("--auto-mount")
         {
@@ -120,7 +121,7 @@ public static class CliCommandProcessor
 
             return MountArchiveAsync(
                 parseResult.GetValue(mountArchiveArgument)!,
-                parseResult.GetValue(mountArchiveDriveArgument)!,
+                parseResult.GetValue(mountArchiveDriveArgument),
                 overrides,
                 diskController,
                 console);
@@ -241,9 +242,9 @@ public static class CliCommandProcessor
         return success ? 0 : 1;
     }
 
-    private static async Task<int> MountArchiveAsync(string archivePath, string driveLetter, CliMountOverrides overrides, ICliDiskController diskController, IAnsiConsole console)
+    private static async Task<int> MountArchiveAsync(string archivePath, string? driveLetter, CliMountOverrides overrides, ICliDiskController diskController, IAnsiConsole console)
     {
-        driveLetter = NormalizeDriveLetter(driveLetter);
+        driveLetter = driveLetter == null ? null : NormalizeDriveLetter(driveLetter);
 
         if (!File.Exists(archivePath))
         {

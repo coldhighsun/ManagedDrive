@@ -19,6 +19,7 @@ public partial class SettingsDialog
         _original = config;
         RunAtStartupBox.IsChecked = StartupManager.IsEnabled;
         StartMinimizedBox.IsChecked = config.StartMinimized;
+        ContextMenuEnabledBox.IsChecked = ShellContextMenuManager.IsRegistered;
 
         LanguageBox.Items.Add(new ComboBoxItem { Content = Loc.Get("Lang.System"), Tag = "" });
         foreach (var (tag, displayName) in LanguageManager.SupportedLanguages)
@@ -75,6 +76,9 @@ public partial class SettingsDialog
         var runAtStartup = RunAtStartupBox.IsChecked == true;
         StartupManager.SetEnabled(runAtStartup);
 
+        var contextMenuEnabled = ContextMenuEnabledBox.IsChecked == true;
+        ShellContextMenuManager.SetEnabled(contextMenuEnabled);
+
         var selectedTag = LanguageBox.SelectedItem is ComboBoxItem { Tag: string t } && !string.IsNullOrEmpty(t) ? t : null;
         LanguageManager.Instance.Apply(selectedTag);
 
@@ -89,6 +93,7 @@ public partial class SettingsDialog
             Theme = selectedTheme,
             Disks = _original.Disks,
             TempDirCompatWarningShown = _original.TempDirCompatWarningShown,
+            ContextMenuEnabled = contextMenuEnabled,
         };
 
         DialogResult = true;

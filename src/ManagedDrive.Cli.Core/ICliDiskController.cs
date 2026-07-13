@@ -28,7 +28,10 @@ public interface ICliDiskController
     /// <c>SharpCompress</c> can read) at <paramref name="mountPoint"/> as a new read-only disk.
     /// </summary>
     /// <param name="archivePath">Path to an existing archive file.</param>
-    /// <param name="mountPoint">The drive letter to mount at.</param>
+    /// <param name="mountPoint">
+    /// The drive letter to mount at, or <c>null</c> to automatically pick the first free letter
+    /// from <c>Z:</c> down to <c>D:</c>.
+    /// </param>
     /// <param name="overrides">
     /// Per-field values the user explicitly passed via CLI flags; only <see cref="CliMountOverrides.AutoMount"/>
     /// applies to an archive-sourced disk. Any other field is ignored, since an archive-sourced
@@ -36,9 +39,10 @@ public interface ICliDiskController
     /// </param>
     /// <returns>
     /// <c>(true, message)</c> on success; <c>(false, message)</c> with a human-readable reason
-    /// otherwise.
+    /// otherwise — including when <paramref name="mountPoint"/> is <c>null</c> and no drive letter
+    /// is free.
     /// </returns>
-    Task<(bool Success, string Message)> MountArchiveAsync(string archivePath, string mountPoint, CliMountOverrides overrides);
+    Task<(bool Success, string Message)> MountArchiveAsync(string archivePath, string? mountPoint, CliMountOverrides overrides);
 
     /// <summary>
     /// Mounts an existing disk image at <paramref name="mountPoint"/>.

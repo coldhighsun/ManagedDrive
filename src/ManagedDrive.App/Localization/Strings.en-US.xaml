@@ -108,6 +108,7 @@
     <sys:String x:Key="Val.BadSnapshotSize">Enter a valid maximum snapshot size.</sys:String>
     <sys:String x:Key="Val.ImagePathIsSnapshot">This path looks like a snapshot file name; choose a different image path.</sys:String>
     <sys:String x:Key="Val.MountPointAlreadyMounted">{0} is already mounted.</sys:String>
+    <sys:String x:Key="Val.NoFreeDriveLetter">No free drive letter is available to mount a new disk.</sys:String>
 
     <!-- CloneDiskDialog -->
     <sys:String x:Key="CloneDisk.Title">Clone Disk</sys:String>
@@ -138,6 +139,7 @@
     <sys:String x:Key="Settings.Title">Settings</sys:String>
     <sys:String x:Key="Settings.RunAtStartup">Run at Windows startup</sys:String>
     <sys:String x:Key="Settings.StartMinimized">Start minimized to tray</sys:String>
+    <sys:String x:Key="Settings.ContextMenuEnabled">Show "Mount as RAM disk" in Explorer's right-click menu</sys:String>
     <sys:String x:Key="Settings.Language">Language:</sys:String>
     <sys:String x:Key="Lang.System">System Default</sys:String>
     <sys:String x:Key="Settings.Theme">Theme:</sys:String>
@@ -146,6 +148,8 @@
     <sys:String x:Key="Settings.Theme.Dark">Dark</sys:String>
     <sys:String x:Key="Tip.RunAtStartup">Start ManagedDrive automatically when Windows starts</sys:String>
     <sys:String x:Key="Tip.StartMinimized">Hide the main window on startup and show only the system tray icon</sys:String>
+    <sys:String x:Key="Tip.ContextMenuEnabled">Add a right-click menu entry to mount zip/7z/rar/tar archives directly as a RAM disk</sys:String>
+    <sys:String x:Key="ShellMenu.ImportArchive">Mount as RAM disk (ManagedDrive)</sys:String>
 
     <!-- Shared buttons -->
     <sys:String x:Key="Btn.Ok">OK</sys:String>

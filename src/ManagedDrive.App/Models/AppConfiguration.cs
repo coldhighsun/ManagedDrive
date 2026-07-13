@@ -56,4 +56,13 @@ public sealed record AppConfiguration
     {
         get; init;
     }
+
+    /// <summary>
+    /// Gets or sets a value indicating whether the Windows Explorer right-click context menu
+    /// entry for importing archive files as RAM disks is registered.
+    /// </summary>
+    public bool ContextMenuEnabled
+    {
+        get; init;
+    }
 }

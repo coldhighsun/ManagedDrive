@@ -26,6 +26,7 @@ Create, mount and manage in-memory volumes that appear as normal drive letters i
 **Persistence, snapshots & cloning**
 - Save disk contents to a `.mdr` image file and restore it on next mount, or import an existing image directly (**Import Disk...**)
 - Import an archive (zip, 7z, rar, tar, and other formats [SharpCompress](https://github.com/adamhathcock/sharpcompress) can read) directly as a read-only disk (**Import Archive...**) — capacity and label are derived from the archive up front
+- Optional Explorer right-click integration: enable the setting to add **"Mount as RAM disk (ManagedDrive)"** to the right-click menu for zip/7z/rar/tar archives, mounting one with a single click — no need to open the app first — launches `ManagedDrive.exe` automatically if it isn't already running
 - Optional auto-save on a 1–60 minute interval, plus an automatic final save before unmount/exit; both are skipped when nothing has changed, and failures raise a tray/status-bar notification
 - Selectable image compression (Off / Fast / Balanced / Max, default Fast)
 - Snapshot / version history — cap retained snapshots by count and/or size; deduplicated by content hash so many snapshots cost little extra space; restore any snapshot via **Restore Snapshot...**
@@ -265,6 +266,7 @@ mdrive exit
 | Command | Description |
 |---|---|
 | `mount <image-path> <drive-letter> [options]` | Mounts an existing `.mdr` image at a drive letter. Options: `--read-only`, `--auto-mount`, `--auto-save-minutes`, `--compression <None\|Fastest\|Optimal\|SmallestSize>`, `--max-snapshot-count`, `--max-snapshot-size-mb`, `--high-usage-warn-percent`. Any option left unset keeps the image's saved profile value (or its default). |
+| `mount-archive <archive-path> [drive-letter]` | Imports an archive (zip/7z/rar/tar/...) as a read-only disk. `drive-letter` is optional — if omitted, the first free letter from `Z:` down to `D:` is used. Used internally by the Explorer right-click menu entry. |
 | `unmount <drive-letter>` | Unmounts a mounted disk. |
 | `format <drive-letter> --yes` | Deletes all files on a mounted disk. Requires `--yes`/`-y` to confirm. |
 | `save <drive-letter>` | Saves a mounted disk's contents to its backing image immediately. |
@@ -316,6 +318,7 @@ This project bundles [WinFsp](https://winfsp.dev/) and [SharpCompress](https://g
 **持久化、快照与克隆**
 - 将磁盘内容保存为 `.mdr` 镜像文件，下次挂载时自动还原；也可直接导入已有镜像（**导入磁盘...**）
 - 直接导入压缩包（zip、7z、rar、tar 等 [SharpCompress](https://github.com/adamhathcock/sharpcompress) 支持的格式）作为只读磁盘（**导入压缩包...**）——容量与卷标从压缩包内容自动推算
+- 可选的资源管理器右键集成：在设置中启用后，会为 zip/7z/rar/tar 压缩包添加右键菜单项**"挂载为内存盘 (ManagedDrive)"**，一键挂载，无需先打开应用——若 `ManagedDrive.exe` 尚未运行会自动启动
 - 可选自动保存（1-60 分钟间隔），并在卸载/退出前自动执行一次收尾保存；内容未变化时自动跳过，保存失败会通过托盘/状态栏提示
 - 可选镜像压缩级别（不压缩／快速／均衡／最高，默认快速）
 - 快照／版本历史——按数量和/或大小上限保留快照，相同内容跨快照去重存储，占用空间远小于逻辑大小之和；可随时通过**还原快照...**还原到某个历史版本
@@ -554,6 +557,7 @@ mdrive exit
 | 命令 | 说明 |
 |---|---|
 | `mount <镜像路径> <盘符> [选项]` | 将已有的 `.mdr` 镜像挂载到指定盘符。可选项：`--read-only`、`--auto-mount`、`--auto-save-minutes`、`--compression <None\|Fastest\|Optimal\|SmallestSize>`、`--max-snapshot-count`、`--max-snapshot-size-mb`、`--high-usage-warn-percent`。未指定的选项沿用该镜像已保存的配置值（或其默认值）。 |
+| `mount-archive <压缩包路径> [盘符]` | 将压缩包（zip/7z/rar/tar 等）作为只读磁盘导入挂载。`盘符`可省略——省略时自动从 `Z:` 向下查找第一个可用盘符。资源管理器右键菜单项内部即调用此命令。 |
 | `unmount <盘符>` | 卸载已挂载的磁盘。 |
 | `format <盘符> --yes` | 清空已挂载磁盘上的所有文件，须加 `--yes`/`-y` 确认。 |
 | `save <盘符>` | 立即将已挂载磁盘的内容保存到其绑定的镜像文件。 |

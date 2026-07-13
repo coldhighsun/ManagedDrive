@@ -108,6 +108,7 @@
     <sys:String x:Key="Val.BadSnapshotSize">请输入有效的最大快照大小。</sys:String>
     <sys:String x:Key="Val.ImagePathIsSnapshot">该路径看起来像快照文件名，请选择另一个镜像路径。</sys:String>
     <sys:String x:Key="Val.MountPointAlreadyMounted">{0} 已挂载。</sys:String>
+    <sys:String x:Key="Val.NoFreeDriveLetter">没有可用的盘符来挂载新磁盘。</sys:String>
 
     <!-- CloneDiskDialog -->
     <sys:String x:Key="CloneDisk.Title">克隆磁盘</sys:String>
@@ -138,6 +139,7 @@
     <sys:String x:Key="Settings.Title">设置</sys:String>
     <sys:String x:Key="Settings.RunAtStartup">开机自动启动</sys:String>
     <sys:String x:Key="Settings.StartMinimized">启动时最小化到托盘</sys:String>
+    <sys:String x:Key="Settings.ContextMenuEnabled">在资源管理器右键菜单中显示"挂载为内存盘"</sys:String>
     <sys:String x:Key="Settings.Language">语言：</sys:String>
     <sys:String x:Key="Lang.System">系统默认</sys:String>
     <sys:String x:Key="Settings.Theme">主题：</sys:String>
@@ -146,6 +148,8 @@
     <sys:String x:Key="Settings.Theme.Dark">深色</sys:String>
     <sys:String x:Key="Tip.RunAtStartup">Windows 启动时自动运行 ManagedDrive</sys:String>
     <sys:String x:Key="Tip.StartMinimized">启动时隐藏主窗口，仅显示系统托盘图标</sys:String>
+    <sys:String x:Key="Tip.ContextMenuEnabled">添加右键菜单项，可直接将 zip/7z/rar/tar 压缩包挂载为内存盘</sys:String>
+    <sys:String x:Key="ShellMenu.ImportArchive">挂载为内存盘 (ManagedDrive)</sys:String>
 
     <!-- Shared buttons -->
     <sys:String x:Key="Btn.Ok">确定</sys:String>
