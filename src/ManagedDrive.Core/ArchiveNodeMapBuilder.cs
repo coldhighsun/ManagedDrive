@@ -160,7 +160,7 @@ public static class ArchiveNodeMapBuilder
 
     private static FileNode NewDirectoryNode(ulong timestamp)
     {
-        return new FileNode
+        return new()
         {
             FileSecurity = FileNode.DefaultSecurityDescriptorBytes,
             FileInfo =

@@ -20,7 +20,7 @@ public static class CliPipeClient
     /// </returns>
     public static bool TrySend(string[] args, out CliResponse response)
     {
-        response = new CliResponse(false, string.Empty, null, 1);
+        response = new(false, string.Empty, null, 1);
 
         using var pipe = new NamedPipeClientStream(".", CliPipeProtocol.PipeName, PipeDirection.InOut);
 

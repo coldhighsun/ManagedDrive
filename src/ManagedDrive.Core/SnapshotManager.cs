@@ -8,22 +8,7 @@ namespace ManagedDrive.Core;
 /// </summary>
 public static partial class SnapshotManager
 {
-    [GeneratedRegex(@"^(?<base>.+)\.(?<ts>\d{8}-\d{6})(-\d+)?\.mdr$", RegexOptions.IgnoreCase)]
-    private static partial Regex SnapshotPattern();
-
     private const string TimestampFormat = "yyyyMMdd-HHmmss";
-
-    /// <summary>
-    /// Metadata for a single snapshot file.
-    /// </summary>
-    public readonly record struct SnapshotInfo(string Path, DateTimeOffset TimestampUtc, long SizeBytes);
-
-    /// <summary>
-    /// Returns <c>true</c> when <paramref name="fileName"/> matches the snapshot naming
-    /// scheme produced by <see cref="BuildSnapshotPath"/> (i.e. it is a snapshot, not a
-    /// plain main image file).
-    /// </summary>
-    public static bool IsSnapshotFileName(string fileName) => SnapshotPattern().IsMatch(fileName);
 
     /// <summary>
     /// Builds a unique snapshot file path in the same directory as <paramref name="mainImagePath"/>,
@@ -48,32 +33,48 @@ public static partial class SnapshotManager
     }
 
     /// <summary>
-    /// Writes <paramref name="nodeMap"/> as a new timestamped snapshot of <paramref name="mainImagePath"/>.
-    /// File content is deduplicated across all snapshots of this image via a shared,
-    /// content-addressed blob store.
+    /// Deletes every snapshot index file of <paramref name="mainImagePath"/> along with its
+    /// entire blob directory. Used when the user deletes the main image itself, so no orphaned
+    /// snapshots or blobs are left behind. Failures deleting an individual file are skipped.
     /// </summary>
-    public static void WriteSnapshot(
-        FileNodeMap nodeMap,
-        ulong capacityBytes,
-        string volumeLabel,
-        string mainImagePath,
-        DateTimeOffset timestampUtc,
-        ImageCompressionLevel level)
+    public static void DeleteAllSnapshots(string mainImagePath)
     {
-        var indexPath = BuildSnapshotPath(mainImagePath, timestampUtc);
-        SnapshotStore.Write(nodeMap, capacityBytes, volumeLabel, indexPath, BlobDirectory(mainImagePath), level);
+        foreach (var snapshot in ListSnapshots(mainImagePath))
+        {
+            try
+            {
+                File.Delete(snapshot.Path);
+            }
+            catch (IOException)
+            {
+            }
+            catch (UnauthorizedAccessException)
+            {
+            }
+        }
+
+        var blobDirectory = BlobDirectory(mainImagePath);
+        try
+        {
+            if (Directory.Exists(blobDirectory))
+            {
+                Directory.Delete(blobDirectory, recursive: true);
+            }
+        }
+        catch (IOException)
+        {
+        }
+        catch (UnauthorizedAccessException)
+        {
+        }
     }
 
     /// <summary>
-    /// Loads the snapshot index at <paramref name="indexPath"/>, resolving its content from
-    /// the blob store shared by all snapshots of the same main image.
+    /// Returns <c>true</c> when <paramref name="fileName"/> matches the snapshot naming
+    /// scheme produced by <see cref="BuildSnapshotPath"/> (i.e. it is a snapshot, not a
+    /// plain main image file).
     /// </summary>
-    /// <exception cref="InvalidDataException">
-    /// Thrown when the index is not a valid snapshot, its version is unsupported, or a
-    /// referenced blob is missing or corrupt.
-    /// </exception>
-    public static FileNodeMap LoadSnapshot(string indexPath, out ulong capacityBytes, out string volumeLabel) =>
-        SnapshotStore.Load(indexPath, BlobDirectoryFromSnapshotPath(indexPath), out capacityBytes, out volumeLabel);
+    public static bool IsSnapshotFileName(string fileName) => SnapshotPattern().IsMatch(fileName);
 
     /// <summary>
     /// Lists all snapshot index files belonging to <paramref name="mainImagePath"/>, sorted
@@ -109,15 +110,26 @@ public static partial class SnapshotManager
                 System.Globalization.DateTimeStyles.AssumeUniversal | System.Globalization.DateTimeStyles.AdjustToUniversal,
                 out var parsed)
                 ? parsed
-                : new DateTimeOffset(File.GetLastWriteTimeUtc(path), TimeSpan.Zero);
+                : new(File.GetLastWriteTimeUtc(path), TimeSpan.Zero);
 
             var logicalSize = SnapshotStore.ReadSummary(path).LogicalSizeBytes;
-            snapshots.Add(new SnapshotInfo(path, timestamp, logicalSize));
+            snapshots.Add(new(path, timestamp, logicalSize));
         }
 
         snapshots.Sort((a, b) => a.TimestampUtc.CompareTo(b.TimestampUtc));
         return snapshots;
     }
+
+    /// <summary>
+    /// Loads the snapshot index at <paramref name="indexPath"/>, resolving its content from
+    /// the blob store shared by all snapshots of the same main image.
+    /// </summary>
+    /// <exception cref="InvalidDataException">
+    /// Thrown when the index is not a valid snapshot, its version is unsupported, or a
+    /// referenced blob is missing or corrupt.
+    /// </exception>
+    public static FileNodeMap LoadSnapshot(string indexPath, out ulong capacityBytes, out string volumeLabel) =>
+        SnapshotStore.Load(indexPath, BlobDirectoryFromSnapshotPath(indexPath), out capacityBytes, out volumeLabel);
 
     /// <summary>
     /// Deletes the oldest snapshots of <paramref name="mainImagePath"/> until both
@@ -169,40 +181,20 @@ public static partial class SnapshotManager
     }
 
     /// <summary>
-    /// Deletes every snapshot index file of <paramref name="mainImagePath"/> along with its
-    /// entire blob directory. Used when the user deletes the main image itself, so no orphaned
-    /// snapshots or blobs are left behind. Failures deleting an individual file are skipped.
+    /// Writes <paramref name="nodeMap"/> as a new timestamped snapshot of <paramref name="mainImagePath"/>.
+    /// File content is deduplicated across all snapshots of this image via a shared,
+    /// content-addressed blob store.
     /// </summary>
-    public static void DeleteAllSnapshots(string mainImagePath)
+    public static void WriteSnapshot(
+        FileNodeMap nodeMap,
+        ulong capacityBytes,
+        string volumeLabel,
+        string mainImagePath,
+        DateTimeOffset timestampUtc,
+        ImageCompressionLevel level)
     {
-        foreach (var snapshot in ListSnapshots(mainImagePath))
-        {
-            try
-            {
-                File.Delete(snapshot.Path);
-            }
-            catch (IOException)
-            {
-            }
-            catch (UnauthorizedAccessException)
-            {
-            }
-        }
-
-        var blobDirectory = BlobDirectory(mainImagePath);
-        try
-        {
-            if (Directory.Exists(blobDirectory))
-            {
-                Directory.Delete(blobDirectory, recursive: true);
-            }
-        }
-        catch (IOException)
-        {
-        }
-        catch (UnauthorizedAccessException)
-        {
-        }
+        var indexPath = BuildSnapshotPath(mainImagePath, timestampUtc);
+        SnapshotStore.Write(nodeMap, capacityBytes, volumeLabel, indexPath, BlobDirectory(mainImagePath), level);
     }
 
     private static string BlobDirectory(string mainImagePath) => SnapshotStore.ComputeBlobDirectory(mainImagePath);
@@ -261,4 +253,12 @@ public static partial class SnapshotManager
             }
         }
     }
+
+    [GeneratedRegex(@"^(?<base>.+)\.(?<ts>\d{8}-\d{6})(-\d+)?\.mdr$", RegexOptions.IgnoreCase)]
+    private static partial Regex SnapshotPattern();
+
+    /// <summary>
+    /// Metadata for a single snapshot file.
+    /// </summary>
+    public readonly record struct SnapshotInfo(string Path, DateTimeOffset TimestampUtc, long SizeBytes);
 }

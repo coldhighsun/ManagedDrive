@@ -95,7 +95,7 @@ public sealed class FileNode
     /// </returns>
     public FileNode Clone()
     {
-        return new FileNode
+        return new()
         {
             FileInfo = FileInfo,
             FileSecurity = FileSecurity?.ToArray(),
