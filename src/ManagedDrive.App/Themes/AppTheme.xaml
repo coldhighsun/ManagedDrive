@@ -11,6 +11,16 @@
         <Setter Property="HorizontalAlignment" Value="Center"/>
     </Style>
 
+    <!-- ========== Hyperlink style ========== -->
+    <Style TargetType="Hyperlink">
+        <Setter Property="Foreground" Value="{DynamicResource AppPrimary}"/>
+        <Style.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+                <Setter Property="Foreground" Value="{DynamicResource AppPrimaryDark}"/>
+            </Trigger>
+        </Style.Triggers>
+    </Style>
+
     <!-- ========== Window base style ========== -->
     <Style x:Key="AppWindow" TargetType="Window">
         <Setter Property="Background" Value="{DynamicResource AppBackground}"/>
