@@ -119,16 +119,17 @@ ManagedDrive/
 │       ├── App.xaml(.cs)           #   Startup, tray icon, auto-mount
 │       └── Cli/                    #   Named-pipe server forwarding CLI commands into the running app
 │
-│   ├── ManagedDrive.Cli.Core/      # Shared CLI parsing/protocol library
-│   │   ├── CliCommandProcessor.cs  #   System.CommandLine subcommands (mount/unmount/format/save/list/exit)
+│   ├── ManagedDrive.Cli.Core/      # Shared CLI parsing/protocol library (no Spectre.Console — keeps ManagedDrive.App's dependency footprint small)
+│   │   ├── CliCommandProcessor.cs  #   System.CommandLine subcommands (mount/unmount/format/save/list/exit); returns a structured CliOutcome, not rendered text
 │   │   ├── ICliDiskController.cs   #   Abstraction the App layer implements to execute CLI commands
 │   │   ├── CliPipeClient.cs        #   Sends a command to the running app's named pipe
-│   │   ├── CliPipeProtocol.cs      #   Wire format shared by client and server
+│   │   ├── CliPipeProtocol.cs      #   Wire format shared by client and server (structured CliResponse, not pre-rendered text)
 │   │   ├── CliMountOverrides.cs    #   Optional per-mount overrides parsed from CLI flags
 │   │   └── ByteFormatter.cs        #   Human-readable byte-size formatting (shared with the App layer)
 │   │
-│   └── ManagedDrive.Cli/           # `mdrive` console-subsystem entry point
-│       └── Program.cs              #   Forwards args over the pipe, auto-launching ManagedDrive.exe if needed
+│   └── ManagedDrive.Cli/           # `mdrive` console-subsystem entry point (only project referencing Spectre.Console)
+│       ├── Program.cs              #   Forwards args over the pipe, auto-launching ManagedDrive.exe if needed
+│       └── CliOutputRenderer.cs    #   Renders a CliResponse to the terminal (colors, tables) via Spectre.Console
 │
 ├── tests/
 │   └── ManagedDrive.Tests/         # xUnit v3 unit tests (pure-managed code only)
@@ -410,16 +411,17 @@ ManagedDrive/
 │       ├── App.xaml(.cs)           #   启动、托盘图标、自动挂载
 │       └── Cli/                    #   将 CLI 命令转发进运行中应用的命名管道服务端
 │
-│   ├── ManagedDrive.Cli.Core/      # 共享的 CLI 解析/协议库
-│   │   ├── CliCommandProcessor.cs  #   System.CommandLine 子命令（mount/unmount/format/save/list/exit）
+│   ├── ManagedDrive.Cli.Core/      # 共享的 CLI 解析/协议库（不依赖 Spectre.Console，避免拖大 ManagedDrive.App 的发布体积）
+│   │   ├── CliCommandProcessor.cs  #   System.CommandLine 子命令（mount/unmount/format/save/list/exit）；返回结构化的 CliOutcome，而非渲染好的文本
 │   │   ├── ICliDiskController.cs   #   App 层实现的接口，用于执行 CLI 命令
 │   │   ├── CliPipeClient.cs        #   向运行中应用的命名管道发送命令
-│   │   ├── CliPipeProtocol.cs      #   客户端与服务端共用的线上协议格式
+│   │   ├── CliPipeProtocol.cs      #   客户端与服务端共用的线上协议格式（结构化的 CliResponse，而非预渲染文本）
 │   │   ├── CliMountOverrides.cs    #   由 CLI 参数解析出的可选挂载覆盖项
 │   │   └── ByteFormatter.cs        #   人类可读的字节大小格式化（与 App 层共用）
 │   │
-│   └── ManagedDrive.Cli/           # `mdrive` 控制台子系统入口点
-│       └── Program.cs              #   将参数通过管道转发，必要时自动启动 ManagedDrive.exe
+│   └── ManagedDrive.Cli/           # `mdrive` 控制台子系统入口点（唯一引用 Spectre.Console 的项目）
+│       ├── Program.cs              #   将参数通过管道转发，必要时自动启动 ManagedDrive.exe
+│       └── CliOutputRenderer.cs    #   用 Spectre.Console 把 CliResponse 渲染为终端输出（颜色、表格）
 │
 ├── tests/
 │   └── ManagedDrive.Tests/         # xUnit v3 单元测试（仅纯托管代码）

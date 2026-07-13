@@ -1,5 +1,5 @@
-using System.Diagnostics;
 using ManagedDrive.Cli.Core;
+using System.Diagnostics;
 
 namespace ManagedDrive.Cli;
 
@@ -19,9 +19,9 @@ public static class Program
     {
         args = ResolvePathArgument(args);
 
-        if (CliPipeClient.TrySend(args, out var output, out var exitCode))
+        if (CliPipeClient.TrySend(args, out var response))
         {
-            return Print(output, exitCode);
+            return CliOutputRenderer.Render(response);
         }
 
         if (!TryLaunchApp())
@@ -35,9 +35,9 @@ public static class Program
         {
             await Task.Delay(RetryIntervalMs);
 
-            if (CliPipeClient.TrySend(args, out output, out exitCode))
+            if (CliPipeClient.TrySend(args, out response))
             {
-                return Print(output, exitCode);
+                return CliOutputRenderer.Render(response);
             }
         }
 
@@ -62,20 +62,6 @@ public static class Program
         var resolved = (string[])args.Clone();
         resolved[1] = Path.GetFullPath(args[1]);
         return resolved;
-    }
-
-    private static int Print(string output, int exitCode)
-    {
-        if (exitCode == 0)
-        {
-            Console.WriteLine(output);
-        }
-        else
-        {
-            Console.Error.WriteLine(output);
-        }
-
-        return exitCode;
     }
 
     private static bool TryLaunchApp()

@@ -20,7 +20,7 @@ public static class CliPipeProtocol
         JsonSerializer.Deserialize<string[]>(json) ?? [];
 
     public static CliResponse DeserializeResponse(string json) =>
-        JsonSerializer.Deserialize<CliResponse>(json) ?? new CliResponse(string.Empty, 1);
+        JsonSerializer.Deserialize<CliResponse>(json) ?? new CliResponse(false, string.Empty, null, 1);
 
     public static string SerializeRequest(string[] args) => JsonSerializer.Serialize(args);
 
@@ -28,6 +28,8 @@ public static class CliPipeProtocol
 }
 
 /// <summary>
-/// Result of executing a CLI command, sent back across the pipe to the calling process.
+/// Structured result of executing a CLI command, sent back across the pipe to the calling
+/// process. Mirrors <see cref="CliOutcome"/> — rendering into terminal output is the calling
+/// process's responsibility.
 /// </summary>
-public sealed record CliResponse(string Output, int ExitCode);
+public sealed record CliResponse(bool Success, string Message, IReadOnlyList<CliDiskInfo>? Disks, int ExitCode);

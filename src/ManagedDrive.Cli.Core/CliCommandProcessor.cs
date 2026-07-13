@@ -1,15 +1,13 @@
 using ManagedDrive.Core;
-using Spectre.Console;
 using System.CommandLine;
 
 namespace ManagedDrive.Cli.Core;
 
 /// <summary>
-/// Parses and executes ManagedDrive's CLI subcommands (<c>mount</c>, <c>unmount</c>,
-/// <c>list</c>, <c>exit</c>) using <c>System.CommandLine</c> for parsing and <c>Spectre.Console</c> for
-/// output. Rendered output is captured into an in-memory buffer rather than written to the
-/// real console, so it can be shipped back across the CLI named pipe or, on a fresh launch,
-/// printed directly.
+/// Parses and dispatches ManagedDrive's CLI subcommands (<c>mount</c>, <c>unmount</c>,
+/// <c>list</c>, <c>exit</c>) using <c>System.CommandLine</c>. Returns a structured
+/// <see cref="CliOutcome"/> rather than rendered text — terminal rendering is the caller's
+/// concern (see <c>ManagedDrive.Cli</c>'s renderer).
 /// </summary>
 public static class CliCommandProcessor
 {
@@ -17,13 +15,10 @@ public static class CliCommandProcessor
     /// Parses <paramref name="args"/> and executes the matching subcommand against
     /// <paramref name="diskController"/>.
     /// </summary>
-    public static async Task<CliResult> ExecuteAsync(string[] args, ICliDiskController diskController)
+    public static async Task<CliOutcome> ExecuteAsync(string[] args, ICliDiskController diskController)
     {
         var buffer = new StringWriter();
-        var console = AnsiConsole.Create(new AnsiConsoleSettings
-        {
-            Out = new AnsiConsoleOutput(buffer),
-        });
+        CliOutcome? outcome = null;
 
         var mountImageArgument = new Argument<string>("image-path")
         {
@@ -72,7 +67,7 @@ public static class CliCommandProcessor
         mountCommand.Options.Add(mountMaxSnapshotCountOption);
         mountCommand.Options.Add(mountMaxSnapshotSizeMbOption);
         mountCommand.Options.Add(mountHighUsageWarnPercentOption);
-        mountCommand.SetAction((parseResult, _) =>
+        mountCommand.SetAction(async (parseResult, _) =>
         {
             var maxSnapshotSizeMb = parseResult.GetValue(mountMaxSnapshotSizeMbOption);
             var overrides = new CliMountOverrides
@@ -86,12 +81,13 @@ public static class CliCommandProcessor
                 HighUsageWarnPercent = parseResult.GetValue(mountHighUsageWarnPercentOption),
             };
 
-            return MountAsync(
+            var exitCode = await MountAsync(
                 parseResult.GetValue(mountImageArgument)!,
                 parseResult.GetValue(mountDriveArgument)!,
                 overrides,
                 diskController,
-                console);
+                o => outcome = o);
+            return exitCode;
         });
 
         var mountArchiveArgument = new Argument<string>("archive-path")
@@ -112,19 +108,20 @@ public static class CliCommandProcessor
         mountArchiveCommand.Arguments.Add(mountArchiveArgument);
         mountArchiveCommand.Arguments.Add(mountArchiveDriveArgument);
         mountArchiveCommand.Options.Add(mountArchiveAutoMountOption);
-        mountArchiveCommand.SetAction((parseResult, _) =>
+        mountArchiveCommand.SetAction(async (parseResult, _) =>
         {
             var overrides = new CliMountOverrides
             {
                 AutoMount = parseResult.GetValue(mountArchiveAutoMountOption),
             };
 
-            return MountArchiveAsync(
+            var exitCode = await MountArchiveAsync(
                 parseResult.GetValue(mountArchiveArgument)!,
                 parseResult.GetValue(mountArchiveDriveArgument),
                 overrides,
                 diskController,
-                console);
+                o => outcome = o);
+            return exitCode;
         });
 
         var unmountDriveArgument = new Argument<string>("drive-letter")
@@ -138,12 +135,12 @@ public static class CliCommandProcessor
         var unmountCommand = new Command("unmount", "Unmounts a mounted disk by drive letter.");
         unmountCommand.Arguments.Add(unmountDriveArgument);
         unmountCommand.Options.Add(unmountDeleteImageOption);
-        unmountCommand.SetAction((parseResult, _) =>
-            UnmountAsync(
+        unmountCommand.SetAction(async (parseResult, _) =>
+            await UnmountAsync(
                 parseResult.GetValue(unmountDriveArgument)!,
                 parseResult.GetValue(unmountDeleteImageOption),
                 diskController,
-                console));
+                o => outcome = o));
 
         var formatDriveArgument = new Argument<string>("drive-letter")
         {
@@ -156,12 +153,12 @@ public static class CliCommandProcessor
         var formatCommand = new Command("format", "Formats a mounted disk, permanently deleting all files on it.");
         formatCommand.Arguments.Add(formatDriveArgument);
         formatCommand.Options.Add(formatYesOption);
-        formatCommand.SetAction((parseResult, _) =>
-            FormatAsync(
+        formatCommand.SetAction(async (parseResult, _) =>
+            await FormatAsync(
                 parseResult.GetValue(formatDriveArgument)!,
                 parseResult.GetValue(formatYesOption),
                 diskController,
-                console));
+                o => outcome = o));
 
         var saveDriveArgument = new Argument<string>("drive-letter")
         {
@@ -169,14 +166,24 @@ public static class CliCommandProcessor
         };
         var saveCommand = new Command("save", "Saves a mounted disk's contents to its backing .mdr image immediately.");
         saveCommand.Arguments.Add(saveDriveArgument);
-        saveCommand.SetAction((parseResult, _) =>
-            SaveAsync(parseResult.GetValue(saveDriveArgument)!, diskController, console));
+        saveCommand.SetAction(async (parseResult, _) =>
+            await SaveAsync(parseResult.GetValue(saveDriveArgument)!, diskController, o => outcome = o));
 
         var listCommand = new Command("list", "Lists currently mounted disks.");
-        listCommand.SetAction((_, _) => Task.FromResult(RenderList(diskController, console)));
+        listCommand.SetAction((_, _) =>
+        {
+            var disks = diskController.ListDisks();
+            outcome = new CliOutcome(true, string.Empty, disks, 0);
+            return Task.FromResult(0);
+        });
 
         var exitCommand = new Command("exit", "Exits the running ManagedDrive application.");
-        exitCommand.SetAction((_, _) => ExitAsync(diskController, console));
+        exitCommand.SetAction(async (_, _) =>
+        {
+            await diskController.RequestExitAsync();
+            outcome = new CliOutcome(true, "ManagedDrive is exiting.", null, 0);
+            return 0;
+        });
 
         var rootCommand = new RootCommand("ManagedDrive CLI — quick mount/unmount for RAM disks.");
         rootCommand.Subcommands.Add(mountCommand);
@@ -194,66 +201,69 @@ public static class CliCommandProcessor
         };
 
         var exitCode = await rootCommand.Parse(args).InvokeAsync(invocationConfiguration);
-        return new CliResult(buffer.ToString(), exitCode);
+
+        if (outcome != null)
+        {
+            return outcome;
+        }
+
+        // No handler ran to completion (parse error, --help, unknown subcommand, etc.) — fall
+        // back to whatever System.CommandLine wrote to the buffer.
+        return new CliOutcome(exitCode == 0, buffer.ToString(), null, exitCode);
     }
 
-    private static async Task<int> ExitAsync(ICliDiskController diskController, IAnsiConsole console)
-    {
-        await diskController.RequestExitAsync();
-        console.MarkupLine("[green]ManagedDrive is exiting.[/]");
-        return 0;
-    }
-
-    private static async Task<int> FormatAsync(string driveLetter, bool confirmed, ICliDiskController diskController, IAnsiConsole console)
+    private static async Task<int> FormatAsync(string driveLetter, bool confirmed, ICliDiskController diskController, Action<CliOutcome> setOutcome)
     {
         driveLetter = NormalizeDriveLetter(driveLetter);
 
         if (!confirmed)
         {
-            console.MarkupLine($"[red]Formatting {driveLetter} will permanently delete all files. Re-run with --yes to confirm.[/]");
+            setOutcome(new CliOutcome(false, $"Formatting {driveLetter} will permanently delete all files. Re-run with --yes to confirm.", null, 1));
             return 1;
         }
 
         var (success, message) = await diskController.FormatAsync(driveLetter);
         if (success)
         {
-            console.MarkupLine($"[green]{Markup.Escape(message)}[/]");
+            setOutcome(new CliOutcome(true, message, null, 0));
             return 0;
         }
 
-        console.MarkupLine(string.IsNullOrEmpty(message)
-            ? $"[red]No disk is currently mounted at {driveLetter}.[/]"
-            : $"[red]{Markup.Escape(message)}[/]");
+        setOutcome(new CliOutcome(
+            false,
+            string.IsNullOrEmpty(message) ? $"No disk is currently mounted at {driveLetter}." : message,
+            null,
+            1));
         return 1;
     }
 
-    private static async Task<int> MountAsync(string imagePath, string driveLetter, CliMountOverrides overrides, ICliDiskController diskController, IAnsiConsole console)
-    {
-        driveLetter = NormalizeDriveLetter(driveLetter);
-
-        if (!File.Exists(imagePath))
-        {
-            console.MarkupLine($"[red]Image file not found: {Markup.Escape(imagePath)}[/]");
-            return 1;
-        }
-
-        var (success, message) = await diskController.MountImageAsync(imagePath, driveLetter, overrides);
-        console.MarkupLine(success ? $"[green]{Markup.Escape(message)}[/]" : $"[red]{Markup.Escape(message)}[/]");
-        return success ? 0 : 1;
-    }
-
-    private static async Task<int> MountArchiveAsync(string archivePath, string? driveLetter, CliMountOverrides overrides, ICliDiskController diskController, IAnsiConsole console)
+    private static async Task<int> MountArchiveAsync(string archivePath, string? driveLetter, CliMountOverrides overrides, ICliDiskController diskController, Action<CliOutcome> setOutcome)
     {
         driveLetter = driveLetter == null ? null : NormalizeDriveLetter(driveLetter);
 
         if (!File.Exists(archivePath))
         {
-            console.MarkupLine($"[red]Archive file not found: {Markup.Escape(archivePath)}[/]");
+            setOutcome(new CliOutcome(false, $"Archive file not found: {archivePath}", null, 1));
             return 1;
         }
 
         var (success, message) = await diskController.MountArchiveAsync(archivePath, driveLetter, overrides);
-        console.MarkupLine(success ? $"[green]{Markup.Escape(message)}[/]" : $"[red]{Markup.Escape(message)}[/]");
+        setOutcome(new CliOutcome(success, message, null, success ? 0 : 1));
+        return success ? 0 : 1;
+    }
+
+    private static async Task<int> MountAsync(string imagePath, string driveLetter, CliMountOverrides overrides, ICliDiskController diskController, Action<CliOutcome> setOutcome)
+    {
+        driveLetter = NormalizeDriveLetter(driveLetter);
+
+        if (!File.Exists(imagePath))
+        {
+            setOutcome(new CliOutcome(false, $"Image file not found: {imagePath}", null, 1));
+            return 1;
+        }
+
+        var (success, message) = await diskController.MountImageAsync(imagePath, driveLetter, overrides);
+        setOutcome(new CliOutcome(success, message, null, success ? 0 : 1));
         return success ? 0 : 1;
     }
 
@@ -273,70 +283,48 @@ public static class CliCommandProcessor
         return input;
     }
 
-    private static int RenderList(ICliDiskController diskController, IAnsiConsole console)
-    {
-        var disks = diskController.ListDisks();
-        if (disks.Count == 0)
-        {
-            console.MarkupLine("[yellow]No disks are currently mounted.[/]");
-            return 0;
-        }
-
-        var table = new Table().Border(TableBorder.Rounded);
-        table.AddColumn("Mount Point");
-        table.AddColumn("Label");
-        table.AddColumn("Used");
-        table.AddColumn("Capacity");
-
-        foreach (var disk in disks)
-        {
-            table.AddRow(
-                disk.MountPoint,
-                Markup.Escape(disk.VolumeLabel),
-                ByteFormatter.Format(disk.UsedBytes),
-                ByteFormatter.Format(disk.TotalBytes));
-        }
-
-        console.Write(table);
-        return 0;
-    }
-
-    private static async Task<int> SaveAsync(string driveLetter, ICliDiskController diskController, IAnsiConsole console)
+    private static async Task<int> SaveAsync(string driveLetter, ICliDiskController diskController, Action<CliOutcome> setOutcome)
     {
         driveLetter = NormalizeDriveLetter(driveLetter);
 
         var (success, message) = await diskController.SaveAsync(driveLetter);
         if (success)
         {
-            console.MarkupLine($"[green]{Markup.Escape(message)}[/]");
+            setOutcome(new CliOutcome(true, message, null, 0));
             return 0;
         }
 
-        console.MarkupLine(string.IsNullOrEmpty(message)
-            ? $"[red]No disk is currently mounted at {driveLetter}.[/]"
-            : $"[red]{Markup.Escape(message)}[/]");
+        setOutcome(new CliOutcome(
+            false,
+            string.IsNullOrEmpty(message) ? $"No disk is currently mounted at {driveLetter}." : message,
+            null,
+            1));
         return 1;
     }
 
-    private static async Task<int> UnmountAsync(string driveLetter, bool deleteImage, ICliDiskController diskController, IAnsiConsole console)
+    private static async Task<int> UnmountAsync(string driveLetter, bool deleteImage, ICliDiskController diskController, Action<CliOutcome> setOutcome)
     {
         driveLetter = NormalizeDriveLetter(driveLetter);
 
         var unmounted = await diskController.UnmountAsync(driveLetter, deleteImage);
         if (unmounted)
         {
-            console.MarkupLine(deleteImage
-                ? $"[green]Unmounted {driveLetter} and deleted its image file.[/]"
-                : $"[green]Unmounted {driveLetter}.[/]");
+            setOutcome(new CliOutcome(
+                true,
+                deleteImage ? $"Unmounted {driveLetter} and deleted its image file." : $"Unmounted {driveLetter}.",
+                null,
+                0));
             return 0;
         }
 
-        console.MarkupLine($"[red]No disk is currently mounted at {driveLetter}.[/]");
+        setOutcome(new CliOutcome(false, $"No disk is currently mounted at {driveLetter}.", null, 1));
         return 1;
     }
 }
 
 /// <summary>
-/// Rendered output plus process exit code of a completed CLI command.
+/// Structured result of a completed CLI command: success/failure, a human-readable message,
+/// an optional disk list (populated only by <c>list</c>), and the process exit code. Rendering
+/// this into terminal output (colors, tables) is the caller's responsibility.
 /// </summary>
-public sealed record CliResult(string Output, int ExitCode);
+public sealed record CliOutcome(bool Success, string Message, IReadOnlyList<CliDiskInfo>? Disks, int ExitCode);
