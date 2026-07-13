@@ -410,6 +410,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             AddDiskSorted(new(disk));
             SaveSettings();
             StatusText = Loc.Format("Status.MountedWithCapacity", disk.MountPoint, options.VolumeLabel, options.CapacityBytes / (1024 * 1024));
+            Process.Start("explorer.exe", disk.MountPoint);
             return (true, StatusText);
         }
         catch (Exception ex)

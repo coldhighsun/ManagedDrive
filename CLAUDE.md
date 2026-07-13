@@ -23,7 +23,7 @@ dotnet run --project src/ManagedDrive.Cli -- list
 
 The solution file is `ManagedDrive.slnx` (Visual Studio 2022+ format).
 
-**WinFsp prerequisite:** `winfsp-msil.dll` must be present at `C:\Program Files (x86)\WinFsp\bin\`. Install exactly [WinFsp 2.2.26183 (2026 Beta2)](https://github.com/winfsp/winfsp/releases/tag/v2.2B2) before building or running — download the MSI directly; do not use `winget install WinFsp.WinFsp`, as the winget package lags behind this release.
+**WinFsp prerequisite:** `winfsp-msil.dll` must be present at `C:\Program Files (x86)\WinFsp\bin\`. Install exactly [WinFsp 2.2.26194 (2026 Beta3)](https://github.com/winfsp/winfsp/releases/tag/v2.2B3) before building or running — download the MSI directly; do not use `winget install WinFsp.WinFsp`, as the winget package lags behind this release.
 
 ## Architecture
 
