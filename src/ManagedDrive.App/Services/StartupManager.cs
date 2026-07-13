@@ -11,14 +11,27 @@ public static class StartupManager
     private const string ValueName = "ManagedDrive";
 
     /// <summary>
-    /// Gets a value indicating whether ManagedDrive is registered to start with Windows.
+    /// Gets a value indicating whether ManagedDrive is registered to start with Windows
+    /// using the currently running executable's path. A stale entry pointing at a different
+    /// (e.g. relocated or previously installed) executable is treated as not enabled.
     /// </summary>
     public static bool IsEnabled
     {
         get
         {
             using var key = Registry.CurrentUser.OpenSubKey(RunKeyPath, writable: false);
-            return key?.GetValue(ValueName) is string;
+            if (key?.GetValue(ValueName) is not string value)
+            {
+                return false;
+            }
+
+            var exePath = Environment.ProcessPath;
+            if (string.IsNullOrEmpty(exePath))
+            {
+                return false;
+            }
+
+            return string.Equals(value.Trim('"'), exePath, StringComparison.OrdinalIgnoreCase);
         }
     }
 

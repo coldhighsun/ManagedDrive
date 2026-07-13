@@ -17,7 +17,7 @@ public partial class SettingsDialog
     {
         InitializeComponent();
         _original = config;
-        RunAtStartupBox.IsChecked = config.RunAtStartup;
+        RunAtStartupBox.IsChecked = StartupManager.IsEnabled;
         StartMinimizedBox.IsChecked = config.StartMinimized;
 
         LanguageBox.Items.Add(new ComboBoxItem { Content = Loc.Get("Lang.System"), Tag = "" });
