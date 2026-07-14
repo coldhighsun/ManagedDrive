@@ -108,11 +108,6 @@ public partial class App
         if (config.StartMinimized)
         {
             _trayIcon!.Visible = true;
-            _trayIcon.ShowBalloonTip(
-                5000,
-                "ManagedDrive",
-                Loc.Get("Msg.StartedMinimized"),
-                System.Windows.Forms.ToolTipIcon.Info);
         }
         else
         {
@@ -350,6 +345,11 @@ public partial class App
         e.Cancel = true;
         _mainWindow!.Hide();
         _trayIcon?.Visible = true;
+        _trayIcon?.ShowBalloonTip(
+            5000,
+            "ManagedDrive",
+            Loc.Get("Msg.StartedMinimized"),
+            System.Windows.Forms.ToolTipIcon.Info);
     }
 
     private void OnDiskCapacityAdjusted(DiskViewModel vm)
