@@ -138,6 +138,11 @@ public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
     public bool IsNotReadOnly => !Disk.Options.ReadOnly;
 
     /// <summary>
+    /// Gets whether this disk's backing image is password-protected.
+    /// </summary>
+    public bool IsPasswordProtected => Disk.IsPasswordProtected;
+
+    /// <summary>
     /// Gets whether this disk is read-only.
     /// </summary>
     public bool IsReadOnly => Disk.Options.ReadOnly;
@@ -158,6 +163,25 @@ public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
 
             field = value;
             OnPropertyChanged(nameof(IsSaving));
+        }
+    }
+
+    /// <summary>
+    /// Gets or sets whether this disk is being unmounted and remounted with new options,
+    /// driving the "applying changes" overlay on the disk card.
+    /// </summary>
+    public bool IsRemounting
+    {
+        get;
+        set
+        {
+            if (field == value)
+            {
+                return;
+            }
+
+            field = value;
+            OnPropertyChanged(nameof(IsRemounting));
         }
     }
 
@@ -272,6 +296,7 @@ public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
         OnPropertyChanged(nameof(PersistImagePath));
         OnPropertyChanged(nameof(SourcePath));
         OnPropertyChanged(nameof(HasImagePath));
+        OnPropertyChanged(nameof(IsPasswordProtected));
 
         IsCurrentTempDir = CheckIsCurrentTempDir();
 

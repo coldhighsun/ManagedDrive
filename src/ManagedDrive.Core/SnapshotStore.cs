@@ -13,6 +13,10 @@ namespace ManagedDrive.Core;
 /// </summary>
 internal static class SnapshotStore
 {
+    private const int BlobFlagCompressed = 0b01;
+    private const int BlobFlagEncrypted = 0b10;
+    private const int BlobNonceSize = 12;
+    private const int BlobTagSize = 16;
     private const int Version = 1;
     private static readonly byte[] Magic = "MDRS"u8.ToArray();
 
@@ -55,7 +59,8 @@ internal static class SnapshotStore
         string indexPath,
         string blobDirectory,
         out ulong capacityBytes,
-        out string volumeLabel)
+        out string volumeLabel,
+        byte[]? cek)
     {
         using var stream = new FileStream(indexPath, FileMode.Open, FileAccess.Read);
         using var reader = new BinaryReader(stream, System.Text.Encoding.UTF8, leaveOpen: false);
@@ -83,7 +88,7 @@ internal static class SnapshotStore
                 if (marker == 1)
                 {
                     var hash = reader.ReadBytes(32);
-                    node.FileData = ReadBlob(blobDirectory, hash, path, header.FileSize, header.AllocationSize);
+                    node.FileData = ReadBlob(blobDirectory, hash, path, header.FileSize, header.AllocationSize, cek);
                 }
                 else
                 {
@@ -146,7 +151,8 @@ internal static class SnapshotStore
         string volumeLabel,
         string indexPath,
         string blobDirectory,
-        ImageCompressionLevel level)
+        ImageCompressionLevel level,
+        byte[]? cek)
     {
         Directory.CreateDirectory(blobDirectory);
 
@@ -170,7 +176,7 @@ internal static class SnapshotStore
 
                     foreach (var kvp in nodes)
                     {
-                        WriteNode(writer, kvp.Key, kvp.Value, blobDirectory, level);
+                        WriteNode(writer, kvp.Key, kvp.Value, blobDirectory, level, cek);
                     }
 
                     writer.Flush();
@@ -196,7 +202,7 @@ internal static class SnapshotStore
         }
     }
 
-    private static void EnsureBlobWritten(string blobDirectory, byte[] hash, byte[] data, int length, ImageCompressionLevel level)
+    private static void EnsureBlobWritten(string blobDirectory, byte[] hash, byte[] data, int length, ImageCompressionLevel level, byte[]? cek)
     {
         var blobPath = HashToBlobPath(blobDirectory, hash);
         if (File.Exists(blobPath))
@@ -207,24 +213,54 @@ internal static class SnapshotStore
         Directory.CreateDirectory(Path.GetDirectoryName(blobPath)!);
 
         var compress = level != ImageCompressionLevel.None;
+
+        byte[] payload;
+        if (compress)
+        {
+            using var ms = new MemoryStream();
+            using (var gzip = new GZipStream(ms, ToCompressionLevel(level), leaveOpen: true))
+            {
+                gzip.Write(data, 0, length);
+            }
+
+            payload = ms.ToArray();
+        }
+        else
+        {
+            payload = data.AsSpan(0, length).ToArray();
+        }
+
+        var flag = compress ? BlobFlagCompressed : 0;
+        byte[]? nonce = null;
+        byte[]? tag = null;
+
+        if (cek is not null)
+        {
+            flag |= BlobFlagEncrypted;
+            nonce = RandomNumberGenerator.GetBytes(BlobNonceSize);
+            var ciphertext = new byte[payload.Length];
+            var localTag = new byte[BlobTagSize];
+            using var aesGcm = new AesGcm(cek, BlobTagSize);
+            aesGcm.Encrypt(nonce, payload, ciphertext, localTag);
+            tag = localTag;
+            payload = ciphertext;
+        }
+
         var tempPath = blobPath + "." + Guid.NewGuid().ToString("N") + ".tmp";
 
         try
         {
             using (var stream = new FileStream(tempPath, FileMode.Create, FileAccess.Write))
             {
-                stream.WriteByte(compress ? (byte)1 : (byte)0);
+                stream.WriteByte((byte)flag);
 
-                if (compress)
+                if (nonce is not null && tag is not null)
                 {
-                    using var gzip = new GZipStream(stream, ToCompressionLevel(level), leaveOpen: true);
-                    gzip.Write(data, 0, length);
-                }
-                else
-                {
-                    stream.Write(data, 0, length);
+                    stream.Write(nonce);
+                    stream.Write(tag);
                 }
 
+                stream.Write(payload);
                 stream.Flush(flushToDisk: true);
             }
 
@@ -245,7 +281,7 @@ internal static class SnapshotStore
         }
     }
 
-    private static byte[] ReadBlob(string blobDirectory, byte[] hash, string nodePath, ulong fileSize, ulong allocationSize)
+    private static byte[] ReadBlob(string blobDirectory, byte[] hash, string nodePath, ulong fileSize, ulong allocationSize, byte[]? cek)
     {
         var blobPath = HashToBlobPath(blobDirectory, hash);
         if (!File.Exists(blobPath))
@@ -256,20 +292,58 @@ internal static class SnapshotStore
 
         using var stream = new FileStream(blobPath, FileMode.Open, FileAccess.Read);
         var flag = stream.ReadByte();
+        var compressed = (flag & BlobFlagCompressed) != 0;
+        var encrypted = (flag & BlobFlagEncrypted) != 0;
+
+        byte[] payload;
+        if (encrypted)
+        {
+            if (cek is null)
+            {
+                throw new ImagePasswordRequiredException();
+            }
+
+            var nonce = new byte[BlobNonceSize];
+            stream.ReadExactly(nonce);
+            var tag = new byte[BlobTagSize];
+            stream.ReadExactly(tag);
+
+            using var cipherStream = new MemoryStream();
+            stream.CopyTo(cipherStream);
+            var ciphertext = cipherStream.ToArray();
+
+            var plaintext = new byte[ciphertext.Length];
+            try
+            {
+                using var aesGcm = new AesGcm(cek, BlobTagSize);
+                aesGcm.Decrypt(nonce, ciphertext, tag, plaintext);
+            }
+            catch (CryptographicException)
+            {
+                throw new ImagePasswordIncorrectException();
+            }
+
+            payload = plaintext;
+        }
+        else
+        {
+            using var raw = new MemoryStream();
+            stream.CopyTo(raw);
+            payload = raw.ToArray();
+        }
 
         byte[] content;
-        if (flag == 1)
+        if (compressed)
         {
-            using var gzip = new GZipStream(stream, CompressionMode.Decompress);
+            using var payloadStream = new MemoryStream(payload);
+            using var gzip = new GZipStream(payloadStream, CompressionMode.Decompress);
             using var decompressed = new MemoryStream();
             gzip.CopyTo(decompressed);
             content = decompressed.ToArray();
         }
         else
         {
-            using var raw = new MemoryStream();
-            stream.CopyTo(raw);
-            content = raw.ToArray();
+            content = payload;
         }
 
         if ((ulong)content.Length != fileSize)
@@ -360,7 +434,7 @@ internal static class SnapshotStore
         _ => CompressionLevel.Optimal,
     };
 
-    private static void WriteNode(BinaryWriter writer, string path, FileNode node, string blobDirectory, ImageCompressionLevel level)
+    private static void WriteNode(BinaryWriter writer, string path, FileNode node, string blobDirectory, ImageCompressionLevel level, byte[]? cek)
     {
         writer.Write(path);
         writer.Write(node.FileInfo.FileAttributes);
@@ -390,7 +464,7 @@ internal static class SnapshotStore
 
         var fileSize = (int)Math.Min(node.FileInfo.FileSize, (ulong)node.FileData.Length);
         var hash = SHA256.HashData(node.FileData.AsSpan(0, fileSize));
-        EnsureBlobWritten(blobDirectory, hash, node.FileData, fileSize, level);
+        EnsureBlobWritten(blobDirectory, hash, node.FileData, fileSize, level, cek);
 
         writer.Write((byte)1); // HasBlob marker
         writer.Write(hash);

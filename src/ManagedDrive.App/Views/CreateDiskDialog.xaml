@@ -14,7 +14,7 @@
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <TabControl Grid.Row="0" x:Name="MainTabControl" Style="{StaticResource AppTabControl}" MinHeight="360">
+        <TabControl Grid.Row="0" x:Name="MainTabControl" Style="{StaticResource AppTabControl}" MinHeight="400">
 
             <!-- Basic Info -->
             <TabItem Header="{DynamicResource CreateDisk.Section.Basic}">
@@ -139,16 +139,18 @@
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="8"/>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="16"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="20"/>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="10"/>
                         <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="8"/>
+                        <RowDefinition Height="20"/>
                         <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="6"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="10"/>
+                        <RowDefinition Height="Auto"/>
                         <RowDefinition Height="Auto"/>
                     </Grid.RowDefinitions>
 
@@ -178,14 +180,14 @@
                     <TextBlock Grid.Row="1" x:Name="ImportNoteText"
                                Text="{DynamicResource CreateDisk.ImportNote}"
                                Foreground="{DynamicResource AppForegroundLight}"
-                               FontSize="11" TextWrapping="Wrap" Margin="92,4,0,0"
+                               FontSize="11" TextWrapping="Wrap" Margin="92,0,0,0"
                                Visibility="Collapsed"/>
 
                     <!-- Archive Import Note -->
-                    <TextBlock Grid.Row="1" x:Name="ArchiveImportNoteText"
+                    <TextBlock Grid.Row="2" x:Name="ArchiveImportNoteText"
                                Text="{DynamicResource CreateDisk.ArchiveImportNote}"
                                Foreground="{DynamicResource AppForegroundLight}"
-                               FontSize="11" TextWrapping="Wrap" Margin="92,4,0,0"
+                               FontSize="11" TextWrapping="Wrap" Margin="92,0,0,0"
                                Visibility="Collapsed"/>
 
                     <!-- Compression Level -->
@@ -208,15 +210,44 @@
                     <TextBlock Grid.Row="4" x:Name="CompressionWarningText"
                                Text="{DynamicResource CreateDisk.CompressionWarning}"
                                Foreground="{DynamicResource AppWarning}"
-                               FontSize="11" TextWrapping="Wrap" Margin="92,4,0,0"
+                               FontSize="11" TextWrapping="Wrap" Margin="92,0,0,0"
                                Visibility="Collapsed"/>
 
-                    <!-- Section divider: image/compression above, auto-save/snapshots below -->
                     <Border Grid.Row="5" BorderBrush="{DynamicResource AppDivider}" BorderThickness="0,1,0,0"
+                            VerticalAlignment="Center"/>
+                    
+                    <!-- Encryption -->
+                    <CheckBox Grid.Row="6" x:Name="EncryptImageBox" VerticalAlignment="Center"
+                              Content="{DynamicResource CreateDisk.EncryptImage}"
+                              Foreground="{DynamicResource AppForeground}"
+                              ToolTip="{DynamicResource Tip.EncryptImage}"
+                              Checked="EncryptImageBox_CheckedChanged" Unchecked="EncryptImageBox_CheckedChanged"/>
+
+                    <Grid Grid.Row="8" x:Name="PasswordPanel" IsEnabled="False" Style="{StaticResource DimWhenDisabled}">
+                        <Grid.RowDefinitions>                            
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="6"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="84"/>
+                            <ColumnDefinition Width="8"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Row="0" Grid.Column="0" Text="{DynamicResource CreateDisk.Password}"
+                                   Foreground="{DynamicResource AppForeground}" VerticalAlignment="Center"/>
+                        <PasswordBox Grid.Row="0" Grid.Column="2" x:Name="PasswordBox1"/>
+                        <TextBlock Grid.Row="2" Grid.Column="0" Text="{DynamicResource CreateDisk.ConfirmPassword}"
+                                   Foreground="{DynamicResource AppForeground}" VerticalAlignment="Center"/>
+                        <PasswordBox Grid.Row="2" Grid.Column="2" x:Name="PasswordBox2"/>
+                    </Grid>
+
+                    <!-- Section divider: image/compression/encryption above, auto-save/snapshots below -->
+                    <Border Grid.Row="9" BorderBrush="{DynamicResource AppDivider}" BorderThickness="0,1,0,0"
                             VerticalAlignment="Center"/>
 
                     <!-- Auto Save -->
-                    <Grid Grid.Row="6">
+                    <Grid Grid.Row="10">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="8"/>
@@ -246,12 +277,12 @@
                     </Grid>
 
                     <!-- Snapshot Explanation -->
-                    <TextBlock Grid.Row="8" Text="{DynamicResource CreateDisk.SnapshotExplanation}"
+                    <TextBlock Grid.Row="11" Text="{DynamicResource CreateDisk.SnapshotExplanation}"
                                Foreground="{DynamicResource AppForegroundLight}"
                                FontSize="11" TextWrapping="Wrap"/>
 
                     <!-- Snapshot Max Count -->
-                    <Grid Grid.Row="10" Margin="16,0,0,0">
+                    <Grid Grid.Row="13" Margin="16,0,0,0">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="8"/>
@@ -280,7 +311,7 @@
                     </Grid>
 
                     <!-- Snapshot Max Size -->
-                    <Grid Grid.Row="12" Margin="16,0,0,0">
+                    <Grid Grid.Row="14" Margin="16,0,0,0">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="8"/>

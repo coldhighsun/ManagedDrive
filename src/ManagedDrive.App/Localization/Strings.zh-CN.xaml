@@ -91,9 +91,11 @@
     <sys:String x:Key="Time.HoursAgo">{0} 小时前</sys:String>
     <sys:String x:Key="Time.DaysAgo">{0} 天前</sys:String>
     <sys:String x:Key="Card.Saving">正在保存...</sys:String>
+    <sys:String x:Key="Card.ApplyingChanges">正在应用更改...</sys:String>
     <sys:String x:Key="Msg.ExitSaving">正在保存磁盘镜像，请稍候...</sys:String>
     <sys:String x:Key="Card.ReadOnly">只读</sys:String>
     <sys:String x:Key="Card.ReadOnlyNoImage">只读 · 无镜像</sys:String>
+    <sys:String x:Key="Card.Encrypted">已加密</sys:String>
     <sys:String x:Key="Val.AutoSaveNoImage">开启自动保存前请先选择镜像文件。</sys:String>
     <sys:String x:Key="Val.ImagePathOnRamDisk">镜像文件不能位于内存盘上。</sys:String>
     <sys:String x:Key="Val.ImagePathInUse">该镜像文件已被其他内存盘使用。</sys:String>
@@ -109,6 +111,23 @@
     <sys:String x:Key="Val.ImagePathIsSnapshot">该路径看起来像快照文件名，请选择另一个镜像路径。</sys:String>
     <sys:String x:Key="Val.MountPointAlreadyMounted">{0} 已挂载。</sys:String>
     <sys:String x:Key="Val.NoFreeDriveLetter">没有可用的盘符来挂载新磁盘。</sys:String>
+
+    <!-- 加密 -->
+    <sys:String x:Key="CreateDisk.EncryptImage">加密镜像（需要密码）</sys:String>
+    <sys:String x:Key="Tip.EncryptImage">使用密码保护保存的镜像文件。密码仅保存在内存中，不会写入磁盘——重启应用后需要重新输入。</sys:String>
+    <sys:String x:Key="CreateDisk.Password">密码：</sys:String>
+    <sys:String x:Key="CreateDisk.ConfirmPassword">确认密码：</sys:String>
+    <sys:String x:Key="Val.PasswordRequired">请输入密码，或取消勾选“加密镜像”。</sys:String>
+    <sys:String x:Key="Val.PasswordMismatch">两次输入的密码不一致。</sys:String>
+    <sys:String x:Key="Val.PasswordIncorrect">密码不正确。</sys:String>
+    <sys:String x:Key="Val.CliPasswordRequired">该镜像已加密，请提供 --password 或 --password-file。</sys:String>
+    <sys:String x:Key="Val.CliPasswordIncorrect">提供的密码不正确。</sys:String>
+    <sys:String x:Key="PasswordPrompt.Title">请输入密码</sys:String>
+    <sys:String x:Key="PasswordPrompt.LabelHeader">卷标</sys:String>
+    <sys:String x:Key="PasswordPrompt.DriveHeader">盘符</sys:String>
+    <sys:String x:Key="PasswordPrompt.SizeHeader">大小</sys:String>
+    <sys:String x:Key="Msg.RemovePasswordConfirmTitle">移除密码</sys:String>
+    <sys:String x:Key="Msg.RemovePasswordConfirmBody">移除密码将同时永久删除该磁盘的历史快照，因为旧快照是加密存储的，移除密码后将无法再恢复。&#x0a;&#x0a;是否继续？</sys:String>
 
     <!-- CloneDiskDialog -->
     <sys:String x:Key="CloneDisk.Title">克隆磁盘</sys:String>

@@ -22,7 +22,9 @@ public partial class CreateDiskDialog
     private readonly bool _isArchiveImportMode;
     private readonly bool _isImportMode;
     private readonly ulong _maxCapacityBytes;
+    private readonly string? _originalPassword;
     private readonly IReadOnlyList<DiskOptions> _otherDisks;
+    private readonly bool _wasEncrypted;
     private int _capacityMaximum = 99999999;
     private int _capacityValue = 2;
     private int _highUsageWarnPercentValue = 90;
@@ -82,9 +84,24 @@ public partial class CreateDiskDialog
     /// to validate that the image file path does not collide with another disk's mount point or
     /// image file.
     /// </param>
-    public CreateDiskDialog(DiskOptions existing, IReadOnlyList<DiskOptions>? otherDisks = null) : this(otherDisks)
+    /// <param name="currentPassword">
+    /// The disk's current password (<c>RamDisk.CurrentPassword</c>), or <c>null</c> if the disk's
+    /// backing image is not currently password-protected. When set, the encryption checkbox is
+    /// checked and both password fields are pre-filled with the current password so it can be
+    /// seen and edited in place; leaving the fields unchanged means "keep the current password
+    /// unchanged" rather than "remove it".
+    /// </param>
+    public CreateDiskDialog(DiskOptions existing, IReadOnlyList<DiskOptions>? otherDisks = null, string? currentPassword = null) : this(otherDisks)
     {
         Title = Loc.Get("CreateDisk.TitleEdit");
+        _originalPassword = currentPassword;
+        _wasEncrypted = currentPassword is not null;
+        EncryptImageBox.IsChecked = _wasEncrypted;
+        if (_wasEncrypted)
+        {
+            PasswordBox1.Password = currentPassword;
+            PasswordBox2.Password = currentPassword;
+        }
 
         DriveLetterBox.Items.Clear();
         LoadDriveLetters(reservedLetter: existing.MountPoint[0]);
@@ -239,6 +256,12 @@ public partial class CreateDiskDialog
         CapacityUnitBox.IsEnabled = false;
         VolumeLabelBox.IsEnabled = false;
 
+        // Whether the imported image is encrypted is inherent to the file being imported, not a
+        // choice made here — the password needed to unlock it (if any) is prompted for after
+        // mounting fails with ImagePasswordRequiredException, not via this checkbox.
+        EncryptImageBox.IsChecked = false;
+        EncryptImageBox.IsEnabled = false;
+
         UpdateCompressionLevelState();
         UpdateAutoSaveEnabledState();
     }
@@ -256,7 +279,7 @@ public partial class CreateDiskDialog
     /// Options of all other currently active disks, used to validate that the archive file path
     /// does not collide with another disk's mount point.
     /// </param>
-    /// <param name="isArchiveImport">Always <c>true</c>; disambiguates this overload from the image-import constructor.</param>
+    /// <param name="isArchiveImport">Always <c>true</c>; disambiguate this overload from the image-import constructor.</param>
     public CreateDiskDialog(string importArchivePath, ulong importTotalBytes, string importVolumeLabel,
         IReadOnlyList<DiskOptions> otherDisks, bool isArchiveImport) : this(otherDisks)
     {
@@ -305,6 +328,28 @@ public partial class CreateDiskDialog
 
         UpdateCompressionLevelState();
         UpdateAutoSaveEnabledState();
+    }
+
+    /// <summary>
+    /// The plaintext password entered by the user, when <see cref="PasswordChanged"/> is
+    /// <c>true</c> and this is non-null (set/change password); <c>null</c> together with
+    /// <see cref="PasswordChanged"/> <c>true</c> means "remove password protection". Never part
+    /// of <see cref="DiskOptions"/> — it is not persisted anywhere and must be passed directly to
+    /// <c>RamDisk.Create</c>/<c>RamDisk.SetPassword</c> by the caller.
+    /// </summary>
+    public string? Password
+    {
+        get; private set;
+    }
+
+    /// <summary>
+    /// <c>true</c> when the user's input requires a password change (setting, changing, or
+    /// removing it); <c>false</c> when editing an already-encrypted disk and the password fields
+    /// were left blank, meaning "keep the current password unchanged".
+    /// </summary>
+    public bool PasswordChanged
+    {
+        get; private set;
     }
 
     /// <summary>
@@ -454,6 +499,11 @@ public partial class CreateDiskDialog
         return (int)Math.Max(1, Math.Min(_maxCapacityBytes / divisor, int.MaxValue));
     }
 
+    private void EncryptImageBox_CheckedChanged(object sender, RoutedEventArgs e)
+    {
+        PasswordPanel.IsEnabled = EncryptImageBox.IsChecked == true;
+    }
+
     private int GetMaxCapacityValue()
     {
         var isGb = CapacityUnitBox.SelectedItem as string == "GB";
@@ -566,6 +616,37 @@ public partial class CreateDiskDialog
         {
             SnapshotSizeValue = (int)SnapshotSizeSlider.Maximum;
         }
+    }
+
+    private bool TryBuildArchiveImportOptions(string mountPoint, out DiskOptions? options, out string error)
+    {
+        options = null;
+
+        double? highUsageWarnPercent = null;
+        if (HighUsageWarnBox.IsChecked == true)
+        {
+            if (_highUsageWarnPercentValue < 1 || _highUsageWarnPercentValue > 99)
+            {
+                error = Loc.Get("Val.BadHighUsagePercent");
+                return false;
+            }
+
+            highUsageWarnPercent = _highUsageWarnPercentValue;
+        }
+
+        options = new()
+        {
+            MountPoint = mountPoint,
+            VolumeLabel = _importVolumeLabel,
+            CapacityBytes = _importCapacityBytes,
+            ReadOnly = true,
+            AutoMount = AutoMountBox.IsChecked == true,
+            SourceArchivePath = _importArchivePath,
+            HighUsageWarnPercent = highUsageWarnPercent,
+        };
+
+        error = string.Empty;
+        return true;
     }
 
     private bool TryBuildOptions(out DiskOptions? options, out string error)
@@ -713,6 +794,11 @@ public partial class CreateDiskDialog
             highUsageWarnPercent = _highUsageWarnPercentValue;
         }
 
+        if (!TryResolvePassword(out error))
+        {
+            return false;
+        }
+
         options = new()
         {
             MountPoint = mountPoint,
@@ -733,33 +819,45 @@ public partial class CreateDiskDialog
         return true;
     }
 
-    private bool TryBuildArchiveImportOptions(string mountPoint, out DiskOptions? options, out string error)
+    private bool TryResolvePassword(out string error)
     {
-        options = null;
+        Password = null;
+        PasswordChanged = false;
 
-        double? highUsageWarnPercent = null;
-        if (HighUsageWarnBox.IsChecked == true)
+        if (EncryptImageBox.IsChecked != true)
         {
-            if (_highUsageWarnPercentValue < 1 || _highUsageWarnPercentValue > 99)
-            {
-                error = Loc.Get("Val.BadHighUsagePercent");
-                return false;
-            }
-
-            highUsageWarnPercent = _highUsageWarnPercentValue;
+            // Explicitly unchecked while editing an already-encrypted disk means "remove
+            // password protection"; otherwise there is simply nothing to change.
+            PasswordChanged = _wasEncrypted;
+            error = string.Empty;
+            return true;
         }
 
-        options = new()
-        {
-            MountPoint = mountPoint,
-            VolumeLabel = _importVolumeLabel,
-            CapacityBytes = _importCapacityBytes,
-            ReadOnly = true,
-            AutoMount = AutoMountBox.IsChecked == true,
-            SourceArchivePath = _importArchivePath,
-            HighUsageWarnPercent = highUsageWarnPercent,
-        };
+        var password1 = PasswordBox1.Password;
+        var password2 = PasswordBox2.Password;
 
+        if (string.IsNullOrEmpty(password1) && string.IsNullOrEmpty(password2))
+        {
+            error = Loc.Get("Val.PasswordRequired");
+            return false;
+        }
+
+        if (password1 != password2)
+        {
+            error = Loc.Get("Val.PasswordMismatch");
+            return false;
+        }
+
+        if (_wasEncrypted && password1 == _originalPassword)
+        {
+            // Editing an already-encrypted disk with the fields left as-is: keep the current
+            // password unchanged.
+            error = string.Empty;
+            return true;
+        }
+
+        Password = password1;
+        PasswordChanged = true;
         error = string.Empty;
         return true;
     }
@@ -772,6 +870,14 @@ public partial class CreateDiskDialog
         {
             AutoSaveBox.IsChecked = false;
         }
+
+        EncryptImageBox.IsEnabled = hasImagePath && ReadOnlyBox.IsChecked != true && !_isImportMode;
+        if (!EncryptImageBox.IsEnabled)
+        {
+            EncryptImageBox.IsChecked = false;
+        }
+
+        PasswordPanel.IsEnabled = EncryptImageBox.IsChecked == true;
 
         UpdateAutoSaveIntervalPanelState();
         UpdateSnapshotEnabledState();

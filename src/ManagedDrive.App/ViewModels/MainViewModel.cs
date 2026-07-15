@@ -455,10 +455,18 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     /// </returns>
     public async Task<bool> MountFromProfileAsync(DiskProfile profile)
     {
+        var options = ProfileToOptions(profile);
+
         try
         {
-            var options = ProfileToOptions(profile);
-            var disk = await Task.Run(() => _mountManager.Mount(options));
+            var disk = await MountWithPasswordRetryAsync(options);
+            if (disk is null)
+            {
+                StatusText = Loc.Format("Status.AutoMountFailed", profile.MountPoint, Loc.Get("Status.MountFailed"));
+                ResetTempIfPointingAt(profile.MountPoint);
+                return false;
+            }
+
             AddDiskSorted(new(disk));
             StatusText = Loc.Format("Status.Mounted", disk.MountPoint, profile.VolumeLabel);
             return true;
@@ -466,17 +474,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         catch (Exception ex)
         {
             StatusText = Loc.Format("Status.AutoMountFailed", profile.MountPoint, ex.Message);
-
-            var userTemp = Environment.GetEnvironmentVariable("TEMP", EnvironmentVariableTarget.User);
-            if (!string.IsNullOrEmpty(userTemp))
-            {
-                var expanded = Environment.ExpandEnvironmentVariables(userTemp);
-                if (expanded.StartsWith(profile.MountPoint, StringComparison.OrdinalIgnoreCase))
-                {
-                    TempDirResetService.Reset();
-                }
-            }
-
+            ResetTempIfPointingAt(profile.MountPoint);
             return false;
         }
     }
@@ -520,13 +518,19 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 
         ulong capacityBytes;
         string volumeLabel;
+        bool isEncrypted;
         try
         {
-            DiskImageSerializer.PeekHeader(imagePath, out capacityBytes, out volumeLabel);
+            DiskImageSerializer.PeekHeader(imagePath, out capacityBytes, out volumeLabel, out isEncrypted);
         }
         catch (InvalidDataException)
         {
             return (false, Loc.Get("Val.ImportInvalidImage"));
+        }
+
+        if (isEncrypted && overrides.Password is null)
+        {
+            return (false, Loc.Get("Val.CliPasswordRequired"));
         }
 
         var savedProfile = _settingsStore.Load().Disks
@@ -563,11 +567,19 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 
         try
         {
-            var disk = await Task.Run(() => _mountManager.Mount(options));
+            var disk = await Task.Run(() => _mountManager.Mount(options, overrides.Password));
             AddDiskSorted(new(disk));
             SaveSettings();
             StatusText = Loc.Format("Status.MountedWithCapacity", disk.MountPoint, options.VolumeLabel, options.CapacityBytes / (1024 * 1024));
             return (true, StatusText);
+        }
+        catch (ImagePasswordRequiredException)
+        {
+            return (false, Loc.Get("Val.CliPasswordRequired"));
+        }
+        catch (ImagePasswordIncorrectException)
+        {
+            return (false, Loc.Get("Val.CliPasswordIncorrect"));
         }
         catch (Exception ex)
         {
@@ -731,6 +743,19 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         HighUsageWarnPercent = p.HighUsageWarnPercent,
     };
 
+    private static void ResetTempIfPointingAt(string mountPoint)
+    {
+        var userTemp = Environment.GetEnvironmentVariable("TEMP", EnvironmentVariableTarget.User);
+        if (!string.IsNullOrEmpty(userTemp))
+        {
+            var expanded = Environment.ExpandEnvironmentVariables(userTemp);
+            if (expanded.StartsWith(mountPoint, StringComparison.OrdinalIgnoreCase))
+            {
+                TempDirResetService.Reset();
+            }
+        }
+    }
+
     private void AddDiskSorted(DiskViewModel vm)
     {
         var i = 0;
@@ -832,7 +857,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             return;
         }
 
-        await MountAndAddAsync(dialog.Result!);
+        await MountAndAddAsync(dialog.Result!, dialog.PasswordChanged ? dialog.Password : null);
     }
 
     private async void ExecuteEditDisk(DiskViewModel? vm)
@@ -842,7 +867,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             return;
         }
 
-        var dialog = new CreateDiskDialog(vm.Disk.Options, GetOtherDiskOptions(excluding: vm))
+        var dialog = new CreateDiskDialog(vm.Disk.Options, GetOtherDiskOptions(excluding: vm), vm.Disk.CurrentPassword)
         {
             Owner = Application.Current.MainWindow
         };
@@ -855,6 +880,21 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         var newOptions = dialog.Result!;
         var old = vm.Disk.Options;
         var needsRemount = newOptions.MountPoint != old.MountPoint || newOptions.ReadOnly != old.ReadOnly;
+
+        if (dialog.PasswordChanged && dialog.Password is null && vm.Disk.IsPasswordProtected)
+        {
+            var confirmRemove = new ConfirmDialog(
+                Loc.Get("Msg.RemovePasswordConfirmTitle"),
+                Loc.Get("Msg.RemovePasswordConfirmBody"))
+            {
+                Owner = Application.Current.MainWindow
+            };
+
+            if (confirmRemove.ShowDialog() != true)
+            {
+                return;
+            }
+        }
 
         if (needsRemount)
         {
@@ -874,25 +914,35 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
                 return;
             }
 
+            vm.IsRemounting = true;
+
             if (vm.IsCurrentTempDir)
             {
                 await Task.Run(TempDirResetService.Reset);
             }
 
+            var currentPassword = vm.Disk.CurrentPassword;
             var oldMountPoint = old.MountPoint;
-            vm.Dispose();
-            Disks.Remove(vm);
             await Task.Run(() => _mountManager.Unmount(oldMountPoint));
 
             try
             {
-                var disk = await Task.Run(() => _mountManager.Mount(newOptions));
+                var disk = await Task.Run(() => _mountManager.Mount(newOptions, currentPassword));
+                if (dialog.PasswordChanged)
+                {
+                    disk.SetPassword(dialog.Password);
+                }
+
+                vm.Dispose();
+                Disks.Remove(vm);
                 AddDiskSorted(new(disk));
                 SaveSettings();
                 StatusText = Loc.Format("Status.MountedWithCapacity", disk.MountPoint, newOptions.VolumeLabel, newOptions.CapacityBytes / (1024 * 1024));
             }
             catch (Exception ex)
             {
+                vm.Dispose();
+                Disks.Remove(vm);
                 MessageBox.Show(
                     Loc.Format("Msg.MountFailed", ex.Message),
                     "ManagedDrive",
@@ -903,7 +953,22 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         }
         else
         {
-            if (!vm.Disk.TryApplyOptions(newOptions, out var error))
+            var error = await Task.Run(() =>
+            {
+                if (!vm.Disk.TryApplyOptions(newOptions, out var applyError))
+                {
+                    return applyError;
+                }
+
+                if (dialog.PasswordChanged)
+                {
+                    vm.Disk.SetPassword(dialog.Password);
+                }
+
+                return null;
+            });
+
+            if (error != null)
             {
                 MessageBox.Show(
                     error,
@@ -1075,7 +1140,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         string volumeLabel;
         try
         {
-            DiskImageSerializer.PeekHeader(openDialog.FileName, out capacityBytes, out volumeLabel);
+            DiskImageSerializer.PeekHeader(openDialog.FileName, out capacityBytes, out volumeLabel, out _);
         }
         catch (InvalidDataException)
         {
@@ -1389,11 +1454,17 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             Disks.Any(d => expandedTemp.StartsWith(d.MountPoint, StringComparison.OrdinalIgnoreCase));
     }
 
-    private async Task MountAndAddAsync(DiskOptions options)
+    private async Task MountAndAddAsync(DiskOptions options, string? password = null)
     {
         try
         {
-            var disk = await Task.Run(() => _mountManager.Mount(options));
+            var disk = await MountWithPasswordRetryAsync(options, password);
+            if (disk is null)
+            {
+                StatusText = Loc.Get("Status.MountFailed");
+                return;
+            }
+
             AddDiskSorted(new(disk));
             SaveSettings();
             StatusText = Loc.Format("Status.MountedWithCapacity", disk.MountPoint, options.VolumeLabel, options.CapacityBytes / (1024 * 1024));
@@ -1406,6 +1477,47 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
                 MessageBoxButton.OK,
                 MessageBoxImage.Error);
             StatusText = Loc.Get("Status.MountFailed");
+        }
+    }
+
+    /// <summary>
+    /// Mounts <paramref name="options"/>, prompting for a password via <see cref="PasswordPromptDialog"/>
+    /// and retrying whenever the image is encrypted and the supplied password is missing or wrong.
+    /// </summary>
+    /// <returns>The mounted disk, or <c>null</c> if the user cancelled the password prompt.</returns>
+    /// <exception cref="Exception">Any mount failure other than a password issue propagates to the caller.</exception>
+    private async Task<RamDisk?> MountWithPasswordRetryAsync(DiskOptions options, string? password = null)
+    {
+        while (true)
+        {
+            string? errorMessage;
+            try
+            {
+                return await Task.Run(() => _mountManager.Mount(options, password));
+            }
+            catch (ImagePasswordRequiredException)
+            {
+                errorMessage = null;
+            }
+            catch (ImagePasswordIncorrectException)
+            {
+                errorMessage = Loc.Get("Val.PasswordIncorrect");
+            }
+
+            var prompt = new PasswordPromptDialog(Loc.Get("PasswordPrompt.Title"), errorMessage, options);
+            if (Application.Current.MainWindow is { IsVisible: true } mainWindow)
+            {
+                // Owner must already have been shown (e.g. not yet true when starting minimized,
+                // as during startup auto-mount), or WPF throws.
+                prompt.Owner = mainWindow;
+            }
+
+            if (prompt.ShowDialog() != true)
+            {
+                return null;
+            }
+
+            password = prompt.Password;
         }
     }
 

@@ -31,6 +31,7 @@ Create, mount and manage in-memory volumes that appear as normal drive letters i
 - Selectable image compression (Off / Fast / Balanced / Max, default Fast)
 - Snapshot / version history — cap retained snapshots by count and/or size; deduplicated by content hash so many snapshots cost little extra space; restore any snapshot via **Restore Snapshot...**
 - Clone a disk onto another mounted disk or export it to a new `.mdr` file (**Clone Disk...**)
+- Optional password protection for `.mdr` images (AES-256-GCM envelope encryption; the password only wraps a random per-disk key, so changing the password never re-encrypts the file contents) — set from the "Encrypt Image" option in the disk dialog; prompted for on mount (including auto-mount at startup) whenever an image is encrypted
 
 **CLI**
 - `mdrive` command-line tool (ships alongside `ManagedDrive.exe`) for scripting mount/unmount/format/save/list/exit against the running app, forwarded over a named pipe
@@ -104,7 +105,8 @@ ManagedDrive/
 │   │   ├── DiskImageSerializer.cs  #   Binary persistence (.mdr format)
 │   │   ├── SnapshotManager.cs      #   Timestamped snapshot naming, listing, pruning, GC
 │   │   ├── SnapshotStore.cs        #   Snapshot index format + content-addressed blob store
-│   │   └── ArchiveNodeMapBuilder.cs #  Extracts zip/7z/rar/tar (via SharpCompress) into a FileNodeMap for read-only import
+│   │   ├── ArchiveNodeMapBuilder.cs #  Extracts zip/7z/rar/tar (via SharpCompress) into a FileNodeMap for read-only import
+│   │   └── ImageEncryptionExceptions.cs # Thrown by DiskImageSerializer.Load when a password is missing/incorrect
 │   │
 │   └── ManagedDrive.App/           # WPF desktop application
 │       ├── Localization/           #   ResourceDictionary strings (en-US, zh-CN)
@@ -114,7 +116,7 @@ ManagedDrive/
 │       ├── Models/                 #   AppConfiguration, DiskProfile
 │       ├── Services/               #   SettingsStore, StartupManager, TempDirResetService
 │       ├── ViewModels/             #   MainViewModel, DiskViewModel
-│       ├── Views/                  #   CreateDiskDialog, CloneDiskDialog, RestoreSnapshotDialog, SettingsDialog, ConfirmDialog, AboutDialog, TrayTooltipView
+│       ├── Views/                  #   CreateDiskDialog, CloneDiskDialog, RestoreSnapshotDialog, SettingsDialog, ConfirmDialog, AboutDialog, TrayTooltipView, PasswordPromptDialog
 │       ├── GlobalUsings.cs         #   Project-wide global using directives
 │       ├── MainWindow.xaml(.cs)    #   Main window
 │       ├── App.xaml(.cs)           #   Startup, tray icon, auto-mount
@@ -268,7 +270,7 @@ mdrive exit
 
 | Command | Description |
 |---|---|
-| `mount <image-path> <drive-letter> [options]` | Mounts an existing `.mdr` image at a drive letter. Options: `--read-only`, `--auto-mount`, `--auto-save-minutes`, `--compression <None\|Fastest\|Optimal\|SmallestSize>`, `--max-snapshot-count`, `--max-snapshot-size-mb`, `--high-usage-warn-percent`. Any option left unset keeps the image's saved profile value (or its default). |
+| `mount <image-path> <drive-letter> [options]` | Mounts an existing `.mdr` image at a drive letter. Options: `--read-only`, `--auto-mount`, `--auto-save-minutes`, `--compression <None\|Fastest\|Optimal\|SmallestSize>`, `--max-snapshot-count`, `--max-snapshot-size-mb`, `--high-usage-warn-percent`, `--password`, `--password-file` (mutually exclusive; needed only if the image is encrypted — `--password-file` reads the first line of a file and is recommended over `--password` to avoid exposing it in shell history or the process list). Any option left unset keeps the image's saved profile value (or its default). |
 | `mount-archive <archive-path> [drive-letter]` | Imports an archive (zip/7z/rar/tar/...) as a read-only disk and opens it in Explorer once mounted. `drive-letter` is optional — if omitted, the first free letter from `Z:` down to `D:` is used. Used internally by the Explorer right-click menu entry. |
 | `unmount <drive-letter>` | Unmounts a mounted disk. |
 | `format <drive-letter> --yes` | Deletes all files on a mounted disk. Requires `--yes`/`-y` to confirm. |
@@ -326,6 +328,7 @@ This project bundles [WinFsp](https://winfsp.dev/) and [SharpCompress](https://g
 - 可选镜像压缩级别（不压缩／快速／均衡／最高，默认快速）
 - 快照／版本历史——按数量和/或大小上限保留快照，相同内容跨快照去重存储，占用空间远小于逻辑大小之和；可随时通过**还原快照...**还原到某个历史版本
 - 克隆磁盘到另一已挂载磁盘，或导出为新的 `.mdr` 文件（**克隆磁盘...**）
+- 可选的 `.mdr` 镜像密码保护（AES-256-GCM 信封加密；密码仅用于加密一个随机生成的每盘专属密钥，因此更改密码无需重新加密文件内容）——在磁盘对话框中通过"加密镜像"选项设置；挂载时（包括启动时的自动挂载）若镜像已加密会提示输入密码
 
 **便利与安全**
 - 可选的资源管理器右键集成：在设置中启用后，会为 zip/7z/rar/tar 压缩包添加右键菜单项**"挂载为内存盘 (ManagedDrive)"**，一键挂载，无需先打开应用——若 `ManagedDrive.exe` 尚未运行会自动启动，挂载完成后会自动打开该盘符的资源管理器窗口
@@ -399,7 +402,8 @@ ManagedDrive/
 │   │   ├── DiskImageSerializer.cs  #   二进制持久化（.mdr 格式）
 │   │   ├── SnapshotManager.cs      #   带时间戳的快照命名、列表、清理与垃圾回收
 │   │   ├── SnapshotStore.cs        #   快照索引格式 + 内容寻址块存储
-│   │   └── ArchiveNodeMapBuilder.cs #  通过 SharpCompress 解压 zip/7z/rar/tar 为 FileNodeMap，用于只读导入
+│   │   ├── ArchiveNodeMapBuilder.cs #  通过 SharpCompress 解压 zip/7z/rar/tar 为 FileNodeMap，用于只读导入
+│   │   └── ImageEncryptionExceptions.cs # DiskImageSerializer.Load 在密码缺失/错误时抛出的异常
 │   │
 │   └── ManagedDrive.App/           # WPF 桌面应用程序
 │       ├── Localization/           #   ResourceDictionary 字符串（en-US、zh-CN）
@@ -409,7 +413,8 @@ ManagedDrive/
 │       ├── Models/                 #   AppConfiguration、DiskProfile
 │       ├── Services/               #   SettingsStore、StartupManager、TempDirResetService
 │       ├── ViewModels/             #   MainViewModel、DiskViewModel
-│       ├── Views/                  #   CreateDiskDialog、CloneDiskDialog、RestoreSnapshotDialog、SettingsDialog、ConfirmDialog、AboutDialog、TrayTooltipView
+│       ├── Views/                  #   CreateDiskDialog、CloneDiskDialog、RestoreSnapshotDialog、SettingsDialog、ConfirmDialog、AboutDialog、TrayTooltipView、PasswordPromptDialog
+│       ├── GlobalUsings.cs         #   项目级全局 using 指令
 │       ├── MainWindow.xaml(.cs)    #   主窗口
 │       ├── App.xaml(.cs)           #   启动、托盘图标、自动挂载
 │       └── Cli/                    #   将 CLI 命令转发进运行中应用的命名管道服务端
@@ -562,7 +567,7 @@ mdrive exit
 
 | 命令 | 说明 |
 |---|---|
-| `mount <镜像路径> <盘符> [选项]` | 将已有的 `.mdr` 镜像挂载到指定盘符。可选项：`--read-only`、`--auto-mount`、`--auto-save-minutes`、`--compression <None\|Fastest\|Optimal\|SmallestSize>`、`--max-snapshot-count`、`--max-snapshot-size-mb`、`--high-usage-warn-percent`。未指定的选项沿用该镜像已保存的配置值（或其默认值）。 |
+| `mount <镜像路径> <盘符> [选项]` | 将已有的 `.mdr` 镜像挂载到指定盘符。可选项：`--read-only`、`--auto-mount`、`--auto-save-minutes`、`--compression <None\|Fastest\|Optimal\|SmallestSize>`、`--max-snapshot-count`、`--max-snapshot-size-mb`、`--high-usage-warn-percent`、`--password`、`--password-file`（二者互斥；仅当镜像已加密时需要——推荐使用 `--password-file`（读取文件首行作为密码）而非 `--password`，以避免密码出现在 shell 历史或进程列表中）。未指定的选项沿用该镜像已保存的配置值（或其默认值）。 |
 | `mount-archive <压缩包路径> [盘符]` | 将压缩包（zip/7z/rar/tar 等）作为只读磁盘导入挂载，挂载完成后会自动在资源管理器中打开该盘符。`盘符`可省略——省略时自动从 `Z:` 向下查找第一个可用盘符。资源管理器右键菜单项内部即调用此命令。 |
 | `unmount <盘符>` | 卸载已挂载的磁盘。 |
 | `format <盘符> --yes` | 清空已挂载磁盘上的所有文件，须加 `--yes`/`-y` 确认。 |

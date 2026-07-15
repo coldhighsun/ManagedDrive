@@ -91,9 +91,11 @@
     <sys:String x:Key="Time.HoursAgo">{0} hours ago</sys:String>
     <sys:String x:Key="Time.DaysAgo">{0} days ago</sys:String>
     <sys:String x:Key="Card.Saving">Saving...</sys:String>
+    <sys:String x:Key="Card.ApplyingChanges">Applying changes...</sys:String>
     <sys:String x:Key="Msg.ExitSaving">Saving disk images, please wait...</sys:String>
     <sys:String x:Key="Card.ReadOnly">Read-only</sys:String>
     <sys:String x:Key="Card.ReadOnlyNoImage">Read-only · No image</sys:String>
+    <sys:String x:Key="Card.Encrypted">Password-protected</sys:String>
     <sys:String x:Key="Val.AutoSaveNoImage">Select an image file before enabling auto-save.</sys:String>
     <sys:String x:Key="Val.ImagePathOnRamDisk">The image file cannot be located on a RAM disk.</sys:String>
     <sys:String x:Key="Val.ImagePathInUse">This image file is already used by another RAM disk.</sys:String>
@@ -109,6 +111,23 @@
     <sys:String x:Key="Val.ImagePathIsSnapshot">This path looks like a snapshot file name; choose a different image path.</sys:String>
     <sys:String x:Key="Val.MountPointAlreadyMounted">{0} is already mounted.</sys:String>
     <sys:String x:Key="Val.NoFreeDriveLetter">No free drive letter is available to mount a new disk.</sys:String>
+
+    <!-- Encryption -->
+    <sys:String x:Key="CreateDisk.EncryptImage">Encrypt image (requires password)</sys:String>
+    <sys:String x:Key="Tip.EncryptImage">Protect the saved image with a password. The password is only held in memory and is never saved to disk — it must be re-entered after restarting the app.</sys:String>
+    <sys:String x:Key="CreateDisk.Password">Password:</sys:String>
+    <sys:String x:Key="CreateDisk.ConfirmPassword">Confirm:</sys:String>
+    <sys:String x:Key="Val.PasswordRequired">Enter a password, or uncheck "Encrypt image".</sys:String>
+    <sys:String x:Key="Val.PasswordMismatch">The password and confirmation do not match.</sys:String>
+    <sys:String x:Key="Val.PasswordIncorrect">Incorrect password.</sys:String>
+    <sys:String x:Key="Val.CliPasswordRequired">This image is password-protected. Supply --password or --password-file.</sys:String>
+    <sys:String x:Key="Val.CliPasswordIncorrect">The supplied password is incorrect.</sys:String>
+    <sys:String x:Key="PasswordPrompt.Title">Enter Password</sys:String>
+    <sys:String x:Key="PasswordPrompt.LabelHeader">Label</sys:String>
+    <sys:String x:Key="PasswordPrompt.DriveHeader">Drive</sys:String>
+    <sys:String x:Key="PasswordPrompt.SizeHeader">Size</sys:String>
+    <sys:String x:Key="Msg.RemovePasswordConfirmTitle">Remove Password</sys:String>
+    <sys:String x:Key="Msg.RemovePasswordConfirmBody">Removing the password will also permanently delete this disk's snapshot history, since old snapshots were encrypted and cannot be recovered without it.&#x0a;&#x0a;Continue?</sys:String>
 
     <!-- CloneDiskDialog -->
     <sys:String x:Key="CloneDisk.Title">Clone Disk</sys:String>
