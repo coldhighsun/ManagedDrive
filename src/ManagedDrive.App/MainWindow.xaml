@@ -100,9 +100,15 @@
                 BorderThickness="0,1,0,0"
                 CornerRadius="0,0,9,9"
                 Padding="12,4">
-            <TextBlock Text="{Binding StatusText}"
-                       FontSize="11"
-                       Foreground="{DynamicResource AppForegroundLight}"/>
+            <DockPanel>
+                <TextBlock DockPanel.Dock="Right"
+                           Text="{Binding AvailableMemoryFormatted}"
+                           FontSize="11"
+                           Foreground="{DynamicResource AppForegroundLight}"/>
+                <TextBlock Text="{Binding StatusText}"
+                           FontSize="11"
+                           Foreground="{DynamicResource AppForegroundLight}"/>
+            </DockPanel>
         </Border>
 
         <!-- Disk card list -->

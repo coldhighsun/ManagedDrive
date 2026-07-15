@@ -13,63 +13,72 @@
                               ShadowDepth="4" />
         </Border.Effect>
 
-        <Grid>
-            <ItemsControl x:Name="DiskList"
-                          ItemsSource="{Binding Disks}">
-                <ItemsControl.Style>
-                    <Style TargetType="ItemsControl">
-                        <Setter Property="Visibility" Value="Visible" />
-                        <Style.Triggers>
-                            <Trigger Property="HasItems" Value="False">
-                                <Setter Property="Visibility" Value="Collapsed" />
-                            </Trigger>
-                        </Style.Triggers>
-                    </Style>
-                </ItemsControl.Style>
-                <ItemsControl.ItemTemplate>
-                    <DataTemplate>
-                        <Grid Margin="0,3">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto" />
-                                <ColumnDefinition Width="100" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
-                            <TextBlock Grid.Column="0"
-                                       FontSize="13"
-                                       FontWeight="Bold"
-                                       Foreground="{DynamicResource AppPrimary}"
-                                       Text="{Binding MountPoint}"
-                                       Margin="0,0,8,0" />
-                            <TextBlock Grid.Column="1"
-                                       FontSize="13"
-                                       Foreground="{DynamicResource AppForeground}"
-                                       Text="{Binding VolumeLabel}"
-                                       TextTrimming="CharacterEllipsis" />
-                            <TextBlock Grid.Column="2"
-                                       FontSize="13"
-                                       Foreground="{DynamicResource AppForegroundLight}"
-                                       Text="{Binding UsedPercent, StringFormat={}{0:F0}%}"
-                                       TextAlignment="Right"
-                                       MinWidth="36" />
-                        </Grid>
-                    </DataTemplate>
-                </ItemsControl.ItemTemplate>
-            </ItemsControl>
+        <StackPanel>
+            <Grid>
+                <ItemsControl x:Name="DiskList"
+                              ItemsSource="{Binding Disks}">
+                    <ItemsControl.Style>
+                        <Style TargetType="ItemsControl">
+                            <Setter Property="Visibility" Value="Visible" />
+                            <Style.Triggers>
+                                <Trigger Property="HasItems" Value="False">
+                                    <Setter Property="Visibility" Value="Collapsed" />
+                                </Trigger>
+                            </Style.Triggers>
+                        </Style>
+                    </ItemsControl.Style>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Grid Margin="0,3">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="100" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0"
+                                           FontSize="13"
+                                           FontWeight="Bold"
+                                           Foreground="{DynamicResource AppPrimary}"
+                                           Text="{Binding MountPoint}"
+                                           Margin="0,0,8,0" />
+                                <TextBlock Grid.Column="1"
+                                           FontSize="13"
+                                           Foreground="{DynamicResource AppForeground}"
+                                           Text="{Binding VolumeLabel}"
+                                           TextTrimming="CharacterEllipsis" />
+                                <TextBlock Grid.Column="2"
+                                           FontSize="13"
+                                           Foreground="{DynamicResource AppForegroundLight}"
+                                           Text="{Binding UsedPercent, StringFormat={}{0:F0}%}"
+                                           TextAlignment="Right"
+                                           MinWidth="36" />
+                            </Grid>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
 
-            <TextBlock FontSize="13"
+                <TextBlock FontSize="13"
+                           Foreground="{DynamicResource AppForegroundLight}"
+                           Text="{DynamicResource Tray.NoDisksMounted}">
+                    <TextBlock.Style>
+                        <Style TargetType="TextBlock">
+                            <Setter Property="Visibility" Value="Collapsed" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding ElementName=DiskList, Path=HasItems}" Value="False">
+                                    <Setter Property="Visibility" Value="Visible" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBlock.Style>
+                </TextBlock>
+            </Grid>
+
+            <Border BorderBrush="{DynamicResource AppDivider}"
+                    BorderThickness="0,1,0,0"
+                    Margin="0,6,0,4" />
+            <TextBlock FontSize="12"
                        Foreground="{DynamicResource AppForegroundLight}"
-                       Text="{DynamicResource Tray.NoDisksMounted}">
-                <TextBlock.Style>
-                    <Style TargetType="TextBlock">
-                        <Setter Property="Visibility" Value="Collapsed" />
-                        <Style.Triggers>
-                            <DataTrigger Binding="{Binding ElementName=DiskList, Path=HasItems}" Value="False">
-                                <Setter Property="Visibility" Value="Visible" />
-                            </DataTrigger>
-                        </Style.Triggers>
-                    </Style>
-                </TextBlock.Style>
-            </TextBlock>
-        </Grid>
+                       Text="{Binding AvailableMemoryFormatted}" />
+        </StackPanel>
     </Border>
 </UserControl>
