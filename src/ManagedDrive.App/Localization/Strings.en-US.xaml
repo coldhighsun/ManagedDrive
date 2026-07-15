@@ -172,6 +172,7 @@
 
     <!-- Status bar -->
     <sys:String x:Key="Status.Ready">Ready.</sys:String>
+    <sys:String x:Key="Status.AvailableMemory">{0} available</sys:String>
     <sys:String x:Key="Status.Mounted">Mounted {0} ({1}).</sys:String>
     <sys:String x:Key="Status.MountedWithCapacity">Mounted {0} ({1}, {2} MB).</sys:String>
     <sys:String x:Key="Status.AutoMountFailed">Auto-mount '{0}' failed: {1}</sys:String>

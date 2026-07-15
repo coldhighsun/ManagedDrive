@@ -172,6 +172,7 @@
 
     <!-- Status bar -->
     <sys:String x:Key="Status.Ready">就绪。</sys:String>
+    <sys:String x:Key="Status.AvailableMemory">可用 {0}</sys:String>
     <sys:String x:Key="Status.Mounted">已挂载 {0}（{1}）。</sys:String>
     <sys:String x:Key="Status.MountedWithCapacity">已挂载 {0}（{1}，{2} MB）。</sys:String>
     <sys:String x:Key="Status.AutoMountFailed">自动挂载"{0}"失败：{1}</sys:String>

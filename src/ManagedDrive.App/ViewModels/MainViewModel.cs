@@ -9,6 +9,7 @@ namespace ManagedDrive.App.ViewModels;
 /// </summary>
 public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 {
+    private readonly DispatcherTimer _memoryRefreshTimer;
     private readonly MountManager _mountManager;
     private readonly SettingsStore _settingsStore;
     private bool _tempDirCompatWarningShown;
@@ -68,6 +69,14 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             });
         SettingsCommand = new(_ => ExecuteSettings());
         AboutCommand = new(_ => ExecuteAbout());
+
+        RefreshAvailableMemory();
+        _memoryRefreshTimer = new()
+        {
+            Interval = TimeSpan.FromSeconds(2)
+        };
+        _memoryRefreshTimer.Tick += (_, _) => RefreshAvailableMemory();
+        _memoryRefreshTimer.Start();
     }
 
     public event EventHandler? ExitRequested;
@@ -82,6 +91,20 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     {
         get;
     }
+
+    /// <summary>
+    /// Gets a localized, human-readable description of the currently available physical
+    /// system memory (e.g. "1.2 GB available"), refreshed every 2 seconds.
+    /// </summary>
+    public string AvailableMemoryFormatted
+    {
+        get;
+        private set
+        {
+            field = value;
+            OnPropertyChanged(nameof(AvailableMemoryFormatted));
+        }
+    } = string.Empty;
 
     /// <summary>
     /// Gets the command that opens the "Clone Disk" dialog for the selected disk: copy its
@@ -248,6 +271,8 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     /// <inheritdoc />
     public void Dispose()
     {
+        _memoryRefreshTimer.Stop();
+
         foreach (var vm in Disks)
         {
             vm.Dispose();
@@ -1393,5 +1418,11 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         {
             vm.Refresh();
         }
+    }
+
+    private void RefreshAvailableMemory()
+    {
+        var availableBytes = SystemMemoryInfo.GetAvailablePhysicalBytes();
+        AvailableMemoryFormatted = Loc.Format("Status.AvailableMemory", ByteFormatter.Format(availableBytes));
     }
 }
