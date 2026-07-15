@@ -128,8 +128,8 @@ public static partial class SnapshotManager
     /// Thrown when the index is not a valid snapshot, its version is unsupported, or a
     /// referenced blob is missing or corrupt.
     /// </exception>
-    public static FileNodeMap LoadSnapshot(string indexPath, out ulong capacityBytes, out string volumeLabel) =>
-        SnapshotStore.Load(indexPath, BlobDirectoryFromSnapshotPath(indexPath), out capacityBytes, out volumeLabel);
+    public static FileNodeMap LoadSnapshot(string indexPath, out ulong capacityBytes, out string volumeLabel, byte[]? cek = null) =>
+        SnapshotStore.Load(indexPath, BlobDirectoryFromSnapshotPath(indexPath), out capacityBytes, out volumeLabel, cek);
 
     /// <summary>
     /// Deletes the oldest snapshots of <paramref name="mainImagePath"/> until both
@@ -191,10 +191,11 @@ public static partial class SnapshotManager
         string volumeLabel,
         string mainImagePath,
         DateTimeOffset timestampUtc,
-        ImageCompressionLevel level)
+        ImageCompressionLevel level,
+        byte[]? cek = null)
     {
         var indexPath = BuildSnapshotPath(mainImagePath, timestampUtc);
-        SnapshotStore.Write(nodeMap, capacityBytes, volumeLabel, indexPath, BlobDirectory(mainImagePath), level);
+        SnapshotStore.Write(nodeMap, capacityBytes, volumeLabel, indexPath, BlobDirectory(mainImagePath), level, cek);
     }
 
     private static string BlobDirectory(string mainImagePath) => SnapshotStore.ComputeBlobDirectory(mainImagePath);

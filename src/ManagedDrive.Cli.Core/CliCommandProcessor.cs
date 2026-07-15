@@ -55,6 +55,14 @@ public static class CliCommandProcessor
         {
             Description = "Usage percentage (0-100) at which a high-usage warning is raised. If omitted, keeps the saved profile's value (or the default: 90).",
         };
+        var mountPasswordOption = new Option<string?>("--password")
+        {
+            Description = "Password to unlock the image, if it is encrypted. Prefer --password-file to avoid the password appearing in shell history or the process list.",
+        };
+        var mountPasswordFileOption = new Option<string?>("--password-file")
+        {
+            Description = "Path to a file whose first line is the password to unlock the image, if it is encrypted. Mutually exclusive with --password.",
+        };
 
         var mountCommand = new Command("mount", "Mounts an existing .mdr disk image at a drive letter.");
         mountCommand.Arguments.Add(mountImageArgument);
@@ -66,9 +74,33 @@ public static class CliCommandProcessor
         mountCommand.Options.Add(mountMaxSnapshotCountOption);
         mountCommand.Options.Add(mountMaxSnapshotSizeMbOption);
         mountCommand.Options.Add(mountHighUsageWarnPercentOption);
+        mountCommand.Options.Add(mountPasswordOption);
+        mountCommand.Options.Add(mountPasswordFileOption);
         mountCommand.SetAction(async (parseResult, _) =>
         {
             var maxSnapshotSizeMb = parseResult.GetValue(mountMaxSnapshotSizeMbOption);
+            var password = parseResult.GetValue(mountPasswordOption);
+            var passwordFile = parseResult.GetValue(mountPasswordFileOption);
+
+            if (password is not null && passwordFile is not null)
+            {
+                outcome = new CliOutcome(false, "--password and --password-file cannot both be specified.", null, 1);
+                return 1;
+            }
+
+            if (passwordFile is not null)
+            {
+                try
+                {
+                    password = File.ReadLines(passwordFile).FirstOrDefault() ?? string.Empty;
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    outcome = new CliOutcome(false, $"Could not read --password-file: {ex.Message}", null, 1);
+                    return 1;
+                }
+            }
+
             var overrides = new CliMountOverrides
             {
                 ReadOnly = parseResult.GetValue(mountReadOnlyOption),
@@ -78,6 +110,7 @@ public static class CliCommandProcessor
                 MaxSnapshotCount = parseResult.GetValue(mountMaxSnapshotCountOption),
                 MaxSnapshotSizeBytes = maxSnapshotSizeMb * 1024UL * 1024UL,
                 HighUsageWarnPercent = parseResult.GetValue(mountHighUsageWarnPercentOption),
+                Password = password,
             };
 
             var exitCode = await MountAsync(

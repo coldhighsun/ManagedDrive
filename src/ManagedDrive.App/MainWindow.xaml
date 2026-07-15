@@ -267,6 +267,14 @@
                                         <TextBlock Text="&#xE74E;" Style="{StaticResource IconText}" FontSize="10"
                                                    Foreground="{DynamicResource AppForegroundLight}"/>
                                     </Border>
+                                    <Border Width="18" Height="18" CornerRadius="9" Margin="2,0,0,0"
+                                            Background="{DynamicResource AppSurface}"
+                                            BorderBrush="{DynamicResource AppDivider}" BorderThickness="1"
+                                            ToolTip="{DynamicResource Card.Encrypted}"
+                                            Visibility="{Binding IsPasswordProtected, Converter={StaticResource BoolToVis}}">
+                                        <TextBlock Text="&#xE192;" Style="{StaticResource IconText}" FontSize="10"
+                                                   Foreground="{DynamicResource AppForegroundLight}"/>
+                                    </Border>
                                 </StackPanel>
                             </Grid>
 
@@ -373,6 +381,26 @@
                                                Foreground="{DynamicResource AppForeground}"/>
                                 </StackPanel>
                             </Border>
+
+                            <!-- Remounting overlay -->
+                            <Border Grid.ColumnSpan="3"
+                                    Background="{DynamicResource AppSurface}"
+                                    Opacity="0.85"
+                                    CornerRadius="8"
+                                    Visibility="{Binding IsRemounting, Converter={StaticResource BoolToVis}}">
+                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                    <TextBlock x:Name="RemountingSpinner"
+                                               Text="&#xE895;" FontFamily="Segoe Fluent Icons" FontSize="16"
+                                               Foreground="{DynamicResource AppPrimary}"
+                                               RenderTransformOrigin="0.5,0.5">
+                                        <TextBlock.RenderTransform>
+                                            <RotateTransform x:Name="RemountSpinnerRotate" Angle="0"/>
+                                        </TextBlock.RenderTransform>
+                                    </TextBlock>
+                                    <TextBlock Text="{DynamicResource Card.ApplyingChanges}" FontSize="12" Margin="6,0,0,0"
+                                               Foreground="{DynamicResource AppForeground}"/>
+                                </StackPanel>
+                            </Border>
                         </Grid>
                     </Border>
                     <DataTemplate.Triggers>
@@ -400,6 +428,21 @@
                             </DataTrigger.EnterActions>
                             <DataTrigger.ExitActions>
                                 <StopStoryboard BeginStoryboardName="SpinStoryboard"/>
+                            </DataTrigger.ExitActions>
+                        </DataTrigger>
+                        <DataTrigger Binding="{Binding IsRemounting}" Value="True">
+                            <DataTrigger.EnterActions>
+                                <BeginStoryboard x:Name="RemountSpinStoryboard">
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetName="RemountSpinnerRotate"
+                                                          Storyboard.TargetProperty="Angle"
+                                                          From="0" To="360" Duration="0:0:1"
+                                                          RepeatBehavior="Forever"/>
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </DataTrigger.EnterActions>
+                            <DataTrigger.ExitActions>
+                                <StopStoryboard BeginStoryboardName="RemountSpinStoryboard"/>
                             </DataTrigger.ExitActions>
                         </DataTrigger>
                     </DataTemplate.Triggers>

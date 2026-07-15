@@ -5,6 +5,46 @@ namespace ManagedDrive.Tests;
 public sealed class DiskImageSerializerTests
 {
     [Fact]
+    public void Load_EncryptedImageWithoutPassword_ThrowsPasswordRequired()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid()}.mdr");
+        try
+        {
+            var map = new FileNodeMap();
+            map.Add("\\", MakeDir());
+            DiskImageSerializer.Save(map, capacityBytes: 1024 * 1024, "MyLabel", path, ImageCompressionLevel.Fastest,
+                new ImageEncryptionInfo("s3cret", DiskImageSerializer.GenerateCek()));
+
+            Assert.Throws<ImagePasswordRequiredException>(() =>
+                DiskImageSerializer.Load(path, out _, out _, password: null, out _));
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void Load_EncryptedImageWithWrongPassword_ThrowsPasswordIncorrect()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid()}.mdr");
+        try
+        {
+            var map = new FileNodeMap();
+            map.Add("\\", MakeDir());
+            DiskImageSerializer.Save(map, capacityBytes: 1024 * 1024, "MyLabel", path, ImageCompressionLevel.Fastest,
+                new ImageEncryptionInfo("s3cret", DiskImageSerializer.GenerateCek()));
+
+            Assert.Throws<ImagePasswordIncorrectException>(() =>
+                DiskImageSerializer.Load(path, out _, out _, "wrong-password", out _));
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
     public void Load_LegacyVersion1UncompressedImage_StillLoads()
     {
         var path = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid()}.mdr");
@@ -20,11 +60,35 @@ public sealed class DiskImageSerializerTests
                 writer.Write(0); // no nodes
             }
 
-            var loaded = DiskImageSerializer.Load(path, out var capacityBytes, out var volumeLabel);
+            var loaded = DiskImageSerializer.Load(path, out var capacityBytes, out var volumeLabel, password: null, out var cek);
 
             Assert.Equal(2048UL, capacityBytes);
             Assert.Equal("LegacyLabel", volumeLabel);
             Assert.Equal(0, loaded.Count);
+            Assert.Null(cek);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void PeekHeader_EncryptedImage_ReturnsCapacityLabelWithoutPassword()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid()}.mdr");
+        try
+        {
+            var map = new FileNodeMap();
+            map.Add("\\", MakeDir());
+            DiskImageSerializer.Save(map, capacityBytes: 1024 * 1024, "MyLabel", path, ImageCompressionLevel.Fastest,
+                new ImageEncryptionInfo("s3cret", DiskImageSerializer.GenerateCek()));
+
+            DiskImageSerializer.PeekHeader(path, out var capacityBytes, out var volumeLabel, out var isEncrypted);
+
+            Assert.Equal(1024UL * 1024, capacityBytes);
+            Assert.Equal("MyLabel", volumeLabel);
+            Assert.True(isEncrypted);
         }
         finally
         {
@@ -62,7 +126,7 @@ public sealed class DiskImageSerializerTests
             {
                 DiskImageSerializer.Save(map, capacityBytes: 1024 * 1024, "MyLabel", path, ImageCompressionLevel.Fastest);
 
-                var loaded = DiskImageSerializer.Load(path, out _, out _);
+                var loaded = DiskImageSerializer.Load(path, out _, out _, password: null, out _);
                 Assert.True(loaded.Count >= 51);
             }
 
@@ -91,13 +155,46 @@ public sealed class DiskImageSerializerTests
 
             DiskImageSerializer.Save(map, capacityBytes: 1024 * 1024, "MyLabel", path, level);
 
-            var loaded = DiskImageSerializer.Load(path, out var capacityBytes, out var volumeLabel);
+            var loaded = DiskImageSerializer.Load(path, out var capacityBytes, out var volumeLabel, password: null, out var cek);
 
             Assert.Equal(1024UL * 1024, capacityBytes);
             Assert.Equal("MyLabel", volumeLabel);
             Assert.Equal(2, loaded.Count);
             Assert.True(loaded.TryGet("\\File.txt", out var node));
             Assert.Equal("hello world"u8.ToArray(), node!.FileData!.Take("hello world"u8.Length).ToArray());
+            Assert.Null(cek);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Theory]
+    [InlineData(ImageCompressionLevel.None)]
+    [InlineData(ImageCompressionLevel.Fastest)]
+    [InlineData(ImageCompressionLevel.Optimal)]
+    [InlineData(ImageCompressionLevel.SmallestSize)]
+    public void SaveThenLoad_WithPassword_RoundTrips(ImageCompressionLevel level)
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid()}.mdr");
+        try
+        {
+            var map = new FileNodeMap();
+            map.Add("\\", MakeDir());
+            map.Add("\\File.txt", MakeFile("hello world"u8.ToArray()));
+
+            var cek = DiskImageSerializer.GenerateCek();
+            DiskImageSerializer.Save(map, capacityBytes: 1024 * 1024, "MyLabel", path, level, new ImageEncryptionInfo("s3cret", cek));
+
+            var loaded = DiskImageSerializer.Load(path, out var capacityBytes, out var volumeLabel, "s3cret", out var loadedCek);
+
+            Assert.Equal(1024UL * 1024, capacityBytes);
+            Assert.Equal("MyLabel", volumeLabel);
+            Assert.Equal(2, loaded.Count);
+            Assert.True(loaded.TryGet("\\File.txt", out var node));
+            Assert.Equal("hello world"u8.ToArray(), node!.FileData!.Take("hello world"u8.Length).ToArray());
+            Assert.Equal(cek, loadedCek);
         }
         finally
         {

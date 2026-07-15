@@ -60,4 +60,14 @@ public sealed record CliMountOverrides
     {
         get; init;
     }
+
+    /// <summary>
+    /// Gets the password to unlock the image with, if it is encrypted. Resolved from either
+    /// <c>--password</c> or <c>--password-file</c> by <see cref="CliCommandProcessor"/> before
+    /// this record is constructed; only one of those flags may be supplied at a time.
+    /// </summary>
+    public string? Password
+    {
+        get; init;
+    }
 }

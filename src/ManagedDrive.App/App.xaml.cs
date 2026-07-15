@@ -158,18 +158,19 @@ public partial class App
         }
     }
 
-    private Task AutoMountDisksAsync()
+    private async Task AutoMountDisksAsync()
     {
         if (_settings == null || _mainViewModel == null)
         {
-            return Task.CompletedTask;
+            return;
         }
 
-        var tasks = _settings.Load().Disks
-            .Where(p => p.AutoMount)
-            .Select(_mainViewModel.MountFromProfileAsync);
-
-        return Task.WhenAll(tasks);
+        // Mounted one at a time (not Task.WhenAll) so that password prompts for encrypted disks
+        // appear sequentially rather than all at once.
+        foreach (var profile in _settings.Load().Disks.Where(p => p.AutoMount))
+        {
+            await _mainViewModel.MountFromProfileAsync(profile);
+        }
     }
 
     private void CheckTempDirectoryOnStartup(AppConfiguration config)

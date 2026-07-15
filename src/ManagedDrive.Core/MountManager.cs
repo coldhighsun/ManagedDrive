@@ -59,12 +59,16 @@ public sealed class MountManager : IDisposable
     /// to the managed collection.
     /// </summary>
     /// <param name="options">Mount configuration for the new disk.</param>
+    /// <param name="password">
+    /// Password to unlock <see cref="DiskOptions.PersistImagePath"/> if it points to an
+    /// encrypted image.
+    /// </param>
     /// <returns>
     /// The newly mounted <see cref="RamDisk"/>.
     /// </returns>
-    public RamDisk Mount(DiskOptions options)
+    public RamDisk Mount(DiskOptions options, string? password = null)
     {
-        var disk = RamDisk.Create(options);
+        var disk = RamDisk.Create(options, password);
 
         lock (_syncRoot)
         {

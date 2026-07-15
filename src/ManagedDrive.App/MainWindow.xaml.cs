@@ -19,7 +19,7 @@ public partial class MainWindow
         Close();
 
     private void MinimizeButton_Click(object sender, RoutedEventArgs e) =>
-            WindowState = WindowState.Minimized;
+        WindowState = WindowState.Minimized;
 
     private void OverflowBtn_Click(object sender, RoutedEventArgs e)
     {

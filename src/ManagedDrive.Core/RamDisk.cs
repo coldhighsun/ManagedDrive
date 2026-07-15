@@ -16,8 +16,10 @@ public sealed class RamDisk : IDisposable
     private readonly MemoryFileSystem _fs;
     private readonly FileSystemHost _host;
     private Timer? _autoSaveTimer;
+    private byte[]? _cek;
     private bool _disposed;
     private string? _lastSavedImagePath;
+    private string? _password;
 
     private RamDisk(MemoryFileSystem fs, FileSystemHost host, DiskOptions options)
     {
@@ -37,9 +39,23 @@ public sealed class RamDisk : IDisposable
     public event EventHandler<Exception>? SaveFailed;
 
     /// <summary>
+    /// Gets the password currently protecting this disk (if any), so a caller performing an
+    /// in-process unmount/remount of the same disk (e.g. applying an edit that requires a full
+    /// remount) can carry it forward to unlock the reloaded image without re-prompting the user.
+    /// Never persisted; intended only for this kind of same-session hand-off.
+    /// </summary>
+    public string? CurrentPassword => _password;
+
+    /// <summary>
     /// Gets the number of bytes currently available on this RAM disk.
     /// </summary>
     public ulong FreeBytes => TotalBytes > UsedBytes ? TotalBytes - UsedBytes : 0;
+
+    /// <summary>
+    /// Gets whether this disk's backing image is currently password-protected. The password
+    /// itself is only held in memory for the lifetime of this instance and is never persisted.
+    /// </summary>
+    public bool IsPasswordProtected => _password is not null;
 
     /// <summary>
     /// Gets the UTC timestamp of the most recent content mutation (create/write/rename/delete/etc.),
@@ -106,16 +122,28 @@ public sealed class RamDisk : IDisposable
     /// the disk permanently over capacity.
     /// </summary>
     /// <param name="options">Mount configuration.</param>
+    /// <param name="password">
+    /// Password to unlock <see cref="DiskOptions.PersistImagePath"/> if it points to an
+    /// encrypted image. Ignored when the image is not encrypted or does not exist.
+    /// </param>
     /// <returns>
     /// A fully mounted <see cref="RamDisk"/> instance.
     /// </returns>
     /// <exception cref="InvalidOperationException">
     /// Thrown when WinFsp returns a non-zero NTSTATUS from <c>Mount</c>.
     /// </exception>
-    public static RamDisk Create(DiskOptions options)
+    /// <exception cref="ImagePasswordRequiredException">
+    /// Thrown when the image at <see cref="DiskOptions.PersistImagePath"/> is encrypted and
+    /// <paramref name="password"/> is <see langword="null"/>.
+    /// </exception>
+    /// <exception cref="ImagePasswordIncorrectException">
+    /// Thrown when <paramref name="password"/> does not match the one the image was encrypted with.
+    /// </exception>
+    public static RamDisk Create(DiskOptions options, string? password = null)
     {
         MemoryFileSystem fs;
         ulong? originalCapacity = null;
+        byte[]? cek = null;
 
         if (options.SourceArchivePath != null &&
             File.Exists(options.SourceArchivePath))
@@ -147,7 +175,9 @@ public sealed class RamDisk : IDisposable
             var nodeMap = DiskImageSerializer.Load(
                 options.PersistImagePath,
                 out var savedCapacity,
-                out var savedLabel);
+                out var savedLabel,
+                password,
+                out cek);
 
             var configuredCapacity = savedCapacity > 0 ? savedCapacity : options.CapacityBytes;
             var label = string.IsNullOrEmpty(savedLabel) ? options.VolumeLabel : savedLabel;
@@ -206,6 +236,21 @@ public sealed class RamDisk : IDisposable
         {
             OriginalCapacityBytesOnLoad = originalCapacity,
         };
+
+        if (cek is not null)
+        {
+            // An existing encrypted image was loaded above: reuse its CEK as-is.
+            disk._password = password;
+            disk._cek = cek;
+        }
+        else if (password is not null)
+        {
+            // A brand-new disk (or one loaded from an unencrypted image) whose caller wants it
+            // encrypted going forward: generate the CEK now, before the auto-save timer below can
+            // possibly fire an unencrypted first save.
+            disk.SetPassword(password);
+        }
+
         disk.ConfigureAutoSaveTimer();
         return disk;
     }
@@ -256,8 +301,19 @@ public sealed class RamDisk : IDisposable
     /// </summary>
     /// <param name="imagePath">Destination file path.</param>
     /// <param name="level">Compression level applied to the exported image.</param>
-    public void ExportToImage(string imagePath, ImageCompressionLevel level) =>
-        DiskImageSerializer.Save(_fs.NodeMap, Options.CapacityBytes, Options.VolumeLabel, imagePath, level);
+    /// <param name="password">
+    /// Password to protect the exported image with, or <see langword="null"/> to export
+    /// unencrypted. Always uses a freshly generated content-encryption key independent of this
+    /// disk's own <see cref="IsPasswordProtected"/> state, since the export is a standalone copy.
+    /// </param>
+    public void ExportToImage(string imagePath, ImageCompressionLevel level, string? password = null) =>
+        DiskImageSerializer.Save(
+            _fs.NodeMap,
+            Options.CapacityBytes,
+            Options.VolumeLabel,
+            imagePath,
+            level,
+            password is not null ? new ImageEncryptionInfo(password, DiskImageSerializer.GenerateCek()) : null);
 
     /// <summary>
     /// Removes all files and directories from the disk, leaving it empty.
@@ -296,7 +352,8 @@ public sealed class RamDisk : IDisposable
                 Options.CapacityBytes,
                 Options.VolumeLabel,
                 Options.PersistImagePath,
-                Options.CompressionLevel);
+                Options.CompressionLevel,
+                _password is not null && _cek is not null ? new ImageEncryptionInfo(_password, _cek) : null);
         }
         catch (Exception ex)
         {
@@ -335,6 +392,39 @@ public sealed class RamDisk : IDisposable
             SaveToImage();
             TryWriteSnapshot();
         }
+    }
+
+    /// <summary>
+    /// Sets, changes, or removes this disk's password. Passing a non-null value when the disk is
+    /// not yet encrypted generates a fresh content-encryption key (CEK); passing a non-null value
+    /// when it is already encrypted only changes the password used to wrap the existing CEK, so
+    /// previously written node data and snapshot blobs remain valid without re-encryption.
+    /// Passing <see langword="null"/> removes password protection and discards the CEK — because
+    /// historical snapshot blobs are encrypted with that CEK and cannot be recovered once it is
+    /// discarded, this also deletes all of this disk's snapshots via
+    /// <see cref="SnapshotManager.DeleteAllSnapshots"/>. Marks the disk dirty so the change takes
+    /// effect on the next save.
+    /// </summary>
+    /// <param name="newPassword">The new password, or <see langword="null"/> to remove protection.</param>
+    public void SetPassword(string? newPassword)
+    {
+        if (newPassword is not null)
+        {
+            _cek ??= DiskImageSerializer.GenerateCek();
+            _password = newPassword;
+        }
+        else
+        {
+            _password = null;
+            _cek = null;
+
+            if (Options.PersistImagePath is { } path)
+            {
+                SnapshotManager.DeleteAllSnapshots(path);
+            }
+        }
+
+        _fs.MarkDirty();
     }
 
     /// <summary>
@@ -406,7 +496,7 @@ public sealed class RamDisk : IDisposable
         {
             try
             {
-                var nodeMap = SnapshotManager.LoadSnapshot(snapshotPath, out _, out _);
+                var nodeMap = SnapshotManager.LoadSnapshot(snapshotPath, out _, out _, _cek);
                 return _fs.TryReplaceContents(nodeMap, out error);
             }
             catch (Exception ex)
@@ -512,7 +602,7 @@ public sealed class RamDisk : IDisposable
     /// <summary>
     /// Saves the disk image on the periodic timer tick, swallowing any exception so a failed
     /// save does not affect the mounted disk or crash the timer thread. If the previous tick's
-    /// save is still running, this tick is skipped instead of running concurrently with it.
+    /// saving is still running, this tick is skipped instead of running concurrently with it.
     /// Skips the save entirely (no disk I/O) when the disk's content has not changed since the
     /// last successful save and the configured image path hasn't changed either.
     /// </summary>
@@ -567,7 +657,8 @@ public sealed class RamDisk : IDisposable
                 Options.VolumeLabel,
                 path,
                 DateTimeOffset.UtcNow,
-                Options.CompressionLevel);
+                Options.CompressionLevel,
+                _cek);
 
             SnapshotManager.Prune(path, Options.MaxSnapshotCount, Options.MaxSnapshotSizeBytes);
         }
