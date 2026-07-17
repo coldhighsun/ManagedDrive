@@ -11,6 +11,11 @@ public partial class App
 {
     private const string SingleInstanceMutexName = "Global\\ManagedDrive-4A7C2E1B-9F3D-4B8A-A1C5-3E6D2F0B8C9A";
 
+    /// <summary>
+    /// Upper bound on how long <see cref="OnSessionEnding"/> waits for all disk saves to finish.
+    /// </summary>
+    private static readonly TimeSpan SessionEndingSaveTimeout = TimeSpan.FromSeconds(10);
+
     private readonly DispatcherTimer _timerPollCursor = new();
     private readonly DispatcherTimer _timerShowTrayInfoPopup = new();
     private readonly DispatcherTimer _timerTooltipCooldown = new();
@@ -406,9 +411,14 @@ public partial class App
     /// <summary>
     /// Fires when Windows is logging off, shutting down, or restarting. WPF's own
     /// <c>Exit</c> event does not fire in this case, and the OS may kill the process shortly
-    /// after this callback returns, so save every mounted disk's image synchronously and
-    /// without unmounting (unmounting is unnecessary here and would risk exceeding the
-    /// shutdown time budget).
+    /// after this callback returns, so save every mounted disk's image and without unmounting
+    /// (unmounting is unnecessary here and would risk exceeding the shutdown time budget).
+    /// Disks are saved in parallel rather than sequentially — each disk's save is independent
+    /// file I/O guarded by its own <c>RamDisk</c> lock, so running them concurrently lets the
+    /// total time fit the shutdown budget even with several large/compressed/encrypted disks.
+    /// This method blocks synchronously until all saves finish or <see cref="SessionEndingSaveTimeout"/>
+    /// elapses, whichever comes first — a bound is needed so a single stuck save (e.g. a backing
+    /// path that has become unreachable) can't hang this callback indefinitely.
     /// </summary>
     private void OnSessionEnding(object sender, SessionEndingEventArgs e)
     {
@@ -417,17 +427,21 @@ public partial class App
             return;
         }
 
-        foreach (var disk in _mountManager.GetAll())
-        {
-            try
+        var saveTasks = _mountManager.GetAll()
+            .Select(disk => Task.Run(() =>
             {
-                disk.SaveToImageSafe();
-            }
-            catch
-            {
-                // Best-effort, matches RamDisk.Dispose()/TryAutoSave() swallow pattern.
-            }
-        }
+                try
+                {
+                    disk.SaveToImageSafe();
+                }
+                catch
+                {
+                    // Best-effort, matches RamDisk.Dispose()/TryAutoSave() swallow pattern.
+                }
+            }))
+            .ToArray();
+
+        Task.WaitAll(saveTasks, SessionEndingSaveTimeout);
     }
 
     private void PositionTrayPopup()

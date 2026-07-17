@@ -275,7 +275,7 @@ public sealed class RamDisk : IDisposable
                 {
                     try
                     {
-                        if (_fs.IsDirty || Options.PersistImagePath != _lastSavedImagePath)
+                        if (NeedsSave())
                         {
                             SaveToImage();
                         }
@@ -370,13 +370,19 @@ public sealed class RamDisk : IDisposable
     /// Saves the disk image while holding <see cref="_autoSaveLock"/>, without unmounting.
     /// Intended for external shutdown-notification callers (e.g. Windows session-ending) that
     /// need a quick, safe save that can't race the periodic auto-save tick. Does nothing if
-    /// <see cref="DiskOptions.PersistImagePath"/> is <c>null</c>.
+    /// <see cref="DiskOptions.PersistImagePath"/> is <c>null</c>, or if the disk's content hasn't
+    /// changed since the last successful save and the configured image path hasn't changed
+    /// either (same skip condition as <see cref="TryAutoSave"/>) — this keeps unmodified disks
+    /// out of the OS shutdown time budget.
     /// </summary>
     public void SaveToImageSafe()
     {
         lock (_autoSaveLock)
         {
-            SaveToImage();
+            if (NeedsSave())
+            {
+                SaveToImage();
+            }
         }
     }
 
@@ -600,6 +606,14 @@ public sealed class RamDisk : IDisposable
     }
 
     /// <summary>
+    /// Whether a save would actually write anything: the disk has unsaved changes, or the
+    /// configured persist path has changed since the last successful save. Shared by
+    /// <see cref="SaveToImageSafe"/> and <see cref="TryAutoSave"/> so both skip saving under the
+    /// same condition.
+    /// </summary>
+    private bool NeedsSave() => _fs.IsDirty || Options.PersistImagePath != _lastSavedImagePath;
+
+    /// <summary>
     /// Saves the disk image on the periodic timer tick, swallowing any exception so a failed
     /// save does not affect the mounted disk or crash the timer thread. If the previous tick's
     /// saving is still running, this tick is skipped instead of running concurrently with it.
@@ -615,7 +629,7 @@ public sealed class RamDisk : IDisposable
 
         try
         {
-            if (_fs.IsDirty || Options.PersistImagePath != _lastSavedImagePath)
+            if (NeedsSave())
             {
                 SaveToImage();
                 TryWriteSnapshot();
