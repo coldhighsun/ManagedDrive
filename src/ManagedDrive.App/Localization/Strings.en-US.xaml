@@ -119,6 +119,8 @@
     <sys:String x:Key="CreateDisk.ConfirmPassword">Confirm:</sys:String>
     <sys:String x:Key="Val.PasswordRequired">Enter a password, or uncheck "Encrypt image".</sys:String>
     <sys:String x:Key="Val.PasswordMismatch">The password and confirmation do not match.</sys:String>
+    <sys:String x:Key="Val.PasswordTooShort">Password must be at least {0} characters.</sys:String>
+    <sys:String x:Key="Val.PasswordTooLong">Password must be at most {0} characters.</sys:String>
     <sys:String x:Key="Val.PasswordIncorrect">Incorrect password.</sys:String>
     <sys:String x:Key="Val.CliPasswordRequired">This image is password-protected. Supply --password or --password-file.</sys:String>
     <sys:String x:Key="Val.CliPasswordIncorrect">The supplied password is incorrect.</sys:String>
