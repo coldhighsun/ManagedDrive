@@ -119,6 +119,8 @@
     <sys:String x:Key="CreateDisk.ConfirmPassword">确认密码：</sys:String>
     <sys:String x:Key="Val.PasswordRequired">请输入密码，或取消勾选“加密镜像”。</sys:String>
     <sys:String x:Key="Val.PasswordMismatch">两次输入的密码不一致。</sys:String>
+    <sys:String x:Key="Val.PasswordTooShort">密码长度不能少于 {0} 位。</sys:String>
+    <sys:String x:Key="Val.PasswordTooLong">密码长度不能超过 {0} 位。</sys:String>
     <sys:String x:Key="Val.PasswordIncorrect">密码不正确。</sys:String>
     <sys:String x:Key="Val.CliPasswordRequired">该镜像已加密，请提供 --password 或 --password-file。</sys:String>
     <sys:String x:Key="Val.CliPasswordIncorrect">提供的密码不正确。</sys:String>

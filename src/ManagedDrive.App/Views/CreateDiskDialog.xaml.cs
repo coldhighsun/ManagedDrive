@@ -8,8 +8,11 @@ namespace ManagedDrive.App.Views;
 /// </summary>
 public partial class CreateDiskDialog
 {
-    private static readonly List<ImageCompressionLevel> CompressionLevels =
-    [
+    private const int MaxPasswordLength = 64;
+
+    private const int MinPasswordLength = 8;
+
+    private static readonly List<ImageCompressionLevel> CompressionLevels = [
         ImageCompressionLevel.None,
         ImageCompressionLevel.Fastest,
         ImageCompressionLevel.Optimal,
@@ -99,8 +102,8 @@ public partial class CreateDiskDialog
         EncryptImageBox.IsChecked = _wasEncrypted;
         if (_wasEncrypted)
         {
-            PasswordBox1.Password = currentPassword;
-            PasswordBox2.Password = currentPassword;
+            PasswordBox1.Password = currentPassword ?? string.Empty;
+            PasswordBox2.Password = currentPassword ?? string.Empty;
         }
 
         DriveLetterBox.Items.Clear();
@@ -854,6 +857,18 @@ public partial class CreateDiskDialog
             // password unchanged.
             error = string.Empty;
             return true;
+        }
+
+        if (password1.Length < MinPasswordLength)
+        {
+            error = Loc.Format("Val.PasswordTooShort", MinPasswordLength);
+            return false;
+        }
+
+        if (password1.Length > MaxPasswordLength)
+        {
+            error = Loc.Format("Val.PasswordTooLong", MaxPasswordLength);
+            return false;
         }
 
         Password = password1;
