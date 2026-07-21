@@ -1,6 +1,3 @@
-using System.Runtime.InteropServices;
-using System.Windows.Interop;
-
 namespace ManagedDrive.App;
 
 /// <summary>
@@ -8,9 +5,6 @@ namespace ManagedDrive.App;
 /// </summary>
 public partial class MainWindow
 {
-    private const uint MonitorDefaultToNearest = 2;
-    private const int WindowsMessageGetMinMaxInfo = 0x0024;
-
     /// <summary>
     /// Initializes the main window and binds the supplied view model.
     /// </summary>
@@ -19,69 +13,22 @@ public partial class MainWindow
     {
         InitializeComponent();
         DataContext = viewModel;
-    }
-
-    /// <summary>
-    /// Hooks the window's message loop so maximizing clamps to the monitor's
-    /// work area instead of its full bounds, which WPF does not do automatically
-    /// for <c>WindowStyle="None"</c> windows and would otherwise cover the taskbar.
-    /// </summary>
-    protected override void OnSourceInitialized(EventArgs e)
-    {
-        base.OnSourceInitialized(e);
-
-        if (PresentationSource.FromVisual(this) is HwndSource source)
-        {
-            source.AddHook(WndProc);
-        }
-    }
-
-    [DllImport("user32.dll")]
-    private static extern bool GetMonitorInfo(IntPtr hMonitor, ref MonitorInfo lpmi);
-
-    [DllImport("user32.dll")]
-    private static extern IntPtr MonitorFromWindow(IntPtr hwnd, uint dwFlags);
-
-    private static void WmGetMinMaxInfo(IntPtr hwnd, IntPtr lParam)
-    {
-        var monitor = MonitorFromWindow(hwnd, MonitorDefaultToNearest);
-        if (monitor == IntPtr.Zero)
-        {
-            return;
-        }
-
-        var monitorInfo = new MonitorInfo { cbSize = Marshal.SizeOf<MonitorInfo>() };
-        if (!GetMonitorInfo(monitor, ref monitorInfo))
-        {
-            return;
-        }
-
-        var workArea = monitorInfo.rcWork;
-        var monitorArea = monitorInfo.rcMonitor;
-
-        var minMaxInfo = Marshal.PtrToStructure<MinMaxInfo>(lParam);
-        minMaxInfo.ptMaxPosition.X = workArea.Left - monitorArea.Left;
-        minMaxInfo.ptMaxPosition.Y = workArea.Top - monitorArea.Top;
-        minMaxInfo.ptMaxSize.X = workArea.Right - workArea.Left;
-        minMaxInfo.ptMaxSize.Y = workArea.Bottom - workArea.Top;
-        Marshal.StructureToPtr(minMaxInfo, lParam, fDeleteOld: true);
-    }
-
-    private static IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
-    {
-        if (msg == WindowsMessageGetMinMaxInfo)
-        {
-            WmGetMinMaxInfo(hwnd, lParam);
-            handled = true;
-        }
-
-        return IntPtr.Zero;
+        StateChanged += MainWindow_StateChanged;
     }
 
     private void CloseButton_Click(object sender, RoutedEventArgs e) => Close();
 
-    private void MaximizeRestoreButton_Click(object sender, RoutedEventArgs e) =>
-        WindowState = WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized;
+    /// <summary>
+    /// The window supports resizing but not fullscreen; this reverts any attempt to
+    /// maximize (Win+Up, edge-drag snap, double-click on the caption area) back to normal.
+    /// </summary>
+    private void MainWindow_StateChanged(object? sender, EventArgs e)
+    {
+        if (WindowState == WindowState.Maximized)
+        {
+            WindowState = WindowState.Normal;
+        }
+    }
 
     private void MinimizeButton_Click(object sender, RoutedEventArgs e) => WindowState = WindowState.Minimized;
 
@@ -93,40 +40,5 @@ public partial class MainWindow
             btn.ContextMenu.PlacementTarget = btn;
             btn.ContextMenu.IsOpen = true;
         }
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct MinMaxInfo
-    {
-        public Point ptReserved;
-        public Point ptMaxSize;
-        public Point ptMaxPosition;
-        public Point ptMinTrackSize;
-        public Point ptMaxTrackSize;
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct MonitorInfo
-    {
-        public int cbSize;
-        public Rect rcMonitor;
-        public Rect rcWork;
-        public uint dwFlags;
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct Point
-    {
-        public int X;
-        public int Y;
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct Rect
-    {
-        public int Left;
-        public int Top;
-        public int Right;
-        public int Bottom;
     }
 }

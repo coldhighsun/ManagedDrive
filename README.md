@@ -49,7 +49,7 @@ Create, mount and manage in-memory volumes that appear as normal drive letters i
 **UI**
 - Bilingual (English / Simplified Chinese) and light/dark themes, both auto-detected with manual override in Settings, switching instantly without restart
 - At-a-glance disk cards with status badges (read-only, current-TEMP, backing image, password-protected) and a usage bar that turns warning-colored past the high-usage threshold
-- Maximize/restore button on the main window toolbar, alongside minimize and close
+- Main window is freely resizable by dragging its edges, but has no maximize/fullscreen mode
 - About dialog with app version and GitHub link
 
 ### Installation
@@ -344,7 +344,7 @@ This project bundles [WinFsp](https://winfsp.dev/) and [SharpCompress](https://g
 **界面**
 - 双语界面（中文/英文）与浅色/深色主题，均可自动检测或在设置中手动切换，即时生效无需重启
 - 一目了然的磁盘卡片，带状态角标（只读、当前临时目录、是否绑定镜像、密码保护）及使用率超阈值时变色的进度条
-- 主窗口工具栏新增最大化/还原按钮，与最小化、关闭按钮并列
+- 主窗口可通过拖拽边缘自由调整大小，但不支持最大化/全屏
 - 关于对话框，显示应用版本及 GitHub 仓库链接
 
 **命令行**
