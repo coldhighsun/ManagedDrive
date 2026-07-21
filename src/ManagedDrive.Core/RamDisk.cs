@@ -26,7 +26,15 @@ public sealed class RamDisk : IDisposable
         _fs = fs;
         _host = host;
         Options = options;
+        _fs.ContentAccessed += OnContentAccessed;
     }
+
+    /// <summary>
+    /// Raised whenever this disk's content is read or written, with <c>true</c> for writes and
+    /// <c>false</c> for reads. Forwarded from the underlying <see cref="MemoryFileSystem"/>;
+    /// fires on WinFsp driver threads, not the UI thread.
+    /// </summary>
+    public event Action<bool>? ContentAccessed;
 
     /// <summary>
     /// Occurs whenever an image save or snapshot write fails, whether triggered manually,
@@ -56,6 +64,12 @@ public sealed class RamDisk : IDisposable
     /// itself is only held in memory for the lifetime of this instance and is never persisted.
     /// </summary>
     public bool IsPasswordProtected => _password is not null;
+
+    /// <summary>
+    /// Gets the UTC timestamp of the most recent file content read, or <c>null</c> if the disk
+    /// has never been read from since mount.
+    /// </summary>
+    public DateTimeOffset? LastContentReadTime => _fs.LastContentReadTimeUtc;
 
     /// <summary>
     /// Gets the UTC timestamp of the most recent content mutation (create/write/rename/delete/etc.),
@@ -264,6 +278,7 @@ public sealed class RamDisk : IDisposable
     {
         if (!_disposed)
         {
+            _fs.ContentAccessed -= OnContentAccessed;
             _autoSaveTimer?.Dispose();
             _autoSaveTimer = null;
 
@@ -606,6 +621,14 @@ public sealed class RamDisk : IDisposable
     }
 
     /// <summary>
+    /// Whether an exit/shutdown save should run: gated by <see cref="DiskOptions.SaveImageOnExit"/>
+    /// on top of the shared <see cref="NeedsSave"/> condition. Used by <see cref="Dispose"/> and
+    /// <see cref="SaveToImageSafe"/> so a disk with save-on-exit disabled is left untouched when
+    /// the app exits or Windows shuts down, while periodic auto-save is unaffected.
+    /// </summary>
+    private bool NeedsExitSave() => Options.SaveImageOnExit && NeedsSave();
+
+    /// <summary>
     /// Whether a save would actually write anything: the disk has unsaved changes, or the
     /// configured persist path has changed since the last successful save. Shared by
     /// <see cref="SaveToImageSafe"/> and <see cref="TryAutoSave"/> so both skip saving under the
@@ -613,13 +636,7 @@ public sealed class RamDisk : IDisposable
     /// </summary>
     private bool NeedsSave() => _fs.IsDirty || Options.PersistImagePath != _lastSavedImagePath;
 
-    /// <summary>
-    /// Whether an exit/shutdown save should run: gated by <see cref="DiskOptions.SaveImageOnExit"/>
-    /// on top of the shared <see cref="NeedsSave"/> condition. Used by <see cref="Dispose"/> and
-    /// <see cref="SaveToImageSafe"/> so a disk with save-on-exit disabled is left untouched when
-    /// the app exits or Windows shuts down, while periodic auto-save is unaffected.
-    /// </summary>
-    private bool NeedsExitSave() => Options.SaveImageOnExit && NeedsSave();
+    private void OnContentAccessed(bool isWrite) => ContentAccessed?.Invoke(isWrite);
 
     /// <summary>
     /// Saves the disk image on the periodic timer tick, swallowing any exception so a failed

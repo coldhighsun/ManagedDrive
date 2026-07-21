@@ -14,13 +14,32 @@ public partial class App
     private const string SingleInstanceMutexName = "Global\\ManagedDrive-4A7C2E1B-9F3D-4B8A-A1C5-3E6D2F0B8C9A";
 
     /// <summary>
+    /// How long the tray icon shows its read/write indicator after a
+    /// <see cref="MountManager.ActivityDetected"/> event before reverting to the idle icon.
+    /// </summary>
+    private static readonly TimeSpan ActivityFlashDuration = TimeSpan.FromMilliseconds(300);
+
+    /// <summary>
     /// Upper bound on how long <see cref="OnSessionEnding"/> waits for all disk saves to finish.
     /// </summary>
     private static readonly TimeSpan SessionEndingSaveTimeout = TimeSpan.FromSeconds(10);
 
+    private readonly DispatcherTimer _timerActivityFlash = new()
+    {
+        Interval = ActivityFlashDuration
+    };
+
     private readonly DispatcherTimer _timerPollCursor = new();
     private readonly DispatcherTimer _timerShowTrayInfoPopup = new();
     private readonly DispatcherTimer _timerTooltipCooldown = new();
+    private readonly IntPtr[] _trayActivityIconHandles = new IntPtr[3];
+
+    /// <summary>
+    /// [0] normal, [1] read indicator, [2] write indicator. Generated once at startup from the
+    /// base tray icon.
+    /// </summary>
+    private readonly Icon?[] _trayActivityIcons = new Icon?[3];
+
     private CliPipeServer? _cliPipeServer;
     private System.Drawing.Point _iconScreenPoint;
     private bool _isExiting;
@@ -33,12 +52,18 @@ public partial class App
     /// UI thread) to register a shutdown block reason without touching WPF objects cross-thread.
     /// </summary>
     private IntPtr _mainWindowHandle;
+
     private MountManager? _mountManager;
     private SettingsStore? _settings;
     private Mutex? _singleInstanceMutex;
     private bool _tooltipCooldown;
     private System.Windows.Forms.NotifyIcon? _trayIcon;
+    private Icon? _trayIconNormal;
     private Popup? _trayInfoPopup;
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool DestroyIcon(IntPtr hIcon);
 
     private static bool IsTempOnAnyDisk(IEnumerable<DiskViewModel> disks)
     {
@@ -52,11 +77,19 @@ public partial class App
         return disks.Any(d => expanded.StartsWith(d.MountPoint, StringComparison.OrdinalIgnoreCase));
     }
 
+    [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool ShutdownBlockReasonCreate(IntPtr hWnd, string pwszReason);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool ShutdownBlockReasonDestroy(IntPtr hWnd);
+
     private void App_Exit(object sender, ExitEventArgs e)
     {
         SystemEvents.SessionEnding -= OnSessionEnding;
         _mainViewModel?.SaveSettings();
-        _trayIcon?.Dispose();
+        DisposeTrayIcons();
         _mainViewModel?.Dispose();
 
         _cliPipeServer?.Dispose();
@@ -109,6 +142,7 @@ public partial class App
         CheckWinFspPrerequisite();
 
         _mountManager = new();
+        _mountManager.ActivityDetected += OnActivityDetected;
         SystemEvents.SessionEnding += OnSessionEnding;
         _mainViewModel = new(_mountManager, _settings, config);
         _mainViewModel.ExitRequested += async (_, _) => await ShutdownAsync();
@@ -188,6 +222,44 @@ public partial class App
         foreach (var profile in _settings.Load().Disks.Where(p => p.AutoMount))
         {
             await _mainViewModel.MountFromProfileAsync(profile);
+        }
+    }
+
+    /// <summary>
+    /// Generates the tray icon variants indexed by <see cref="_trayActivityIcons"/> (0 = normal,
+    /// 1 = read indicator, 2 = write indicator) by overlaying a colored dot in the top-right
+    /// corner of <paramref name="baseIcon"/>: green for reads, orange for writes. Each generated
+    /// <see cref="Icon"/>'s backing HICON is recorded in <see cref="_trayActivityIconHandles"/> so
+    /// it can be released via <see cref="DestroyIcon"/> on shutdown, since <see cref="Icon.Dispose"/>
+    /// alone does not release a handle obtained from <see cref="Bitmap.GetHicon"/>.
+    /// </summary>
+    private void BuildTrayActivityIcons(Icon baseIcon)
+    {
+        var size = baseIcon.Size;
+        var dotDiameter = Math.Max(4, size.Width / 3);
+        var dotRect = new Rectangle(size.Width - dotDiameter, 0, dotDiameter, dotDiameter);
+        Brush?[] overlayBrushes =
+        [
+            null,
+            new SolidBrush(Color.FromArgb(255, 0, 230, 118)),
+            new SolidBrush(Color.FromArgb(255, 255, 50, 0)),
+        ];
+
+        for (var state = 0; state < _trayActivityIcons.Length; state++)
+        {
+            using var bitmap = new Bitmap(size.Width, size.Height);
+            using (var graphics = Graphics.FromImage(bitmap))
+            {
+                graphics.DrawIcon(baseIcon, new Rectangle(0, 0, size.Width, size.Height));
+                if (overlayBrushes[state] is { } brush)
+                {
+                    graphics.FillEllipse(brush, dotRect);
+                }
+            }
+
+            var hicon = bitmap.GetHicon();
+            _trayActivityIconHandles[state] = hicon;
+            _trayActivityIcons[state] = Icon.FromHandle(hicon);
         }
     }
 
@@ -273,6 +345,30 @@ public partial class App
         }
 
         Shutdown();
+    }
+
+    /// <summary>
+    /// Stops the activity blink timer and releases the tray icon and all four generated
+    /// activity-indicator variants, including the HICONs backing <see cref="_trayActivityIcons"/>
+    /// which <see cref="Icon.Dispose"/> alone would leak.
+    /// </summary>
+    private void DisposeTrayIcons()
+    {
+        _timerActivityFlash.Stop();
+        _trayIcon?.Dispose();
+        _trayIconNormal?.Dispose();
+
+        for (var i = 0; i < _trayActivityIcons.Length; i++)
+        {
+            _trayActivityIcons[i]?.Dispose();
+            _trayActivityIcons[i] = null;
+
+            if (_trayActivityIconHandles[i] != IntPtr.Zero)
+            {
+                DestroyIcon(_trayActivityIconHandles[i]);
+                _trayActivityIconHandles[i] = IntPtr.Zero;
+            }
+        }
     }
 
     private async Task ExecuteResetTempDirsFromTray()
@@ -369,6 +465,31 @@ public partial class App
             "ManagedDrive",
             Loc.Get("Msg.StartedMinimized"),
             System.Windows.Forms.ToolTipIcon.Info);
+    }
+
+    /// <summary>
+    /// Handler for <see cref="MountManager.ActivityDetected"/>. May run on any WinFsp driver
+    /// thread, so the actual icon update is dispatched to the UI thread. Flashes the read/write
+    /// indicator icon once for <see cref="ActivityFlashDuration"/>, then reverts to idle; the
+    /// write indicator takes priority and isn't overridden by a read arriving mid-flash.
+    /// </summary>
+    private void OnActivityDetected(bool isWrite)
+    {
+        Dispatcher.BeginInvoke(() =>
+        {
+            if (_trayIcon == null || _trayActivityIcons[0] == null)
+            {
+                return;
+            }
+
+            if (isWrite || _trayIcon.Icon != _trayActivityIcons[2])
+            {
+                SetTrayIcon(_trayActivityIcons[isWrite ? 2 : 1]);
+            }
+
+            _timerActivityFlash.Stop();
+            _timerActivityFlash.Start();
+        });
     }
 
     private void OnDiskCapacityAdjusted(DiskViewModel vm)
@@ -478,14 +599,6 @@ public partial class App
         }
     }
 
-    [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool ShutdownBlockReasonCreate(IntPtr hWnd, string pwszReason);
-
-    [DllImport("user32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool ShutdownBlockReasonDestroy(IntPtr hWnd);
-
     private void PositionTrayPopup()
     {
         var workArea = SystemParameters.WorkArea;
@@ -516,6 +629,19 @@ public partial class App
         _trayInfoPopup.VerticalOffset = top;
     }
 
+    /// <summary>
+    /// Assigns <paramref name="icon"/> to the tray icon only if it differs from the current one,
+    /// avoiding redundant <see cref="System.Windows.Forms.NotifyIcon.Icon"/> reassignment that
+    /// would otherwise cause visible flicker.
+    /// </summary>
+    private void SetTrayIcon(Icon? icon)
+    {
+        if (_trayIcon != null && _trayIcon.Icon != icon)
+        {
+            _trayIcon.Icon = icon;
+        }
+    }
+
     private void SetupTrayIcon()
     {
         var menu = new System.Windows.Forms.ContextMenuStrip();
@@ -529,10 +655,12 @@ public partial class App
         menu.Items.Add(Loc.Get("Tray.Exit"), null, (_, _) => Dispatcher.Invoke(ExitApplication));
 
         var iconStream = GetResourceStream(new("pack://application:,,,/ManagedDrive.ico"))!.Stream;
+        _trayIconNormal = new(iconStream);
+        BuildTrayActivityIcons(_trayIconNormal);
 
         _trayIcon = new()
         {
-            Icon = new(iconStream),
+            Icon = _trayActivityIcons[0],
             ContextMenuStrip = menu,
             Text = "",
             Visible = false,
@@ -584,6 +712,12 @@ public partial class App
         {
             _tooltipCooldown = false;
             _timerTooltipCooldown.Stop();
+        };
+
+        _timerActivityFlash.Tick += (_, _) =>
+        {
+            SetTrayIcon(_trayActivityIcons[0]);
+            _timerActivityFlash.Stop();
         };
 
         LanguageManager.Instance.LanguageChanged += (_, _) => UpdateTrayMenuHeaders();
@@ -668,8 +802,13 @@ public partial class App
 
         _cliPipeServer?.Dispose();
         _mainViewModel?.SaveSettings();
-        _trayIcon?.Dispose();
+        DisposeTrayIcons();
         _mainViewModel?.Dispose();
+        if (_mountManager != null)
+        {
+            _mountManager.ActivityDetected -= OnActivityDetected;
+        }
+
         await Task.Run(() => _mountManager?.Dispose());
         Shutdown();
     }
