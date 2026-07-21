@@ -16,14 +16,23 @@ public static class ArchiveNodeMapBuilder
     /// synthesizing any directory nodes an archive doesn't explicitly list.
     /// </summary>
     /// <param name="archivePath">Path to the archive file.</param>
+    /// <param name="totalBytes">
+    /// The total uncompressed byte size previously computed by <see cref="PeekArchive"/>, used to
+    /// normalize <paramref name="progress"/> reports as a byte-weighted fraction. When
+    /// <see langword="null"/> or non-positive, progress is not reported mid-extraction (an
+    /// unreliable ad-hoc total would be misleading) — only a final 1.0 report is made.
+    /// </param>
+    /// <param name="progress">Optional progress reporter, updated with a fraction in [0, 1].</param>
     /// <returns>A populated node map, including the root directory entry.</returns>
     /// <exception cref="InvalidDataException">
     /// The file is not a format SharpCompress can read, or the archive is otherwise invalid.
     /// </exception>
-    public static FileNodeMap BuildNodeMap(string archivePath)
+    public static FileNodeMap BuildNodeMap(string archivePath, long? totalBytes = null, IProgress<double>? progress = null)
     {
         var nodeMap = new FileNodeMap();
         var now = (ulong)DateTimeOffset.UtcNow.ToFileTime();
+        var reportProgress = totalBytes is > 0;
+        var processedBytes = 0L;
 
         EnsureRoot(nodeMap, now);
 
@@ -52,6 +61,12 @@ public static class ArchiveNodeMapBuilder
                 }
 
                 AddFile(nodeMap, path, entry, timestamp);
+
+                if (reportProgress)
+                {
+                    processedBytes += entry.Size;
+                    progress?.Report(Math.Clamp((double)processedBytes / totalBytes!.Value, 0.0, 1.0));
+                }
             }
         }
         catch (Exception ex) when (ex is not InvalidDataException)
@@ -59,6 +74,7 @@ public static class ArchiveNodeMapBuilder
             throw new InvalidDataException($"Not a supported archive file: {archivePath}", ex);
         }
 
+        progress?.Report(1.0);
         return nodeMap;
     }
 

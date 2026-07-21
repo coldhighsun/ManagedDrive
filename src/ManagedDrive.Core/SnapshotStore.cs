@@ -152,7 +152,8 @@ internal static class SnapshotStore
         string indexPath,
         string blobDirectory,
         ImageCompressionLevel level,
-        byte[]? cek)
+        byte[]? cek,
+        IProgress<double>? progress = null)
     {
         Directory.CreateDirectory(blobDirectory);
 
@@ -174,9 +175,19 @@ internal static class SnapshotStore
                     var nodes = nodeMap.GetAllNodes();
                     writer.Write(nodes.Count);
 
-                    foreach (var kvp in nodes)
+                    if (nodes.Count == 0)
                     {
-                        WriteNode(writer, kvp.Key, kvp.Value, blobDirectory, level, cek);
+                        progress?.Report(1.0);
+                    }
+                    else
+                    {
+                        var written = 0;
+                        foreach (var kvp in nodes)
+                        {
+                            WriteNode(writer, kvp.Key, kvp.Value, blobDirectory, level, cek);
+                            written++;
+                            progress?.Report((double)written / nodes.Count);
+                        }
                     }
 
                     writer.Flush();

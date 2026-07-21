@@ -107,6 +107,12 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     } = string.Empty;
 
     /// <summary>
+    /// Gets the busy/progress overlay state shown during a long-running disk operation
+    /// (image save, archive import, export) triggered from this view model.
+    /// </summary>
+    public BusyOverlayViewModel BusyOverlay { get; } = new();
+
+    /// <summary>
     /// Gets the command that opens the "Clone Disk" dialog for the selected disk: copy its
     /// contents onto another mounted disk, or export them to a new image file.
     /// </summary>
@@ -831,9 +837,11 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         }
         else if (dialog.ExportPath is { } exportPath)
         {
+            BusyOverlay.Start(Loc.Get("Busy.ExportingImage"));
             try
             {
-                await Task.Run(() => vm.Disk.ExportToImage(exportPath, dialog.ExportCompressionLevel));
+                var progress = new Progress<double>(BusyOverlay.Report);
+                await Task.Run(() => vm.Disk.ExportToImage(exportPath, dialog.ExportCompressionLevel, progress: progress));
                 StatusText = Loc.Format("Status.DiskExported", vm.MountPoint, exportPath);
             }
             catch (Exception ex)
@@ -843,6 +851,10 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
                     "ManagedDrive",
                     MessageBoxButton.OK,
                     MessageBoxImage.Error);
+            }
+            finally
+            {
+                BusyOverlay.Stop();
             }
         }
     }
@@ -1109,7 +1121,16 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             return;
         }
 
-        await MountAndAddAsync(dialog.Result!);
+        BusyOverlay.Start(Loc.Get("Busy.ImportingArchive"), indeterminate: totalBytes == 0);
+        try
+        {
+            var progress = new Progress<double>(BusyOverlay.Report);
+            await MountAndAddAsync(dialog.Result!, progress: progress);
+        }
+        finally
+        {
+            BusyOverlay.Stop();
+        }
     }
 
     private async void ExecuteImportDisk()
@@ -1288,9 +1309,11 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         }
 
         vm.IsSaving = true;
+        BusyOverlay.Start(Loc.Get("Busy.SavingImage"));
         try
         {
-            await Task.Run(() => vm.Disk.SaveToImageWithSnapshot());
+            var progress = new Progress<double>(BusyOverlay.Report);
+            await Task.Run(() => vm.Disk.SaveToImageWithSnapshot(progress));
             StatusText = Loc.Format("Status.ImageSaved", vm.MountPoint);
         }
         catch (Exception ex)
@@ -1304,6 +1327,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         finally
         {
             vm.IsSaving = false;
+            BusyOverlay.Stop();
         }
     }
 
@@ -1456,11 +1480,11 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             Disks.Any(d => expandedTemp.StartsWith(d.MountPoint, StringComparison.OrdinalIgnoreCase));
     }
 
-    private async Task MountAndAddAsync(DiskOptions options, string? password = null)
+    private async Task MountAndAddAsync(DiskOptions options, string? password = null, IProgress<double>? progress = null)
     {
         try
         {
-            var disk = await MountWithPasswordRetryAsync(options, password);
+            var disk = await MountWithPasswordRetryAsync(options, password, progress);
             if (disk is null)
             {
                 StatusText = Loc.Get("Status.MountFailed");
@@ -1488,14 +1512,14 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     /// </summary>
     /// <returns>The mounted disk, or <c>null</c> if the user cancelled the password prompt.</returns>
     /// <exception cref="Exception">Any mount failure other than a password issue propagates to the caller.</exception>
-    private async Task<RamDisk?> MountWithPasswordRetryAsync(DiskOptions options, string? password = null)
+    private async Task<RamDisk?> MountWithPasswordRetryAsync(DiskOptions options, string? password = null, IProgress<double>? progress = null)
     {
         while (true)
         {
             string? errorMessage;
             try
             {
-                return await Task.Run(() => _mountManager.Mount(options, password));
+                return await Task.Run(() => _mountManager.Mount(options, password, progress));
             }
             catch (ImagePasswordRequiredException)
             {

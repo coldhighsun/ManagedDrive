@@ -155,13 +155,19 @@ public static class DiskImageSerializer
     /// Password/content-encryption-key pair to protect the image, or <see langword="null"/>
     /// to save unencrypted.
     /// </param>
+    /// <param name="progress">
+    /// Optional progress reporter, updated with a fraction in [0, 1] as each node is written.
+    /// The subsequent gzip compression and AES-GCM encryption steps operate on the whole
+    /// serialized buffer as a single unit and are not individually reported.
+    /// </param>
     public static void Save(
         FileNodeMap nodeMap,
         ulong capacityBytes,
         string volumeLabel,
         string imagePath,
         ImageCompressionLevel level,
-        ImageEncryptionInfo? encryption = null)
+        ImageEncryptionInfo? encryption = null,
+        IProgress<double>? progress = null)
     {
         var compress = level != ImageCompressionLevel.None;
         var directory = Path.GetDirectoryName(imagePath);
@@ -184,9 +190,19 @@ public static class DiskImageSerializer
                 var nodes = nodeMap.GetAllNodes();
                 payloadWriter.Write(nodes.Count);
 
-                foreach (var kvp in nodes)
+                if (nodes.Count == 0)
                 {
-                    WriteNode(payloadWriter, kvp.Key, kvp.Value);
+                    progress?.Report(1.0);
+                }
+                else
+                {
+                    var written = 0;
+                    foreach (var kvp in nodes)
+                    {
+                        WriteNode(payloadWriter, kvp.Key, kvp.Value);
+                        written++;
+                        progress?.Report((double)written / nodes.Count);
+                    }
                 }
 
                 payloadWriter.Flush();

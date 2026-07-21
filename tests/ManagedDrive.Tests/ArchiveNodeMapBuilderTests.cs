@@ -6,6 +6,44 @@ namespace ManagedDrive.Tests;
 public sealed class ArchiveNodeMapBuilderTests
 {
     [Fact]
+    public void BuildNodeMap_ComputesTotalAllocatedFromExtractedContent()
+    {
+        var path = CreateZip(entries =>
+        {
+            entries.Add("A.txt", new byte[100]);
+            entries.Add("B.txt", new byte[900]);
+        });
+
+        try
+        {
+            var nodeMap = ArchiveNodeMapBuilder.BuildNodeMap(path);
+
+            var expected = FileNode.AlignToAllocationUnit(100) + FileNode.AlignToAllocationUnit(900);
+            Assert.Equal(expected, nodeMap.GetTotalAllocated());
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void BuildNodeMap_InvalidFile_ThrowsInvalidDataException()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid()}.zip");
+        File.WriteAllBytes(path, "not a zip file"u8.ToArray());
+
+        try
+        {
+            Assert.Throws<InvalidDataException>(() => ArchiveNodeMapBuilder.BuildNodeMap(path));
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
     public void BuildNodeMap_MultiLevelZip_RestoresDirectoriesAndFileContent()
     {
         var path = CreateZip(entries =>
@@ -42,7 +80,7 @@ public sealed class ArchiveNodeMapBuilderTests
     }
 
     [Fact]
-    public void BuildNodeMap_ComputesTotalAllocatedFromExtractedContent()
+    public void BuildNodeMap_WithoutTotalBytes_ReportsOnlyFinalOne()
     {
         var path = CreateZip(entries =>
         {
@@ -52,10 +90,10 @@ public sealed class ArchiveNodeMapBuilderTests
 
         try
         {
-            var nodeMap = ArchiveNodeMapBuilder.BuildNodeMap(path);
+            var reports = new List<double>();
+            ArchiveNodeMapBuilder.BuildNodeMap(path, totalBytes: null, progress: new RecordingProgress(reports));
 
-            var expected = FileNode.AlignToAllocationUnit(100) + FileNode.AlignToAllocationUnit(900);
-            Assert.Equal(expected, nodeMap.GetTotalAllocated());
+            Assert.Equal([1.0], reports);
         }
         finally
         {
@@ -64,20 +102,27 @@ public sealed class ArchiveNodeMapBuilderTests
     }
 
     [Fact]
-    public void PeekArchive_ValidZip_ReturnsTotalSizeAndSuggestedLabel()
+    public void BuildNodeMap_WithTotalBytes_ReportsMonotonicProgressEndingAtOne()
     {
         var path = CreateZip(entries =>
         {
-            entries.Add("A.txt", new byte[10]);
-            entries.Add("B.txt", new byte[20]);
+            entries.Add("A.txt", new byte[100]);
+            entries.Add("B.txt", new byte[900]);
         });
 
         try
         {
-            ArchiveNodeMapBuilder.PeekArchive(path, out var totalBytes, out var suggestedLabel);
+            ArchiveNodeMapBuilder.PeekArchive(path, out var totalBytes, out _);
 
-            Assert.Equal(30UL, totalBytes);
-            Assert.Equal(Path.GetFileNameWithoutExtension(path), suggestedLabel);
+            var reports = new List<double>();
+            ArchiveNodeMapBuilder.BuildNodeMap(path, (long)totalBytes, new RecordingProgress(reports));
+
+            Assert.NotEmpty(reports);
+            Assert.Equal(1.0, reports[^1]);
+            for (var i = 1; i < reports.Count; i++)
+            {
+                Assert.True(reports[i] >= reports[i - 1]);
+            }
         }
         finally
         {
@@ -103,14 +148,20 @@ public sealed class ArchiveNodeMapBuilderTests
     }
 
     [Fact]
-    public void BuildNodeMap_InvalidFile_ThrowsInvalidDataException()
+    public void PeekArchive_ValidZip_ReturnsTotalSizeAndSuggestedLabel()
     {
-        var path = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid()}.zip");
-        File.WriteAllBytes(path, "not a zip file"u8.ToArray());
+        var path = CreateZip(entries =>
+        {
+            entries.Add("A.txt", new byte[10]);
+            entries.Add("B.txt", new byte[20]);
+        });
 
         try
         {
-            Assert.Throws<InvalidDataException>(() => ArchiveNodeMapBuilder.BuildNodeMap(path));
+            ArchiveNodeMapBuilder.PeekArchive(path, out var totalBytes, out var suggestedLabel);
+
+            Assert.Equal(30UL, totalBytes);
+            Assert.Equal(Path.GetFileNameWithoutExtension(path), suggestedLabel);
         }
         finally
         {

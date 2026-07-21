@@ -74,9 +74,13 @@ public sealed class MountManager : IDisposable
     /// <returns>
     /// The newly mounted <see cref="RamDisk"/>.
     /// </returns>
-    public RamDisk Mount(DiskOptions options, string? password = null)
+    /// <param name="progress">
+    /// Optional progress reporter for the archive-extraction path
+    /// (<see cref="DiskOptions.SourceArchivePath"/>), updated with a fraction in [0, 1].
+    /// </param>
+    public RamDisk Mount(DiskOptions options, string? password = null, IProgress<double>? progress = null)
     {
-        var disk = RamDisk.Create(options, password);
+        var disk = RamDisk.Create(options, password, progress);
         disk.ContentAccessed += OnDiskContentAccessed;
 
         lock (_syncRoot)

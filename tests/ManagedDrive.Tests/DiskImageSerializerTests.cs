@@ -139,6 +139,57 @@ public sealed class DiskImageSerializerTests
         }
     }
 
+    [Fact]
+    public void Save_EmptyNodeMap_ReportsOnlyOne()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid()}.mdr");
+        try
+        {
+            var map = new FileNodeMap();
+
+            var reports = new List<double>();
+            DiskImageSerializer.Save(map, capacityBytes: 1024 * 1024, "MyLabel", path, ImageCompressionLevel.Fastest,
+                progress: new RecordingProgress(reports));
+
+            Assert.Equal([1.0], reports);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void Save_MultipleNodes_ReportsMonotonicProgressEndingAtOne()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid()}.mdr");
+        try
+        {
+            var map = new FileNodeMap();
+            map.Add("\\", MakeDir());
+            for (var i = 0; i < 5; i++)
+            {
+                map.Add($"\\File{i}.txt", MakeFile("hello world"u8.ToArray()));
+            }
+
+            var reports = new List<double>();
+            DiskImageSerializer.Save(map, capacityBytes: 1024 * 1024, "MyLabel", path, ImageCompressionLevel.Fastest,
+                progress: new RecordingProgress(reports));
+
+            Assert.NotEmpty(reports);
+            Assert.True(reports[0] > 0);
+            Assert.Equal(1.0, reports[^1]);
+            for (var i = 1; i < reports.Count; i++)
+            {
+                Assert.True(reports[i] >= reports[i - 1]);
+            }
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
     [Theory]
     [InlineData(ImageCompressionLevel.None)]
     [InlineData(ImageCompressionLevel.Fastest)]
