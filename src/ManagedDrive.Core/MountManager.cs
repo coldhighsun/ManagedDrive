@@ -37,7 +37,7 @@ public sealed class MountManager : IDisposable
 
         lock (_syncRoot)
         {
-            all = new(_disks.Values);
+            all = [.. _disks.Values];
             _disks.Clear();
         }
 

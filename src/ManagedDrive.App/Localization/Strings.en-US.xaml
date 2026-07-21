@@ -17,7 +17,7 @@
     <sys:String x:Key="Btn.SetAsTempDir">Set as Temp Directory...</sys:String>
     <sys:String x:Key="Btn.RestoreDefaultTemp">Restore Default Temp Directory</sys:String>
     <sys:String x:Key="Btn.FormatDisk">Format…</sys:String>
-    <sys:String x:Key="Btn.CloneDisk">Clone Disk...</sys:String>
+    <sys:String x:Key="Btn.CloneDisk">Clone / Export Disk...</sys:String>
     <sys:String x:Key="Btn.RestoreSnapshot">Restore Snapshot...</sys:String>
     <sys:String x:Key="Btn.Refresh">Refresh</sys:String>
     <sys:String x:Key="Btn.Settings">Settings</sys:String>
@@ -141,8 +141,12 @@
     <sys:String x:Key="CloneDisk.SourceDescription">Copy the contents of {0} ({1}) to:</sys:String>
     <sys:String x:Key="CloneDisk.ToDisk">Another mounted disk</sys:String>
     <sys:String x:Key="CloneDisk.ToDiskWarning">All existing files and folders on the target disk will be permanently replaced.</sys:String>
-    <sys:String x:Key="CloneDisk.ToFile">A new image file</sys:String>
-    <sys:String x:Key="CloneDisk.ExportFile">Image File</sys:String>
+    <sys:String x:Key="CloneDisk.ToFile">A new file</sys:String>
+    <sys:String x:Key="CloneDisk.ExportFile">Export File</sys:String>
+    <sys:String x:Key="CloneDisk.ExportFormat">Export as</sys:String>
+    <sys:String x:Key="CloneDisk.ExportFormat.Mdr">ManagedDrive Image (.mdr)</sys:String>
+    <sys:String x:Key="CloneDisk.ExportFormat.Zip">Zip Archive (.zip)</sys:String>
+    <sys:String x:Key="CloneDisk.ExportFormat.SevenZip">7z Archive (.7z)</sys:String>
     <sys:String x:Key="Val.NoCloneTarget">Please select a target disk.</sys:String>
     <sys:String x:Key="Val.NoExportPath">Please choose a destination image file.</sys:String>
     <sys:String x:Key="Msg.CloneDiskConfirmTitle">Clone Disk</sys:String>
@@ -265,6 +269,8 @@
     <sys:String x:Key="SaveDlg.Title">Select Image File</sys:String>
     <sys:String x:Key="ImportDlg.Title">Select Image to Import</sys:String>
     <sys:String x:Key="SaveDlg.Filter">ManagedDrive Image (*.mdr)|*.mdr|All Files (*.*)|*.*</sys:String>
+    <sys:String x:Key="SaveDlg.Filter.Zip">Zip Archive (*.zip)|*.zip|All Files (*.*)|*.*</sys:String>
+    <sys:String x:Key="SaveDlg.Filter.SevenZip">7z Archive (*.7z)|*.7z|All Files (*.*)|*.*</sys:String>
     <sys:String x:Key="ImportArchiveDlg.Title">Select Archive to Import</sys:String>
     <sys:String x:Key="ArchiveDlg.Filter">Archives (*.zip;*.7z;*.rar;*.tar;*.gz;*.tgz;*.bz2;*.lz)|*.zip;*.7z;*.rar;*.tar;*.gz;*.tgz;*.bz2;*.lz|All Files (*.*)|*.*</sys:String>
 

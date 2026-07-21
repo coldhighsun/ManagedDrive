@@ -83,7 +83,7 @@ public sealed class FileNodeMap
     {
         lock (_syncRoot)
         {
-            return new List<KeyValuePair<string, FileNode>>(_map);
+            return [.. _map];
         }
     }
 
@@ -201,7 +201,7 @@ public sealed class FileNodeMap
             {
                 var descendant = _map[key];
                 _map.Remove(key);
-                var newKey = newPath + key.Substring(oldPath.Length);
+                var newKey = string.Concat(newPath, key.AsSpan(oldPath.Length));
                 descendant.FilePath = newKey;
                 descendant.LeafName = ComputeLeafName(newKey);
                 _map[newKey] = descendant;

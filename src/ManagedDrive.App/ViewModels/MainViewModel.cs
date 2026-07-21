@@ -841,7 +841,14 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             try
             {
                 var progress = new Progress<double>(BusyOverlay.Report);
-                await Task.Run(() => vm.Disk.ExportToImage(exportPath, dialog.ExportCompressionLevel, progress: progress));
+                if (dialog.ExportArchiveFormat is { } archiveFormat)
+                {
+                    await Task.Run(() => vm.Disk.ExportToArchive(exportPath, archiveFormat, dialog.ExportCompressionLevel, progress));
+                }
+                else
+                {
+                    await Task.Run(() => vm.Disk.ExportToImage(exportPath, dialog.ExportCompressionLevel, progress: progress));
+                }
                 StatusText = Loc.Format("Status.DiskExported", vm.MountPoint, exportPath);
             }
             catch (Exception ex)

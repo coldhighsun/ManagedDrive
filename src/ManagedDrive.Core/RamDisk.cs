@@ -1,4 +1,5 @@
 using Fsp;
+using System.Runtime.InteropServices;
 
 namespace ManagedDrive.Core;
 
@@ -315,6 +316,19 @@ public sealed class RamDisk : IDisposable
     }
 
     /// <summary>
+    /// Writes this disk's current contents to a new zip or 7z archive file at
+    /// <paramref name="archivePath"/>. Unlike <see cref="ExportToImage"/> the result is a plain
+    /// archive readable by any zip/7z tool, not a <c>.mdr</c> image — it cannot be re-mounted
+    /// directly, only re-imported via <see cref="ArchiveNodeMapBuilder"/>.
+    /// </summary>
+    /// <param name="archivePath">Destination archive file path.</param>
+    /// <param name="format">The archive container format to write.</param>
+    /// <param name="level">Compression level applied to the archive.</param>
+    /// <param name="progress">Optional progress reporter, updated with a fraction in [0, 1].</param>
+    public void ExportToArchive(string archivePath, ArchiveExportFormat format, ImageCompressionLevel level, IProgress<double>? progress = null) =>
+        ArchiveNodeMapWriter.WriteArchive(_fs.NodeMap, archivePath, format, level, progress);
+
+    /// <summary>
     /// Writes this disk's current contents to a new image file at <paramref name="imagePath"/>.
     /// Unlike <see cref="SaveToImage"/>, this is independent of
     /// <see cref="DiskOptions.PersistImagePath"/> and does not affect this disk's dirty or
@@ -585,7 +599,7 @@ public sealed class RamDisk : IDisposable
         SHChangeNotify(EventDriveAdd, FlagPath | FlagFlush, path, null);
     }
 
-    [System.Runtime.InteropServices.DllImport("shell32.dll", CharSet = System.Runtime.InteropServices.CharSet.Auto)]
+    [DllImport("shell32.dll", CharSet = CharSet.Auto)]
     private static extern void SHChangeNotify(uint wEventId, uint uFlags, string? dwItem1, string? dwItem2);
 
     /// <summary>

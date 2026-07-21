@@ -17,7 +17,7 @@
     <sys:String x:Key="Btn.SetAsTempDir">设为临时文件夹...</sys:String>
     <sys:String x:Key="Btn.RestoreDefaultTemp">恢复默认临时文件夹</sys:String>
     <sys:String x:Key="Btn.FormatDisk">格式化…</sys:String>
-    <sys:String x:Key="Btn.CloneDisk">克隆磁盘...</sys:String>
+    <sys:String x:Key="Btn.CloneDisk">克隆/导出磁盘...</sys:String>
     <sys:String x:Key="Btn.RestoreSnapshot">恢复快照...</sys:String>
     <sys:String x:Key="Btn.Refresh">刷新</sys:String>
     <sys:String x:Key="Btn.Settings">设置</sys:String>
@@ -141,8 +141,12 @@
     <sys:String x:Key="CloneDisk.SourceDescription">将 {0}（{1}）的内容复制到：</sys:String>
     <sys:String x:Key="CloneDisk.ToDisk">另一个已挂载的磁盘</sys:String>
     <sys:String x:Key="CloneDisk.ToDiskWarning">目标磁盘上现有的所有文件和文件夹将被永久替换。</sys:String>
-    <sys:String x:Key="CloneDisk.ToFile">一个新的镜像文件</sys:String>
-    <sys:String x:Key="CloneDisk.ExportFile">镜像文件</sys:String>
+    <sys:String x:Key="CloneDisk.ToFile">一个新文件</sys:String>
+    <sys:String x:Key="CloneDisk.ExportFile">导出文件</sys:String>
+    <sys:String x:Key="CloneDisk.ExportFormat">导出为</sys:String>
+    <sys:String x:Key="CloneDisk.ExportFormat.Mdr">ManagedDrive 镜像 (.mdr)</sys:String>
+    <sys:String x:Key="CloneDisk.ExportFormat.Zip">Zip 压缩包 (.zip)</sys:String>
+    <sys:String x:Key="CloneDisk.ExportFormat.SevenZip">7z 压缩包 (.7z)</sys:String>
     <sys:String x:Key="Val.NoCloneTarget">请选择目标磁盘。</sys:String>
     <sys:String x:Key="Val.NoExportPath">请选择目标镜像文件。</sys:String>
     <sys:String x:Key="Msg.CloneDiskConfirmTitle">克隆磁盘</sys:String>
@@ -265,6 +269,8 @@
     <sys:String x:Key="SaveDlg.Title">选择镜像文件</sys:String>
     <sys:String x:Key="ImportDlg.Title">选择要导入的镜像文件</sys:String>
     <sys:String x:Key="SaveDlg.Filter">ManagedDrive 镜像 (*.mdr)|*.mdr|所有文件 (*.*)|*.*</sys:String>
+    <sys:String x:Key="SaveDlg.Filter.Zip">Zip 压缩包 (*.zip)|*.zip|所有文件 (*.*)|*.*</sys:String>
+    <sys:String x:Key="SaveDlg.Filter.SevenZip">7z 压缩包 (*.7z)|*.7z|所有文件 (*.*)|*.*</sys:String>
     <sys:String x:Key="ImportArchiveDlg.Title">选择要导入的压缩包</sys:String>
     <sys:String x:Key="ArchiveDlg.Filter">压缩包 (*.zip;*.7z;*.rar;*.tar;*.gz;*.tgz;*.bz2;*.lz)|*.zip;*.7z;*.rar;*.tar;*.gz;*.tgz;*.bz2;*.lz|所有文件 (*.*)|*.*</sys:String>
 

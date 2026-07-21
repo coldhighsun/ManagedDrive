@@ -24,7 +24,7 @@
 
         <!-- Clone to another mounted disk -->
         <Border Grid.Row="2" Style="{StaticResource SectionBorder}">
-            <StackPanel>
+            <StackPanel Grid.IsSharedSizeScope="True">
                 <RadioButton x:Name="CloneToDiskOption" GroupName="CloneMode"
                              Content="{DynamicResource CloneDisk.ToDisk}"
                              Foreground="{DynamicResource AppForeground}"
@@ -47,22 +47,20 @@
 
                 <Grid Margin="0,8,0,8">
                     <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto" SharedSizeGroup="CloneExportLabel"/>
                         <ColumnDefinition Width="8"/>
-                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="200"/>
                     </Grid.ColumnDefinitions>
-                    <TextBox Grid.Column="0" x:Name="ExportPathBox" IsReadOnly="True" Cursor="Hand"
-                             helpers:HintHelper.Text="{DynamicResource CloneDisk.ExportFile}"
-                             Style="{StaticResource OutlinedTextBox}"
-                             PreviewMouseLeftButtonDown="ExportPathBox_PreviewMouseLeftButtonDown"/>
-                    <Button Grid.Column="2" Content="..." Width="40"
-                            Click="BrowseExportPath_Click"
-                            Style="{StaticResource OutlinedButton}"/>
+                    <TextBlock Grid.Column="0" Text="{DynamicResource CloneDisk.ExportFormat}"
+                               Foreground="{DynamicResource AppForeground}"
+                               VerticalAlignment="Center"/>
+                    <ComboBox Grid.Column="2" x:Name="ExportFormatBox" IsEditable="False"
+                              Style="{StaticResource OutlinedComboBox}"/>
                 </Grid>
 
-                <Grid>
+                <Grid Margin="0,0,0,8">
                     <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto" SharedSizeGroup="CloneExportLabel"/>
                         <ColumnDefinition Width="8"/>
                         <ColumnDefinition Width="140"/>
                     </Grid.ColumnDefinitions>
@@ -71,6 +69,16 @@
                                VerticalAlignment="Center"/>
                     <ComboBox Grid.Column="2" x:Name="CompressionLevelBox" IsEditable="False"
                               Style="{StaticResource OutlinedComboBox}"/>
+                </Grid>
+
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBox Grid.Column="0" x:Name="ExportPathBox" IsReadOnly="True" Cursor="Hand"
+                             helpers:HintHelper.Text="{DynamicResource CloneDisk.ExportFile}"
+                             Style="{StaticResource OutlinedTextBox}"
+                             PreviewMouseLeftButtonDown="ExportPathBox_PreviewMouseLeftButtonDown"/>
                 </Grid>
             </StackPanel>
         </Border>
