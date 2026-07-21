@@ -30,6 +30,7 @@
     <sys:String x:Key="Tip.Settings">Application settings</sys:String>
     <sys:String x:Key="Tip.ResetTempDirs">Reset Windows Temp Directories to defaults</sys:String>
     <sys:String x:Key="Tip.Minimize">Minimize</sys:String>
+    <sys:String x:Key="Tip.MaximizeRestore">Maximize/Restore</sys:String>
     <sys:String x:Key="Tip.HideToTray">Hide to tray</sys:String>
     <sys:String x:Key="Tip.CloseDialog">Close</sys:String>
     <sys:String x:Key="Col.MountPoint">Mount Point</sys:String>
