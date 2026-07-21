@@ -12,6 +12,13 @@ public sealed class MountManager : IDisposable
     private readonly Lock _syncRoot = new();
 
     /// <summary>
+    /// Raised whenever any mounted disk's content is read or written, with <c>true</c> for
+    /// writes and <c>false</c> for reads. Forwarded from each disk's
+    /// <see cref="RamDisk.ContentAccessed"/>; fires on WinFsp driver threads, not the UI thread.
+    /// </summary>
+    public event Action<bool>? ActivityDetected;
+
+    /// <summary>
     /// Raised on the thread that called <see cref="Mount"/> after a disk is successfully mounted.
     /// </summary>
     public event EventHandler<RamDisk>? DiskMounted;
@@ -36,6 +43,7 @@ public sealed class MountManager : IDisposable
 
         foreach (var disk in all)
         {
+            disk.ContentAccessed -= OnDiskContentAccessed;
             disk.Dispose();
         }
     }
@@ -69,6 +77,7 @@ public sealed class MountManager : IDisposable
     public RamDisk Mount(DiskOptions options, string? password = null)
     {
         var disk = RamDisk.Create(options, password);
+        disk.ContentAccessed += OnDiskContentAccessed;
 
         lock (_syncRoot)
         {
@@ -99,8 +108,11 @@ public sealed class MountManager : IDisposable
             }
         }
 
+        disk.ContentAccessed -= OnDiskContentAccessed;
         disk.Dispose();
         DiskUnmounted?.Invoke(this, disk);
         return true;
     }
+
+    private void OnDiskContentAccessed(bool isWrite) => ActivityDetected?.Invoke(isWrite);
 }

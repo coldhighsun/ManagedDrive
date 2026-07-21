@@ -17,6 +17,7 @@ public sealed class MemoryFileSystem : FileSystemBase
 
     private readonly bool _readOnly;
     private volatile bool _isDirty;
+    private long _lastContentReadTicks;
     private long _lastContentWriteTicks;
     private ulong _maxCapacity;
     private string _volumeLabel;
@@ -52,10 +53,31 @@ public sealed class MemoryFileSystem : FileSystemBase
     }
 
     /// <summary>
+    /// Raised whenever a file's content is read or written, with <c>true</c> for writes and
+    /// <c>false</c> for reads. Fired synchronously from WinFsp driver threads (concurrent,
+    /// potentially high-frequency) — subscribers must not assume the UI thread and must handle
+    /// their own thread safety.
+    /// </summary>
+    internal event Action<bool>? ContentAccessed;
+
+    /// <summary>
     /// Gets a value indicating whether the disk's content has changed since the last
     /// successful save (<see cref="ClearDirty"/>).
     /// </summary>
     internal bool IsDirty => _isDirty;
+
+    /// <summary>
+    /// Gets the UTC timestamp of the most recent successful <see cref="Read"/> of file content,
+    /// or <c>null</c> if the disk has never been read from since mount.
+    /// </summary>
+    internal DateTimeOffset? LastContentReadTimeUtc
+    {
+        get
+        {
+            var ticks = Interlocked.Read(ref _lastContentReadTicks);
+            return ticks == 0 ? null : new DateTimeOffset(ticks, TimeSpan.Zero);
+        }
+    }
 
     /// <summary>
     /// Gets the UTC timestamp of the most recent content mutation (create/write/rename/delete/etc.),
@@ -479,6 +501,8 @@ public sealed class MemoryFileSystem : FileSystemBase
         {
             Marshal.Copy(node.FileData, (int)offset, buffer, (int)toRead);
             bytesTransferred = toRead;
+            Interlocked.Exchange(ref _lastContentReadTicks, DateTimeOffset.UtcNow.UtcTicks);
+            ContentAccessed?.Invoke(false);
         }
 
         return STATUS_SUCCESS;
@@ -796,6 +820,7 @@ public sealed class MemoryFileSystem : FileSystemBase
     {
         _isDirty = true;
         Interlocked.Exchange(ref _lastContentWriteTicks, DateTimeOffset.UtcNow.UtcTicks);
+        ContentAccessed?.Invoke(true);
     }
 
     /// <summary>
