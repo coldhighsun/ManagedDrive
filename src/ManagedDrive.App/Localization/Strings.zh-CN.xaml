@@ -73,16 +73,17 @@
     <sys:String x:Key="CompressionLevel.Optimal">均衡</sys:String>
     <sys:String x:Key="CompressionLevel.SmallestSize">最高</sys:String>
     <sys:String x:Key="CreateDisk.CompressionWarning">均衡/最高压缩可能会显著增加保存时间，请谨慎选择。</sys:String>
+    <sys:String x:Key="CreateDisk.SaveOnExit">退出时保存镜像</sys:String>
     <sys:String x:Key="CreateDisk.AutoSave">自动保存镜像，间隔（分钟）：</sys:String>
     <sys:String x:Key="CreateDisk.AutoSaveInterval">间隔（分钟）</sys:String>
     <sys:String x:Key="CreateDisk.MinutesValue">{0} 分钟</sys:String>
-    <sys:String x:Key="Tip.AutoSave">挂载期间按间隔自动将磁盘内容保存到镜像文件</sys:String>
+    <sys:String x:Key="Tip.SaveOnExit">在程序关闭或 Windows 关机时保存该磁盘镜像。与周期性自动保存相互独立。</sys:String>
+    <sys:String x:Key="Tip.AutoSave">挂载期间按设定的时间间隔自动将磁盘内容保存到镜像文件。默认只保留当前这一份镜像（每次保存都会覆盖）；勾选下方的快照限制后，每次自动保存还会额外保留带时间戳的历史快照，可用于恢复到某个时间点。</sys:String>
     <sys:String x:Key="Tip.AutoSaveInterval">自动保存的时间间隔（分钟）</sys:String>
     <sys:String x:Key="CreateDisk.SnapshotMaxCount">最多保留的快照数量：</sys:String>
     <sys:String x:Key="CreateDisk.SnapshotMaxSize">总大小不超过</sys:String>
-    <sys:String x:Key="Tip.SnapshotMaxCount">快照数量达到该值后，自动删除最旧的快照</sys:String>
-    <sys:String x:Key="Tip.SnapshotMaxSize">快照总大小超过该值后，自动删除最旧的快照</sys:String>
-    <sys:String x:Key="CreateDisk.SnapshotExplanation">仅启用自动保存时，只会保留当前这一份镜像文件（每次都会被覆盖）。勾选下面任一限制后，每次自动保存还会额外生成一份带时间戳的历史快照，可用于恢复到某个时间点；以下限制控制最多保留多少份：</sys:String>
+    <sys:String x:Key="Tip.SnapshotMaxCount">最多保留这么多份快照；超出后自动删除最旧的。</sys:String>
+    <sys:String x:Key="Tip.SnapshotMaxSize">限制所有快照的总大小；超出后自动删除最旧的。</sys:String>
     <sys:String x:Key="Card.LastWritePrefix">上次写入：{0}</sys:String>
     <sys:String x:Key="Card.NeverWritten">尚未写入</sys:String>
     <sys:String x:Key="Card.LastAutoSavePrefix">上次保存镜像：{0}</sys:String>
@@ -191,6 +192,9 @@
     <sys:String x:Key="Tray.SaveFailedBody">{0}（{1}）：{2}</sys:String>
     <sys:String x:Key="Tray.CapacityAdjustedTitle">容量已自动调整</sys:String>
     <sys:String x:Key="Tray.CapacityAdjustedBody">{0}（{1}）：配置容量 {2} MB 小于已加载镜像的实际占用（{3} MB），已临时提升容量以容纳现有数据。</sys:String>
+
+    <!-- Shutdown -->
+    <sys:String x:Key="Shutdown.SavingReason">正在关机前保存磁盘镜像…</sys:String>
 
     <!-- Status bar -->
     <sys:String x:Key="Status.Ready">就绪。</sys:String>

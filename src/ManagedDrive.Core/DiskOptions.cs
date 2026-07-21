@@ -131,4 +131,11 @@ public sealed record DiskOptions
     /// warning is shown. <c>null</c> disables the warning for this disk. Defaults to 90%.
     /// </summary>
     public double? HighUsageWarnPercent { get; init; } = 90.0;
+
+    /// <summary>
+    /// When <c>true</c> (the default), the disk image is saved on application exit and OS
+    /// shutdown. Has no effect on read-only disks or when <see cref="PersistImagePath"/> is
+    /// <c>null</c>. Independent of periodic auto-save (<see cref="AutoSaveIntervalMinutes"/>).
+    /// </summary>
+    public bool SaveImageOnExit { get; init; } = true;
 }

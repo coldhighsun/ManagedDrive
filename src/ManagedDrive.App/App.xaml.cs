@@ -1,5 +1,7 @@
 using ManagedDrive.Cli.Core;
+using System.Runtime.InteropServices;
 using System.Windows.Controls.Primitives;
+using System.Windows.Interop;
 
 namespace ManagedDrive.App;
 
@@ -24,6 +26,13 @@ public partial class App
     private bool _isExiting;
     private MainViewModel? _mainViewModel;
     private MainWindow? _mainWindow;
+
+    /// <summary>
+    /// Cached handle of the main window, captured on the UI thread at startup. Used by
+    /// <see cref="OnSessionEnding"/> (which runs on the <see cref="SystemEvents"/> thread, not the
+    /// UI thread) to register a shutdown block reason without touching WPF objects cross-thread.
+    /// </summary>
+    private IntPtr _mainWindowHandle;
     private MountManager? _mountManager;
     private SettingsStore? _settings;
     private Mutex? _singleInstanceMutex;
@@ -105,6 +114,10 @@ public partial class App
         _mainViewModel.ExitRequested += async (_, _) => await ShutdownAsync();
         _mainWindow = new(_mainViewModel);
         _mainWindow.Closing += MainWindow_Closing;
+
+        // Force the HWND to exist now (on the UI thread) so OnSessionEnding can reference it from
+        // the SystemEvents thread even when the window stays hidden in the tray.
+        _mainWindowHandle = new WindowInteropHelper(_mainWindow).EnsureHandle();
 
         SetupTrayIcon();
         SetupUsageWarnings();
@@ -427,22 +440,51 @@ public partial class App
             return;
         }
 
-        var saveTasks = _mountManager.GetAll()
-            .Select(disk => Task.Run(() =>
-            {
-                try
-                {
-                    disk.SaveToImageSafe();
-                }
-                catch
-                {
-                    // Best-effort, matches RamDisk.Dispose()/TryAutoSave() swallow pattern.
-                }
-            }))
-            .ToArray();
+        var hasHandle = _mainWindowHandle != IntPtr.Zero;
+        if (hasHandle)
+        {
+            // Tell Windows we are busy saving so it does not force-kill us before the save loop
+            // below finishes. Without this, the OS honours only its ~5 s HungAppTimeout, which the
+            // save can exceed for large/compressed/encrypted disks.
+            ShutdownBlockReasonCreate(_mainWindowHandle, Loc.Get("Shutdown.SavingReason"));
+        }
 
-        Task.WaitAll(saveTasks, SessionEndingSaveTimeout);
+        try
+        {
+            var saveTasks = _mountManager.GetAll()
+                .Select(disk => Task.Run(() =>
+                {
+                    try
+                    {
+                        disk.SaveToImageSafe();
+                    }
+                    catch
+                    {
+                        // Best-effort, matches RamDisk.Dispose()/TryAutoSave() swallow pattern.
+                    }
+                }))
+                .ToArray();
+
+            Task.WaitAll(saveTasks, SessionEndingSaveTimeout);
+        }
+        finally
+        {
+            if (hasHandle)
+            {
+                // Always clear the block reason so we never hold up the shutdown once saving is
+                // done (or has timed out).
+                ShutdownBlockReasonDestroy(_mainWindowHandle);
+            }
+        }
     }
+
+    [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool ShutdownBlockReasonCreate(IntPtr hWnd, string pwszReason);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool ShutdownBlockReasonDestroy(IntPtr hWnd);
 
     private void PositionTrayPopup()
     {

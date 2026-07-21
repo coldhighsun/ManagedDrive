@@ -344,6 +344,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             MaxSnapshotCount = vm.Disk.Options.MaxSnapshotCount,
             MaxSnapshotSizeBytes = vm.Disk.Options.MaxSnapshotSizeBytes,
             HighUsageWarnPercent = vm.Disk.Options.HighUsageWarnPercent,
+            SaveImageOnExit = vm.Disk.Options.SaveImageOnExit,
         });
     }
 
@@ -741,6 +742,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         MaxSnapshotCount = p.MaxSnapshotCount,
         MaxSnapshotSizeBytes = p.MaxSnapshotSizeBytes,
         HighUsageWarnPercent = p.HighUsageWarnPercent,
+        SaveImageOnExit = p.SaveImageOnExit,
     };
 
     private static void ResetTempIfPointingAt(string mountPoint)
