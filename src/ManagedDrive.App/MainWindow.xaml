@@ -13,6 +13,7 @@
         Title="{DynamicResource Window.Title}"
         Height="480" Width="760"
         MinHeight="320" MinWidth="520"
+        ResizeMode="CanResize"
         WindowStartupLocation="CenterScreen"
         TextElement.Foreground="{DynamicResource AppForeground}"
         TextElement.FontWeight="Regular"
@@ -78,21 +79,6 @@
                             Click="MinimizeButton_Click"
                             ToolTip="{DynamicResource Tip.Minimize}">
                         <TextBlock Style="{StaticResource IconText}" Text="&#xE921;" FontSize="12"/>
-                    </Button>
-                    <Button Style="{StaticResource IconButton}"
-                            Click="MaximizeRestoreButton_Click"
-                            ToolTip="{DynamicResource Tip.MaximizeRestore}">
-                        <TextBlock x:Name="MaximizeRestoreIcon" Text="&#xE922;">
-                            <TextBlock.Style>
-                                <Style TargetType="TextBlock" BasedOn="{StaticResource IconText}">
-                                    <Style.Triggers>
-                                        <DataTrigger Binding="{Binding WindowState, RelativeSource={RelativeSource AncestorType=Window}}" Value="Maximized">
-                                            <Setter Property="Text" Value="&#xE923;"/>
-                                        </DataTrigger>
-                                    </Style.Triggers>
-                                </Style>
-                            </TextBlock.Style>
-                        </TextBlock>
                     </Button>
                     <Button Style="{StaticResource IconButton}"
                             Click="CloseButton_Click"
