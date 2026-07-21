@@ -6,24 +6,18 @@ namespace ManagedDrive.App.Infrastructure;
 /// A lightweight <see cref="ICommand"/> implementation that delegates execution and
 /// can-execute logic to caller-supplied delegates.
 /// </summary>
-public sealed class RelayCommand : ICommand
+/// <remarks>
+/// Initializes a new <see cref="RelayCommand"/>.
+/// </remarks>
+/// <param name="execute">The delegate invoked by <see cref="Execute"/>.</param>
+/// <param name="canExecute">
+/// Optional delegate invoked by <see cref="CanExecute"/>. When <c>null</c> the command
+/// is always executable.
+/// </param>
+public sealed class RelayCommand(Action<object?> execute, Func<object?, bool>? canExecute = null) : ICommand
 {
-    private readonly Func<object?, bool>? _canExecute;
-    private readonly Action<object?> _execute;
-
-    /// <summary>
-    /// Initializes a new <see cref="RelayCommand"/>.
-    /// </summary>
-    /// <param name="execute">The delegate invoked by <see cref="Execute"/>.</param>
-    /// <param name="canExecute">
-    /// Optional delegate invoked by <see cref="CanExecute"/>. When <c>null</c> the command
-    /// is always executable.
-    /// </param>
-    public RelayCommand(Action<object?> execute, Func<object?, bool>? canExecute = null)
-    {
-        _execute = execute ?? throw new ArgumentNullException(nameof(execute));
-        _canExecute = canExecute;
-    }
+    private readonly Func<object?, bool>? _canExecute = canExecute;
+    private readonly Action<object?> _execute = execute ?? throw new ArgumentNullException(nameof(execute));
 
     /// <inheritdoc />
     public event EventHandler? CanExecuteChanged

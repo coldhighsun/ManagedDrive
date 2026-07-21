@@ -17,6 +17,13 @@ public partial class CloneDiskDialog
         ImageCompressionLevel.SmallestSize,
     ];
 
+    private static readonly List<ArchiveExportFormat?> ExportFormats =
+    [
+        null,
+        ArchiveExportFormat.Zip,
+        ArchiveExportFormat.SevenZip,
+    ];
+
     private readonly IReadOnlyList<DiskOptions> _otherDisks;
     private readonly IReadOnlyList<DiskViewModel> _targets;
 
@@ -49,6 +56,13 @@ public partial class CloneDiskDialog
         }
         CompressionLevelBox.SelectedIndex = CompressionLevels.IndexOf(ImageCompressionLevel.Fastest);
 
+        foreach (var format in ExportFormats)
+        {
+            ExportFormatBox.Items.Add(new ExportFormatItem(format, Loc.Get(ExportFormatKey(format))));
+        }
+        ExportFormatBox.SelectedIndex = 0;
+        ExportFormatBox.SelectionChanged += (_, _) => UpdateExportPathExtension();
+
         // Set the initial radio selection only after all named elements above are assigned —
         // setting IsChecked in XAML would fire the Checked handler mid-InitializeComponent,
         // before later-declared fields like TargetDiskBox exist, causing a NullReferenceException.
@@ -70,6 +84,16 @@ public partial class CloneDiskDialog
     /// Gets the compression level to use, valid only when <see cref="ExportPath"/> is set.
     /// </summary>
     public ImageCompressionLevel ExportCompressionLevel
+    {
+        get; private set;
+    }
+
+    /// <summary>
+    /// Gets the archive format to use when <see cref="ExportPath"/> targets a <c>.zip</c> or
+    /// <c>.7z</c> file rather than a <c>.mdr</c> image; <c>null</c> for a <c>.mdr</c> export or
+    /// when cloning to another mounted disk.
+    /// </summary>
+    public ArchiveExportFormat? ExportArchiveFormat
     {
         get; private set;
     }
@@ -100,7 +124,33 @@ public partial class CloneDiskDialog
         _ => "CompressionLevel.Optimal",
     };
 
+    private static string ExportFormatKey(ArchiveExportFormat? format) => format switch
+    {
+        ArchiveExportFormat.Zip => "CloneDisk.ExportFormat.Zip",
+        ArchiveExportFormat.SevenZip => "CloneDisk.ExportFormat.SevenZip",
+        _ => "CloneDisk.ExportFormat.Mdr",
+    };
+
+    private static string ExportExtension(ArchiveExportFormat? format) => format switch
+    {
+        ArchiveExportFormat.Zip => ".zip",
+        ArchiveExportFormat.SevenZip => ".7z",
+        _ => ".mdr",
+    };
+
+    private static string ExportFilterKey(ArchiveExportFormat? format) => format switch
+    {
+        ArchiveExportFormat.Zip => "SaveDlg.Filter.Zip",
+        ArchiveExportFormat.SevenZip => "SaveDlg.Filter.SevenZip",
+        _ => "SaveDlg.Filter",
+    };
+
     private sealed record CompressionLevelItem(ImageCompressionLevel Level, string Display)
+    {
+        public override string ToString() => Display;
+    }
+
+    private sealed record ExportFormatItem(ArchiveExportFormat? Format, string Display)
     {
         public override string ToString() => Display;
     }
@@ -109,8 +159,6 @@ public partial class CloneDiskDialog
     {
         public override string ToString() => Display;
     }
-
-    private void BrowseExportPath_Click(object sender, RoutedEventArgs e) => OpenExportPathDialog();
 
     private void ExportPathBox_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
@@ -151,6 +199,7 @@ public partial class CloneDiskDialog
 
             TargetDisk = null;
             ExportPath = ExportPathBox.Text.Trim();
+            ExportArchiveFormat = (ExportFormatBox.SelectedItem as ExportFormatItem)?.Format;
             ExportCompressionLevel = (CompressionLevelBox.SelectedItem as CompressionLevelItem)?.Level
                 ?? ImageCompressionLevel.Fastest;
         }
@@ -160,11 +209,14 @@ public partial class CloneDiskDialog
 
     private void OpenExportPathDialog()
     {
+        var format = (ExportFormatBox.SelectedItem as ExportFormatItem)?.Format;
+        var extension = ExportExtension(format);
+
         var dlg = new SaveFileDialog
         {
             Title = Loc.Get("SaveDlg.Title"),
-            Filter = Loc.Get("SaveDlg.Filter"),
-            DefaultExt = ".mdr",
+            Filter = Loc.Get(ExportFilterKey(format)),
+            DefaultExt = extension,
             OverwritePrompt = true,
             FileName = ExportPathBox.Text,
         };
@@ -198,11 +250,29 @@ public partial class CloneDiskDialog
         ExportPathBox.Text = dlg.FileName;
     }
 
+    private void UpdateExportPathExtension()
+    {
+        if (string.IsNullOrWhiteSpace(ExportPathBox.Text))
+        {
+            return;
+        }
+
+        var format = (ExportFormatBox.SelectedItem as ExportFormatItem)?.Format;
+        var directory = Path.GetDirectoryName(ExportPathBox.Text);
+        var nameWithoutExtension = Path.GetFileNameWithoutExtension(ExportPathBox.Text);
+        var newFileName = nameWithoutExtension + ExportExtension(format);
+
+        ExportPathBox.Text = string.IsNullOrEmpty(directory)
+            ? newFileName
+            : Path.Combine(directory, newFileName);
+    }
+
     private void UpdateModeState()
     {
         var toDisk = CloneToDiskOption.IsChecked == true;
         TargetDiskBox.IsEnabled = toDisk && _targets.Count > 0;
         ExportPathBox.IsEnabled = !toDisk;
+        ExportFormatBox.IsEnabled = !toDisk;
         CompressionLevelBox.IsEnabled = !toDisk;
     }
 }

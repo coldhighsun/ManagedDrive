@@ -120,7 +120,7 @@ public sealed class DiskImageSerializerTests
                     map.Remove(mutatePath);
                     i++;
                 }
-            });
+            }, TestContext.Current.CancellationToken);
 
             for (var i = 0; i < 20; i++)
             {

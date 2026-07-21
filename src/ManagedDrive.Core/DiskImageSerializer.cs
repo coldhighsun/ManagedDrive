@@ -520,7 +520,7 @@ public static class DiskImageSerializer
         writer.Write(node.FileInfo.IndexNumber);
         writer.Write(node.FileInfo.HardLinks);
 
-        var security = node.FileSecurity ?? Array.Empty<byte>();
+        var security = node.FileSecurity ?? [];
         writer.Write(security.Length);
         writer.Write(security);
 

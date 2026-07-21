@@ -504,10 +504,7 @@ public partial class App
             _trayIcon.ShowBalloonTip(5000, title, body, System.Windows.Forms.ToolTipIcon.Warning);
         }
 
-        if (_mainViewModel != null)
-        {
-            _mainViewModel.StatusText = Loc.Format("Status.CapacityAdjusted", vm.MountPoint, originalMb, newMb);
-        }
+        _mainViewModel?.StatusText = Loc.Format("Status.CapacityAdjusted", vm.MountPoint, originalMb, newMb);
     }
 
     private void OnDiskHighUsageWarning(object? sender, EventArgs e)
@@ -536,10 +533,7 @@ public partial class App
             _trayIcon.ShowBalloonTip(5000, title, body, System.Windows.Forms.ToolTipIcon.Error);
         }
 
-        if (_mainViewModel != null)
-        {
-            _mainViewModel.StatusText = Loc.Format("Status.SaveFailed", vm.MountPoint, ex.Message);
-        }
+        _mainViewModel?.StatusText = Loc.Format("Status.SaveFailed", vm.MountPoint, ex.Message);
     }
 
     /// <summary>
@@ -804,10 +798,8 @@ public partial class App
         _mainViewModel?.SaveSettings();
         DisposeTrayIcons();
         _mainViewModel?.Dispose();
-        if (_mountManager != null)
-        {
-            _mountManager.ActivityDetected -= OnActivityDetected;
-        }
+
+        _mountManager?.ActivityDetected -= OnActivityDetected;
 
         await Task.Run(() => _mountManager?.Dispose());
         Shutdown();

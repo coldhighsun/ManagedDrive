@@ -307,7 +307,7 @@ public sealed class MemoryFileSystem : FileSystemBase
         ref byte[] securityDescriptor)
     {
         var node = (FileNode)fileNode;
-        securityDescriptor = node.FileSecurity ?? Array.Empty<byte>();
+        securityDescriptor = node.FileSecurity ?? [];
         return STATUS_SUCCESS;
     }
 
