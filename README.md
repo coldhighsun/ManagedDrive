@@ -32,6 +32,7 @@ Create, mount and manage in-memory volumes that appear as normal drive letters i
 - Snapshot / version history — cap retained snapshots by count and/or size; deduplicated by content hash so many snapshots cost little extra space; restore any snapshot via **Restore Snapshot...**
 - Clone a disk onto another mounted disk or export it to a new `.mdr` file (**Clone Disk...**)
 - Optional password protection for `.mdr` images (AES-256-GCM envelope encryption; the password only wraps a random per-disk key, so changing the password never re-encrypts the file contents) — set from the "Encrypt Image" option in the disk dialog (password must be 8–64 characters); prompted for on mount (including auto-mount at startup) whenever an image is encrypted
+- Progress feedback for long operations — image save, archive import, and export all show a busy overlay with a progress bar instead of leaving the app looking unresponsive on large disks
 
 **CLI**
 - `mdrive` command-line tool (ships alongside `ManagedDrive.exe`) for scripting mount/unmount/format/save/list/exit against the running app, forwarded over a named pipe
@@ -167,7 +168,7 @@ Key classes:
 - **`MemoryFileSystem : FileSystemBase`** — overrides all 21 required WinFsp callbacks (`Create`, `Open`, `Read`, `Write`, `Rename`, `CanDelete`, `ReadDirectoryEntry`, etc.) and enforces a configurable capacity ceiling, returning `STATUS_DISK_FULL` when exceeded; memory is not pre-allocated — each `FileNode` holds only the bytes actually written.
 - **`RamDisk`** — composes `MemoryFileSystem` with a `FileSystemHost`. The static `Create()` factory mounts the volume and polls until the drive letter is visible in the OS (up to 2.5 s), then broadcasts `SHCNE_DRIVEADD` to refresh Explorer. `Dispose()` unmounts. When an auto-save interval is configured, a background timer saves the image immediately and then on every interval, skipping ticks where nothing has changed since the last save. Independently of that timer, whenever an image path is configured and save-on-exit isn't disabled for the disk, `Dispose()` performs a final save before unmounting — even if no auto-save interval was set — skipped only when nothing changed since the last save, so unmounting, remounting, or exiting never loses an edit or performs a redundant write. A `SaveFailed` event fires whenever an image save or snapshot write fails, including on background auto-save ticks and the final save in `Dispose()` that would otherwise fail silently, so the App layer can surface the error via a tray balloon and the status bar. Optional per-disk password protection keeps a random content-encryption key in memory only, wrapped by the user's password.
 - **`MountManager`** — thread-safe registry of active `RamDisk` instances. Fires `DiskMounted` / `DiskUnmounted` events.
-- **`DiskImageSerializer`** — reads/writes `.mdr` files (full FS state including metadata, ACLs, and file data), optionally gzip-compressed at a user-selectable level.
+- **`DiskImageSerializer`** — reads/writes `.mdr` files (full FS state including metadata, ACLs, and file data), optionally gzip-compressed at a user-selectable level. `Save` accepts an optional `IProgress<double>`, reported per node, that the App layer surfaces as a progress bar.
 - **`SnapshotManager` / `SnapshotStore`** — write a timestamped, read-only copy of the disk's contents next to the main `.mdr` image after every save (when snapshot limits are configured), list/prune them, and restore one back onto a live disk. File content is deduplicated by SHA-256 hash into a shared blob store, so snapshots of a mostly-unchanged disk cost little extra space.
 
 ### Disk Image Format (`.mdr`)
@@ -331,6 +332,7 @@ This project bundles [WinFsp](https://winfsp.dev/) and [SharpCompress](https://g
 - 快照／版本历史——按数量和/或大小上限保留快照，相同内容跨快照去重存储，占用空间远小于逻辑大小之和；可随时通过**还原快照...**还原到某个历史版本
 - 克隆磁盘到另一已挂载磁盘，或导出为新的 `.mdr` 文件（**克隆磁盘...**）
 - 可选的 `.mdr` 镜像密码保护（AES-256-GCM 信封加密；密码仅用于加密一个随机生成的每盘专属密钥，因此更改密码无需重新加密文件内容）——在磁盘对话框中通过"加密镜像"选项设置（密码长度需为 8–64 位）；挂载时（包括启动时的自动挂载）若镜像已加密会提示输入密码
+- 长耗时操作的进度反馈——保存镜像、导入压缩包、导出磁盘时均会显示带进度条的忙碌遮罩，避免大盘操作时应用看起来无响应
 
 **便利与安全**
 - 可选的资源管理器右键集成：在设置中启用后，会为 zip/7z/rar/tar 压缩包添加右键菜单项**"挂载为内存盘 (ManagedDrive)"**，一键挂载，无需先打开应用——若 `ManagedDrive.exe` 尚未运行会自动启动，挂载完成后会自动打开该盘符的资源管理器窗口
@@ -466,7 +468,7 @@ ManagedDrive 使用 **WinFsp**（Windows 文件系统代理）将内存目录树
 - **`MemoryFileSystem : FileSystemBase`** — 覆写全部 21 个所需的 WinFsp 回调（`Create`、`Open`、`Read`、`Write`、`Rename`、`CanDelete`、`ReadDirectoryEntry` 等），并强制执行可配置的容量上限，超出时返回 `STATUS_DISK_FULL`；内存不预分配——每个 `FileNode` 仅保留实际写入的字节数。
 - **`RamDisk`** — 组合 `MemoryFileSystem` 与 `FileSystemHost`。静态工厂方法 `Create()` 挂载卷，并轮询直至驱动器号在系统中可见（最长 2.5 秒），随后向资源管理器广播 `SHCNE_DRIVEADD`。`Dispose()` 执行卸载。配置了自动保存间隔时，后台计时器会立即保存一次镜像，随后按间隔重复保存，若自上次保存后内容未变化则跳过该次保存。与该计时器无关，只要配置了镜像路径且该磁盘未关闭"退出时保存"，`Dispose()` 在卸载前就会执行一次收尾保存——即使从未设置自动保存间隔；同样只在内容未变化时跳过，确保卸载、重新挂载或退出应用时既不遗漏最新的改动，也不产生多余的写入。镜像保存或快照写入失败时会触发 `SaveFailed` 事件——包括原本会被静默吞掉的后台自动保存和 `Dispose()` 收尾保存失败——供 App 层通过托盘气泡通知和状态栏呈现错误。可选的每磁盘密码保护仅在内存中保存一个随机生成的内容加密密钥，由用户密码进行包裹。
 - **`MountManager`** — 线程安全的活动 `RamDisk` 实例注册表，提供 `DiskMounted` / `DiskUnmounted` 事件。
-- **`DiskImageSerializer`** — 读写 `.mdr` 文件（保存完整文件系统状态，包含元数据、ACL 和文件数据），可选按用户指定的级别进行 gzip 压缩。
+- **`DiskImageSerializer`** — 读写 `.mdr` 文件（保存完整文件系统状态，包含元数据、ACL 和文件数据），可选按用户指定的级别进行 gzip 压缩。`Save` 支持可选的 `IProgress<double>` 参数，按节点上报进度，App 层据此驱动进度条。
 - **`SnapshotManager` / `SnapshotStore`** — 在配置了快照上限的情况下，每次保存后都会在主 `.mdr` 镜像旁写入一份带时间戳的只读快照副本，并支持列出、清理旧快照及将某个快照还原到实时磁盘。文件内容按 SHA-256 哈希去重存储于共享的块存储中，因此对一个大部分内容未变化的磁盘做快照，额外占用的空间非常小。
 
 ### 磁盘镜像格式（`.mdr`）

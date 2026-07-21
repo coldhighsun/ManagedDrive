@@ -153,7 +153,12 @@ public sealed class RamDisk : IDisposable
     /// <exception cref="ImagePasswordIncorrectException">
     /// Thrown when <paramref name="password"/> does not match the one the image was encrypted with.
     /// </exception>
-    public static RamDisk Create(DiskOptions options, string? password = null)
+    /// <param name="progress">
+    /// Optional progress reporter for the archive-extraction path
+    /// (<see cref="DiskOptions.SourceArchivePath"/>), updated with a fraction in [0, 1]. Ignored
+    /// for the image-load path.
+    /// </param>
+    public static RamDisk Create(DiskOptions options, string? password = null, IProgress<double>? progress = null)
     {
         MemoryFileSystem fs;
         ulong? originalCapacity = null;
@@ -162,7 +167,8 @@ public sealed class RamDisk : IDisposable
         if (options.SourceArchivePath != null &&
             File.Exists(options.SourceArchivePath))
         {
-            var nodeMap = ArchiveNodeMapBuilder.BuildNodeMap(options.SourceArchivePath);
+            ArchiveNodeMapBuilder.PeekArchive(options.SourceArchivePath, out var totalBytes, out _);
+            var nodeMap = ArchiveNodeMapBuilder.BuildNodeMap(options.SourceArchivePath, (long)totalBytes, progress);
 
             var actualUsed = nodeMap.GetTotalAllocated();
             var capacity = ResolveEffectiveCapacity(options.CapacityBytes, actualUsed);
@@ -321,14 +327,16 @@ public sealed class RamDisk : IDisposable
     /// unencrypted. Always uses a freshly generated content-encryption key independent of this
     /// disk's own <see cref="IsPasswordProtected"/> state, since the export is a standalone copy.
     /// </param>
-    public void ExportToImage(string imagePath, ImageCompressionLevel level, string? password = null) =>
+    /// <param name="progress">Optional progress reporter, updated with a fraction in [0, 1].</param>
+    public void ExportToImage(string imagePath, ImageCompressionLevel level, string? password = null, IProgress<double>? progress = null) =>
         DiskImageSerializer.Save(
             _fs.NodeMap,
             Options.CapacityBytes,
             Options.VolumeLabel,
             imagePath,
             level,
-            password is not null ? new ImageEncryptionInfo(password, DiskImageSerializer.GenerateCek()) : null);
+            password is not null ? new ImageEncryptionInfo(password, DiskImageSerializer.GenerateCek()) : null,
+            progress);
 
     /// <summary>
     /// Removes all files and directories from the disk, leaving it empty.
@@ -353,7 +361,8 @@ public sealed class RamDisk : IDisposable
     /// Serializes the current disk contents to <see cref="DiskOptions.PersistImagePath"/>.
     /// Does nothing if <see cref="DiskOptions.PersistImagePath"/> is <c>null</c>.
     /// </summary>
-    public void SaveToImage()
+    /// <param name="progress">Optional progress reporter, updated with a fraction in [0, 1].</param>
+    public void SaveToImage(IProgress<double>? progress = null)
     {
         if (Options.PersistImagePath == null)
         {
@@ -368,7 +377,8 @@ public sealed class RamDisk : IDisposable
                 Options.VolumeLabel,
                 Options.PersistImagePath,
                 Options.CompressionLevel,
-                _password is not null && _cek is not null ? new ImageEncryptionInfo(_password, _cek) : null);
+                _password is not null && _cek is not null ? new ImageEncryptionInfo(_password, _cek) : null,
+                progress);
         }
         catch (Exception ex)
         {
@@ -406,12 +416,17 @@ public sealed class RamDisk : IDisposable
     /// afterward. Coordinates with the periodic auto-save timer via <see cref="_autoSaveLock"/>
     /// so a manual save and a periodic auto-save never write/prune snapshots concurrently.
     /// </summary>
-    public void SaveToImageWithSnapshot()
+    /// <param name="progress">
+    /// Optional progress reporter, updated with a fraction in [0, 1] across both the image save
+    /// (the first half of the range) and the snapshot write (the second half).
+    /// </param>
+    public void SaveToImageWithSnapshot(IProgress<double>? progress = null)
     {
         lock (_autoSaveLock)
         {
-            SaveToImage();
-            TryWriteSnapshot();
+            SaveToImage(progress is null ? null : new Progress<double>(p => progress.Report(p * 0.5)));
+            TryWriteSnapshot(progress is null ? null : new Progress<double>(p => progress.Report(0.5 + p * 0.5)));
+            progress?.Report(1.0);
         }
     }
 
@@ -676,15 +691,17 @@ public sealed class RamDisk : IDisposable
     /// Does nothing if no image path is configured or neither snapshot limit is set. Must be
     /// called while <see cref="_autoSaveLock"/> is held.
     /// </summary>
-    private void TryWriteSnapshot()
+    private void TryWriteSnapshot(IProgress<double>? progress = null)
     {
         if (Options.PersistImagePath is not { } path)
         {
+            progress?.Report(1.0);
             return;
         }
 
         if (Options.MaxSnapshotCount is null && Options.MaxSnapshotSizeBytes is null)
         {
+            progress?.Report(1.0);
             return;
         }
 
@@ -697,7 +714,8 @@ public sealed class RamDisk : IDisposable
                 path,
                 DateTimeOffset.UtcNow,
                 Options.CompressionLevel,
-                _cek);
+                _cek,
+                progress);
 
             SnapshotManager.Prune(path, Options.MaxSnapshotCount, Options.MaxSnapshotSizeBytes);
         }
