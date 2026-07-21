@@ -30,6 +30,7 @@
     <sys:String x:Key="Tip.Settings">应用程序设置</sys:String>
     <sys:String x:Key="Tip.ResetTempDirs">将 Windows 临时目录重置为默认值</sys:String>
     <sys:String x:Key="Tip.Minimize">最小化</sys:String>
+    <sys:String x:Key="Tip.MaximizeRestore">最大化/还原</sys:String>
     <sys:String x:Key="Tip.HideToTray">最小化到系统托盘</sys:String>
     <sys:String x:Key="Tip.CloseDialog">关闭</sys:String>
     <sys:String x:Key="Col.MountPoint">挂载点</sys:String>
