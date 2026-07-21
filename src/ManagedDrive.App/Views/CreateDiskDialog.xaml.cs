@@ -133,6 +133,7 @@ public partial class CreateDiskDialog
         AutoMountBox.IsChecked = existing.AutoMount;
         ImagePathBox.Text = existing.PersistImagePath ?? string.Empty;
         CompressionLevelBox.SelectedIndex = CompressionLevels.IndexOf(existing.CompressionLevel);
+        SaveOnExitBox.IsChecked = existing.SaveImageOnExit;
         UpdateCompressionLevelState();
         UpdateAutoSaveEnabledState();
 
@@ -453,6 +454,34 @@ public partial class CreateDiskDialog
         }
     }
 
+    /// <summary>
+    /// Validates that the given image path is not a snapshot file name and is not already used as
+    /// another active disk's persistence target. These checks do not depend on the selected drive
+    /// letter, so they can run the moment the user picks an image file (see
+    /// <see cref="OpenImagePathDialog"/>) as well as at build time.
+    /// </summary>
+    /// <param name="imagePath">The image file path to validate.</param>
+    /// <param name="error">The localized error message when validation fails; empty otherwise.</param>
+    /// <returns><c>true</c> when the path is available; otherwise <c>false</c>.</returns>
+    private bool TryValidateImagePathAvailable(string imagePath, out string error)
+    {
+        if (SnapshotManager.IsSnapshotFileName(Path.GetFileName(imagePath)))
+        {
+            error = Loc.Get("Val.ImagePathIsSnapshot");
+            return false;
+        }
+
+        if (_otherDisks.Any(d => d.PersistImagePath != null &&
+            string.Equals(d.PersistImagePath, imagePath, StringComparison.OrdinalIgnoreCase)))
+        {
+            error = Loc.Get("Val.ImagePathInUse");
+            return false;
+        }
+
+        error = string.Empty;
+        return true;
+    }
+
     private void AutoSaveBox_CheckedChanged(object sender, RoutedEventArgs e)
     {
         UpdateAutoSaveIntervalPanelState();
@@ -584,6 +613,12 @@ public partial class CreateDiskDialog
 
         if (dlg.ShowDialog() == true)
         {
+            if (!TryValidateImagePathAvailable(dlg.FileName, out var error))
+            {
+                MessageBox.Show(error, Loc.Get("Val.Title"), MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
             ImagePathBox.Text = dlg.FileName;
             UpdateCompressionLevelState();
             UpdateAutoSaveEnabledState();
@@ -699,23 +734,17 @@ public partial class CreateDiskDialog
                 return false;
             }
 
-            if (SnapshotManager.IsSnapshotFileName(Path.GetFileName(imagePath)))
+            if (!TryValidateImagePathAvailable(imagePath, out error))
             {
-                error = Loc.Get("Val.ImagePathIsSnapshot");
                 return false;
             }
 
+            // Depends on the currently selected drive letter (which may change after the image
+            // file is picked), so this check stays here rather than at selection time.
             var allMountPoints = _otherDisks.Select(d => d.MountPoint).Append(mountPoint);
             if (allMountPoints.Any(mp => imagePath.StartsWith(mp, StringComparison.OrdinalIgnoreCase)))
             {
                 error = Loc.Get("Val.ImagePathOnRamDisk");
-                return false;
-            }
-
-            if (_otherDisks.Any(d => d.PersistImagePath != null &&
-                string.Equals(d.PersistImagePath, imagePath, StringComparison.OrdinalIgnoreCase)))
-            {
-                error = Loc.Get("Val.ImagePathInUse");
                 return false;
             }
         }
@@ -816,6 +845,7 @@ public partial class CreateDiskDialog
             MaxSnapshotCount = maxSnapshotCount,
             MaxSnapshotSizeBytes = maxSnapshotSizeBytes,
             HighUsageWarnPercent = highUsageWarnPercent,
+            SaveImageOnExit = SaveOnExitBox.IsChecked == true,
         };
 
         error = string.Empty;
@@ -886,6 +916,10 @@ public partial class CreateDiskDialog
             AutoSaveBox.IsChecked = false;
         }
 
+        // Save-on-exit only matters for a writable, persisted disk. Leave its checked state
+        // untouched when disabled so the default (on) survives toggling read-only / image path.
+        SaveOnExitBox.IsEnabled = hasImagePath && ReadOnlyBox.IsChecked != true;
+
         EncryptImageBox.IsEnabled = hasImagePath && ReadOnlyBox.IsChecked != true && !_isImportMode;
         if (!EncryptImageBox.IsEnabled)
         {
@@ -917,7 +951,9 @@ public partial class CreateDiskDialog
 
     private void UpdateCompressionLevelState()
     {
-        CompressionLevelBox.IsEnabled = !string.IsNullOrEmpty(ImagePathBox.Text) && ReadOnlyBox.IsChecked != true;
+        // Toggle the whole row (label + combo) so the label greys out with the control when a
+        // read-only disk has nothing to compress.
+        CompressionLevelRow.IsEnabled = !string.IsNullOrEmpty(ImagePathBox.Text) && ReadOnlyBox.IsChecked != true;
         UpdateCompressionWarning();
     }
 
@@ -926,7 +962,7 @@ public partial class CreateDiskDialog
         if (CompressionWarningText is null)
             return;
         var level = (CompressionLevelBox.SelectedItem as CompressionLevelItem)?.Level;
-        var show = CompressionLevelBox.IsEnabled
+        var show = CompressionLevelRow.IsEnabled
                    && level is ImageCompressionLevel.Optimal or ImageCompressionLevel.SmallestSize;
         CompressionWarningText.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
     }

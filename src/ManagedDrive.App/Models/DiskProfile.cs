@@ -93,4 +93,10 @@ public sealed record DiskProfile
     /// high-usage. <c>null</c> disables the warning for this disk.
     /// </summary>
     public double? HighUsageWarnPercent { get; init; } = 90.0;
+
+    /// <summary>
+    /// Gets or sets a value indicating whether the disk image is saved on application exit and
+    /// OS shutdown. Defaults to <c>true</c>.
+    /// </summary>
+    public bool SaveImageOnExit { get; init; } = true;
 }

@@ -275,7 +275,7 @@ public sealed class RamDisk : IDisposable
                 {
                     try
                     {
-                        if (NeedsSave())
+                        if (NeedsExitSave())
                         {
                             SaveToImage();
                         }
@@ -369,17 +369,17 @@ public sealed class RamDisk : IDisposable
     /// <summary>
     /// Saves the disk image while holding <see cref="_autoSaveLock"/>, without unmounting.
     /// Intended for external shutdown-notification callers (e.g. Windows session-ending) that
-    /// need a quick, safe save that can't race the periodic auto-save tick. Does nothing if
-    /// <see cref="DiskOptions.PersistImagePath"/> is <c>null</c>, or if the disk's content hasn't
-    /// changed since the last successful save and the configured image path hasn't changed
-    /// either (same skip condition as <see cref="TryAutoSave"/>) — this keeps unmodified disks
-    /// out of the OS shutdown time budget.
+    /// need a quick, safe save that can't race the periodic auto-save tick. Does nothing when
+    /// <see cref="NeedsExitSave"/> is <c>false</c> — i.e. save-on-exit is disabled for this disk
+    /// (<see cref="DiskOptions.SaveImageOnExit"/>), or the disk's content hasn't changed since the
+    /// last successful save and the configured image path hasn't changed either. This keeps
+    /// opted-out or unmodified disks out of the OS shutdown time budget.
     /// </summary>
     public void SaveToImageSafe()
     {
         lock (_autoSaveLock)
         {
-            if (NeedsSave())
+            if (NeedsExitSave())
             {
                 SaveToImage();
             }
@@ -612,6 +612,14 @@ public sealed class RamDisk : IDisposable
     /// same condition.
     /// </summary>
     private bool NeedsSave() => _fs.IsDirty || Options.PersistImagePath != _lastSavedImagePath;
+
+    /// <summary>
+    /// Whether an exit/shutdown save should run: gated by <see cref="DiskOptions.SaveImageOnExit"/>
+    /// on top of the shared <see cref="NeedsSave"/> condition. Used by <see cref="Dispose"/> and
+    /// <see cref="SaveToImageSafe"/> so a disk with save-on-exit disabled is left untouched when
+    /// the app exits or Windows shuts down, while periodic auto-save is unaffected.
+    /// </summary>
+    private bool NeedsExitSave() => Options.SaveImageOnExit && NeedsSave();
 
     /// <summary>
     /// Saves the disk image on the periodic timer tick, swallowing any exception so a failed

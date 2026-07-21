@@ -73,16 +73,17 @@
     <sys:String x:Key="CompressionLevel.Optimal">Balanced</sys:String>
     <sys:String x:Key="CompressionLevel.SmallestSize">Max</sys:String>
     <sys:String x:Key="CreateDisk.CompressionWarning">Balanced/Max compression may significantly increase save times. Choose carefully.</sys:String>
+    <sys:String x:Key="CreateDisk.SaveOnExit">Save image on exit</sys:String>
     <sys:String x:Key="CreateDisk.AutoSave">Auto-save the image, interval (minutes):</sys:String>
     <sys:String x:Key="CreateDisk.AutoSaveInterval">Interval (min)</sys:String>
     <sys:String x:Key="CreateDisk.MinutesValue">{0} min</sys:String>
-    <sys:String x:Key="Tip.AutoSave">Periodically save the disk contents to the image file while mounted</sys:String>
+    <sys:String x:Key="Tip.SaveOnExit">Save this disk's image when the app closes or Windows shuts down. Independent of periodic auto-save.</sys:String>
+    <sys:String x:Key="Tip.AutoSave">Periodically save the disk contents to the image file while mounted. Only the current image is kept (overwritten each save); enable a snapshot limit below to also keep timestamped snapshots you can restore to later.</sys:String>
     <sys:String x:Key="Tip.AutoSaveInterval">How often to auto-save, in minutes</sys:String>
     <sys:String x:Key="CreateDisk.SnapshotMaxCount">Max number of snapshots to keep:</sys:String>
     <sys:String x:Key="CreateDisk.SnapshotMaxSize">Limit total size to</sys:String>
-    <sys:String x:Key="Tip.SnapshotMaxCount">Delete the oldest snapshots once this many are stored</sys:String>
-    <sys:String x:Key="Tip.SnapshotMaxSize">Delete the oldest snapshots once their combined size exceeds this limit</sys:String>
-    <sys:String x:Key="CreateDisk.SnapshotExplanation">With only auto-save enabled, just the current image file is kept (overwritten each time). Checking either limit below also creates a timestamped snapshot on every auto-save that you can restore to later; the limits control how many are kept:</sys:String>
+    <sys:String x:Key="Tip.SnapshotMaxCount">Keep at most this many snapshots; the oldest are deleted once the count is exceeded.</sys:String>
+    <sys:String x:Key="Tip.SnapshotMaxSize">Cap the combined size of all snapshots; the oldest are deleted once this size is exceeded.</sys:String>
     <sys:String x:Key="Card.LastWritePrefix">Last modified: {0}</sys:String>
     <sys:String x:Key="Card.NeverWritten">Not yet modified</sys:String>
     <sys:String x:Key="Card.LastAutoSavePrefix">Last image save: {0}</sys:String>
@@ -191,6 +192,9 @@
     <sys:String x:Key="Tray.SaveFailedBody">{0} ({1}): {2}</sys:String>
     <sys:String x:Key="Tray.CapacityAdjustedTitle">Capacity Adjusted</sys:String>
     <sys:String x:Key="Tray.CapacityAdjustedBody">{0} ({1}): configured capacity {2} MB was smaller than the loaded image ({3} MB); capacity was temporarily raised to fit existing data.</sys:String>
+
+    <!-- Shutdown -->
+    <sys:String x:Key="Shutdown.SavingReason">Saving disk images before shutdown…</sys:String>
 
     <!-- Status bar -->
     <sys:String x:Key="Status.Ready">Ready.</sys:String>
