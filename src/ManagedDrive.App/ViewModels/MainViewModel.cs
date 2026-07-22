@@ -58,6 +58,9 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
                 var vm = p as DiskViewModel ?? SelectedDisk;
                 return vm is { IsReadOnly: false, HasImagePath: true };
             });
+        ViewDiskContentsCommand = new(
+            p => ExecuteViewDiskContents(p as DiskViewModel ?? SelectedDisk),
+            p => p is DiskViewModel || SelectedDisk != null);
         RefreshCommand = new(_ => RefreshAll());
         ResetTempDirsCommand = new(_ => ExecuteResetTempDirs());
         ToggleTempDirCommand = new(
@@ -219,6 +222,15 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     /// Gets the command that saves the selected disk's image to file.
     /// </summary>
     public RelayCommand SaveImageCommand
+    {
+        get;
+    }
+
+    /// <summary>
+    /// Gets the command that opens a read-only view of the selected disk's file/directory
+    /// tree and per-node space usage.
+    /// </summary>
+    public RelayCommand ViewDiskContentsCommand
     {
         get;
     }
@@ -1284,6 +1296,20 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 
         vm.Refresh();
         StatusText = Loc.Format("Status.SnapshotRestored", vm.MountPoint);
+    }
+
+    private void ExecuteViewDiskContents(DiskViewModel? vm)
+    {
+        if (vm == null)
+        {
+            return;
+        }
+
+        var dialog = new DiskContentDialog(vm)
+        {
+            Owner = Application.Current.MainWindow
+        };
+        dialog.ShowDialog();
     }
 
     private async void ExecuteSaveImage(DiskViewModel? vm)

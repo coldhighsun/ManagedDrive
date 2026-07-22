@@ -19,6 +19,7 @@
     <sys:String x:Key="Btn.FormatDisk">Format…</sys:String>
     <sys:String x:Key="Btn.CloneDisk">Clone / Export Disk...</sys:String>
     <sys:String x:Key="Btn.RestoreSnapshot">Restore Snapshot...</sys:String>
+    <sys:String x:Key="Btn.ViewDiskContents">View Disk Contents...</sys:String>
     <sys:String x:Key="Btn.Refresh">Refresh</sys:String>
     <sys:String x:Key="Btn.Settings">Settings</sys:String>
     <sys:String x:Key="Tip.NewDisk">Create and mount a new RAM disk</sys:String>
@@ -175,6 +176,17 @@
     <sys:String x:Key="SnapshotDiff.Added">Added</sys:String>
     <sys:String x:Key="SnapshotDiff.Removed">Removed</sys:String>
     <sys:String x:Key="SnapshotDiff.Modified">Modified</sys:String>
+
+    <!-- Disk Content Dialog -->
+    <sys:String x:Key="DiskContent.Title">Disk Contents</sys:String>
+    <sys:String x:Key="DiskContent.TotalUsage">Total: {0} used of {1}.</sys:String>
+    <sys:String x:Key="DiskContent.Empty">This disk has no files or folders yet.</sys:String>
+    <sys:String x:Key="DiskContent.ColumnName">Name</sys:String>
+    <sys:String x:Key="DiskContent.ColumnSize">Size</sys:String>
+    <sys:String x:Key="DiskContent.ColumnType">Type</sys:String>
+    <sys:String x:Key="DiskContent.TypeFolder">File folder</sys:String>
+    <sys:String x:Key="DiskContent.TypeFile">{0} File</sys:String>
+    <sys:String x:Key="DiskContent.TypeFileGeneric">File</sys:String>
     <sys:String x:Key="Btn.Close">Close</sys:String>
     <sys:String x:Key="Msg.RestoreSnapshotConfirmBody">Restore {0} ({1}) from snapshot {2}?&#x0a;&#x0a;Current contents will be replaced.</sys:String>
     <sys:String x:Key="Status.SnapshotRestored">Restored {0} from a snapshot.</sys:String>
