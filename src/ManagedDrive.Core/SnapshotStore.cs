@@ -27,6 +27,13 @@ internal static class SnapshotStore
     internal readonly record struct SnapshotSummary(long LogicalSizeBytes, IReadOnlySet<string> ReferencedHashesHex);
 
     /// <summary>
+    /// One node's identity within a snapshot, as read cheaply from the index without touching
+    /// any blob: its path, whether it is a directory, its logical file size, and (for files)
+    /// the SHA-256 hash of its content.
+    /// </summary>
+    internal readonly record struct SnapshotEntry(string Path, bool IsDirectory, ulong FileSize, byte[]? Hash);
+
+    /// <summary>
     /// Returns the shared blob directory for snapshots of <paramref name="mainImagePath"/>.
     /// </summary>
     internal static string ComputeBlobDirectory(string mainImagePath)
@@ -103,10 +110,10 @@ internal static class SnapshotStore
     }
 
     /// <summary>
-    /// Reads only the header and per-node hash markers of the snapshot index at
-    /// <paramref name="indexPath"/>, without reading any blob content.
+    /// Reads every node's path, directory flag, logical size, and (for files) content hash from
+    /// the snapshot index at <paramref name="indexPath"/>, without reading any blob content.
     /// </summary>
-    internal static SnapshotSummary ReadSummary(string indexPath)
+    internal static List<SnapshotEntry> ReadEntries(string indexPath)
     {
         using var stream = new FileStream(indexPath, FileMode.Open, FileAccess.Read);
         using var reader = new BinaryReader(stream, System.Text.Encoding.UTF8, leaveOpen: false);
@@ -117,23 +124,44 @@ internal static class SnapshotStore
         _ = reader.ReadString(); // volumeLabel
 
         var count = reader.ReadInt32();
-        long logicalSize = 0;
-        var referenced = new HashSet<string>();
+        var entries = new List<SnapshotEntry>(count);
 
         for (var i = 0; i < count; i++)
         {
-            var (_, header) = ReadNodeHeader(reader);
-            logicalSize += (long)header.FileSize;
-
+            var (path, header) = ReadNodeHeader(reader);
             var isDirectory = (header.FileAttributes & (uint)FileAttributes.Directory) != 0;
+
+            byte[]? hash = null;
             if (!isDirectory)
             {
                 var marker = reader.ReadByte();
                 if (marker == 1)
                 {
-                    var hash = reader.ReadBytes(32);
-                    referenced.Add(Convert.ToHexStringLower(hash));
+                    hash = reader.ReadBytes(32);
                 }
+            }
+
+            entries.Add(new(path, isDirectory, header.FileSize, hash));
+        }
+
+        return entries;
+    }
+
+    /// <summary>
+    /// Reads only the header and per-node hash markers of the snapshot index at
+    /// <paramref name="indexPath"/>, without reading any blob content.
+    /// </summary>
+    internal static SnapshotSummary ReadSummary(string indexPath)
+    {
+        long logicalSize = 0;
+        var referenced = new HashSet<string>();
+
+        foreach (var entry in ReadEntries(indexPath))
+        {
+            logicalSize += (long)entry.FileSize;
+            if (entry.Hash is not null)
+            {
+                referenced.Add(Convert.ToHexStringLower(entry.Hash));
             }
         }
 

@@ -277,6 +277,19 @@ public sealed class RamDisk : IDisposable
     }
 
     /// <summary>
+    /// Compares the snapshot at <paramref name="snapshotPath"/> against this disk's current live
+    /// contents, without restoring anything or reading any blob content beyond the snapshot's
+    /// stored per-file SHA-256 hashes.
+    /// </summary>
+    public SnapshotManager.SnapshotDiffResult DiffAgainstSnapshot(string snapshotPath)
+    {
+        lock (_autoSaveLock)
+        {
+            return SnapshotManager.DiffAgainstCurrent(snapshotPath, _fs.NodeMap);
+        }
+    }
+
+    /// <summary>
     /// Unmounts the disk and releases all resources. After disposal the disk is no longer
     /// accessible from the Windows shell. If an image path is configured, a final save is
     /// performed before unmounting, unless nothing has changed since the last save.
@@ -650,6 +663,31 @@ public sealed class RamDisk : IDisposable
     }
 
     /// <summary>
+    /// Compares the disk's current contents against the most recently written snapshot of
+    /// <paramref name="mainImagePath"/>, if one exists. Returns <c>false</c> (i.e. "write a new
+    /// snapshot") when there is no prior snapshot, or when reading/comparing it fails for any
+    /// reason — a comparison failure should never silently suppress a snapshot.
+    /// </summary>
+    private bool IsUnchangedSinceLatestSnapshot(string mainImagePath)
+    {
+        try
+        {
+            var snapshots = SnapshotManager.ListSnapshots(mainImagePath);
+            if (snapshots.Count == 0)
+            {
+                return false;
+            }
+
+            var latest = snapshots[^1];
+            return !SnapshotManager.DiffAgainstCurrent(latest.Path, _fs.NodeMap).HasChanges;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
     /// Whether an exit/shutdown save should run: gated by <see cref="DiskOptions.SaveImageOnExit"/>
     /// on top of the shared <see cref="NeedsSave"/> condition. Used by <see cref="Dispose"/> and
     /// <see cref="SaveToImageSafe"/> so a disk with save-on-exit disabled is left untouched when
@@ -702,8 +740,12 @@ public sealed class RamDisk : IDisposable
     /// <summary>
     /// Writes a timestamped snapshot copy of the just-saved image and prunes older snapshots
     /// per <see cref="DiskOptions.MaxSnapshotCount"/>/<see cref="DiskOptions.MaxSnapshotSizeBytes"/>.
-    /// Does nothing if no image path is configured or neither snapshot limit is set. Must be
-    /// called while <see cref="_autoSaveLock"/> is held.
+    /// Does nothing if no image path is configured, neither snapshot limit is set, or the disk's
+    /// contents are identical to the most recent existing snapshot (checked cheaply via stored
+    /// SHA-256 hashes, without reading any blob) — this keeps a disk that gets saved repeatedly
+    /// without real content changes (e.g. every mount's immediate first auto-save tick) from
+    /// accumulating redundant, identical snapshots. Must be called while
+    /// <see cref="_autoSaveLock"/> is held.
     /// </summary>
     private void TryWriteSnapshot(IProgress<double>? progress = null)
     {
@@ -714,6 +756,12 @@ public sealed class RamDisk : IDisposable
         }
 
         if (Options.MaxSnapshotCount is null && Options.MaxSnapshotSizeBytes is null)
+        {
+            progress?.Report(1.0);
+            return;
+        }
+
+        if (IsUnchangedSinceLatestSnapshot(path))
         {
             progress?.Report(1.0);
             return;

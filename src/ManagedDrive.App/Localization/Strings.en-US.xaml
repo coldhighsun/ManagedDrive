@@ -159,9 +159,23 @@
     <sys:String x:Key="RestoreSnapshot.Description">{0} ({1}): choose a snapshot to restore.</sys:String>
     <sys:String x:Key="RestoreSnapshot.Count">{0} snapshot(s)</sys:String>
     <sys:String x:Key="RestoreSnapshot.NoneWarning">No snapshots are available for this disk yet.</sys:String>
+    <sys:String x:Key="RestoreSnapshot.ViewChanges">View Changes...</sys:String>
+    <sys:String x:Key="RestoreSnapshot.Delete">Delete...</sys:String>
     <sys:String x:Key="Val.NoSnapshotSelected">Select a snapshot to restore.</sys:String>
     <sys:String x:Key="Msg.NoSnapshotsAvailable">No snapshots are available for this disk yet.</sys:String>
     <sys:String x:Key="Msg.RestoreSnapshotConfirmTitle">Restore Snapshot</sys:String>
+    <sys:String x:Key="Msg.DeleteSnapshotConfirmTitle">Delete Snapshot</sys:String>
+    <sys:String x:Key="Msg.DeleteSnapshotConfirmBody">Delete snapshot {0}? This cannot be undone.</sys:String>
+
+    <!-- SnapshotDiffDialog -->
+    <sys:String x:Key="SnapshotDiff.Title">Snapshot Changes</sys:String>
+    <sys:String x:Key="SnapshotDiff.Description">Comparing snapshot "{0}" against the disk's current contents.</sys:String>
+    <sys:String x:Key="SnapshotDiff.Summary">{0} added, {1} removed, {2} modified, {3} unchanged file(s).</sys:String>
+    <sys:String x:Key="SnapshotDiff.NoChanges">No differences found between this snapshot and the disk's current contents.</sys:String>
+    <sys:String x:Key="SnapshotDiff.Added">Added</sys:String>
+    <sys:String x:Key="SnapshotDiff.Removed">Removed</sys:String>
+    <sys:String x:Key="SnapshotDiff.Modified">Modified</sys:String>
+    <sys:String x:Key="Btn.Close">Close</sys:String>
     <sys:String x:Key="Msg.RestoreSnapshotConfirmBody">Restore {0} ({1}) from snapshot {2}?&#x0a;&#x0a;Current contents will be replaced.</sys:String>
     <sys:String x:Key="Status.SnapshotRestored">Restored {0} from a snapshot.</sys:String>
 
