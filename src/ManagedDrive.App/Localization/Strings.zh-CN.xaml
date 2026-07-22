@@ -19,6 +19,7 @@
     <sys:String x:Key="Btn.FormatDisk">格式化…</sys:String>
     <sys:String x:Key="Btn.CloneDisk">克隆/导出磁盘...</sys:String>
     <sys:String x:Key="Btn.RestoreSnapshot">恢复快照...</sys:String>
+    <sys:String x:Key="Btn.ViewDiskContents">查看磁盘内容...</sys:String>
     <sys:String x:Key="Btn.Refresh">刷新</sys:String>
     <sys:String x:Key="Btn.Settings">设置</sys:String>
     <sys:String x:Key="Tip.NewDisk">创建并挂载新的 RAM 磁盘</sys:String>
@@ -175,6 +176,17 @@
     <sys:String x:Key="SnapshotDiff.Added">新增</sys:String>
     <sys:String x:Key="SnapshotDiff.Removed">删除</sys:String>
     <sys:String x:Key="SnapshotDiff.Modified">修改</sys:String>
+
+    <!-- Disk Content Dialog -->
+    <sys:String x:Key="DiskContent.Title">磁盘内容</sys:String>
+    <sys:String x:Key="DiskContent.TotalUsage">已用 {0},共 {1}。</sys:String>
+    <sys:String x:Key="DiskContent.Empty">该磁盘目前没有任何文件或文件夹。</sys:String>
+    <sys:String x:Key="DiskContent.ColumnName">名称</sys:String>
+    <sys:String x:Key="DiskContent.ColumnSize">大小</sys:String>
+    <sys:String x:Key="DiskContent.ColumnType">类型</sys:String>
+    <sys:String x:Key="DiskContent.TypeFolder">文件夹</sys:String>
+    <sys:String x:Key="DiskContent.TypeFile">{0} 文件</sys:String>
+    <sys:String x:Key="DiskContent.TypeFileGeneric">文件</sys:String>
     <sys:String x:Key="Btn.Close">关闭</sys:String>
     <sys:String x:Key="Msg.RestoreSnapshotConfirmBody">从快照 {2} 恢复 {0}（{1}）？&#x0a;&#x0a;当前内容将被替换。</sys:String>
     <sys:String x:Key="Status.SnapshotRestored">已从快照恢复 {0}。</sys:String>

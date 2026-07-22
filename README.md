@@ -45,7 +45,7 @@ Create, mount and manage in-memory volumes that appear as normal drive letters i
 - High-usage warning per disk (configurable threshold, default 90%, with hysteresis)
 - Temp directory redirection — point Windows TEMP/TMP at a disk's `Temp` folder, with automatic reset on unmount/remount and startup warnings if TEMP is left pointing at a RAM disk
 - Exit confirmation with a saving overlay while pending image saves complete; TEMP is reset first if it points at a mounted disk
-- Double-click a disk to open it in Explorer; right-click for Explorer/image-folder shortcuts
+- Double-click a disk to open it in Explorer; right-click for Explorer/image-folder shortcuts, or **View Disk Contents...** for a read-only, sortable Name/Size/Type tree view without leaving the app
 
 **UI**
 - Bilingual (English / Simplified Chinese) and light/dark themes, both auto-detected with manual override in Settings, switching instantly without restart
@@ -118,7 +118,7 @@ ManagedDrive/
 │       ├── Models/                 #   AppConfiguration, DiskProfile
 │       ├── Services/               #   SettingsStore, StartupManager, TempDirResetService
 │       ├── ViewModels/             #   MainViewModel, DiskViewModel
-│       ├── Views/                  #   CreateDiskDialog, CloneDiskDialog, RestoreSnapshotDialog, SettingsDialog, ConfirmDialog, AboutDialog, TrayTooltipView, PasswordPromptDialog
+│       ├── Views/                  #   CreateDiskDialog, CloneDiskDialog, DiskContentDialog, RestoreSnapshotDialog, SettingsDialog, ConfirmDialog, AboutDialog, TrayTooltipView, PasswordPromptDialog
 │       ├── GlobalUsings.cs         #   Project-wide global using directives
 │       ├── MainWindow.xaml(.cs)    #   Main window
 │       ├── App.xaml(.cs)           #   Startup, tray icon, auto-mount
@@ -341,7 +341,7 @@ This project bundles [WinFsp](https://winfsp.dev/) and [SharpCompress](https://g
 - 每磁盘可配置的高用量警告（默认阈值 90%，带回滞防抖）
 - 临时目录重定向——将 Windows TEMP/TMP 指向某磁盘的 `Temp` 文件夹，卸载/重挂时自动恢复默认值，TEMP 遗留指向内存盘时会在启动时提示
 - 退出确认，并在待处理的镜像保存完成前显示保存遮罩；若 TEMP 指向已挂载磁盘会先重置
-- 双击磁盘在资源管理器中打开；右键提供资源管理器/镜像文件夹等快捷方式
+- 双击磁盘在资源管理器中打开；右键提供资源管理器/镜像文件夹等快捷方式，或**查看磁盘内容...**，无需离开应用即可查看可排序的 名称/大小/类型 只读树状列表
 
 **界面**
 - 双语界面（中文/英文）与浅色/深色主题，均可自动检测或在设置中手动切换，即时生效无需重启
@@ -418,7 +418,7 @@ ManagedDrive/
 │       ├── Models/                 #   AppConfiguration、DiskProfile
 │       ├── Services/               #   SettingsStore、StartupManager、TempDirResetService
 │       ├── ViewModels/             #   MainViewModel、DiskViewModel
-│       ├── Views/                  #   CreateDiskDialog、CloneDiskDialog、RestoreSnapshotDialog、SettingsDialog、ConfirmDialog、AboutDialog、TrayTooltipView、PasswordPromptDialog
+│       ├── Views/                  #   CreateDiskDialog、CloneDiskDialog、DiskContentDialog、RestoreSnapshotDialog、SettingsDialog、ConfirmDialog、AboutDialog、TrayTooltipView、PasswordPromptDialog
 │       ├── GlobalUsings.cs         #   项目级全局 using 指令
 │       ├── MainWindow.xaml(.cs)    #   主窗口
 │       ├── App.xaml(.cs)           #   启动、托盘图标、自动挂载

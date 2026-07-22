@@ -385,6 +385,13 @@ public sealed class RamDisk : IDisposable
     }
 
     /// <summary>
+    /// Returns a snapshot of every file and directory node currently on this disk, keyed by full
+    /// path. Read-only: intended for UI views (e.g. a disk content browser) that display the
+    /// disk's contents without mutating it.
+    /// </summary>
+    public IReadOnlyList<KeyValuePair<string, FileNode>> GetAllNodes() => _fs.NodeMap.GetAllNodes();
+
+    /// <summary>
     /// Serializes the current disk contents to <see cref="DiskOptions.PersistImagePath"/>.
     /// Does nothing if <see cref="DiskOptions.PersistImagePath"/> is <c>null</c>.
     /// </summary>

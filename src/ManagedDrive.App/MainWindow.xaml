@@ -192,6 +192,11 @@
                                                     RelativeSource={RelativeSource AncestorType=ContextMenu}}"
                                           CommandParameter="{Binding PlacementTarget.DataContext,
                                                     RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
+                                <MenuItem Header="{DynamicResource Btn.ViewDiskContents}"
+                                          Command="{Binding PlacementTarget.Tag.ViewDiskContentsCommand,
+                                                    RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                          CommandParameter="{Binding PlacementTarget.DataContext,
+                                                    RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
                                 <Separator/>
                                 <!-- Destructive operations -->
                                 <MenuItem Header="{DynamicResource Btn.SaveImage}"

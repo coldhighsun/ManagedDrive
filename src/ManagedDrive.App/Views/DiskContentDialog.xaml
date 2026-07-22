@@ -1,0 +1,238 @@
+<views:DialogWindowBase x:Class="ManagedDrive.App.Views.DiskContentDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:views="clr-namespace:ManagedDrive.App.Views"
+        Style="{StaticResource DialogWindowStyle}"
+        Title="{DynamicResource DiskContent.Title}"
+        Width="480" Height="480"
+        MinWidth="360" MinHeight="320"
+        ResizeMode="CanResize"
+        WindowStartupLocation="CenterOwner">
+
+    <views:DialogWindowBase.Resources>
+        <views:DepthToIndentConverter x:Key="DepthToIndentConverter"/>
+        <BooleanToVisibilityConverter x:Key="BoolToVis"/>
+
+        <!-- Flat theme for GridViewColumnHeader: the default WPF chrome is an Aero-style
+             bevel/gradient that clashes with this app's flat light/dark theme. -->
+        <Style x:Key="FlatGridViewColumnHeader" TargetType="GridViewColumnHeader">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="{DynamicResource AppForegroundLight}"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="HorizontalContentAlignment" Value="Left"/>
+            <Setter Property="Padding" Value="4,0,4,6"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="GridViewColumnHeader">
+                        <Grid>
+                            <!-- The right border here IS the column divider: drawn as part of this
+                                 Border's own edge (not a separately-positioned sibling), it's
+                                 guaranteed to span this cell's exact full height, top to bottom. -->
+                            <Border Background="{TemplateBinding Background}"
+                                    BorderThickness="0,0,1,1"
+                                    BorderBrush="{DynamicResource AppDivider}"
+                                    Padding="{TemplateBinding Padding}">
+                                <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"/>
+                            </Border>
+                            <!-- Named "PART_HeaderGripper": GridViewColumnHeader's own code wires up
+                                 column-width drag-resize on a template part with this exact name,
+                                 same as the default (Aero-chrome) template does. Given its own
+                                 template (just a transparent hit-test area) so it doesn't render
+                                 the default Thumb chrome's visible bevel/background. -->
+                            <Thumb x:Name="PART_HeaderGripper"
+                                   HorizontalAlignment="Right"
+                                   Width="6"
+                                   Cursor="SizeWE">
+                                <Thumb.Template>
+                                    <ControlTemplate TargetType="Thumb">
+                                        <Border Background="Transparent"/>
+                                    </ControlTemplate>
+                                </Thumb.Template>
+                            </Thumb>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Flat ListViewItem to match the app's other list/tree controls (no selection chrome
+             beyond a subtle background, no focus rectangle). -->
+        <Style x:Key="FlatListViewItem" TargetType="ListViewItem">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="{DynamicResource AppForeground}"/>
+            <Setter Property="Padding" Value="4,3"/>
+            <EventSetter Event="MouseDoubleClick" Handler="Row_MouseDoubleClick"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ListViewItem">
+                        <Border x:Name="Bd" Background="{TemplateBinding Background}"
+                                Padding="{TemplateBinding Padding}"
+                                SnapsToDevicePixels="True">
+                            <GridViewRowPresenter Content="{TemplateBinding Content}"
+                                                   Columns="{TemplateBinding GridView.ColumnCollection}"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource AppDivider}"/>
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource AppDivider}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </views:DialogWindowBase.Resources>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="16"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="16"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <TextBlock Grid.Row="0"
+                   x:Name="SummaryText"
+                   Foreground="{DynamicResource AppForegroundLight}"
+                   TextWrapping="Wrap"/>
+
+        <Border Grid.Row="2" Style="{StaticResource SectionBorder}">
+            <Grid>
+                <TextBlock x:Name="EmptyText"
+                           Text="{DynamicResource DiskContent.Empty}"
+                           Foreground="{DynamicResource AppForegroundLight}"
+                           TextWrapping="Wrap"
+                           Visibility="Collapsed"/>
+
+                <ListView x:Name="ContentList"
+                          BorderThickness="0" Background="Transparent"
+                          ScrollViewer.VerticalScrollBarVisibility="Auto"
+                          ScrollViewer.CanContentScroll="True"
+                          VirtualizingStackPanel.IsVirtualizing="True"
+                          ItemContainerStyle="{StaticResource FlatListViewItem}"
+                          GridViewColumnHeader.Click="ColumnHeader_Click">
+                    <ListView.View>
+                        <GridView ColumnHeaderContainerStyle="{StaticResource FlatGridViewColumnHeader}">
+                            <GridViewColumn x:Name="NameColumn" Width="240">
+                                <GridViewColumn.Header>
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="{DynamicResource DiskContent.ColumnName}"/>
+                                        <TextBlock x:Name="NameSortArrow" FontSize="9" Margin="4,0,0,0" Visibility="Collapsed">
+                                            <TextBlock.Style>
+                                                <Style TargetType="TextBlock" BasedOn="{StaticResource IconText}"/>
+                                            </TextBlock.Style>
+                                        </TextBlock>
+                                    </StackPanel>
+                                </GridViewColumn.Header>
+                                <GridViewColumn.CellTemplate>
+                                    <DataTemplate DataType="{x:Type views:DiskContentRow}">
+                                        <StackPanel Orientation="Horizontal"
+                                                    Margin="{Binding Depth, Converter={StaticResource DepthToIndentConverter}}">
+                                            <Button x:Name="ExpanderButton"
+                                                    Width="16" Height="16" Padding="0"
+                                                    Click="ExpanderButton_Click"
+                                                    Visibility="{Binding HasChildren, Converter={StaticResource BoolToVis}}">
+                                                <Button.Template>
+                                                    <ControlTemplate TargetType="Button">
+                                                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                    </ControlTemplate>
+                                                </Button.Template>
+                                                <TextBlock FontSize="10"
+                                                           Foreground="{DynamicResource AppForegroundLight}">
+                                                    <TextBlock.Style>
+                                                        <Style TargetType="TextBlock" BasedOn="{StaticResource IconText}">
+                                                            <Setter Property="Text" Value="&#xE76C;"/>
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding IsExpanded}" Value="True">
+                                                                    <Setter Property="Text" Value="&#xE70D;"/>
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </TextBlock.Style>
+                                                </TextBlock>
+                                            </Button>
+                                            <TextBlock FontSize="14"
+                                                       Foreground="{DynamicResource AppForegroundLight}"
+                                                       Margin="2,0,6,0">
+                                                <TextBlock.Style>
+                                                    <Style TargetType="TextBlock" BasedOn="{StaticResource IconText}">
+                                                        <Setter Property="Text" Value="&#xE7C3;"/>
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding Node.IsDirectory}" Value="True">
+                                                                <Setter Property="Text" Value="&#xE8B7;"/>
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </TextBlock.Style>
+                                            </TextBlock>
+                                            <TextBlock Text="{Binding Node.Name}"
+                                                       VerticalAlignment="Center"
+                                                       Foreground="{DynamicResource AppForeground}"/>
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </GridViewColumn.CellTemplate>
+                            </GridViewColumn>
+                            <GridViewColumn x:Name="SizeColumn" Width="110">
+                                <GridViewColumn.Header>
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="{DynamicResource DiskContent.ColumnSize}"/>
+                                        <TextBlock x:Name="SizeSortArrow" FontSize="9" Margin="4,0,0,0" Visibility="Collapsed">
+                                            <TextBlock.Style>
+                                                <Style TargetType="TextBlock" BasedOn="{StaticResource IconText}"/>
+                                            </TextBlock.Style>
+                                        </TextBlock>
+                                    </StackPanel>
+                                </GridViewColumn.Header>
+                                <GridViewColumn.CellTemplate>
+                                    <DataTemplate DataType="{x:Type views:DiskContentRow}">
+                                        <!-- GridViewRowPresenter sizes each cell's content presenter to the
+                                             content's own desired size (left-aligned), not the column width,
+                                             so a plain TextAlignment="Right" has nothing to align within.
+                                             Binding this Border's Width to the column's own (possibly
+                                             user-resized) ActualWidth gives it a concrete box to right-align
+                                             text in. The right Padding keeps the last character off the cell's
+                                             right clip edge (a too-small gap clips the trailing "B"); it must
+                                             be padding, not margin, since margin would grow the Border's own
+                                             desired size and re-cause the overflow. -->
+                                        <Border Width="{Binding ActualWidth, ElementName=SizeColumn}" Padding="0,0,15,0" ClipToBounds="True">
+                                            <TextBlock Text="{Binding Node.SizeDisplay}"
+                                                       TextAlignment="Right"
+                                                       Foreground="{DynamicResource AppForegroundLight}"/>
+                                        </Border>
+                                    </DataTemplate>
+                                </GridViewColumn.CellTemplate>
+                            </GridViewColumn>
+                            <GridViewColumn x:Name="TypeColumn" Width="100">
+                                <GridViewColumn.Header>
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="{DynamicResource DiskContent.ColumnType}"/>
+                                        <TextBlock x:Name="TypeSortArrow" FontSize="9" Margin="4,0,0,0" Visibility="Collapsed">
+                                            <TextBlock.Style>
+                                                <Style TargetType="TextBlock" BasedOn="{StaticResource IconText}"/>
+                                            </TextBlock.Style>
+                                        </TextBlock>
+                                    </StackPanel>
+                                </GridViewColumn.Header>
+                                <GridViewColumn.CellTemplate>
+                                    <DataTemplate DataType="{x:Type views:DiskContentRow}">
+                                        <TextBlock Text="{Binding Node.TypeDisplay}"
+                                                   Foreground="{DynamicResource AppForegroundLight}"/>
+                                    </DataTemplate>
+                                </GridViewColumn.CellTemplate>
+                            </GridViewColumn>
+                        </GridView>
+                    </ListView.View>
+                </ListView>
+            </Grid>
+        </Border>
+
+        <!-- Close -->
+        <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Right">
+            <Button Content="{DynamicResource Btn.Close}" Width="80" IsDefault="True" IsCancel="True"
+                    Style="{StaticResource RaisedButton}"/>
+        </StackPanel>
+    </Grid>
+</views:DialogWindowBase>
