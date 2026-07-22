@@ -42,14 +42,34 @@
             </StackPanel>
         </Border>
 
-        <!-- OK / Cancel -->
-        <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Right">
-            <Button Content="{DynamicResource Btn.Cancel}" Width="80" IsCancel="True"
-                    Style="{StaticResource FlatButton}"
-                    Margin="0,0,8,0"/>
-            <Button Content="{DynamicResource Btn.Ok}" Width="80" IsDefault="True"
-                    Click="OK_Click"
-                    Style="{StaticResource RaisedButton}"/>
-        </StackPanel>
+        <!-- View changes / OK / Cancel -->
+        <Grid Grid.Row="4">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <StackPanel Grid.Column="0" Orientation="Horizontal">
+                <Button x:Name="ViewChangesButton"
+                        Content="{DynamicResource RestoreSnapshot.ViewChanges}"
+                        Style="{StaticResource FlatButton}"
+                        Click="ViewChanges_Click"
+                        Margin="0,0,8,0"/>
+                <Button x:Name="DeleteButton"
+                        Content="{DynamicResource RestoreSnapshot.Delete}"
+                        Style="{StaticResource FlatButton}"
+                        Click="Delete_Click"/>
+            </StackPanel>
+
+            <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right">
+                <Button Content="{DynamicResource Btn.Cancel}" Width="80" IsCancel="True"
+                        Style="{StaticResource FlatButton}"
+                        Margin="0,0,8,0"/>
+                <Button x:Name="OkButton"
+                        Content="{DynamicResource Btn.Ok}" Width="80" IsDefault="True"
+                        Click="OK_Click"
+                        Style="{StaticResource RaisedButton}"/>
+            </StackPanel>
+        </Grid>
     </Grid>
 </views:DialogWindowBase>

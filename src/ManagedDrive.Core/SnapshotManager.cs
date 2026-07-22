@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using System.Text.RegularExpressions;
 
 namespace ManagedDrive.Core;
@@ -70,11 +71,139 @@ public static partial class SnapshotManager
     }
 
     /// <summary>
+    /// Deletes a single snapshot of <paramref name="mainImagePath"/> at <paramref name="snapshotPath"/>,
+    /// then garbage-collects any blob that is no longer referenced by a remaining snapshot.
+    /// </summary>
+    /// <exception cref="ArgumentException">
+    /// Thrown when <paramref name="snapshotPath"/> does not match the snapshot naming scheme.
+    /// </exception>
+    public static void DeleteSnapshot(string mainImagePath, string snapshotPath)
+    {
+        if (!IsSnapshotFileName(Path.GetFileName(snapshotPath)))
+        {
+            throw new ArgumentException("Path is not a snapshot file.", nameof(snapshotPath));
+        }
+
+        try
+        {
+            File.Delete(snapshotPath);
+        }
+        catch (IOException)
+        {
+        }
+        catch (UnauthorizedAccessException)
+        {
+        }
+
+        GarbageCollectBlobs(mainImagePath);
+    }
+
+    /// <summary>
+    /// Compares the snapshot at <paramref name="indexPath"/> against <paramref name="currentMap"/>
+    /// (the disk's live contents), classifying every path as added, removed, or modified based on
+    /// the snapshot's already-stored SHA-256 hashes — no blob content is read. Files present in
+    /// both with matching content are counted in <see cref="SnapshotDiffResult.UnchangedFileCount"/>.
+    /// </summary>
+    public static SnapshotDiffResult DiffAgainstCurrent(string indexPath, FileNodeMap currentMap)
+    {
+        var snapshotEntries = SnapshotStore.ReadEntries(indexPath);
+        var snapshotByPath = new Dictionary<string, SnapshotStore.SnapshotEntry>(StringComparer.OrdinalIgnoreCase);
+        foreach (var entry in snapshotEntries)
+        {
+            snapshotByPath[entry.Path] = entry;
+        }
+
+        var addedFiles = new List<string>();
+        var addedDirectories = new List<string>();
+        var modifiedFiles = new List<string>();
+        var unchangedFileCount = 0;
+        var seenPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var kvp in currentMap.GetAllNodes())
+        {
+            var path = kvp.Key;
+            var node = kvp.Value;
+            seenPaths.Add(path);
+
+            if (!snapshotByPath.TryGetValue(path, out var snapshotEntry))
+            {
+                if (node.IsDirectory)
+                {
+                    addedDirectories.Add(path);
+                }
+                else
+                {
+                    addedFiles.Add(path);
+                }
+
+                continue;
+            }
+
+            if (node.IsDirectory)
+            {
+                continue;
+            }
+
+            var currentIsEmpty = node.FileData is null || node.FileInfo.FileSize == 0;
+            bool matches;
+            if (currentIsEmpty)
+            {
+                matches = snapshotEntry.FileSize == 0;
+            }
+            else
+            {
+                var currentHash = ComputeHash(node);
+                matches = snapshotEntry.Hash is not null && currentHash.AsSpan().SequenceEqual(snapshotEntry.Hash);
+            }
+
+            if (matches)
+            {
+                unchangedFileCount++;
+            }
+            else
+            {
+                modifiedFiles.Add(path);
+            }
+        }
+
+        var removedFiles = new List<string>();
+        var removedDirectories = new List<string>();
+        foreach (var entry in snapshotEntries)
+        {
+            if (seenPaths.Contains(entry.Path))
+            {
+                continue;
+            }
+
+            if (entry.IsDirectory)
+            {
+                removedDirectories.Add(entry.Path);
+            }
+            else
+            {
+                removedFiles.Add(entry.Path);
+            }
+        }
+
+        return new(addedFiles, removedFiles, modifiedFiles, addedDirectories, removedDirectories, unchangedFileCount);
+    }
+
+    /// <summary>
     /// Returns <c>true</c> when <paramref name="fileName"/> matches the snapshot naming
     /// scheme produced by <see cref="BuildSnapshotPath"/> (i.e. it is a snapshot, not a
     /// plain main image file).
     /// </summary>
     public static bool IsSnapshotFileName(string fileName) => SnapshotPattern().IsMatch(fileName);
+
+    /// <summary>
+    /// Lists every node in the snapshot at <paramref name="indexPath"/> (path, directory flag,
+    /// logical size) without reading any blob content — a lightweight "what's in this snapshot"
+    /// listing for browsing prior to a full restore.
+    /// </summary>
+    public static IReadOnlyList<SnapshotContentEntry> ListSnapshotContents(string indexPath) =>
+        SnapshotStore.ReadEntries(indexPath)
+            .Select(e => new SnapshotContentEntry(e.Path, e.IsDirectory, e.FileSize))
+            .ToList();
 
     /// <summary>
     /// Lists all snapshot index files belonging to <paramref name="mainImagePath"/>, sorted
@@ -214,6 +343,12 @@ public static partial class SnapshotManager
         return Path.Combine(directory, baseName + ".snapblobs");
     }
 
+    private static byte[] ComputeHash(FileNode node)
+    {
+        var fileSize = (int)Math.Min(node.FileInfo.FileSize, (ulong)node.FileData!.Length);
+        return SHA256.HashData(node.FileData.AsSpan(0, fileSize));
+    }
+
     /// <summary>
     /// Deletes every blob in this image's blob directory that is not referenced by any
     /// remaining snapshot (mark-and-sweep; no persistent reference counts).
@@ -263,4 +398,31 @@ public static partial class SnapshotManager
     /// Metadata for a single snapshot file.
     /// </summary>
     public readonly record struct SnapshotInfo(string Path, DateTimeOffset TimestampUtc, long SizeBytes);
+
+    /// <summary>
+    /// One node listed by <see cref="ListSnapshotContents"/>: its path, whether it is a
+    /// directory, and its logical size in bytes.
+    /// </summary>
+    public readonly record struct SnapshotContentEntry(string Path, bool IsDirectory, ulong SizeBytes);
+
+    /// <summary>
+    /// Result of comparing a snapshot against a disk's live contents, as computed by
+    /// <see cref="DiffAgainstCurrent"/>.
+    /// </summary>
+    public readonly record struct SnapshotDiffResult(
+        IReadOnlyList<string> AddedFiles,
+        IReadOnlyList<string> RemovedFiles,
+        IReadOnlyList<string> ModifiedFiles,
+        IReadOnlyList<string> AddedDirectories,
+        IReadOnlyList<string> RemovedDirectories,
+        int UnchangedFileCount)
+    {
+        /// <summary>
+        /// <c>true</c> when the snapshot differs from the current contents in any way (any
+        /// added, removed, or modified file or directory); <c>false</c> when they are identical.
+        /// </summary>
+        public bool HasChanges =>
+            AddedFiles.Count > 0 || RemovedFiles.Count > 0 || ModifiedFiles.Count > 0 ||
+            AddedDirectories.Count > 0 || RemovedDirectories.Count > 0;
+    }
 }

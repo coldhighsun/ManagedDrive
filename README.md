@@ -29,7 +29,7 @@ Create, mount and manage in-memory volumes that appear as normal drive letters i
 - Import an archive (zip, 7z, rar, tar, and other formats [SharpCompress](https://github.com/adamhathcock/sharpcompress) can read) directly as a read-only disk (**Import Archive...**) — capacity and label are derived from the archive up front
 - Optional auto-save on a 1–60 minute interval, plus an automatic final save before unmount/exit (individually disableable per disk via **Save on exit**); both are skipped when nothing has changed, and failures raise a tray/status-bar notification
 - Selectable image compression (Off / Fast / Balanced / Max, default Fast)
-- Snapshot / version history — cap retained snapshots by count and/or size; deduplicated by content hash so many snapshots cost little extra space; restore any snapshot via **Restore Snapshot...**
+- Snapshot / version history — cap retained snapshots by count and/or size; deduplicated by content hash so many snapshots cost little extra space; restore any snapshot via **Restore Snapshot...**, which also lets you delete an individual snapshot on demand
 - Clone a disk onto another mounted disk or export it to a new `.mdr` file (**Clone Disk...**)
 - Optional password protection for `.mdr` images (AES-256-GCM envelope encryption; the password only wraps a random per-disk key, so changing the password never re-encrypts the file contents) — set from the "Encrypt Image" option in the disk dialog (password must be 8–64 characters); prompted for on mount (including auto-mount at startup) whenever an image is encrypted
 - Progress feedback for long operations — image save, archive import, and export all show a busy overlay with a progress bar instead of leaving the app looking unresponsive on large disks
@@ -190,7 +190,7 @@ Version `1` images (no `CompressionLevel` byte, always uncompressed) and version
 
 ### Snapshot Format
 
-Snapshots use a separate, independent format from `.mdr` images. For a main image `disk.mdr`, snapshots are named `disk.yyyyMMdd-HHmmss.mdr` in the same folder, each a small binary index file (magic `MDRS`) listing every file/directory's metadata plus, for non-empty files, a SHA-256 hash. The actual file content lives in a shared, content-addressed blob store at `disk.snapblobs/` (sharded into 2-character hex subfolders), gzip-compressed per-blob at the disk's configured compression level — identical content across snapshots is stored only once. When the parent disk is password-protected, each blob is additionally AES-256-GCM encrypted with the same key. Pruning old snapshots also garbage-collects any blob no longer referenced by a remaining snapshot; clearing a disk's password deletes all of its snapshots outright, since the old blobs are unrecoverable without the discarded key.
+Snapshots use a separate, independent format from `.mdr` images. For a main image `disk.mdr`, snapshots are named `disk.yyyyMMdd-HHmmss.mdr` in the same folder, each a small binary index file (magic `MDRS`) listing every file/directory's metadata plus, for non-empty files, a SHA-256 hash. The actual file content lives in a shared, content-addressed blob store at `disk.snapblobs/` (sharded into 2-character hex subfolders), gzip-compressed per-blob at the disk's configured compression level — identical content across snapshots is stored only once. When the parent disk is password-protected, each blob is additionally AES-256-GCM encrypted with the same key. Pruning old snapshots, or deleting a single one via **Restore Snapshot...**, also garbage-collects any blob no longer referenced by a remaining snapshot; clearing a disk's password deletes all of its snapshots outright, since the old blobs are unrecoverable without the discarded key.
 
 ### Settings & Persistence
 
@@ -329,7 +329,7 @@ This project bundles [WinFsp](https://winfsp.dev/) and [SharpCompress](https://g
 - 直接导入压缩包（zip、7z、rar、tar 等 [SharpCompress](https://github.com/adamhathcock/sharpcompress) 支持的格式）作为只读磁盘（**导入压缩包...**）——容量与卷标从压缩包内容自动推算
 - 可选自动保存（1-60 分钟间隔），并在卸载/退出前自动执行一次收尾保存（可按磁盘通过**退出时保存**单独关闭）；内容未变化时自动跳过，保存失败会通过托盘/状态栏提示
 - 可选镜像压缩级别（不压缩／快速／均衡／最高，默认快速）
-- 快照／版本历史——按数量和/或大小上限保留快照，相同内容跨快照去重存储，占用空间远小于逻辑大小之和；可随时通过**还原快照...**还原到某个历史版本
+- 快照／版本历史——按数量和/或大小上限保留快照，相同内容跨快照去重存储，占用空间远小于逻辑大小之和；可随时通过**还原快照...**还原到某个历史版本，也可在其中按需删除某个单独的快照
 - 克隆磁盘到另一已挂载磁盘，或导出为新的 `.mdr` 文件（**克隆磁盘...**）
 - 可选的 `.mdr` 镜像密码保护（AES-256-GCM 信封加密；密码仅用于加密一个随机生成的每盘专属密钥，因此更改密码无需重新加密文件内容）——在磁盘对话框中通过"加密镜像"选项设置（密码长度需为 8–64 位）；挂载时（包括启动时的自动挂载）若镜像已加密会提示输入密码
 - 长耗时操作的进度反馈——保存镜像、导入压缩包、导出磁盘时均会显示带进度条的忙碌遮罩，避免大盘操作时应用看起来无响应
@@ -490,7 +490,7 @@ ManagedDrive 使用 **WinFsp**（Windows 文件系统代理）将内存目录树
 
 ### 快照格式
 
-快照采用与 `.mdr` 镜像完全独立的格式。对于主镜像 `disk.mdr`，其快照命名为同目录下的 `disk.yyyyMMdd-HHmmss.mdr`，每个都是一个小型二进制索引文件（魔数 `MDRS`），列出所有文件/目录的元数据，非空文件还会记录一个 SHA-256 哈希。实际文件内容存储在共享的内容寻址块存储 `disk.snapblobs/` 中（按哈希前 2 位十六进制分片到子文件夹），按磁盘配置的压缩级别逐块 gzip 压缩——多个快照间相同的内容只保存一份。当所属磁盘已设置密码保护时，每个块还会额外使用同一密钥进行 AES-256-GCM 加密。清理旧快照时，还会一并垃圾回收不再被任何剩余快照引用的块；清除磁盘密码时会直接删除该磁盘的所有快照，因为旧的块在密钥丢弃后已无法恢复。
+快照采用与 `.mdr` 镜像完全独立的格式。对于主镜像 `disk.mdr`，其快照命名为同目录下的 `disk.yyyyMMdd-HHmmss.mdr`，每个都是一个小型二进制索引文件（魔数 `MDRS`），列出所有文件/目录的元数据，非空文件还会记录一个 SHA-256 哈希。实际文件内容存储在共享的内容寻址块存储 `disk.snapblobs/` 中（按哈希前 2 位十六进制分片到子文件夹），按磁盘配置的压缩级别逐块 gzip 压缩——多个快照间相同的内容只保存一份。当所属磁盘已设置密码保护时，每个块还会额外使用同一密钥进行 AES-256-GCM 加密。清理旧快照，或通过**还原快照...**删除某个单独的快照时，都会一并垃圾回收不再被任何剩余快照引用的块；清除磁盘密码时会直接删除该磁盘的所有快照，因为旧的块在密钥丢弃后已无法恢复。
 
 ### 配置与持久化
 

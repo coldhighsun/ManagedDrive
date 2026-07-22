@@ -159,9 +159,23 @@
     <sys:String x:Key="RestoreSnapshot.Description">{0}（{1}）：请选择要恢复的快照。</sys:String>
     <sys:String x:Key="RestoreSnapshot.Count">共 {0} 个快照</sys:String>
     <sys:String x:Key="RestoreSnapshot.NoneWarning">该磁盘暂无可用快照。</sys:String>
+    <sys:String x:Key="RestoreSnapshot.ViewChanges">查看变化...</sys:String>
+    <sys:String x:Key="RestoreSnapshot.Delete">删除...</sys:String>
     <sys:String x:Key="Val.NoSnapshotSelected">请选择要恢复的快照。</sys:String>
     <sys:String x:Key="Msg.NoSnapshotsAvailable">该磁盘暂无可用快照。</sys:String>
     <sys:String x:Key="Msg.RestoreSnapshotConfirmTitle">恢复快照</sys:String>
+    <sys:String x:Key="Msg.DeleteSnapshotConfirmTitle">删除快照</sys:String>
+    <sys:String x:Key="Msg.DeleteSnapshotConfirmBody">删除快照 {0}？此操作无法撤销。</sys:String>
+
+    <!-- SnapshotDiffDialog -->
+    <sys:String x:Key="SnapshotDiff.Title">快照变化</sys:String>
+    <sys:String x:Key="SnapshotDiff.Description">正在将快照"{0}"与磁盘当前内容进行对比。</sys:String>
+    <sys:String x:Key="SnapshotDiff.Summary">新增 {0} 项，删除 {1} 项，修改 {2} 个文件，{3} 个文件未变化。</sys:String>
+    <sys:String x:Key="SnapshotDiff.NoChanges">该快照与磁盘当前内容没有差异。</sys:String>
+    <sys:String x:Key="SnapshotDiff.Added">新增</sys:String>
+    <sys:String x:Key="SnapshotDiff.Removed">删除</sys:String>
+    <sys:String x:Key="SnapshotDiff.Modified">修改</sys:String>
+    <sys:String x:Key="Btn.Close">关闭</sys:String>
     <sys:String x:Key="Msg.RestoreSnapshotConfirmBody">从快照 {2} 恢复 {0}（{1}）？&#x0a;&#x0a;当前内容将被替换。</sys:String>
     <sys:String x:Key="Status.SnapshotRestored">已从快照恢复 {0}。</sys:String>
 
