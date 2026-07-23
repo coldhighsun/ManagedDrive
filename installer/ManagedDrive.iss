@@ -56,7 +56,10 @@ const
   WinFspRegKey32 = 'SOFTWARE\WOW6432Node\WinFsp';
   WinFspRegKey64 = 'SOFTWARE\WinFsp';
   DotNetDesktopRuntimeRegKey = 'SOFTWARE\WOW6432Node\dotnet\Setup\InstalledVersions\x64\sharedfx\Microsoft.WindowsDesktop.App';
-  DotNetDownloadUrl = 'https://dotnet.microsoft.com/download/dotnet/10.0';
+  // Microsoft's stable "evergreen" redirect - always resolves to the current latest win-x64
+  // Desktop Runtime installer for the 10.0 channel, so we never have to chase patch versions.
+  DotNetDesktopRuntimeEvergreenUrl = 'https://aka.ms/dotnet/10.0/windowsdesktop-runtime-win-x64.exe';
+  DotNetDownloadPageUrl = 'https://dotnet.microsoft.com/download/dotnet/10.0';
 
 // Mirrors ManagedDrive.App's App.xaml.cs::CheckWinFspPrerequisite() detection:
 // HKLM InstallDir -> <InstallDir>\bin\winfsp-msil.dll must exist with a 2.2.x file version.
@@ -133,13 +136,58 @@ procedure PromptForDotNetDesktopRuntime();
 var
   ErrorCode: Integer;
 begin
-  if MsgBox('ManagedDrive requires the .NET 10 Desktop Runtime, which was not found on this ' +
-    'computer. Open the official download page now? You can also install it later and ' +
+  if MsgBox('ManagedDrive requires the .NET 10 Desktop Runtime, which could not be installed ' +
+    'automatically. Open the official download page now? You can also install it later and ' +
     '.NET-related features will start working once it is installed.',
     mbConfirmation, MB_YESNO) = IDYES then
   begin
-    ShellExec('open', DotNetDownloadUrl, '', '', SW_SHOWNORMAL, ewNoWait, ErrorCode);
+    ShellExec('open', DotNetDownloadPageUrl, '', '', SW_SHOWNORMAL, ewNoWait, ErrorCode);
   end;
+end;
+
+// Silently downloads and runs the official .NET 10 Desktop Runtime installer via the evergreen
+// link, mirroring InstallWinFspSilently() - unlike the WinFsp MSI this can't be bundled ahead of
+// time since "latest patch" changes over time and the installer is tens of MB. Falls back to
+// PromptForDotNetDesktopRuntime() if the download or the silent install itself fails, so a user
+// is never left with a silent no-op.
+procedure InstallDotNetDesktopRuntimeSilently();
+var
+  DownloadPath, ScriptPath, ScriptContent: string;
+  ResultCode: Integer;
+begin
+  WizardForm.StatusLabel.Caption := 'Downloading .NET 10 Desktop Runtime...';
+
+  // Written to a temp .ps1 file (rather than passed inline via -Command) to avoid the quoting
+  // headaches of nesting a PowerShell string literal inside a Pascal Script string literal.
+  DownloadPath := ExpandConstant('{tmp}\windowsdesktop-runtime-win-x64.exe');
+  ScriptPath := ExpandConstant('{tmp}\download-dotnet-runtime.ps1');
+  ScriptContent := Format('Invoke-WebRequest -Uri "%s" -OutFile "%s"', [DotNetDesktopRuntimeEvergreenUrl, DownloadPath]);
+  SaveStringToFile(ScriptPath, ScriptContent, False);
+
+  if not Exec('powershell.exe', Format('-NoProfile -ExecutionPolicy Bypass -File "%s"', [ScriptPath]), '',
+    SW_HIDE, ewWaitUntilTerminated, ResultCode) or not FileExists(DownloadPath) then
+  begin
+    Log('Failed to download the .NET 10 Desktop Runtime installer; falling back to manual prompt.');
+    PromptForDotNetDesktopRuntime();
+    exit;
+  end;
+
+  WizardForm.StatusLabel.Caption := 'Installing .NET 10 Desktop Runtime...';
+
+  if not Exec(DownloadPath, '/install /quiet /norestart', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then
+  begin
+    Log('Failed to launch the .NET 10 Desktop Runtime installer: ' + SysErrorMessage(ResultCode));
+    PromptForDotNetDesktopRuntime();
+    exit;
+  end;
+
+  if ResultCode <> 0 then
+  begin
+    Log(Format('.NET 10 Desktop Runtime silent install returned exit code %d; falling back to manual prompt.', [ResultCode]));
+    PromptForDotNetDesktopRuntime();
+  end
+  else
+    Log('.NET 10 Desktop Runtime installed successfully.');
 end;
 
 procedure CurStepChanged(CurStep: TSetupStep);
@@ -155,7 +203,7 @@ begin
   if CurStep = ssPostInstall then
   begin
     if not IsDotNetDesktopRuntime10Installed() then
-      PromptForDotNetDesktopRuntime()
+      InstallDotNetDesktopRuntimeSilently()
     else
       Log('.NET 10 Desktop Runtime already installed; skipping.');
   end;
