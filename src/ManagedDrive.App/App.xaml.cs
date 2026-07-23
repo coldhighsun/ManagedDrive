@@ -341,7 +341,7 @@ public partial class App
 
         if (result == MessageBoxResult.Yes)
         {
-            Process.Start(new ProcessStartInfo("https://github.com/winfsp/winfsp/releases/tag/v2.2B2") { UseShellExecute = true });
+            Process.Start(new ProcessStartInfo("https://github.com/winfsp/winfsp/releases/tag/v2.2B3") { UseShellExecute = true });
         }
 
         Shutdown();

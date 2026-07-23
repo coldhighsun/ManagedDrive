@@ -485,3 +485,7 @@ $RECYCLE.BIN/
 
 .wix
 *.wixpdb
+
+# Inno Setup build inputs/outputs
+installer/publish-fx/
+installer/Output/

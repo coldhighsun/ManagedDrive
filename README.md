@@ -55,12 +55,13 @@ Create, mount and manage in-memory volumes that appear as normal drive letters i
 
 ### Installation
 
-Two ZIPs are published on the [Releases](https://github.com/coldhighsun/ManagedDrive/releases) page for each version — pick one:
+Three artifacts are published on the [Releases](https://github.com/coldhighsun/ManagedDrive/releases) page for each version — pick one:
 
-- `ManagedDrive-vX.Y.Z-win-x64-portable.zip` — small download; requires the [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0) to be installed separately.
-- `ManagedDrive-vX.Y.Z-win-x64-selfcontained.zip` — larger download (bundles its own .NET runtime); no runtime install needed.
+- `ManagedDrive-Setup-X.Y.Z.exe` — a guided installer. It detects whether WinFsp and the .NET 10 Desktop Runtime are already installed, silently installs the bundled WinFsp MSI if missing, prompts you to install the .NET Desktop Runtime if missing, and installs ManagedDrive into Program Files with Start Menu/desktop shortcuts. Recommended for most users.
+- `ManagedDrive-vX.Y.Z-win-x64-portable.zip` — small download; requires WinFsp and the [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0) to be installed separately.
+- `ManagedDrive-vX.Y.Z-win-x64-selfcontained.zip` — larger download (bundles its own .NET runtime); only WinFsp needs to be installed separately.
 
-Extract either one anywhere and run `ManagedDrive.exe` directly. `ManagedDrive.exe` is a single-file executable — the ZIP contains it plus one small companion `winfsp-msil.dll` (the managed WinFsp interop assembly, which can't be embedded in the single-file bundle) that must stay next to it. The only registry write is the optional "Run at startup" setting; nothing else touches the registry. WinFsp must be installed separately first in both cases (see Prerequisites below).
+If using either ZIP, extract it anywhere and run `ManagedDrive.exe` directly. `ManagedDrive.exe` is a single-file executable — the ZIP contains it plus one small companion `winfsp-msil.dll` (the managed WinFsp interop assembly, which can't be embedded in the single-file bundle) that must stay next to it. The only registry write is the optional "Run at startup" setting; nothing else touches the registry. WinFsp must be installed separately first with the ZIPs (see Prerequisites below); the installer handles this automatically.
 
 Each ZIP also includes `mdrive.exe`, a companion CLI (see [CLI Usage](#cli-usage) below). Add the extraction folder to your `PATH` to run `mdrive` from any shell.
 
@@ -355,12 +356,13 @@ This project bundles [WinFsp](https://winfsp.dev/) and [SharpCompress](https://g
 
 ### 安装
 
-[Releases](https://github.com/coldhighsun/ManagedDrive/releases) 页面为每个版本发布了两个 ZIP，任选其一：
+[Releases](https://github.com/coldhighsun/ManagedDrive/releases) 页面为每个版本发布了三种安装方式，任选其一：
 
-- `ManagedDrive-vX.Y.Z-win-x64-portable.zip` —— 体积较小；需要单独安装 [.NET 10 桌面运行时](https://dotnet.microsoft.com/download/dotnet/10.0)。
-- `ManagedDrive-vX.Y.Z-win-x64-selfcontained.zip` —— 体积较大（内置完整运行时）；无需安装运行时。
+- `ManagedDrive-Setup-X.Y.Z.exe` —— 引导式安装程序。会自动检测 WinFsp 和 .NET 10 桌面运行时是否已安装，若缺少 WinFsp 会静默安装内置的 WinFsp 安装包，若缺少 .NET 桌面运行时会提示安装，并将 ManagedDrive 安装到 Program Files，创建开始菜单/桌面快捷方式。推荐大多数用户使用。
+- `ManagedDrive-vX.Y.Z-win-x64-portable.zip` —— 体积较小；需要单独安装 WinFsp 和 [.NET 10 桌面运行时](https://dotnet.microsoft.com/download/dotnet/10.0)。
+- `ManagedDrive-vX.Y.Z-win-x64-selfcontained.zip` —— 体积较大（内置完整运行时）；只需单独安装 WinFsp。
 
-解压到任意目录后直接运行 `ManagedDrive.exe` 即可。`ManagedDrive.exe` 是单文件可执行程序——ZIP 中还附带一个体积很小的 `winfsp-msil.dll`（WinFsp 托管互操作程序集，无法打包进单文件中），需与 exe 保持在同一目录下。唯一会写入注册表的操作是可选的"开机自启"设置，除此之外不会写入注册表。两种方式都仍需提前单独安装 WinFsp（见下方环境要求）。
+若使用 ZIP，解压到任意目录后直接运行 `ManagedDrive.exe` 即可。`ManagedDrive.exe` 是单文件可执行程序——ZIP 中还附带一个体积很小的 `winfsp-msil.dll`（WinFsp 托管互操作程序集，无法打包进单文件中），需与 exe 保持在同一目录下。唯一会写入注册表的操作是可选的"开机自启"设置，除此之外不会写入注册表。使用 ZIP 时仍需提前单独安装 WinFsp（见下方环境要求）；安装程序会自动处理这一步。
 
 每个 ZIP 中还包含 `mdrive.exe`，一个配套的命令行工具（见下方[命令行用法](#命令行用法)）。将解压目录加入 `PATH` 后即可在任意终端中运行 `mdrive`。
 
