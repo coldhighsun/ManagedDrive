@@ -78,15 +78,6 @@ jobs:
             -o publish-fx/
         shell: pwsh
 
-      - name: Publish app (win-x64, self-contained)
-        run: |
-          dotnet publish src/ManagedDrive.App/ManagedDrive.App.csproj `
-            -c Release `
-            -r win-x64 `
-            --self-contained true `
-            -o publish-sc/
-        shell: pwsh
-
       - name: Publish CLI (win-x64, framework-dependent)
         run: |
           dotnet publish src/ManagedDrive.Cli/ManagedDrive.Cli.csproj `
@@ -94,15 +85,6 @@ jobs:
             -r win-x64 `
             --no-self-contained `
             -o publish-fx/
-        shell: pwsh
-
-      - name: Publish CLI (win-x64, self-contained)
-        run: |
-          dotnet publish src/ManagedDrive.Cli/ManagedDrive.Cli.csproj `
-            -c Release `
-            -r win-x64 `
-            --self-contained true `
-            -o publish-sc/
         shell: pwsh
 
       - name: Resolve version from tag
@@ -113,11 +95,10 @@ jobs:
           echo "version=$($tag.TrimStart('v'))" >> $env:GITHUB_OUTPUT
         shell: pwsh
 
-      - name: Build portable packages
+      - name: Build portable package
         run: |
           $tag = "${{ steps.version.outputs.tag }}"
           Compress-Archive -Path publish-fx\* -DestinationPath "ManagedDrive-$tag-win-x64-portable.zip"
-          Compress-Archive -Path publish-sc\* -DestinationPath "ManagedDrive-$tag-win-x64-selfcontained.zip"
         shell: pwsh
 
       - name: Prepare installer inputs
@@ -153,5 +134,4 @@ jobs:
           generate_release_notes: true
           files: |
             ManagedDrive-${{ steps.version.outputs.tag }}-win-x64-portable.zip
-            ManagedDrive-${{ steps.version.outputs.tag }}-win-x64-selfcontained.zip
             installer/Output/ManagedDrive-Setup-${{ steps.version.outputs.version }}.exe
