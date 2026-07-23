@@ -110,6 +110,7 @@ jobs:
         run: |
           $tag = "${{ github.ref_name }}"          # e.g. v1.2.3
           echo "tag=$tag"   >> $env:GITHUB_OUTPUT
+          echo "version=$($tag.TrimStart('v'))" >> $env:GITHUB_OUTPUT
         shell: pwsh
 
       - name: Build portable packages
@@ -117,6 +118,25 @@ jobs:
           $tag = "${{ steps.version.outputs.tag }}"
           Compress-Archive -Path publish-fx\* -DestinationPath "ManagedDrive-$tag-win-x64-portable.zip"
           Compress-Archive -Path publish-sc\* -DestinationPath "ManagedDrive-$tag-win-x64-selfcontained.zip"
+        shell: pwsh
+
+      - name: Prepare installer inputs
+        run: |
+          Copy-Item -Path publish-fx -Destination installer\publish-fx -Recurse
+          Invoke-WebRequest `
+            -Uri "https://github.com/winfsp/winfsp/releases/download/v2.2B3/winfsp-2.2.26194.msi" `
+            -OutFile "installer\winfsp-2.2.26194.msi"
+        shell: pwsh
+
+      - name: Install Inno Setup
+        run: choco install innosetup -y --no-progress
+        shell: pwsh
+
+      - name: Build installer
+        run: |
+          & "${env:ProgramFiles(x86)}\Inno Setup 7\ISCC.exe" `
+            "/DAppVersion=${{ steps.version.outputs.version }}" `
+            installer\ManagedDrive.iss
         shell: pwsh
 
       - name: Create GitHub Release
@@ -128,3 +148,4 @@ jobs:
           files: |
             ManagedDrive-${{ steps.version.outputs.tag }}-win-x64-portable.zip
             ManagedDrive-${{ steps.version.outputs.tag }}-win-x64-selfcontained.zip
+            installer/Output/ManagedDrive-Setup-${{ steps.version.outputs.version }}.exe
