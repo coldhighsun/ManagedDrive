@@ -91,13 +91,15 @@ end;
 
 // Mirrors the check dotnet's own bootstrapper uses to detect an installed
 // shared framework version, avoiding any dependency on dotnet.exe being on PATH.
+// Installed versions are recorded as REG_DWORD *values* under this key (name = version
+// string, data = 1), not as subkeys - RegGetValueNames is required, not RegGetSubkeyNames.
 function IsDotNetDesktopRuntime10Installed(): Boolean;
 var
   Versions: TArrayOfString;
   I: Integer;
 begin
   Result := False;
-  if not RegGetSubkeyNames(HKLM, DotNetDesktopRuntimeRegKey, Versions) then
+  if not RegGetValueNames(HKLM, DotNetDesktopRuntimeRegKey, Versions) then
     exit;
 
   for I := 0 to GetArrayLength(Versions) - 1 do
