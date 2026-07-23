@@ -129,14 +129,20 @@ jobs:
         shell: pwsh
 
       - name: Install Inno Setup
-        run: choco install innosetup -y --no-progress
+        # Chocolatey's "innosetup" package tops out at 6.x; JRSoftware.InnoSetup.7 is the
+        # separate winget package for Inno Setup 7.
+        run: winget install --id JRSoftware.InnoSetup.7 --silent --accept-package-agreements --accept-source-agreements
         shell: pwsh
 
       - name: Build installer
         run: |
-          & "${env:ProgramFiles(x86)}\Inno Setup 7\ISCC.exe" `
-            "/DAppVersion=${{ steps.version.outputs.version }}" `
-            installer\ManagedDrive.iss
+          $iscc = Get-ChildItem -Path "$env:ProgramFiles", "${env:ProgramFiles(x86)}", "$env:LOCALAPPDATA\Programs" `
+            -Recurse -Filter "ISCC.exe" -ErrorAction SilentlyContinue |
+            Select-Object -First 1 -ExpandProperty FullName
+          if (-not $iscc) {
+            throw "ISCC.exe not found after installing Inno Setup 7."
+          }
+          & $iscc "/DAppVersion=${{ steps.version.outputs.version }}" installer\ManagedDrive.iss
         shell: pwsh
 
       - name: Create GitHub Release
