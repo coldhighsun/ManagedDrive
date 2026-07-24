@@ -308,7 +308,14 @@ public sealed class RamDisk : IDisposable
     /// accessible from the Windows shell. If an image path is configured, a final save is
     /// performed before unmounting, unless nothing has changed since the last save.
     /// </summary>
-    public void Dispose()
+    public void Dispose() => Dispose(null);
+
+    /// <summary>
+    /// Unmounts the disk and releases all resources, as <see cref="Dispose()"/>, but reports
+    /// progress of the final save (if one is performed) via <paramref name="progress"/>.
+    /// </summary>
+    /// <param name="progress">Optional progress reporter, updated with a fraction in [0, 1].</param>
+    public void Dispose(IProgress<double>? progress)
     {
         if (!_disposed)
         {
@@ -326,7 +333,7 @@ public sealed class RamDisk : IDisposable
                     {
                         if (NeedsExitSave())
                         {
-                            SaveToImage();
+                            SaveToImage(progress);
                         }
                     }
                     catch

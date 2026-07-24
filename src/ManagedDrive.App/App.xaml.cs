@@ -319,7 +319,9 @@ public partial class App
             _mountManager.ActivityDetected -= _trayIconController.OnActivityDetected;
         }
 
-        await Task.Run(() => _mountManager?.Dispose());
+        await Task.Run(() => _mountManager?.Dispose((disk, fraction) =>
+            Application.Current.Dispatcher.BeginInvoke(() =>
+                _mainViewModel?.ReportExitSaveProgress(disk.Options.MountPoint, fraction))));
         Shutdown();
     }
 }

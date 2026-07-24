@@ -212,7 +212,53 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         {
             field = value;
             OnPropertyChanged(nameof(IsExiting));
+
+            if (value)
+            {
+                ExitSaveProgress = 0;
+                ExitSaveStatusText = Loc.Get("Msg.ExitSaving");
+            }
         }
+    }
+
+    /// <summary>
+    /// Gets the overall progress fraction (0-1) of the final disk save(s) performed while
+    /// <see cref="IsExiting"/> is <c>true</c>. Driven by <see cref="ReportExitSaveProgress"/>.
+    /// </summary>
+    public double ExitSaveProgress
+    {
+        get;
+        private set
+        {
+            field = value;
+            OnPropertyChanged(nameof(ExitSaveProgress));
+        }
+    }
+
+    /// <summary>
+    /// Gets the status text shown above the exit-saving progress bar.
+    /// </summary>
+    public string ExitSaveStatusText
+    {
+        get;
+        private set
+        {
+            field = value;
+            OnPropertyChanged(nameof(ExitSaveStatusText));
+        }
+    } = string.Empty;
+
+    /// <summary>
+    /// Updates <see cref="ExitSaveProgress"/> and <see cref="ExitSaveStatusText"/> during the
+    /// final on-exit save. Called from <c>App.ShutdownAsync</c> via
+    /// <see cref="ManagedDrive.Core.Mounting.MountManager.Dispose(Action{ManagedDrive.Core.Mounting.RamDisk, double})"/>.
+    /// </summary>
+    /// <param name="mountPoint">The mount point of the disk currently being saved.</param>
+    /// <param name="fraction">Overall progress across all disks, in [0, 1].</param>
+    internal void ReportExitSaveProgress(string mountPoint, double fraction)
+    {
+        ExitSaveProgress = fraction;
+        ExitSaveStatusText = Loc.Format("Msg.ExitSavingDisk", mountPoint);
     }
 
     /// <summary>

@@ -96,6 +96,7 @@
     <sys:String x:Key="Card.Saving">正在保存...</sys:String>
     <sys:String x:Key="Card.ApplyingChanges">正在应用更改...</sys:String>
     <sys:String x:Key="Msg.ExitSaving">正在保存磁盘镜像，请稍候...</sys:String>
+    <sys:String x:Key="Msg.ExitSavingDisk">正在保存 "{0}"...</sys:String>
     <sys:String x:Key="Busy.SavingImage">正在保存磁盘映像…</sys:String>
     <sys:String x:Key="Busy.ImportingArchive">正在导入归档…</sys:String>
     <sys:String x:Key="Busy.ExportingImage">正在导出磁盘映像…</sys:String>

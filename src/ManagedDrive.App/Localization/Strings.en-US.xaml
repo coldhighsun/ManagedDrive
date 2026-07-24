@@ -96,6 +96,7 @@
     <sys:String x:Key="Card.Saving">Saving...</sys:String>
     <sys:String x:Key="Card.ApplyingChanges">Applying changes...</sys:String>
     <sys:String x:Key="Msg.ExitSaving">Saving disk images, please wait...</sys:String>
+    <sys:String x:Key="Msg.ExitSavingDisk">Saving "{0}"...</sys:String>
     <sys:String x:Key="Busy.SavingImage">Saving disk image...</sys:String>
     <sys:String x:Key="Busy.ImportingArchive">Importing archive...</sys:String>
     <sys:String x:Key="Busy.ExportingImage">Exporting disk image...</sys:String>
