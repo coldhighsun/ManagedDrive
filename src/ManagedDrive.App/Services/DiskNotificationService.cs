@@ -61,7 +61,7 @@ public sealed class DiskNotificationService
             return;
         }
 
-        _mainViewModel.ShowDiskActivityStatus(vm.MountPoint, vm.VolumeLabel, e.IsWrite, e.FilePath);
+        _mainViewModel.ShowDiskActivityStatus(vm.MountPoint, e.IsWrite, e.FilePath);
     }
 
     private void OnDiskCapacityAdjusted(DiskViewModel vm)

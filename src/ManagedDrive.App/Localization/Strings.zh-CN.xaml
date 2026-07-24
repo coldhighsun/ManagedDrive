@@ -246,8 +246,8 @@
     <sys:String x:Key="Status.CapacityAdjusted">{0}：容量已从 {1} MB 自动提升到 {2} MB，以容纳已加载的镜像。</sys:String>
     <sys:String x:Key="Status.Unmounted">已卸载 {0}。</sys:String>
     <sys:String x:Key="Status.TempDirSet">临时文件夹已设置为 {0}。</sys:String>
-    <sys:String x:Key="Status.DiskRead">正在从 {1}（{0}）读取 "{2}"...</sys:String>
-    <sys:String x:Key="Status.DiskWrite">正在写入 "{2}" 到 {1}（{0}）...</sys:String>
+    <sys:String x:Key="Status.DiskRead">{0} 正在读取 "{1}"...</sys:String>
+    <sys:String x:Key="Status.DiskWrite">{0} 正在写入 "{1}"...</sys:String>
 
     <!-- MessageBox bodies -->
     <sys:String x:Key="Msg.AlreadyRunning">ManagedDrive 已在运行。</sys:String>
