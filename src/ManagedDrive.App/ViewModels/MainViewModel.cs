@@ -721,7 +721,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     /// or written to, reverting to <c>Status.Ready</c> after <see cref="DiskActivityStatusDuration"/>
     /// of inactivity. Driven by <see cref="DiskViewModel.ActivityObserved"/>.
     /// </summary>
-    internal void ShowDiskActivityStatus(string mountPoint, string volumeLabel, bool isWrite, string filePath)
+    internal void ShowDiskActivityStatus(string mountPoint, bool isWrite, string filePath)
     {
         var fileName = Path.GetFileName(filePath);
         if (string.IsNullOrEmpty(fileName))
@@ -729,7 +729,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             fileName = filePath;
         }
 
-        StatusText = Loc.Format(isWrite ? "Status.DiskWrite" : "Status.DiskRead", mountPoint, volumeLabel, fileName);
+        StatusText = Loc.Format(isWrite ? "Status.DiskWrite" : "Status.DiskRead", mountPoint, fileName);
         _diskActivityStatusTimer.Stop();
         _diskActivityStatusTimer.Start();
     }
