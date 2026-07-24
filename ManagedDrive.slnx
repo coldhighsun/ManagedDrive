@@ -15,6 +15,8 @@
   <Folder Name="/src/">
     <Project Path="src/ManagedDrive.App/ManagedDrive.App.csproj" />
     <Project Path="src/ManagedDrive.Core/ManagedDrive.Core.csproj" />
+    <Project Path="src/ManagedDrive.HelperProtocol/ManagedDrive.HelperProtocol.csproj" />
+    <Project Path="src/ManagedDrive.Service/ManagedDrive.Service.csproj" />
   </Folder>
   <Folder Name="/benchmarks/">
     <Project Path="benchmarks/ManagedDrive.Benchmarks/ManagedDrive.Benchmarks.csproj" />
