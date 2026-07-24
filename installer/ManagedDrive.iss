@@ -11,6 +11,8 @@
 #endif
 
 #define WinFspMsiName "winfsp-2.2.26194.msi"
+#define HelperServiceName "ManagedDriveHelper"
+#define HelperServiceExeName "ManagedDriveHelper.exe"
 
 [Setup]
 AppId={{9B6F0F1A-6E0D-4A6B-8C7E-6C6D9B0E5A11}
@@ -192,6 +194,61 @@ begin
     Log('.NET 10 Desktop Runtime installed successfully.');
 end;
 
+// The optional SYSTEM helper service (cross-session RAM-disk symlink visibility - see
+// CLAUDE.md). Best-effort only: ManagedDrive itself works fine without it, so every
+// step here only Log()s on failure rather than aborting setup.
+function IsHelperServiceInstalled(): Boolean;
+begin
+  Result := RegKeyExists(HKLM, 'SYSTEM\CurrentControlSet\Services\{#HelperServiceName}');
+end;
+
+procedure StopHelperService();
+var
+  ResultCode: Integer;
+begin
+  if not Exec('sc.exe', 'stop {#HelperServiceName}', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then
+    Log('Failed to launch sc.exe to stop the helper service: ' + SysErrorMessage(ResultCode))
+  else if ResultCode <> 0 then
+    Log(Format('"sc stop {#HelperServiceName}" returned exit code %d (service may already be stopped).', [ResultCode]));
+end;
+
+procedure StartHelperService();
+var
+  ResultCode: Integer;
+begin
+  if not Exec('sc.exe', 'start {#HelperServiceName}', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then
+    Log('Failed to launch sc.exe to start the helper service: ' + SysErrorMessage(ResultCode))
+  else if ResultCode <> 0 then
+    Log(Format('"sc start {#HelperServiceName}" returned exit code %d.', [ResultCode]))
+  else
+    Log('Helper service started.');
+end;
+
+procedure InstallHelperServiceSilently();
+var
+  BinPath: string;
+  ResultCode: Integer;
+begin
+  BinPath := '"' + ExpandConstant('{app}') + '\{#HelperServiceExeName}"';
+
+  if not Exec('sc.exe', Format('create {#HelperServiceName} binPath= %s start= auto', [BinPath]), '',
+    SW_HIDE, ewWaitUntilTerminated, ResultCode) then
+  begin
+    Log('Failed to launch sc.exe to create the helper service: ' + SysErrorMessage(ResultCode));
+    exit;
+  end;
+
+  if ResultCode <> 0 then
+  begin
+    Log(Format('"sc create {#HelperServiceName}" returned exit code %d; skipping start. Cross-session ' +
+      'RAM-disk visibility will not be available, but ManagedDrive itself is unaffected.', [ResultCode]));
+    exit;
+  end;
+
+  Log('Helper service registered.');
+  StartHelperService();
+end;
+
 procedure CurStepChanged(CurStep: TSetupStep);
 begin
   if CurStep = ssInstall then
@@ -208,5 +265,38 @@ begin
       InstallDotNetDesktopRuntimeSilently()
     else
       Log('.NET 10 Desktop Runtime already installed; skipping.');
+
+    if not IsHelperServiceInstalled() then
+      InstallHelperServiceSilently()
+    else
+    begin
+      // Reinstall/upgrade: the exe on disk under {app} has just been replaced, but the
+      // already-running service process still has the old file mapped in memory - restart
+      // it so the new binary actually takes effect.
+      Log('Helper service already registered; restarting to pick up the updated binary.');
+      StopHelperService();
+      StartHelperService();
+    end;
+  end;
+end;
+
+procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+var
+  ResultCode: Integer;
+begin
+  if CurUninstallStep = usUninstall then
+  begin
+    if IsHelperServiceInstalled() then
+    begin
+      StopHelperService();
+      if not Exec('sc.exe', 'delete {#HelperServiceName}', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then
+        Log('Failed to launch sc.exe to delete the helper service: ' + SysErrorMessage(ResultCode))
+      else if ResultCode <> 0 then
+        Log(Format('"sc delete {#HelperServiceName}" returned exit code %d.', [ResultCode]))
+      else
+        Log('Helper service removed.');
+    end
+    else
+      Log('Helper service not registered; nothing to remove.');
   end;
 end;
