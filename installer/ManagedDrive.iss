@@ -280,6 +280,54 @@ begin
   end;
 end;
 
+// Checks whether the user-level TEMP variable currently points at a drive letter that a saved
+// ManagedDrive disk profile uses as its mount point. Mirrors TempDirCompatChecker.IsTempOnAnyDisk
+// (App layer), but reads the persisted profile list from settings.json instead of live
+// DiskViewModels, since the uninstaller cannot assume the app is running. settings.json is
+// written via JsonSerializer.Serialize with default (indented, PascalCase) options, so a plain
+// substring search for the "MountPoint": "<Letter>: pattern is reliable without a JSON parser.
+function IsTempOnManagedDriveMountPoint(): Boolean;
+var
+  TempValue, SettingsPath, NeedlePrefix, DriveLetter: string;
+  SettingsContent: AnsiString;
+begin
+  Result := False;
+
+  if not RegQueryStringValue(HKCU, 'Environment', 'TEMP', TempValue) then
+    exit;
+
+  if (Length(TempValue) < 2) or (TempValue[2] <> ':') then
+    exit;
+
+  DriveLetter := Uppercase(Copy(TempValue, 1, 1));
+
+  SettingsPath := ExpandConstant('{userappdata}\ManagedDrive\settings.json');
+  if not LoadStringFromFile(SettingsPath, SettingsContent) then
+    exit;
+
+  NeedlePrefix := '"MountPoint": "' + DriveLetter + ':';
+  Result := Pos(NeedlePrefix, SettingsContent) > 0;
+end;
+
+function InitializeUninstall(): Boolean;
+begin
+  Result := True;
+
+  if IsTempOnManagedDriveMountPoint() then
+  begin
+    MsgBox(
+      'TEMP is currently set to a ManagedDrive RAM disk. Uninstalling now will leave TEMP ' +
+      'pointing at a drive that no longer exists.'#13#10#13#10 +
+      'Please open ManagedDrive and reset TEMP to its default location (Tray menu > Reset TEMP ' +
+      'Dirs, or untoggle TEMP on the disk), then run this uninstaller again.'#13#10#13#10 +
+      '当前 TEMP 目录设置在了 ManagedDrive 内存盘上。现在卸载会导致 TEMP 指向一个不存在的驱动器。'#13#10#13#10 +
+      '请先打开 ManagedDrive，将 TEMP 还原为系统默认设置（托盘菜单 > 重置 TEMP 目录，或取消该磁盘' +
+      '的 TEMP 设置），然后再次运行本卸载程序。',
+      mbError, MB_OK);
+    Result := False;
+  end;
+end;
+
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 var
   ResultCode: Integer;
