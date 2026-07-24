@@ -52,7 +52,8 @@ Create, mount and manage in-memory volumes that appear as normal drive letters i
 - Bilingual (English / Simplified Chinese) and light/dark themes, both auto-detected with manual override in Settings, switching instantly without restart
 - At-a-glance disk cards with status badges (read-only, current-TEMP, backing image, password-protected) and a usage bar that turns warning-colored past the high-usage threshold
 - Main window is freely resizable by dragging its edges, but has no maximize/fullscreen mode
-- About dialog with app version and GitHub link
+- About dialog with app version, GitHub link, and an inline "update available" link when a newer release exists
+- Optional daily automatic update check against GitHub Releases (toggle in Settings); a tray balloon plus a dialog (View Release / Skip This Version / Remind Me Later) appears when a newer formal release is found
 
 ### Installation
 
@@ -112,9 +113,9 @@ ManagedDrive/
 │       ├── Helpers/                #   ByteFormatter, HintHelper (watermark/placeholder text)
 │       ├── Infrastructure/         #   RelayCommand
 │       ├── Models/                 #   AppConfiguration, DiskProfile
-│       ├── Services/               #   SettingsStore, StartupManager, TempDirResetService, ShellContextMenuManager, SystemMemoryInfo, plus six services split out of App.xaml.cs: TrayIconController, TrayTooltipController, DiskNotificationService, TempDirCompatChecker, SessionEndingSaveHandler, WinFspPrerequisite
+│       ├── Services/               #   SettingsStore, StartupManager, TempDirResetService, ShellContextMenuManager, SystemMemoryInfo, UpdateCheckService, plus six services split out of App.xaml.cs: TrayIconController, TrayTooltipController, DiskNotificationService, TempDirCompatChecker, SessionEndingSaveHandler, WinFspPrerequisite
 │       ├── ViewModels/             #   MainViewModel, DiskViewModel
-│       ├── Views/                  #   CreateDiskDialog, CloneDiskDialog, DiskContentDialog, RestoreSnapshotDialog, SettingsDialog, SnapshotDiffDialog, ConfirmDialog, AboutDialog, TrayTooltipView, PasswordPromptDialog
+│       ├── Views/                  #   CreateDiskDialog, CloneDiskDialog, DiskContentDialog, RestoreSnapshotDialog, SettingsDialog, SnapshotDiffDialog, ConfirmDialog, AboutDialog, UpdateAvailableDialog, TrayTooltipView, PasswordPromptDialog
 │       ├── GlobalUsings.cs         #   Project-wide global using directives
 │       ├── MainWindow.xaml(.cs)    #   Main window
 │       ├── App.xaml(.cs)           #   Startup/shutdown orchestration and window navigation; tray/notification/TEMP/prerequisite concerns live in Services/ (above)
@@ -147,7 +148,8 @@ ManagedDrive/
 │       ├── ArchiveNodeMapWriterTests.cs
 │       ├── MountOptionsFactoryTests.cs
 │       ├── CreateDiskOptionsBuilderTests.cs
-│       └── ByteUnitConverterTests.cs
+│       ├── ByteUnitConverterTests.cs
+│       └── RecordingProgress.cs           #   Shared IProgress<double> test double
 │
 └── benchmarks/
     └── ManagedDrive.Benchmarks/    # BenchmarkDotNet throughput/latency benchmarks
@@ -349,7 +351,8 @@ This project bundles [WinFsp](https://winfsp.dev/) and [SharpCompress](https://g
 - 双语界面（中文/英文）与浅色/深色主题，均可自动检测或在设置中手动切换，即时生效无需重启
 - 一目了然的磁盘卡片，带状态角标（只读、当前临时目录、是否绑定镜像、密码保护）及使用率超阈值时变色的进度条
 - 主窗口可通过拖拽边缘自由调整大小，但不支持最大化/全屏
-- 关于对话框，显示应用版本及 GitHub 仓库链接
+- 关于对话框显示应用版本及 GitHub 仓库链接，如检测到新版本还会内嵌一个"有可用更新"链接
+- 可选的每日自动检查更新（在设置中开关），检测到 GitHub 上有新的正式版本时会弹出托盘气泡及对话框（查看发布页/忽略此版本/稍后提醒）
 
 **命令行**
 - `mdrive` 命令行工具（随 `ManagedDrive.exe` 一同发布），可通过命名管道对运行中的应用执行 mount/unmount/format/save/list/exit 等脚本化操作
@@ -413,9 +416,9 @@ ManagedDrive/
 │       ├── Helpers/                #   ByteFormatter、HintHelper（水印/占位文本）
 │       ├── Infrastructure/         #   RelayCommand
 │       ├── Models/                 #   AppConfiguration、DiskProfile
-│       ├── Services/               #   SettingsStore、StartupManager、TempDirResetService、ShellContextMenuManager、SystemMemoryInfo，以及从 App.xaml.cs 拆出的六个服务：TrayIconController、TrayTooltipController、DiskNotificationService、TempDirCompatChecker、SessionEndingSaveHandler、WinFspPrerequisite
+│       ├── Services/               #   SettingsStore、StartupManager、TempDirResetService、ShellContextMenuManager、SystemMemoryInfo、UpdateCheckService，以及从 App.xaml.cs 拆出的六个服务：TrayIconController、TrayTooltipController、DiskNotificationService、TempDirCompatChecker、SessionEndingSaveHandler、WinFspPrerequisite
 │       ├── ViewModels/             #   MainViewModel、DiskViewModel
-│       ├── Views/                  #   CreateDiskDialog、CloneDiskDialog、DiskContentDialog、RestoreSnapshotDialog、SettingsDialog、SnapshotDiffDialog、ConfirmDialog、AboutDialog、TrayTooltipView、PasswordPromptDialog
+│       ├── Views/                  #   CreateDiskDialog、CloneDiskDialog、DiskContentDialog、RestoreSnapshotDialog、SettingsDialog、SnapshotDiffDialog、ConfirmDialog、AboutDialog、UpdateAvailableDialog、TrayTooltipView、PasswordPromptDialog
 │       ├── GlobalUsings.cs         #   项目级全局 using 指令
 │       ├── MainWindow.xaml(.cs)    #   主窗口
 │       ├── App.xaml(.cs)           #   启动/关闭编排与窗口导航；托盘、通知、TEMP、前置检查等职责已拆分至上面的 Services/
@@ -448,7 +451,8 @@ ManagedDrive/
 │       ├── ArchiveNodeMapWriterTests.cs
 │       ├── MountOptionsFactoryTests.cs
 │       ├── CreateDiskOptionsBuilderTests.cs
-│       └── ByteUnitConverterTests.cs
+│       ├── ByteUnitConverterTests.cs
+│       └── RecordingProgress.cs           #   共用的 IProgress<double> 测试替身
 │
 └── benchmarks/
     └── ManagedDrive.Benchmarks/    # BenchmarkDotNet 吞吐量/延迟基准测试
