@@ -12,7 +12,7 @@ public sealed class WildcardMatchTests
     [InlineData("foo.tx", "foo.txt", false)]
     public void ExactAndCaseInsensitiveMatch(string pattern, string name, bool expected)
     {
-        Assert.Equal(expected, MemoryFileSystem.WildcardMatch(pattern, name));
+        Assert.Equal(expected, WildcardMatcher.Match(pattern, name));
     }
 
     [Theory]
@@ -22,7 +22,7 @@ public sealed class WildcardMatchTests
     [InlineData("???", "ab", false)]
     public void QuestionMarkMatchesSingleChar(string pattern, string name, bool expected)
     {
-        Assert.Equal(expected, MemoryFileSystem.WildcardMatch(pattern, name));
+        Assert.Equal(expected, WildcardMatcher.Match(pattern, name));
     }
 
     [Theory]
@@ -39,7 +39,7 @@ public sealed class WildcardMatchTests
     [InlineData("*a*b*", "xbxax", false)]
     public void StarMatchesZeroOrMoreChars(string pattern, string name, bool expected)
     {
-        Assert.Equal(expected, MemoryFileSystem.WildcardMatch(pattern, name));
+        Assert.Equal(expected, WildcardMatcher.Match(pattern, name));
     }
 
     [Theory]
@@ -49,7 +49,7 @@ public sealed class WildcardMatchTests
     [InlineData("*", "", true)]
     public void EmptyPatternOrName(string pattern, string name, bool expected)
     {
-        Assert.Equal(expected, MemoryFileSystem.WildcardMatch(pattern, name));
+        Assert.Equal(expected, WildcardMatcher.Match(pattern, name));
     }
 
     [Theory]
@@ -59,6 +59,6 @@ public sealed class WildcardMatchTests
     [InlineData("*a*a*a*b", "aaac", false)]
     public void AdversarialBacktrackingPatterns(string pattern, string name, bool expected)
     {
-        Assert.Equal(expected, MemoryFileSystem.WildcardMatch(pattern, name));
+        Assert.Equal(expected, WildcardMatcher.Match(pattern, name));
     }
 }

@@ -220,7 +220,7 @@ public sealed class MemoryFileSystem : FileSystemBase
 
         var aligned = FileNode.AlignToAllocationUnit(allocationSize);
 
-        if (NodeMap.GetTotalAllocated() + aligned > _maxCapacity)
+        if (WouldExceedCapacity(aligned))
         {
             return STATUS_DISK_FULL;
         }
@@ -459,7 +459,7 @@ public sealed class MemoryFileSystem : FileSystemBase
         var currentAlloc = node.FileInfo.AllocationSize;
         var extra = aligned > currentAlloc ? aligned - currentAlloc : 0;
 
-        if (NodeMap.GetTotalAllocated() + extra > _maxCapacity)
+        if (WouldExceedCapacity(extra))
         {
             fileInfo = node.FileInfo;
             return STATUS_DISK_FULL;
@@ -546,7 +546,7 @@ public sealed class MemoryFileSystem : FileSystemBase
         out string? fileName,
         out FileInfo fileInfo)
     {
-        context ??= BuildDirContext((FileNode)fileNode, pattern, marker);
+        context ??= DirectoryEnumeration.Build(NodeMap, (FileNode)fileNode, pattern, marker);
 
         return ((DirContext)context).TryNext(out fileName, out fileInfo);
     }
@@ -786,47 +786,6 @@ public sealed class MemoryFileSystem : FileSystemBase
         return STATUS_SUCCESS;
     }
 
-    internal static bool WildcardMatch(ReadOnlySpan<char> pattern, ReadOnlySpan<char> name)
-    {
-        var p = 0;
-        var n = 0;
-        var starIdx = -1;
-        var matchIdx = 0;
-
-        while (n < name.Length)
-        {
-            if (p < pattern.Length &&
-                (pattern[p] == '?' || char.ToUpperInvariant(pattern[p]) == char.ToUpperInvariant(name[n])))
-            {
-                p++;
-                n++;
-            }
-            else if (p < pattern.Length && pattern[p] == '*')
-            {
-                starIdx = p;
-                matchIdx = n;
-                p++;
-            }
-            else if (starIdx != -1)
-            {
-                p = starIdx + 1;
-                matchIdx++;
-                n = matchIdx;
-            }
-            else
-            {
-                return false;
-            }
-        }
-
-        while (p < pattern.Length && pattern[p] == '*')
-        {
-            p++;
-        }
-
-        return p == pattern.Length;
-    }
-
     /// <summary>
     /// Marks the disk's content as up to date with the on-disk image.
     /// </summary>
@@ -902,77 +861,10 @@ public sealed class MemoryFileSystem : FileSystemBase
     private static ulong FileTimeNow() => (ulong)DateTimeOffset.UtcNow.ToFileTime();
 
     /// <summary>
-    /// Returns <c>true</c> when <paramref name="name"/> matches the glob
-    /// <paramref name="pattern"/> (case-insensitive, supporting <c>*</c> and <c>?</c>).
-    /// A null or <c>*</c> pattern matches everything.
+    /// Returns <c>true</c> when allocating <paramref name="extra"/> more bytes on top of the
+    /// currently allocated total would exceed the volume's capacity ceiling.
     /// </summary>
-    private static bool MatchesPattern(string? pattern, string name)
-    {
-        if (string.IsNullOrEmpty(pattern) || pattern == "*")
-        {
-            return true;
-        }
-
-        return WildcardMatch(pattern.AsSpan(), name.AsSpan());
-    }
-
-    /// <summary>
-    /// Builds the full directory-entry list for <paramref name="dir"/> at the start of a
-    /// <c>ReadDirectoryEntry</c> sequence, including <c>.</c> and <c>..</c>.
-    /// </summary>
-    private DirContext BuildDirContext(FileNode dir, string? pattern, string? marker)
-    {
-        var entries = new List<(string Name, FileInfo Info)>();
-
-        // "." — current directory
-        var addDot = marker == null ||
-                     string.Compare(".", marker, StringComparison.OrdinalIgnoreCase) > 0;
-        if (addDot)
-        {
-            entries.Add((".", dir.FileInfo));
-        }
-
-        // ".." — parent directory
-        var addDotDot = marker == null ||
-                        string.Compare("..", marker, StringComparison.OrdinalIgnoreCase) > 0;
-        if (addDotDot)
-        {
-            var parentNode = dir;
-            if (dir.FilePath.Length > 1)
-            {
-                var parentPath = Path.GetDirectoryName(dir.FilePath)!;
-                if (!NodeMap.TryGet(parentPath, out var p) || p == null)
-                {
-                    parentNode = dir;
-                }
-                else
-                {
-                    parentNode = p;
-                }
-            }
-
-            entries.Add(("..", parentNode.FileInfo));
-        }
-
-        // Pass marker to GetChildren only when it names a real child (i.e., it follows "..")
-        string? childMarker = null;
-        if (marker != null &&
-            string.Compare(marker, "..", StringComparison.OrdinalIgnoreCase) > 0)
-        {
-            childMarker = marker;
-        }
-
-        foreach (var kvp in NodeMap.GetChildren(dir.FilePath, childMarker))
-        {
-            var childName = kvp.Value.LeafName;
-            if (MatchesPattern(pattern, childName))
-            {
-                entries.Add((childName, kvp.Value.FileInfo));
-            }
-        }
-
-        return new(entries);
-    }
+    private bool WouldExceedCapacity(ulong extra) => NodeMap.GetTotalAllocated() + extra > _maxCapacity;
 
     /// <summary>
     /// Core implementation for both file-size and allocation-size changes.
@@ -997,7 +889,7 @@ public sealed class MemoryFileSystem : FileSystemBase
             if (aligned > node.FileInfo.AllocationSize)
             {
                 var extra = aligned - node.FileInfo.AllocationSize;
-                if (NodeMap.GetTotalAllocated() + extra > _maxCapacity)
+                if (WouldExceedCapacity(extra))
                 {
                     return STATUS_DISK_FULL;
                 }
@@ -1048,38 +940,5 @@ public sealed class MemoryFileSystem : FileSystemBase
         }
 
         return STATUS_SUCCESS;
-    }
-
-    private sealed class DirContext
-    {
-        private readonly List<(string Name, FileInfo Info)> _entries;
-        private int _index;
-
-        internal DirContext(List<(string Name, FileInfo Info)> entries)
-        {
-            _entries = entries;
-            _index = 0;
-        }
-
-        /// <summary>
-        /// Advances to the next entry.
-        /// </summary>
-        /// <returns>
-        /// <c>true</c> if an entry was written; <c>false</c> when the list is exhausted.
-        /// </returns>
-        internal bool TryNext(out string? name, out FileInfo info)
-        {
-            if (_index < _entries.Count)
-            {
-                name = _entries[_index].Name;
-                info = _entries[_index].Info;
-                _index++;
-                return true;
-            }
-
-            name = null;
-            info = default;
-            return false;
-        }
     }
 }
