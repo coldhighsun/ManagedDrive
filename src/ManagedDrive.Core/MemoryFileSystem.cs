@@ -17,7 +17,9 @@ public sealed class MemoryFileSystem : FileSystemBase
 
     private readonly bool _readOnly;
     private volatile bool _isDirty;
+    private ContentAccessInfo? _lastContentReadAccess;
     private long _lastContentReadTicks;
+    private ContentAccessInfo? _lastContentWriteAccess;
     private long _lastContentWriteTicks;
     private ulong _maxCapacity;
     private string _volumeLabel;
@@ -67,6 +69,12 @@ public sealed class MemoryFileSystem : FileSystemBase
     internal bool IsDirty => _isDirty;
 
     /// <summary>
+    /// Gets an atomic snapshot of the most recent successful <see cref="Read"/> of file content
+    /// (time + path), or <c>null</c> if the disk has never been read from since mount.
+    /// </summary>
+    internal ContentAccessInfo? LastContentReadAccess => Volatile.Read(ref _lastContentReadAccess);
+
+    /// <summary>
     /// Gets the UTC timestamp of the most recent successful <see cref="Read"/> of file content,
     /// or <c>null</c> if the disk has never been read from since mount.
     /// </summary>
@@ -78,6 +86,14 @@ public sealed class MemoryFileSystem : FileSystemBase
             return ticks == 0 ? null : new DateTimeOffset(ticks, TimeSpan.Zero);
         }
     }
+
+    /// <summary>
+    /// Gets an atomic snapshot of the most recent successful <see cref="Write"/> of file content
+    /// (time + path), or <c>null</c> if the disk has never been written to since mount. Unlike
+    /// <see cref="LastContentWriteTimeUtc"/>, this only reflects actual content writes, not other
+    /// mutations (rename/delete/attribute changes/etc.) that also call <see cref="MarkDirty"/>.
+    /// </summary>
+    internal ContentAccessInfo? LastContentWriteAccess => Volatile.Read(ref _lastContentWriteAccess);
 
     /// <summary>
     /// Gets the UTC timestamp of the most recent content mutation (create/write/rename/delete/etc.),
@@ -501,7 +517,9 @@ public sealed class MemoryFileSystem : FileSystemBase
         {
             Marshal.Copy(node.FileData, (int)offset, buffer, (int)toRead);
             bytesTransferred = toRead;
-            Interlocked.Exchange(ref _lastContentReadTicks, DateTimeOffset.UtcNow.UtcTicks);
+            var readNow = DateTimeOffset.UtcNow;
+            Interlocked.Exchange(ref _lastContentReadTicks, readNow.UtcTicks);
+            Interlocked.Exchange(ref _lastContentReadAccess, new(readNow, node.FilePath));
             ContentAccessed?.Invoke(false);
         }
 
@@ -763,6 +781,7 @@ public sealed class MemoryFileSystem : FileSystemBase
         node.FileInfo.ChangeTime = now;
 
         MarkDirty();
+        Interlocked.Exchange(ref _lastContentWriteAccess, new(DateTimeOffset.UtcNow, node.FilePath));
         fileInfo = node.FileInfo;
         return STATUS_SUCCESS;
     }

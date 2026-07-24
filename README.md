@@ -42,6 +42,7 @@ Create, mount and manage in-memory volumes that appear as normal drive letters i
 - Optional Explorer right-click integration: enable the setting to add **"Mount as RAM disk (ManagedDrive)"** to the right-click menu for zip/7z/rar/tar archives, mounting one with a single click — no need to open the app first — launches `ManagedDrive.exe` automatically if it isn't already running, and opens the new drive in Explorer as soon as it's mounted
 - System tray icon with hover tooltip (live usage per disk, plus available system memory), quick-access menu, and optional start-minimized mode; the icon briefly flashes a read/write indicator whenever any mounted disk is accessed
 - Available system memory shown live in the main window's status bar (refreshed every 2 seconds)
+- Main window status bar also shows the file most recently read from or written to, pushed live as it happens (throttled to at most once every 300 ms) rather than polled — automatically paused while the window is hidden in the tray and resumed when it's shown again
 - High-usage warning per disk (configurable threshold, default 90%, with hysteresis)
 - Temp directory redirection — point Windows TEMP/TMP at a disk's `Temp` folder, with automatic reset on unmount/remount and startup warnings if TEMP is left pointing at a RAM disk
 - Exit confirmation with a saving overlay while pending image saves complete; TEMP is reset first if it points at a mounted disk
@@ -338,6 +339,7 @@ This project bundles [WinFsp](https://winfsp.dev/) and [SharpCompress](https://g
 - 可选的资源管理器右键集成：在设置中启用后，会为 zip/7z/rar/tar 压缩包添加右键菜单项**"挂载为内存盘 (ManagedDrive)"**，一键挂载，无需先打开应用——若 `ManagedDrive.exe` 尚未运行会自动启动，挂载完成后会自动打开该盘符的资源管理器窗口
 - 系统托盘图标，悬浮显示所有磁盘实时使用率及可用系统内存，提供快捷菜单及可选的最小化启动模式；任意已挂载磁盘被读写时，图标会短暂闪烁一次读/写指示
 - 主窗口状态栏实时显示当前可用系统内存（每 2 秒刷新）
+- 主窗口状态栏同时实时显示最近一次读/写的文件——事件发生时即主动推送（节流至最多每 300 毫秒一次），而非轮询；主窗口最小化到托盘时自动暂停推送，重新显示时自动恢复
 - 每磁盘可配置的高用量警告（默认阈值 90%，带回滞防抖）
 - 临时目录重定向——将 Windows TEMP/TMP 指向某磁盘的 `Temp` 文件夹，卸载/重挂时自动恢复默认值，TEMP 遗留指向内存盘时会在启动时提示
 - 退出确认，并在待处理的镜像保存完成前显示保存遮罩；若 TEMP 指向已挂载磁盘会先重置

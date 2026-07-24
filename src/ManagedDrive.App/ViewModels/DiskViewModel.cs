@@ -15,10 +15,20 @@ public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
     /// </summary>
     private const double HighUsageResetGap = 5.0;
 
+    /// <summary>
+    /// Throttle window for <see cref="ActivityObserved"/>: the first access in a burst is
+    /// reported immediately, subsequent accesses within this window are coalesced into a single
+    /// trailing report when it elapses.
+    /// </summary>
+    private static readonly TimeSpan ActivityThrottleWindow = TimeSpan.FromMilliseconds(300);
+
+    private readonly DispatcherTimer _activityThrottleTimer;
     private readonly DispatcherTimer _refreshTimer;
 
+    private bool _activityTrackingEnabled;
     private ulong _freeBytes;
     private bool _isCurrentTempDir;
+    private DiskActivityEventArgs? _pendingActivity;
     private ulong _usedBytes;
 
     /// <summary>
@@ -44,8 +54,23 @@ public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
         _refreshTimer.Tick += OnRefreshTick;
         _refreshTimer.Start();
 
+        _activityThrottleTimer = new()
+        {
+            Interval = ActivityThrottleWindow
+        };
+        _activityThrottleTimer.Tick += OnActivityThrottleTick;
+
         Disk.SaveFailed += OnDiskSaveFailed;
     }
+
+    /// <summary>
+    /// Occurs when this disk has been read from or written to, naming the file most recently
+    /// touched. Pushed directly from <see cref="RamDisk.ContentAccessed"/> rather than polled,
+    /// throttled to at most once per <see cref="ActivityThrottleWindow"/>: the first access in a
+    /// burst is reported immediately, and any further accesses within the window are coalesced
+    /// into one trailing report when it elapses. Always raised on the UI dispatcher thread.
+    /// </summary>
+    public event EventHandler<DiskActivityEventArgs>? ActivityObserved;
 
     /// <summary>
     /// Occurs when disk usage reaches or exceeds the configured high-usage warning threshold.
@@ -148,25 +173,6 @@ public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
     public bool IsReadOnly => Disk.Options.ReadOnly;
 
     /// <summary>
-    /// Gets or sets whether this disk's image is currently being saved, driving the
-    /// "saving" overlay on the disk card.
-    /// </summary>
-    public bool IsSaving
-    {
-        get;
-        set
-        {
-            if (field == value)
-            {
-                return;
-            }
-
-            field = value;
-            OnPropertyChanged(nameof(IsSaving));
-        }
-    }
-
-    /// <summary>
     /// Gets or sets whether this disk is being unmounted and remounted with new options,
     /// driving the "applying changes" overlay on the disk card.
     /// </summary>
@@ -182,6 +188,25 @@ public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
 
             field = value;
             OnPropertyChanged(nameof(IsRemounting));
+        }
+    }
+
+    /// <summary>
+    /// Gets or sets whether this disk's image is currently being saved, driving the
+    /// "saving" overlay on the disk card.
+    /// </summary>
+    public bool IsSaving
+    {
+        get;
+        set
+        {
+            if (field == value)
+            {
+                return;
+            }
+
+            field = value;
+            OnPropertyChanged(nameof(IsSaving));
         }
     }
 
@@ -273,32 +298,46 @@ public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
     {
         _refreshTimer.Stop();
         _refreshTimer.Tick -= OnRefreshTick;
+        _activityThrottleTimer.Tick -= OnActivityThrottleTick;
+        SetActivityTrackingEnabled(false);
         Disk.SaveFailed -= OnDiskSaveFailed;
     }
 
     /// <summary>
-    /// Refreshes usage statistics, volume label, and capacity immediately.
+    /// Refreshes usage statistics, volume label, and capacity immediately. Always recomputes
+    /// usage and re-evaluates the high-usage warning (it drives a tray balloon, so it must keep
+    /// working while the main window is hidden), but skips the display-only property-change
+    /// notifications when the main window isn't visible — nothing is bound to them in that state
+    /// (the tray tooltip's own binding is force-refreshed right before it's shown; see
+    /// <see cref="MainViewModel"/>).
     /// </summary>
     public void Refresh()
     {
         _usedBytes = Disk.UsedBytes;
         _freeBytes = Disk.FreeBytes;
-        OnPropertyChanged(nameof(UsedFormatted));
-        OnPropertyChanged(nameof(FreeFormatted));
-        OnPropertyChanged(nameof(FreePercent));
-        OnPropertyChanged(nameof(UsedPercent));
-        OnPropertyChanged(nameof(CapacityFormatted));
-        OnPropertyChanged(nameof(VolumeLabel));
-        OnPropertyChanged(nameof(LastContentWriteFormatted));
-        OnPropertyChanged(nameof(LastAutoSaveFormatted));
-        OnPropertyChanged(nameof(ShowLastAutoSave));
-        OnPropertyChanged(nameof(SnapshotsEnabled));
-        OnPropertyChanged(nameof(PersistImagePath));
-        OnPropertyChanged(nameof(SourcePath));
-        OnPropertyChanged(nameof(HasImagePath));
-        OnPropertyChanged(nameof(IsPasswordProtected));
 
-        IsCurrentTempDir = CheckIsCurrentTempDir();
+        var isUiVisible = Application.Current?.MainWindow is { IsVisible: true };
+        if (isUiVisible)
+        {
+            OnPropertyChanged(nameof(UsedFormatted));
+            OnPropertyChanged(nameof(FreeFormatted));
+            OnPropertyChanged(nameof(FreePercent));
+            OnPropertyChanged(nameof(CapacityFormatted));
+            OnPropertyChanged(nameof(VolumeLabel));
+            OnPropertyChanged(nameof(LastContentWriteFormatted));
+            OnPropertyChanged(nameof(LastAutoSaveFormatted));
+            OnPropertyChanged(nameof(ShowLastAutoSave));
+            OnPropertyChanged(nameof(SnapshotsEnabled));
+            OnPropertyChanged(nameof(PersistImagePath));
+            OnPropertyChanged(nameof(SourcePath));
+            OnPropertyChanged(nameof(HasImagePath));
+            OnPropertyChanged(nameof(IsPasswordProtected));
+
+            IsCurrentTempDir = CheckIsCurrentTempDir();
+        }
+
+        // Bound by the tray tooltip, which can be visible even while the main window is hidden.
+        OnPropertyChanged(nameof(UsedPercent));
 
         if (Disk.Options.SourceArchivePath != null)
         {
@@ -331,6 +370,34 @@ public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
         }
     }
 
+    /// <summary>
+    /// Enables or disables the <see cref="Disk.ContentAccessed"/> subscription that drives
+    /// <see cref="ActivityObserved"/>. The main window's visibility controls this (see
+    /// <see cref="App"/>) — no one can see the status bar while it's hidden, so there is no
+    /// point paying for dispatcher marshaling and throttle-timer upkeep in that state. Disabling
+    /// also stops the throttle timer and discards any pending activity, so a stale snapshot from
+    /// before the window was hidden can't surface once tracking resumes.
+    /// </summary>
+    public void SetActivityTrackingEnabled(bool enabled)
+    {
+        if (_activityTrackingEnabled == enabled)
+        {
+            return;
+        }
+
+        _activityTrackingEnabled = enabled;
+        if (enabled)
+        {
+            Disk.ContentAccessed += OnContentAccessed;
+        }
+        else
+        {
+            Disk.ContentAccessed -= OnContentAccessed;
+            _activityThrottleTimer.Stop();
+            _pendingActivity = null;
+        }
+    }
+
     private static string FormatRelativeTime(DateTimeOffset timestamp)
     {
         var elapsed = DateTimeOffset.UtcNow - timestamp;
@@ -350,6 +417,26 @@ public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
         return string.Equals(userTemp, diskTemp, StringComparison.OrdinalIgnoreCase);
     }
 
+    private void OnActivityThrottleTick(object? sender, EventArgs e)
+    {
+        _activityThrottleTimer.Stop();
+
+        if (_pendingActivity is not { } pending)
+        {
+            return;
+        }
+
+        _pendingActivity = null;
+        ActivityObserved?.Invoke(this, pending);
+    }
+
+    /// <summary>
+    /// Handler for <see cref="RamDisk.ContentAccessed"/>. May run on any WinFsp driver thread,
+    /// so the actual throttling/reporting work is dispatched to the UI thread.
+    /// </summary>
+    private void OnContentAccessed(bool isWrite) =>
+        Application.Current?.Dispatcher.BeginInvoke(() => ReportActivity(isWrite));
+
     private void OnDiskSaveFailed(object? sender, Exception ex) =>
         Application.Current?.Dispatcher.Invoke(() => SaveFailed?.Invoke(this, ex));
 
@@ -357,4 +444,50 @@ public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
         PropertyChanged?.Invoke(this, new(propertyName));
 
     private void OnRefreshTick(object? sender, EventArgs e) => Refresh();
+
+    /// <summary>
+    /// Runs on the UI thread. Implements the leading + trailing throttle: if no report is
+    /// in-flight, raises <see cref="ActivityObserved"/> immediately and starts the throttle
+    /// window; otherwise just records the latest access, which is reported once the window
+    /// elapses (see <see cref="OnActivityThrottleTick"/>). Writes take priority over reads when
+    /// both occur within the same window, matching the previous polling behavior.
+    /// </summary>
+    private void ReportActivity(bool isWrite)
+    {
+        var access = isWrite ? Disk.LastContentWriteAccess : Disk.LastContentReadAccess;
+        if (access is null)
+        {
+            return;
+        }
+
+        var args = new DiskActivityEventArgs(isWrite, access.Path);
+
+        if (!_activityThrottleTimer.IsEnabled)
+        {
+            _activityThrottleTimer.Start();
+            ActivityObserved?.Invoke(this, args);
+            return;
+        }
+
+        if (isWrite || _pendingActivity is not { IsWrite: true })
+        {
+            _pendingActivity = args;
+        }
+    }
+
+    /// <summary>
+    /// Event data for <see cref="ActivityObserved"/>.
+    /// </summary>
+    public sealed class DiskActivityEventArgs(bool isWrite, string filePath) : EventArgs
+    {
+        /// <summary>
+        /// Gets the full path of the file most recently touched.
+        /// </summary>
+        public string FilePath { get; } = filePath;
+
+        /// <summary>
+        /// Gets whether the observed activity was a write (<c>true</c>) or a read (<c>false</c>).
+        /// </summary>
+        public bool IsWrite { get; } = isWrite;
+    }
 }

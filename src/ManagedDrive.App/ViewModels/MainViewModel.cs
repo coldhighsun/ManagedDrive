@@ -9,6 +9,9 @@ namespace ManagedDrive.App.ViewModels;
 /// </summary>
 public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 {
+    private static readonly TimeSpan DiskActivityStatusDuration = TimeSpan.FromSeconds(2.5);
+
+    private readonly DispatcherTimer _diskActivityStatusTimer;
     private readonly DispatcherTimer _memoryRefreshTimer;
     private readonly MountManager _mountManager;
     private readonly SettingsStore _settingsStore;
@@ -78,8 +81,27 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         {
             Interval = TimeSpan.FromSeconds(2)
         };
-        _memoryRefreshTimer.Tick += (_, _) => RefreshAvailableMemory();
+        _memoryRefreshTimer.Tick += (_, _) =>
+        {
+            // Only the main window's status bar and the tray tooltip show this; skip the
+            // GlobalMemoryStatusEx call while neither is visible. The tooltip force-refreshes
+            // via RefreshForTrayTooltip() right before it's shown, so it never reads stale data.
+            if (Application.Current?.MainWindow is { IsVisible: true })
+            {
+                RefreshAvailableMemory();
+            }
+        };
         _memoryRefreshTimer.Start();
+
+        _diskActivityStatusTimer = new()
+        {
+            Interval = DiskActivityStatusDuration
+        };
+        _diskActivityStatusTimer.Tick += (_, _) =>
+        {
+            _diskActivityStatusTimer.Stop();
+            StatusText = Loc.Get("Status.Ready");
+        };
     }
 
     public event EventHandler? ExitRequested;
@@ -227,15 +249,6 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     }
 
     /// <summary>
-    /// Gets the command that opens a read-only view of the selected disk's file/directory
-    /// tree and per-node space usage.
-    /// </summary>
-    public RelayCommand ViewDiskContentsCommand
-    {
-        get;
-    }
-
-    /// <summary>
     /// Gets or sets the currently selected disk in the list.
     /// </summary>
     public DiskViewModel? SelectedDisk
@@ -286,10 +299,20 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         get;
     }
 
+    /// <summary>
+    /// Gets the command that opens a read-only view of the selected disk's file/directory
+    /// tree and per-node space usage.
+    /// </summary>
+    public RelayCommand ViewDiskContentsCommand
+    {
+        get;
+    }
+
     /// <inheritdoc />
     public void Dispose()
     {
         _memoryRefreshTimer.Stop();
+        _diskActivityStatusTimer.Stop();
 
         foreach (var vm in Disks)
         {
@@ -683,6 +706,18 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         return true;
     }
 
+    /// <summary>
+    /// Forces an immediate, unconditional refresh of per-disk usage and available memory,
+    /// bypassing the main-window-visibility skip in <see cref="DiskViewModel.Refresh"/> and
+    /// <see cref="RefreshAvailableMemory"/>. Called right before the tray tooltip is shown so it
+    /// never displays data that's stale from being paused while the main window was hidden.
+    /// </summary>
+    internal void RefreshForTrayTooltip()
+    {
+        RefreshAll();
+        RefreshAvailableMemory();
+    }
+
     internal void SaveSettings()
     {
         var current = _settingsStore.Load();
@@ -695,6 +730,24 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             Disks = GetProfiles().ToList(),
             TempDirCompatWarningShown = _tempDirCompatWarningShown,
         });
+    }
+
+    /// <summary>
+    /// Shows a transient status-bar message naming the disk and file most recently read from
+    /// or written to, reverting to <c>Status.Ready</c> after <see cref="DiskActivityStatusDuration"/>
+    /// of inactivity. Driven by <see cref="DiskViewModel.ActivityObserved"/>.
+    /// </summary>
+    internal void ShowDiskActivityStatus(string mountPoint, string volumeLabel, bool isWrite, string filePath)
+    {
+        var fileName = Path.GetFileName(filePath);
+        if (string.IsNullOrEmpty(fileName))
+        {
+            fileName = filePath;
+        }
+
+        StatusText = Loc.Format(isWrite ? "Status.DiskWrite" : "Status.DiskRead", mountPoint, volumeLabel, fileName);
+        _diskActivityStatusTimer.Stop();
+        _diskActivityStatusTimer.Start();
     }
 
     /// <summary>
@@ -1298,20 +1351,6 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         StatusText = Loc.Format("Status.SnapshotRestored", vm.MountPoint);
     }
 
-    private void ExecuteViewDiskContents(DiskViewModel? vm)
-    {
-        if (vm == null)
-        {
-            return;
-        }
-
-        var dialog = new DiskContentDialog(vm)
-        {
-            Owner = Application.Current.MainWindow
-        };
-        dialog.ShowDialog();
-    }
-
     private async void ExecuteSaveImage(DiskViewModel? vm)
     {
         if (vm == null)
@@ -1495,6 +1534,20 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 
         SaveSettings();
         StatusText = Loc.Format("Status.Unmounted", mountPoint);
+    }
+
+    private void ExecuteViewDiskContents(DiskViewModel? vm)
+    {
+        if (vm == null)
+        {
+            return;
+        }
+
+        var dialog = new DiskContentDialog(vm)
+        {
+            Owner = Application.Current.MainWindow
+        };
+        dialog.ShowDialog();
     }
 
     /// <summary>
