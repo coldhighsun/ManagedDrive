@@ -449,27 +449,9 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             .FirstOrDefault(p => p.SourceArchivePath != null &&
                 string.Equals(p.SourceArchivePath, archivePath, StringComparison.OrdinalIgnoreCase));
 
-        var options = savedProfile != null
-            ? ProfileToOptions(savedProfile) with
-            {
-                MountPoint = mountPoint,
-                CapacityBytes = capacityBytes,
-                VolumeLabel = volumeLabel,
-            }
-            : new()
-            {
-                MountPoint = mountPoint,
-                CapacityBytes = capacityBytes,
-                VolumeLabel = volumeLabel,
-                SourceArchivePath = archivePath,
-            };
-
-        options = options with
-        {
-            ReadOnly = true,
-            SourceArchivePath = archivePath,
-            AutoMount = overrides.AutoMount ?? options.AutoMount,
-        };
+        var options = MountOptionsFactory.BuildArchiveOptions(
+            savedProfile != null ? ProfileToOptions(savedProfile) : null,
+            mountPoint, archivePath, capacityBytes, volumeLabel, overrides.AutoMount);
 
         try
         {
@@ -579,33 +561,21 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             .FirstOrDefault(p => p.PersistImagePath != null &&
                 string.Equals(p.PersistImagePath, imagePath, StringComparison.OrdinalIgnoreCase));
 
-        var options = savedProfile != null
-            ? ProfileToOptions(savedProfile) with
+        var options = MountOptionsFactory.BuildImageOptions(
+            savedProfile != null ? ProfileToOptions(savedProfile) : null,
+            mountPoint, imagePath, capacityBytes, volumeLabel,
+            new MountOverrides
             {
-                MountPoint = mountPoint,
-                CapacityBytes = capacityBytes,
-                VolumeLabel = volumeLabel,
-            }
-            : new()
-            {
-                MountPoint = mountPoint,
-                CapacityBytes = capacityBytes,
-                VolumeLabel = volumeLabel,
-                PersistImagePath = imagePath,
-            };
-
-        options = options with
-        {
-            ReadOnly = overrides.ReadOnly ?? options.ReadOnly,
-            AutoMount = overrides.AutoMount ?? options.AutoMount,
-            AutoSaveIntervalMinutes = overrides.AutoSaveIntervalMinutes ?? options.AutoSaveIntervalMinutes,
-            CompressionLevel = overrides.CompressionLevel is { } compressionLevel
-                ? (Core.ImageCompressionLevel)compressionLevel
-                : options.CompressionLevel,
-            MaxSnapshotCount = overrides.MaxSnapshotCount ?? options.MaxSnapshotCount,
-            MaxSnapshotSizeBytes = overrides.MaxSnapshotSizeBytes ?? options.MaxSnapshotSizeBytes,
-            HighUsageWarnPercent = overrides.HighUsageWarnPercent ?? options.HighUsageWarnPercent,
-        };
+                ReadOnly = overrides.ReadOnly,
+                AutoMount = overrides.AutoMount,
+                AutoSaveIntervalMinutes = overrides.AutoSaveIntervalMinutes,
+                CompressionLevel = overrides.CompressionLevel is { } compressionLevel
+                    ? (Core.ImageCompressionLevel)compressionLevel
+                    : null,
+                MaxSnapshotCount = overrides.MaxSnapshotCount,
+                MaxSnapshotSizeBytes = overrides.MaxSnapshotSizeBytes,
+                HighUsageWarnPercent = overrides.HighUsageWarnPercent,
+            });
 
         try
         {
