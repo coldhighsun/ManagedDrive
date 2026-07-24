@@ -65,4 +65,29 @@ public sealed record AppConfiguration
     {
         get; init;
     }
+
+    /// <summary>
+    /// Gets or sets a value indicating whether ManagedDrive automatically checks GitHub Releases
+    /// for a newer version at startup, at most once per day. Manual checks from the About dialog
+    /// are not affected by this setting. Defaults to <c>true</c>.
+    /// </summary>
+    public bool AutoCheckForUpdates { get; init; } = true;
+
+    /// <summary>
+    /// Gets or sets the timestamp of the last successful update check, used to throttle
+    /// automatic checks to at most once per day. <c>null</c> if never checked.
+    /// </summary>
+    public DateTimeOffset? LastUpdateCheckUtc
+    {
+        get; init;
+    }
+
+    /// <summary>
+    /// Gets or sets the version the user chose to skip notifications for via the "Skip This
+    /// Version" option, or <c>null</c> if no version is currently skipped.
+    /// </summary>
+    public string? SkippedVersion
+    {
+        get; init;
+    }
 }

@@ -300,6 +300,17 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     }
 
     /// <summary>
+    /// The update checker used by the About dialog's "Check for Updates" button. Set by
+    /// <see cref="ManagedDrive.App.App"/> after construction, since <see cref="UpdateCheckService"/>
+    /// itself depends on services constructed after this view model. <c>null</c> disables the
+    /// button (the dialog treats a missing service as a no-op).
+    /// </summary>
+    public UpdateCheckService? UpdateCheckService
+    {
+        get; set;
+    }
+
+    /// <summary>
     /// Gets the command that opens a read-only view of the selected disk's file/directory
     /// tree and per-node space usage.
     /// </summary>
@@ -699,6 +710,9 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             Theme = ThemeManager.Instance.SavedTheme,
             Disks = GetProfiles().ToList(),
             TempDirCompatWarningShown = _tempDirCompatWarningShown,
+            AutoCheckForUpdates = current.AutoCheckForUpdates,
+            LastUpdateCheckUtc = current.LastUpdateCheckUtc,
+            SkippedVersion = current.SkippedVersion,
         });
     }
 
@@ -812,7 +826,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 
     private void ExecuteAbout()
     {
-        var dialog = new AboutDialog();
+        var dialog = new AboutDialog(UpdateCheckService);
         if (Application.Current.MainWindow is { IsLoaded: true } mainWindow)
         {
             dialog.Owner = mainWindow;

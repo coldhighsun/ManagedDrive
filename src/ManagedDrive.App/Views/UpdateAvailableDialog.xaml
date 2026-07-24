@@ -1,0 +1,65 @@
+<Window x:Class="ManagedDrive.App.Views.UpdateAvailableDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Style="{StaticResource AppWindow}"
+        Width="420" SizeToContent="Height"
+        ResizeMode="NoResize"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False">
+
+    <Border Background="{DynamicResource AppBackground}"
+            BorderBrush="{DynamicResource AppDivider}"
+            BorderThickness="1"
+            CornerRadius="10">
+        <Border.Effect>
+            <DropShadowEffect Color="#000000" Opacity="0.25" BlurRadius="18" ShadowDepth="2"/>
+        </Border.Effect>
+
+        <Grid Margin="24">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="16"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="24"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <!-- Icon + title -->
+            <StackPanel Grid.Row="0" Orientation="Horizontal">
+                <TextBlock FontFamily="Segoe Fluent Icons" FontSize="24"
+                           Text="&#xEB52;"
+                           VerticalAlignment="Center"
+                           Foreground="{DynamicResource AppAccent}"/>
+                <TextBlock x:Name="TitleText"
+                           VerticalAlignment="Center"
+                           Margin="10,0,0,0"
+                           FontSize="16" FontWeight="Medium"/>
+            </StackPanel>
+
+            <!-- Body text -->
+            <TextBlock x:Name="BodyText"
+                       Grid.Row="2"
+                       TextWrapping="Wrap"
+                       LineHeight="20"
+                       Foreground="{DynamicResource AppForegroundLight}"/>
+
+            <!-- Buttons -->
+            <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Right">
+                <Button Content="{DynamicResource Update.SkipThisVersion}" Width="120"
+                        Click="SkipButton_Click"
+                        Style="{StaticResource FlatButton}"
+                        Margin="0,0,8,0"/>
+                <Button Content="{DynamicResource Update.RemindMeLater}" Width="120" IsCancel="True"
+                        Click="RemindLaterButton_Click"
+                        Style="{StaticResource FlatButton}"
+                        Margin="0,0,8,0"/>
+                <Button Content="{DynamicResource Update.ViewRelease}" Width="110" IsDefault="True"
+                        Click="ViewReleaseButton_Click"
+                        Style="{StaticResource RaisedButton}"/>
+            </StackPanel>
+        </Grid>
+    </Border>
+</Window>
