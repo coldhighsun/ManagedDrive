@@ -99,9 +99,15 @@ jobs:
       - name: Resolve version from tag
         id: version
         run: |
-          $tag = "${{ github.ref_name }}"          # e.g. v1.2.3
+          $tag = "${{ github.ref_name }}"          # e.g. v1.2.3 or v1.2.3-beta.1
+          $version = $tag.TrimStart('v')
+          # A SemVer pre-release suffix (the "-beta.1" part) marks the tag as a test build,
+          # matching UpdateCheckService.TryParseVersion, which deliberately fails to parse
+          # hyphen-suffixed tags so they're never offered as an update.
+          $isPrerelease = $version.Contains('-')
           echo "tag=$tag"   >> $env:GITHUB_OUTPUT
-          echo "version=$($tag.TrimStart('v'))" >> $env:GITHUB_OUTPUT
+          echo "version=$version" >> $env:GITHUB_OUTPUT
+          echo "is_prerelease=$($isPrerelease.ToString().ToLower())" >> $env:GITHUB_OUTPUT
         shell: pwsh
 
       - name: Build portable package
@@ -147,7 +153,7 @@ jobs:
           tag_name: ${{ github.ref_name }}
           name: ManagedDrive ${{ github.ref_name }}
           generate_release_notes: true
-          prerelease: auto
+          prerelease: ${{ steps.version.outputs.is_prerelease }}
           files: |
             ManagedDrive-${{ steps.version.outputs.tag }}-win-x64-portable.zip
             installer/Output/ManagedDrive-Setup-${{ steps.version.outputs.version }}.exe
