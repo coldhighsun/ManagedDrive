@@ -17,43 +17,43 @@ Create, mount and manage in-memory volumes that appear as normal drive letters i
 ### Features
 
 **Core**
-- Mount multiple RAM disks simultaneously, each with its own drive letter, capacity, volume label and read-only flag
-- Dynamic memory allocation — capacity is a ceiling, not a reservation; memory is used only by actual file data
-- Edit a mounted disk live (label, capacity, auto-mount, image path) without losing data; changing the drive letter or read-only flag remounts the disk
-- NTFS-compatible volume identity, so RAM disks work as targets for tools that require NTFS (e.g. WinGet, Windows Update staging, BITS)
+- Mount multiple RAM disks at once, each with its own drive letter, capacity, volume label and read-only flag
+- Dynamic memory allocation — capacity is a ceiling, not a reservation
+- Live-edit a mounted disk (label, capacity, auto-mount, image path); changing the drive letter or read-only flag remounts it
+- NTFS-compatible, so RAM disks work with tools that require NTFS (WinGet, Windows Update staging, BITS)
 - Auto-mount saved profiles on startup
-- Format a disk to instantly delete all its contents (**Format**; read-only disks are protected)
+- **Format** instantly clears a disk's contents (read-only disks are protected)
 
 **Persistence, snapshots & cloning**
-- Save disk contents to a `.mdr` image file and restore it on next mount, or import an existing image directly (**Import Disk...**)
-- Import an archive (zip, 7z, rar, tar, and other formats [SharpCompress](https://github.com/adamhathcock/sharpcompress) can read) directly as a read-only disk (**Import Archive...**) — capacity and label are derived from the archive up front
-- Optional auto-save on a 1–60 minute interval, plus an automatic final save before unmount/exit (individually disableable per disk via **Save on exit**); both are skipped when nothing has changed, and failures raise a tray/status-bar notification
+- Save to a `.mdr` image and restore it on next mount, or import an existing image directly (**Import Disk...**)
+- Import an archive (zip, 7z, rar, tar, or anything [SharpCompress](https://github.com/adamhathcock/sharpcompress) reads) as a read-only disk (**Import Archive...**), with capacity/label derived automatically
+- Optional auto-save (1–60 min interval) plus a final save before unmount/exit (disableable per disk via **Save on exit**); skipped when nothing changed, failures raise a tray/status-bar notification
 - Selectable image compression (Off / Fast / Balanced / Max, default Fast)
-- Snapshot / version history — cap retained snapshots by count and/or size; deduplicated by content hash so many snapshots cost little extra space; restore any snapshot via **Restore Snapshot...**, which also lets you delete an individual snapshot on demand
+- Snapshot / version history capped by count and/or size, deduplicated by content hash; restore via **Restore Snapshot...**, which also lets you delete individual snapshots
 - Clone a disk onto another mounted disk or export it to a new `.mdr` file (**Clone Disk...**)
-- Optional password protection for `.mdr` images (AES-256-GCM envelope encryption; the password only wraps a random per-disk key, so changing the password never re-encrypts the file contents) — set from the "Encrypt Image" option in the disk dialog (password must be 8–64 characters); prompted for on mount (including auto-mount at startup) whenever an image is encrypted
-- Progress feedback for long operations — image save, archive import, and export all show a busy overlay with a progress bar instead of leaving the app looking unresponsive on large disks
+- Optional `.mdr` password protection (AES-256-GCM envelope encryption — the password only wraps a random per-disk key, so changing it never re-encrypts file data); set via "Encrypt Image" in the disk dialog (8–64 characters, with a live strength hint) and prompted for on mount whenever an image is encrypted. Sensitive buffers are zeroed from memory as soon as they're no longer needed.
+- Progress bar overlay for long operations (image save, archive import, export) instead of an unresponsive-looking app
 
 **CLI**
-- `mdrive` command-line tool (ships alongside `ManagedDrive.exe`) for scripting mount/unmount/format/save/list/exit against the running app, forwarded over a named pipe
-- Auto-launches `ManagedDrive.exe` if it isn't already running and waits for it to become ready before sending the command
+- `mdrive` (ships alongside `ManagedDrive.exe`) scripts mount/unmount/format/save/list/exit against the running app over a named pipe
+- Auto-launches `ManagedDrive.exe` if needed and waits for it to be ready before sending the command
 
 **Convenience & safety**
-- Optional Explorer right-click integration: enable the setting to add **"Mount as RAM disk (ManagedDrive)"** to the right-click menu for zip/7z/rar/tar archives, mounting one with a single click — no need to open the app first — launches `ManagedDrive.exe` automatically if it isn't already running, and opens the new drive in Explorer as soon as it's mounted
-- System tray icon with hover tooltip (live usage per disk, plus available system memory), quick-access menu, and optional start-minimized mode; the icon briefly flashes a read/write indicator whenever any mounted disk is accessed
-- Available system memory shown live in the main window's status bar (refreshed every 2 seconds)
-- Main window status bar also shows the file most recently read from or written to, pushed live as it happens (throttled to at most once every 300 ms) rather than polled — automatically paused while the window is hidden in the tray and resumed when it's shown again
-- High-usage warning per disk (configurable threshold, default 90%, with hysteresis)
-- Temp directory redirection — point Windows TEMP/TMP at a disk's `Temp` folder, with automatic reset on unmount/remount and startup warnings if TEMP is left pointing at a RAM disk
-- Exit confirmation with a saving overlay while pending image saves complete; TEMP is reset first if it points at a mounted disk
-- Double-click a disk to open it in Explorer; right-click for Explorer/image-folder shortcuts, or **View Disk Contents...** for a read-only, sortable Name/Size/Type tree view without leaving the app
+- Optional Explorer right-click integration: adds **"Mount as RAM disk (ManagedDrive)"** for zip/7z/rar/tar archives — one click mounts, auto-launching the app if needed and opening the new drive in Explorer
+- Tray icon with a hover tooltip (per-disk usage + available memory), quick menu, optional start-minimized mode, and a brief read/write flash on activity
+- Available system memory shown live in the status bar (2 s refresh)
+- Status bar also shows the most recently accessed file, pushed live (throttled to 300 ms) rather than polled, paused while the window is hidden in the tray
+- Per-disk high-usage warning (default 90%, with hysteresis)
+- Temp directory redirection to a disk's `Temp` folder, auto-reset on unmount/remount, with a startup warning if TEMP is left on a RAM disk
+- Exit confirmation with a saving overlay while pending saves finish; TEMP is reset first if it points at a mounted disk
+- Double-click to open a disk in Explorer; right-click for shortcuts or **View Disk Contents...** (a read-only, sortable Name/Size/Type tree)
 
 **UI**
-- Bilingual (English / Simplified Chinese) and light/dark themes, both auto-detected with manual override in Settings, switching instantly without restart
-- At-a-glance disk cards with status badges (read-only, current-TEMP, backing image, password-protected) and a usage bar that turns warning-colored past the high-usage threshold
-- Main window is freely resizable by dragging its edges, but has no maximize/fullscreen mode
-- About dialog with app version, GitHub link, and an inline "update available" link when a newer release exists
-- Optional daily automatic update check against GitHub Releases (toggle in Settings); a tray balloon plus a dialog (View Release / Skip This Version / Remind Me Later) appears when a newer formal release is found
+- Bilingual (English / Simplified Chinese) and light/dark themes, both auto-detected with manual override, switching instantly
+- Disk cards with status badges (read-only, current-TEMP, backing image, password-protected) and a usage bar that warns past the high-usage threshold
+- Freely resizable window, no maximize/fullscreen
+- About dialog with version, GitHub link, and an "update available" link when a newer release exists
+- Optional daily update check against GitHub Releases; a tray balloon + dialog (View Release / Skip / Remind Later) appears on a new release
 
 ### Installation
 
@@ -111,7 +111,7 @@ ManagedDrive/
 │       ├── Localization/           #   ResourceDictionary strings (en-US, zh-CN)
 │       ├── Themes/                 #   AppTheme.xaml styles + light/dark color palettes, ThemeManager
 │       ├── Helpers/                #   ByteFormatter, HintHelper (watermark/placeholder text)
-│       ├── Infrastructure/         #   RelayCommand
+│       ├── Infrastructure/         #   RelayCommand, PasswordStrengthEstimator
 │       ├── Models/                 #   AppConfiguration, DiskProfile
 │       ├── Services/               #   SettingsStore, StartupManager, TempDirResetService, ShellContextMenuManager, SystemMemoryInfo, UpdateCheckService, plus six services split out of App.xaml.cs: TrayIconController, TrayTooltipController, DiskNotificationService, TempDirCompatChecker, SessionEndingSaveHandler, WinFspPrerequisite
 │       ├── ViewModels/             #   MainViewModel, DiskViewModel
@@ -149,6 +149,7 @@ ManagedDrive/
 │       ├── MountOptionsFactoryTests.cs
 │       ├── CreateDiskOptionsBuilderTests.cs
 │       ├── ByteUnitConverterTests.cs
+│       ├── PasswordStrengthEstimatorTests.cs
 │       └── RecordingProgress.cs           #   Shared IProgress<double> test double
 │
 └── benchmarks/
@@ -162,17 +163,17 @@ ManagedDrive/
 
 ### How It Works
 
-ManagedDrive uses **WinFsp** (Windows File System Proxy) to present an in-memory directory tree as a real Windows volume. WinFsp ships a signed kernel driver that acts as a bridge; all file I/O is forwarded to `MemoryFileSystem`, which stores data in .NET byte arrays.
+ManagedDrive uses **WinFsp** (Windows File System Proxy) to present an in-memory directory tree as a real Windows volume, via a signed kernel driver that forwards file I/O to `MemoryFileSystem`, which stores data in .NET byte arrays.
 
 Key classes:
 
-- **`FileNode`** — holds `Fsp.Interop.FileInfo` metadata, a `byte[]` data buffer, a cached leaf name, and a security descriptor.
-- **`FileNodeMap`** — a case-insensitive `SortedDictionary<string, FileNode>` that maps full paths to nodes, supports paginated child enumeration via a bounded prefix walk, and tracks total allocated bytes with an incrementally-maintained counter (O(1) reads instead of a full scan). Thread-safe via the C# 13 `Lock` type.
-- **`MemoryFileSystem : FileSystemBase`** — overrides all 21 required WinFsp callbacks (`Create`, `Open`, `Read`, `Write`, `Rename`, `CanDelete`, `ReadDirectoryEntry`, etc.) and enforces a configurable capacity ceiling, returning `STATUS_DISK_FULL` when exceeded; memory is not pre-allocated — each `FileNode` holds only the bytes actually written.
-- **`RamDisk`** — composes `MemoryFileSystem` with a `FileSystemHost`. The static `Create()` factory mounts the volume and polls until the drive letter is visible in the OS (up to 2.5 s), then broadcasts `SHCNE_DRIVEADD` to refresh Explorer. `Dispose()` unmounts. When an auto-save interval is configured, a background timer saves the image immediately and then on every interval, skipping ticks where nothing has changed since the last save. Independently of that timer, whenever an image path is configured and save-on-exit isn't disabled for the disk, `Dispose()` performs a final save before unmounting — even if no auto-save interval was set — skipped only when nothing changed since the last save, so unmounting, remounting, or exiting never loses an edit or performs a redundant write. A `SaveFailed` event fires whenever an image save or snapshot write fails, including on background auto-save ticks and the final save in `Dispose()` that would otherwise fail silently, so the App layer can surface the error via a tray balloon and the status bar. Optional per-disk password protection keeps a random content-encryption key in memory only, wrapped by the user's password.
-- **`MountManager`** — thread-safe registry of active `RamDisk` instances. Fires `DiskMounted` / `DiskUnmounted` events.
-- **`DiskImageSerializer`** — reads/writes `.mdr` files (full FS state including metadata, ACLs, and file data), optionally gzip-compressed at a user-selectable level. `Save` accepts an optional `IProgress<double>`, reported per node, that the App layer surfaces as a progress bar.
-- **`SnapshotManager` / `SnapshotStore`** — write a timestamped, read-only copy of the disk's contents next to the main `.mdr` image after every save (when snapshot limits are configured), list/prune them, and restore one back onto a live disk. File content is deduplicated by SHA-256 hash into a shared blob store, so snapshots of a mostly-unchanged disk cost little extra space.
+- **`FileNode`** — a node's `Fsp.Interop.FileInfo` metadata, `byte[]` data buffer, cached leaf name, and security descriptor.
+- **`FileNodeMap`** — a case-insensitive `SortedDictionary<string, FileNode>` mapping full paths to nodes; supports paginated child enumeration and O(1) allocated-byte tracking. Thread-safe via the C# 13 `Lock` type.
+- **`MemoryFileSystem : FileSystemBase`** — implements all 21 WinFsp callbacks (`Create`, `Read`, `Write`, `Rename`, etc.), enforces a configurable capacity ceiling (`STATUS_DISK_FULL` when exceeded), and only allocates the bytes actually written.
+- **`RamDisk`** — combines `MemoryFileSystem` with a `FileSystemHost`. `Create()` mounts the volume, waits for the drive letter to appear (up to 2.5 s), and refreshes Explorer; `Dispose()` unmounts. An optional auto-save timer and a final save on `Dispose()` (skippable via "Save on exit") keep the backing image current, skipping saves when nothing changed. A `SaveFailed` event surfaces any save/snapshot failure, including background ones that would otherwise fail silently. Optional per-disk encryption keeps a random content-encryption key in memory only, wrapped by the user's password.
+- **`MountManager`** — thread-safe registry of active `RamDisk` instances, firing `DiskMounted`/`DiskUnmounted` events.
+- **`DiskImageSerializer`** — reads/writes `.mdr` files (metadata, ACLs, file data), optionally gzip-compressed; `Save` reports progress per node via `IProgress<double>`.
+- **`SnapshotManager` / `SnapshotStore`** — write a timestamped, read-only copy of the disk next to its `.mdr` image after each save, list/prune them, and restore one back. Content is deduplicated by SHA-256 into a shared blob store, so snapshots of a mostly-unchanged disk cost little extra space.
 
 ### Disk Image Format (`.mdr`)
 
@@ -189,11 +190,11 @@ A little-endian binary format:
 | NodeCount | `int32` | Number of nodes that follow |
 | *Node entries* | — | Path, metadata (10 fields), security descriptor, file data — gzip-compressed as a block when `CompressionLevel != None`, then AES-256-GCM encrypted on top when the image is password-protected |
 
-Version `1` images (no `CompressionLevel` byte, always uncompressed) and version `2` images (whole node region compressed the same way, no encryption support) remain readable for backward compatibility.
+Version `1` (no `CompressionLevel` byte, always uncompressed) and version `2` (whole node region compressed, no encryption) images remain readable for backward compatibility.
 
 ### Snapshot Format
 
-Snapshots use a separate, independent format from `.mdr` images. For a main image `disk.mdr`, snapshots are named `disk.yyyyMMdd-HHmmss.mdr` in the same folder, each a small binary index file (magic `MDRS`) listing every file/directory's metadata plus, for non-empty files, a SHA-256 hash. The actual file content lives in a shared, content-addressed blob store at `disk.snapblobs/` (sharded into 2-character hex subfolders), gzip-compressed per-blob at the disk's configured compression level — identical content across snapshots is stored only once. When the parent disk is password-protected, each blob is additionally AES-256-GCM encrypted with the same key. Pruning old snapshots, or deleting a single one via **Restore Snapshot...**, also garbage-collects any blob no longer referenced by a remaining snapshot; clearing a disk's password deletes all of its snapshots outright, since the old blobs are unrecoverable without the discarded key.
+Snapshots use a separate format from `.mdr` images. For `disk.mdr`, snapshots are named `disk.yyyyMMdd-HHmmss.mdr` in the same folder — a small binary index file (magic `MDRS`) listing each file/directory's metadata plus, for non-empty files, a SHA-256 hash. File content lives in a shared, content-addressed blob store at `disk.snapblobs/` (sharded into 2-char hex subfolders), gzip-compressed per blob — identical content across snapshots is stored once. Encrypted disks additionally encrypt each blob with the same key via AES-256-GCM. Pruning or deleting a snapshot (via **Restore Snapshot...**) garbage-collects any now-unreferenced blobs; clearing a disk's password deletes all of its snapshots outright, since old blobs are unrecoverable without the discarded key.
 
 ### Settings & Persistence
 
@@ -213,7 +214,7 @@ Read/write, random-access, and small-file throughput measured with [BenchmarkDot
 | **OS** | Windows 11 Pro (Build 26200) |
 | **Runtime** | .NET 10.0.9 · BenchmarkDotNet 0.15.8 |
 
-`SequentialReadWriteBenchmarks` creates or reads a single file via `FileStream` at 4 KB and 1 MB. Writes use `FileOptions.WriteThrough` (no OS write-back cache) and reads use `FileOptions.SequentialScan`.
+`SequentialReadWriteBenchmarks` creates/reads a single file via `FileStream` at 4 KB and 1 MB (writes with `FileOptions.WriteThrough`, reads with `FileOptions.SequentialScan`).
 
 | File Size | Operation | RAM Disk | NVMe SSD | Ratio |
 |---:|---|---:|---:|---:|
@@ -223,9 +224,9 @@ Read/write, random-access, and small-file throughput measured with [BenchmarkDot
 | 1 MB | Read | 547 MB/s | 1,139 MB/s | 0.5× slower |
 
 > **Why are RAM disk reads slower?**  
-> Physical disk reads appear fast because the OS page cache keeps recently-written files in DRAM. The RAM disk reads go through WinFsp's kernel–userspace bridge, which adds IPC overhead compared to the direct page-cache path. In workloads where data is written once and read many times from cold cache (e.g. build outputs, temp files that outlive page-cache pressure), the RAM disk will consistently outperform SSD on reads too.
+> Physical reads look fast because the OS page cache keeps recent files in DRAM; RAM disk reads instead cross WinFsp's kernel–userspace bridge, adding IPC overhead. For write-once, read-many-from-cold-cache workloads (build outputs, temp files), the RAM disk still wins on reads too.
 >
-> **4 KB note:** small-file results are dominated by file-open/close syscall overhead, not transfer speed.
+> **4 KB note:** small-file results are dominated by open/close syscall overhead, not transfer speed.
 
 Raw latency (mean, `[SimpleJob(warmupCount: 2, iterationCount: 3)]`):
 
@@ -241,7 +242,7 @@ Raw latency (mean, `[SimpleJob(warmupCount: 2, iterationCount: 3)]`):
 | Random 4 KB read (30 seeks over a 16 MB file) | 3.26 ms | 1.00 ms | 3.3× slower |
 | 30× small-file (4 KB) create+write | 75.5 ms (2.52 ms/file) | 115.1 ms (3.84 ms/file) | **1.5× faster** |
 
-Random reads are slower on the RAM disk for the same reason sequential reads are (WinFsp kernel–userspace round-trip per I/O), while small-file writes are faster because RAM disk file creation skips physical block allocation and journaling entirely — at the cost of far higher managed memory allocation per operation (see `Alloc Ratio` in the raw BenchmarkDotNet output).
+Random reads are slower for the same reason as sequential reads (a kernel–userspace round-trip per I/O); small-file writes are faster since RAM disk file creation skips block allocation and journaling — at the cost of higher managed memory allocation per operation (see `Alloc Ratio` in the raw BenchmarkDotNet output).
 
 ### Running Tests
 
@@ -249,7 +250,7 @@ Random reads are slower on the RAM disk for the same reason sequential reads are
 dotnet test tests/ManagedDrive.Tests
 ```
 
-Tests cover `FileNode` (allocation unit alignment, index numbers, deep-copy cloning), `FileNodeMap` (CRUD, case-insensitive lookup, child pagination, rename, capacity tracking), `MemoryFileSystem` disk-cloning (copying contents between disks, target-too-small and read-only-target rejection, clone independence), directory enumeration and the wildcard glob matcher used by directory listing, `DiskImageSerializer` (save/load round-trips across every compression level, legacy version-1 images, concurrent map mutation during save), archive import/export, `MountOptionsFactory` (the saved-profile/CLI-overrides merge used by `mdrive mount`/`mount-archive`), and `CreateDiskOptionsBuilder`/`ByteUnitConverter` (the create-disk dialog's validation logic, extracted into Core specifically so it's testable without WPF). Mount/unmount integration tests require the WinFsp driver and must be run manually.
+Tests cover `FileNode`, `FileNodeMap` (CRUD, lookup, pagination, rename, capacity tracking), `MemoryFileSystem` disk-cloning, directory enumeration and the wildcard matcher, `DiskImageSerializer` (round-trips across compression levels, legacy images, concurrent mutation during save), archive import/export, `MountOptionsFactory`, `CreateDiskOptionsBuilder`/`ByteUnitConverter` (create-disk dialog validation, kept WPF-free for testability), and `PasswordStrengthEstimator`. Mount/unmount integration tests need the WinFsp driver and must be run manually.
 
 ### Running Benchmarks
 
@@ -290,19 +291,17 @@ Run `mdrive --help` or `mdrive <command> --help` for the full option list.
 
 #### Certain installers may fail when TEMP is set to a RAM disk
 
-The core issue is that the installer **executable itself is running from the RAM disk** — not merely that files were extracted there. WinFsp mounts drives in the **current user's session device namespace**. If an installer is extracted to TEMP and then launched by a system-level process — such as the Windows Package Manager service used by winget — that process operates in the global device namespace and cannot resolve user-session drive letters. Attempting to execute such an installer from a path like `Z:\Temp\WinGet\...\setup.exe` fails with:
+The issue: the installer **executable itself runs from the RAM disk**, not just extracted files. WinFsp mounts drives in the current user's session device namespace, so a system-level process (e.g. winget's Package Manager service) launching from `Z:\Temp\WinGet\...\setup.exe` can't resolve that drive letter and fails with:
 
 > `0x800704b3` — The network path was not found
 
-Known affected packages include **WeChatWin_\*.exe** (WeChat installer), **7z\*.exe** (7-Zip installer), and **Git-\*.exe** (Git installer). Not all winget packages are affected — many install without issue.
+Known affected: **WeChatWin_\*.exe**, **7z\*.exe**, **Git-\*.exe** (not all winget packages are affected).
 
-This is an architectural limitation of WinFsp user-mode file systems and cannot be worked around in user space.
+This is an architectural limitation of WinFsp user-mode file systems, not something ManagedDrive can work around.
 
-**Recommendation:** If you encounter installation errors, you have two options:
-- Restore TEMP to the Windows default using the toolbar button in ManagedDrive, then retry the installation.
-- Download the installer directly from the software's official website and run it manually, bypassing winget entirely.
+**Fix:** Reset TEMP to the Windows default (toolbar button) and retry, or download the installer directly from the vendor's site and run it manually.
 
-ManagedDrive will warn you when you attempt to set a RAM disk as TEMP. On every subsequent startup, if TEMP still points to a RAM disk, a warning is shown again — reset TEMP to the Windows default to stop the recurring prompt.
+ManagedDrive warns once when TEMP is set to a RAM disk, and again on every startup while it stays that way.
 
 ### License
 
@@ -320,43 +319,43 @@ This project bundles [WinFsp](https://winfsp.dev/) and [SharpCompress](https://g
 ### 功能特性
 
 **核心功能**
-- 同时挂载多个 RAM 磁盘，每个磁盘拥有独立的驱动器号、容量、卷标和只读标志
-- 动态内存分配——磁盘容量为上限而非预分配，内存只随实际文件数据占用
-- 实时编辑已挂载磁盘（卷标、容量、自动挂载、镜像路径）无需重挂即可生效；更改盘符或只读标志时自动重挂
-- NTFS 兼容卷标识，使内存盘可作为需要 NTFS 卷的工具（如 WinGet、Windows Update 暂存、BITS 下载）的目标路径
-- 应用启动时自动挂载已保存的磁盘配置
-- 格式化磁盘可立即清空所有内容（**格式化**；只读磁盘受保护）
+- 同时挂载多个 RAM 磁盘，各自拥有独立的驱动器号、容量、卷标和只读标志
+- 动态内存分配——容量为上限而非预分配
+- 实时编辑已挂载磁盘（卷标、容量、自动挂载、镜像路径）；更改盘符或只读标志会自动重挂
+- NTFS 兼容，可作为需要 NTFS 卷的工具（WinGet、Windows Update 暂存、BITS）的目标路径
+- 启动时自动挂载已保存的磁盘配置
+- **格式化**立即清空磁盘内容（只读磁盘受保护）
 
 **持久化、快照与克隆**
-- 将磁盘内容保存为 `.mdr` 镜像文件，下次挂载时自动还原；也可直接导入已有镜像（**导入磁盘...**）
-- 直接导入压缩包（zip、7z、rar、tar 等 [SharpCompress](https://github.com/adamhathcock/sharpcompress) 支持的格式）作为只读磁盘（**导入压缩包...**）——容量与卷标从压缩包内容自动推算
-- 可选自动保存（1-60 分钟间隔），并在卸载/退出前自动执行一次收尾保存（可按磁盘通过**退出时保存**单独关闭）；内容未变化时自动跳过，保存失败会通过托盘/状态栏提示
+- 保存为 `.mdr` 镜像并在下次挂载时还原，或直接导入已有镜像（**导入磁盘...**）
+- 导入压缩包（zip/7z/rar/tar 等 [SharpCompress](https://github.com/adamhathcock/sharpcompress) 支持的格式）为只读磁盘（**导入压缩包...**），容量/卷标自动推算
+- 可选自动保存（1-60 分钟）及卸载/退出前的收尾保存（可按磁盘通过**退出时保存**关闭）；内容未变时跳过，失败会有托盘/状态栏提示
 - 可选镜像压缩级别（不压缩／快速／均衡／最高，默认快速）
-- 快照／版本历史——按数量和/或大小上限保留快照，相同内容跨快照去重存储，占用空间远小于逻辑大小之和；可随时通过**还原快照...**还原到某个历史版本，也可在其中按需删除某个单独的快照
-- 克隆磁盘到另一已挂载磁盘，或导出为新的 `.mdr` 文件（**克隆磁盘...**）
-- 可选的 `.mdr` 镜像密码保护（AES-256-GCM 信封加密；密码仅用于加密一个随机生成的每盘专属密钥，因此更改密码无需重新加密文件内容）——在磁盘对话框中通过"加密镜像"选项设置（密码长度需为 8–64 位）；挂载时（包括启动时的自动挂载）若镜像已加密会提示输入密码
-- 长耗时操作的进度反馈——保存镜像、导入压缩包、导出磁盘时均会显示带进度条的忙碌遮罩，避免大盘操作时应用看起来无响应
+- 按数量/大小上限保留的快照版本历史，内容去重存储；通过**还原快照...**还原或删除单个快照
+- 克隆磁盘到另一已挂载磁盘，或导出为新 `.mdr` 文件（**克隆磁盘...**）
+- 可选 `.mdr` 密码保护（AES-256-GCM 信封加密——密码仅包裹一个随机每盘密钥，改密码无需重新加密文件）；在磁盘对话框中通过"加密镜像"设置（8–64 位，带实时强度提示），加密镜像挂载时会提示输入密码；敏感缓冲区用完即从内存清零
+- 长耗时操作（保存镜像、导入/导出压缩包）显示带进度条的忙碌遮罩，避免应用看起来无响应
 
 **便利与安全**
-- 可选的资源管理器右键集成：在设置中启用后，会为 zip/7z/rar/tar 压缩包添加右键菜单项**"挂载为内存盘 (ManagedDrive)"**，一键挂载，无需先打开应用——若 `ManagedDrive.exe` 尚未运行会自动启动，挂载完成后会自动打开该盘符的资源管理器窗口
-- 系统托盘图标，悬浮显示所有磁盘实时使用率及可用系统内存，提供快捷菜单及可选的最小化启动模式；任意已挂载磁盘被读写时，图标会短暂闪烁一次读/写指示
-- 主窗口状态栏实时显示当前可用系统内存（每 2 秒刷新）
-- 主窗口状态栏同时实时显示最近一次读/写的文件——事件发生时即主动推送（节流至最多每 300 毫秒一次），而非轮询；主窗口最小化到托盘时自动暂停推送，重新显示时自动恢复
-- 每磁盘可配置的高用量警告（默认阈值 90%，带回滞防抖）
-- 临时目录重定向——将 Windows TEMP/TMP 指向某磁盘的 `Temp` 文件夹，卸载/重挂时自动恢复默认值，TEMP 遗留指向内存盘时会在启动时提示
-- 退出确认，并在待处理的镜像保存完成前显示保存遮罩；若 TEMP 指向已挂载磁盘会先重置
-- 双击磁盘在资源管理器中打开；右键提供资源管理器/镜像文件夹等快捷方式，或**查看磁盘内容...**，无需离开应用即可查看可排序的 名称/大小/类型 只读树状列表
+- 可选资源管理器右键集成：为 zip/7z/rar/tar 添加**"挂载为内存盘 (ManagedDrive)"**菜单项，一键挂载并自动启动应用、打开资源管理器
+- 托盘图标带悬浮提示（各盘用量+可用内存）、快捷菜单、可选最小化启动，读写活动时短暂闪烁指示
+- 状态栏实时显示可用系统内存（2 秒刷新）
+- 状态栏同时推送最近访问的文件（节流至 300 毫秒一次，非轮询），窗口最小化到托盘时暂停
+- 每磁盘可配置高用量警告（默认 90%，带回滞防抖）
+- 临时目录重定向到某磁盘的 `Temp` 文件夹，卸载/重挂自动恢复，TEMP 遗留在内存盘上时启动提示
+- 退出确认并显示保存遮罩直至待处理保存完成；TEMP 指向已挂载磁盘时会先重置
+- 双击在资源管理器中打开磁盘；右键提供快捷方式或**查看磁盘内容...**（只读、可排序的名称/大小/类型树状列表）
 
 **界面**
-- 双语界面（中文/英文）与浅色/深色主题，均可自动检测或在设置中手动切换，即时生效无需重启
-- 一目了然的磁盘卡片，带状态角标（只读、当前临时目录、是否绑定镜像、密码保护）及使用率超阈值时变色的进度条
-- 主窗口可通过拖拽边缘自由调整大小，但不支持最大化/全屏
-- 关于对话框显示应用版本及 GitHub 仓库链接，如检测到新版本还会内嵌一个"有可用更新"链接
-- 可选的每日自动检查更新（在设置中开关），检测到 GitHub 上有新的正式版本时会弹出托盘气泡及对话框（查看发布页/忽略此版本/稍后提醒）
+- 双语（中/英）及浅色/深色主题，均可自动检测或手动切换，即时生效
+- 磁盘卡片带状态角标（只读、当前临时目录、绑定镜像、密码保护）及超阈值变色的使用率进度条
+- 窗口可自由拖拽调整大小，不支持最大化/全屏
+- 关于对话框显示版本、GitHub 链接，有新版本时显示更新链接
+- 可选每日检查更新；发现新版本时弹出托盘气泡+对话框（查看发布页/忽略/稍后提醒）
 
 **命令行**
-- `mdrive` 命令行工具（随 `ManagedDrive.exe` 一同发布），可通过命名管道对运行中的应用执行 mount/unmount/format/save/list/exit 等脚本化操作
-- 若 `ManagedDrive.exe` 尚未运行，会自动启动并等待其就绪后再发送命令
+- `mdrive`（随 `ManagedDrive.exe` 发布）通过命名管道对运行中的应用执行 mount/unmount/format/save/list/exit
+- 若应用未运行会自动启动并等待就绪后发送命令
 
 ### 安装
 
@@ -414,7 +413,7 @@ ManagedDrive/
 │       ├── Localization/           #   ResourceDictionary 字符串（en-US、zh-CN）
 │       ├── Themes/                 #   AppTheme.xaml 样式 + 浅色/深色配色字典、ThemeManager
 │       ├── Helpers/                #   ByteFormatter、HintHelper（水印/占位文本）
-│       ├── Infrastructure/         #   RelayCommand
+│       ├── Infrastructure/         #   RelayCommand, PasswordStrengthEstimator
 │       ├── Models/                 #   AppConfiguration、DiskProfile
 │       ├── Services/               #   SettingsStore、StartupManager、TempDirResetService、ShellContextMenuManager、SystemMemoryInfo、UpdateCheckService，以及从 App.xaml.cs 拆出的六个服务：TrayIconController、TrayTooltipController、DiskNotificationService、TempDirCompatChecker、SessionEndingSaveHandler、WinFspPrerequisite
 │       ├── ViewModels/             #   MainViewModel、DiskViewModel
@@ -452,6 +451,7 @@ ManagedDrive/
 │       ├── MountOptionsFactoryTests.cs
 │       ├── CreateDiskOptionsBuilderTests.cs
 │       ├── ByteUnitConverterTests.cs
+│       ├── PasswordStrengthEstimatorTests.cs
 │       └── RecordingProgress.cs           #   共用的 IProgress<double> 测试替身
 │
 └── benchmarks/
@@ -465,17 +465,17 @@ ManagedDrive/
 
 ### 工作原理
 
-ManagedDrive 使用 **WinFsp**（Windows 文件系统代理）将内存目录树呈现为真实的 Windows 卷。WinFsp 附带一个已签名的内核驱动程序作为桥接层；所有文件 I/O 均转发至 `MemoryFileSystem`，后者将数据存储在 .NET 字节数组中。
+ManagedDrive 使用 **WinFsp**（Windows 文件系统代理）将内存目录树呈现为真实的 Windows 卷，通过已签名内核驱动把文件 I/O 转发至 `MemoryFileSystem`，数据存储在 .NET 字节数组中。
 
 核心类：
 
-- **`FileNode`** — 持有 `Fsp.Interop.FileInfo` 元数据、`byte[]` 数据缓冲区、缓存的叶子节点名称及安全描述符。
-- **`FileNodeMap`** — 不区分大小写的 `SortedDictionary<string, FileNode>`，将完整路径映射到节点，通过有界前缀遍历支持分页子节点枚举，并通过增量维护的计数器追踪已分配字节总量（O(1) 读取，无需全量扫描）。通过 C# 13 `Lock` 类型保证线程安全。
-- **`MemoryFileSystem : FileSystemBase`** — 覆写全部 21 个所需的 WinFsp 回调（`Create`、`Open`、`Read`、`Write`、`Rename`、`CanDelete`、`ReadDirectoryEntry` 等），并强制执行可配置的容量上限，超出时返回 `STATUS_DISK_FULL`；内存不预分配——每个 `FileNode` 仅保留实际写入的字节数。
-- **`RamDisk`** — 组合 `MemoryFileSystem` 与 `FileSystemHost`。静态工厂方法 `Create()` 挂载卷，并轮询直至驱动器号在系统中可见（最长 2.5 秒），随后向资源管理器广播 `SHCNE_DRIVEADD`。`Dispose()` 执行卸载。配置了自动保存间隔时，后台计时器会立即保存一次镜像，随后按间隔重复保存，若自上次保存后内容未变化则跳过该次保存。与该计时器无关，只要配置了镜像路径且该磁盘未关闭"退出时保存"，`Dispose()` 在卸载前就会执行一次收尾保存——即使从未设置自动保存间隔；同样只在内容未变化时跳过，确保卸载、重新挂载或退出应用时既不遗漏最新的改动，也不产生多余的写入。镜像保存或快照写入失败时会触发 `SaveFailed` 事件——包括原本会被静默吞掉的后台自动保存和 `Dispose()` 收尾保存失败——供 App 层通过托盘气泡通知和状态栏呈现错误。可选的每磁盘密码保护仅在内存中保存一个随机生成的内容加密密钥，由用户密码进行包裹。
-- **`MountManager`** — 线程安全的活动 `RamDisk` 实例注册表，提供 `DiskMounted` / `DiskUnmounted` 事件。
-- **`DiskImageSerializer`** — 读写 `.mdr` 文件（保存完整文件系统状态，包含元数据、ACL 和文件数据），可选按用户指定的级别进行 gzip 压缩。`Save` 支持可选的 `IProgress<double>` 参数，按节点上报进度，App 层据此驱动进度条。
-- **`SnapshotManager` / `SnapshotStore`** — 在配置了快照上限的情况下，每次保存后都会在主 `.mdr` 镜像旁写入一份带时间戳的只读快照副本，并支持列出、清理旧快照及将某个快照还原到实时磁盘。文件内容按 SHA-256 哈希去重存储于共享的块存储中，因此对一个大部分内容未变化的磁盘做快照，额外占用的空间非常小。
+- **`FileNode`** — 节点的 `Fsp.Interop.FileInfo` 元数据、`byte[]` 数据缓冲区、缓存的叶子名称及安全描述符。
+- **`FileNodeMap`** — 不区分大小写的 `SortedDictionary<string, FileNode>`，支持分页子节点枚举和 O(1) 已分配字节追踪，通过 C# 13 `Lock` 保证线程安全。
+- **`MemoryFileSystem : FileSystemBase`** — 实现全部 21 个 WinFsp 回调（`Create`、`Read`、`Write`、`Rename` 等），强制容量上限（超出返回 `STATUS_DISK_FULL`），仅分配实际写入的字节。
+- **`RamDisk`** — 组合 `MemoryFileSystem` 与 `FileSystemHost`。`Create()` 挂载卷、等待盘符出现（最长 2.5 秒）并刷新资源管理器；`Dispose()` 执行卸载。可选自动保存计时器与 `Dispose()` 时的收尾保存（可通过"退出时保存"关闭）保持镜像最新，内容未变时跳过。`SaveFailed` 事件会上报任何保存/快照失败，包括原本会被静默吞掉的后台失败。可选的每盘加密仅在内存中保留一个由用户密码包裹的随机密钥。
+- **`MountManager`** — 线程安全的活动 `RamDisk` 注册表，提供 `DiskMounted`/`DiskUnmounted` 事件。
+- **`DiskImageSerializer`** — 读写 `.mdr` 文件（元数据、ACL、文件数据），可选 gzip 压缩；`Save` 通过 `IProgress<double>` 按节点上报进度。
+- **`SnapshotManager` / `SnapshotStore`** — 每次保存后在主镜像旁写入带时间戳的只读快照，支持列出、清理及还原。内容按 SHA-256 去重存储，因此对基本未变化的磁盘做快照额外占用很小。
 
 ### 磁盘镜像格式（`.mdr`）
 
@@ -492,11 +492,11 @@ ManagedDrive 使用 **WinFsp**（Windows 文件系统代理）将内存目录树
 | 节点数 | `int32` | 后续节点数量 |
 | *节点条目* | — | 路径、元数据（10 个字段）、安全描述符、文件数据——压缩级别非 0 时整体经 gzip 压缩，镜像已加密时再整体经 AES-256-GCM 加密 |
 
-版本 `1` 的镜像（不含压缩级别字段，始终不压缩）和版本 `2` 的镜像（节点区整体按同样方式压缩，不支持加密）仍可正常读取，保持向后兼容。
+版本 `1`（不含压缩级别字段，始终不压缩）和版本 `2`（节点区整体压缩，不支持加密）的镜像仍可正常读取，保持向后兼容。
 
 ### 快照格式
 
-快照采用与 `.mdr` 镜像完全独立的格式。对于主镜像 `disk.mdr`，其快照命名为同目录下的 `disk.yyyyMMdd-HHmmss.mdr`，每个都是一个小型二进制索引文件（魔数 `MDRS`），列出所有文件/目录的元数据，非空文件还会记录一个 SHA-256 哈希。实际文件内容存储在共享的内容寻址块存储 `disk.snapblobs/` 中（按哈希前 2 位十六进制分片到子文件夹），按磁盘配置的压缩级别逐块 gzip 压缩——多个快照间相同的内容只保存一份。当所属磁盘已设置密码保护时，每个块还会额外使用同一密钥进行 AES-256-GCM 加密。清理旧快照，或通过**还原快照...**删除某个单独的快照时，都会一并垃圾回收不再被任何剩余快照引用的块；清除磁盘密码时会直接删除该磁盘的所有快照，因为旧的块在密钥丢弃后已无法恢复。
+快照采用与 `.mdr` 镜像独立的格式。对于主镜像 `disk.mdr`，快照命名为同目录下的 `disk.yyyyMMdd-HHmmss.mdr`——一个小型二进制索引文件（魔数 `MDRS`），列出文件/目录元数据，非空文件附带 SHA-256 哈希。文件内容存储在共享的内容寻址块存储 `disk.snapblobs/` 中（按哈希前 2 位分片），逐块 gzip 压缩——相同内容跨快照只保存一份。加密磁盘的每个块还会用同一密钥做 AES-256-GCM 加密。清理或删除单个快照（**还原快照...**）会垃圾回收不再被引用的块；清除密码会直接删除该磁盘的所有快照，因为旧块在密钥丢弃后已无法恢复。
 
 ### 配置与持久化
 
@@ -516,7 +516,7 @@ ManagedDrive 使用 **WinFsp**（Windows 文件系统代理）将内存目录树
 | **系统** | Windows 11 Pro（Build 26200） |
 | **运行时** | .NET 10.0.9 · BenchmarkDotNet 0.15.8 |
 
-`SequentialReadWriteBenchmarks` 通过 `FileStream` 在 4 KB 和 1 MB 大小下对单个文件进行创建或读取操作。写入使用 `FileOptions.WriteThrough`（禁用操作系统写回缓存），读取使用 `FileOptions.SequentialScan`。
+`SequentialReadWriteBenchmarks` 通过 `FileStream` 在 4 KB 和 1 MB 大小下创建/读取单个文件（写入用 `FileOptions.WriteThrough`，读取用 `FileOptions.SequentialScan`）。
 
 | 文件大小 | 操作 | 内存盘 | NVMe SSD | 倍率 |
 |---:|---|---:|---:|---:|
@@ -526,9 +526,9 @@ ManagedDrive 使用 **WinFsp**（Windows 文件系统代理）将内存目录树
 | 1 MB | 读取 | 547 MB/s | 1,139 MB/s | 慢 0.5× |
 
 > **为何内存盘读取反而更慢？**  
-> 物理磁盘的读取速度之所以快，是因为操作系统页面缓存将最近写入的文件保留在 DRAM 中。内存盘的读取则需要经过 WinFsp 的内核–用户态桥接，引入了额外的 IPC 开销，比直接走页面缓存路径更慢。在数据写入一次、多次读取且页面缓存已失效的场景下（如构建产物、临时文件），内存盘的读取性能同样会超越 SSD。
+> 物理磁盘读取快是因为页面缓存把最近的文件留在 DRAM 中；内存盘读取要经过 WinFsp 的内核–用户态桥接，多了一层 IPC 开销。在写一次、多次读且缓存已失效的场景（构建产物、临时文件）下，内存盘读取同样会超越 SSD。
 >
-> **4 KB 说明：** 小文件结果主要受文件打开/关闭的系统调用开销主导，不反映实际传输速率。
+> **4 KB 说明：** 小文件结果主要受打开/关闭系统调用开销主导，不反映实际传输速率。
 
 原始延迟（均值，`[SimpleJob(warmupCount: 2, iterationCount: 3)]`）：
 
@@ -544,7 +544,7 @@ ManagedDrive 使用 **WinFsp**（Windows 文件系统代理）将内存目录树
 | 随机 4 KB 读取（对 16 MB 文件随机寻址 30 次） | 3.26 ms | 1.00 ms | 慢 3.3× |
 | 30 次小文件（4 KB）创建+写入 | 75.5 ms（2.52 ms/文件） | 115.1 ms（3.84 ms/文件） | **快 1.5×** |
 
-随机读取在内存盘上更慢，原因与顺序读取相同（每次 I/O 都要经过 WinFsp 内核–用户态往返）；而小文件写入更快，是因为内存盘创建文件完全跳过了物理块分配和日志记录——代价是每次操作的托管内存分配量显著更高（详见原始 BenchmarkDotNet 输出中的 `Alloc Ratio`）。
+随机读取更慢的原因与顺序读取相同（每次 I/O 都要经过内核–用户态往返）；小文件写入更快是因为内存盘创建文件跳过了物理块分配和日志记录——代价是托管内存分配量更高（详见 BenchmarkDotNet 输出中的 `Alloc Ratio`）。
 
 ### 运行测试
 
@@ -552,7 +552,7 @@ ManagedDrive 使用 **WinFsp**（Windows 文件系统代理）将内存目录树
 dotnet test tests/ManagedDrive.Tests
 ```
 
-测试覆盖 `FileNode`（分配单元对齐、索引编号、深拷贝克隆）、`FileNodeMap`（增删改查、大小写无关查找、子节点分页、重命名、容量追踪）、`MemoryFileSystem` 的磁盘克隆逻辑（跨磁盘复制内容、目标容量不足与目标只读时的拒绝、克隆节点的独立性）、目录枚举及目录列表所用的通配符匹配逻辑、`DiskImageSerializer`（各压缩级别的保存/加载往返、旧版本 1 镜像、保存期间并发修改磁盘节点）、压缩包导入/导出、`MountOptionsFactory`（`mdrive mount`/`mount-archive` 所用的已存配置与 CLI 覆盖项合并逻辑），以及 `CreateDiskOptionsBuilder`/`ByteUnitConverter`（创建磁盘对话框的校验逻辑，专门下沉到 Core 以便脱离 WPF 单测）。挂载/卸载集成测试需要 WinFsp 驱动程序，须手动运行。
+测试覆盖 `FileNode`、`FileNodeMap`（增删改查、查找、分页、重命名、容量追踪）、`MemoryFileSystem` 的磁盘克隆逻辑、目录枚举及通配符匹配、`DiskImageSerializer`（各压缩级别的保存/加载往返、旧版本镜像、并发修改）、压缩包导入/导出、`MountOptionsFactory`、`CreateDiskOptionsBuilder`/`ByteUnitConverter`（下沉到 Core 以便脱离 WPF 单测），以及 `PasswordStrengthEstimator`。挂载/卸载集成测试需要 WinFsp 驱动，须手动运行。
 
 ### 运行基准测试
 
@@ -593,19 +593,17 @@ mdrive exit
 
 #### 将 TEMP 设为内存盘后，某些安装包可能报错
 
-核心问题在于安装程序**本身正是从内存盘路径运行**，而不仅仅是文件被解压到了内存盘上。WinFsp 将驱动器挂载在**当前用户的会话设备命名空间**中。若安装包被解压到 TEMP 后由系统级进程启动（例如 winget 所使用的 Windows 软件包管理器服务），该进程运行于全局设备命名空间，无法解析用户会话级别的驱动器号。尝试从 `Z:\Temp\WinGet\...\setup.exe` 之类的路径执行安装程序时，会报错：
+问题根源：安装程序**本身就是从内存盘运行**，不只是文件被解压到内存盘。WinFsp 把驱动器挂载在当前用户的会话设备命名空间中，若系统级进程（如 winget 的软件包管理器服务）从 `Z:\Temp\WinGet\...\setup.exe` 这类路径启动，会因无法解析该盘符而报错：
 
 > `0x800704b3` — 网络路径键入不正确 / The network path was not found
 
-已知受影响的安装包包括 **WeChatWin\_\*.exe**（微信安装程序）、**7z\*.exe**（7-Zip 安装程序）和 **Git-\*.exe**（Git 安装程序）。并非所有 winget 包都受影响——大多数包可正常安装。
+已知受影响：**WeChatWin\_\*.exe**（微信）、**7z\*.exe**（7-Zip）、**Git-\*.exe**（Git），并非所有 winget 包都受影响。
 
-这是 WinFsp 用户态文件系统的架构性限制，无法在用户空间层面绕过。
+这是 WinFsp 用户态文件系统的架构性限制，无法在用户空间绕过。
 
-**建议：** 如遇安装报错，可采用以下任一方式解决：
-- 通过 ManagedDrive 工具栏的按钮将 TEMP 恢复为 Windows 默认值，再重试安装。
-- 直接前往软件官网下载安装包手动安装，绕过 winget。
+**解决办法：** 用工具栏按钮把 TEMP 恢复为 Windows 默认值后重试，或直接前往官网下载安装包手动安装。
 
-每次将内存盘设置为临时目录时，ManagedDrive 均会弹出警告提示。此后每次启动，只要 TEMP 仍指向内存盘，警告便会再次弹出——将 TEMP 恢复为 Windows 默认值后即可停止重复提示。
+ManagedDrive 会在 TEMP 被设为内存盘时提示一次，此后只要 TEMP 仍指向内存盘，每次启动都会再次提示——恢复默认值即可停止。
 
 ### 许可证
 
