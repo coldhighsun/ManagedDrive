@@ -29,6 +29,14 @@
                                FontSize="12"
                                Foreground="{DynamicResource AppForegroundLight}"
                                Margin="0,2,0,0"/>
+                    <TextBlock x:Name="UpdateStatusText"
+                               FontSize="12"
+                               Margin="0,4,0,0"
+                               Visibility="Collapsed">
+                        <Hyperlink x:Name="UpdateLink" RequestNavigate="Hyperlink_RequestNavigate">
+                            <Run x:Name="UpdateLinkRun"/>
+                        </Hyperlink>
+                    </TextBlock>
                 </StackPanel>
             </StackPanel>
 
