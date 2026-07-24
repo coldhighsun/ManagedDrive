@@ -87,6 +87,15 @@ jobs:
             -o publish-fx/
         shell: pwsh
 
+      - name: Publish helper service (win-x64, framework-dependent)
+        run: |
+          dotnet publish src/ManagedDrive.Service/ManagedDrive.Service.csproj `
+            -c Release `
+            -r win-x64 `
+            --no-self-contained `
+            -o publish-fx/
+        shell: pwsh
+
       - name: Resolve version from tag
         id: version
         run: |
