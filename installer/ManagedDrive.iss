@@ -310,23 +310,34 @@ begin
   Result := Pos(NeedlePrefix, SettingsContent) > 0;
 end;
 
+// Surfaces the TEMP-on-RAM-disk abort reason appropriately for the run mode: an interactive
+// MsgBox when a user is present to read it, or a Log(...) entry when running silently (e.g.
+// winget install --silent, /VERYSILENT), where a blocking MsgBox would never be seen/dismissed
+// but the reason should still be diagnosable via Setup's /LOG= output.
+procedure ReportTempOnRamDiskWarning(const EnMessage, ZhMessage: string);
+begin
+  if WizardSilent() then
+    Log('Aborting: ' + EnMessage)
+  else
+    MsgBox(EnMessage + #13#10#13#10 + ZhMessage, mbError, MB_OK);
+end;
+
 function InitializeSetup(): Boolean;
 begin
   Result := True;
 
   if IsTempOnManagedDriveMountPoint() then
   begin
-    MsgBox(
+    ReportTempOnRamDiskWarning(
       'TEMP is currently set to a ManagedDrive RAM disk. Installing or upgrading now may close ' +
       'ManagedDrive and unmount that disk while Setup still needs a working TEMP directory for ' +
       'its own files, which can make Setup fail partway through.'#13#10#13#10 +
       'Please open ManagedDrive and reset TEMP to its default location (Tray menu > Reset TEMP ' +
-      'Dirs, or untoggle TEMP on the disk), then run this installer again.'#13#10#13#10 +
+      'Dirs, or untoggle TEMP on the disk), then run this installer again.',
       '当前 TEMP 目录设置在了 ManagedDrive 内存盘上。现在安装或升级可能会关闭 ManagedDrive 并卸载该' +
       '盘，而安装程序自身仍需要一个可用的 TEMP 目录来存放临时文件，这会导致安装过程中途失败。'#13#10#13#10 +
       '请先打开 ManagedDrive，将 TEMP 还原为系统默认设置（托盘菜单 > 重置 TEMP 目录，或取消该磁盘' +
-      '的 TEMP 设置），然后再次运行本安装程序。',
-      mbError, MB_OK);
+      '的 TEMP 设置），然后再次运行本安装程序。');
     Result := False;
   end;
 end;
@@ -337,15 +348,14 @@ begin
 
   if IsTempOnManagedDriveMountPoint() then
   begin
-    MsgBox(
+    ReportTempOnRamDiskWarning(
       'TEMP is currently set to a ManagedDrive RAM disk. Uninstalling now will leave TEMP ' +
       'pointing at a drive that no longer exists.'#13#10#13#10 +
       'Please open ManagedDrive and reset TEMP to its default location (Tray menu > Reset TEMP ' +
-      'Dirs, or untoggle TEMP on the disk), then run this uninstaller again.'#13#10#13#10 +
+      'Dirs, or untoggle TEMP on the disk), then run this uninstaller again.',
       '当前 TEMP 目录设置在了 ManagedDrive 内存盘上。现在卸载会导致 TEMP 指向一个不存在的驱动器。'#13#10#13#10 +
       '请先打开 ManagedDrive，将 TEMP 还原为系统默认设置（托盘菜单 > 重置 TEMP 目录，或取消该磁盘' +
-      '的 TEMP 设置），然后再次运行本卸载程序。',
-      mbError, MB_OK);
+      '的 TEMP 设置），然后再次运行本卸载程序。');
     Result := False;
   end;
 end;
