@@ -1,4 +1,4 @@
-namespace ManagedDrive.Core;
+namespace ManagedDrive.Core.DiskCreation;
 
 /// <summary>
 /// The mode the create-disk dialog is operating in. Only affects how capacity/label are

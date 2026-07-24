@@ -21,6 +21,12 @@
 
   <ItemGroup>
     <Using Include="Xunit" />
+    <Using Include="ManagedDrive.Core.Archive" />
+    <Using Include="ManagedDrive.Core.DiskCreation" />
+    <Using Include="ManagedDrive.Core.FileSystem" />
+    <Using Include="ManagedDrive.Core.Mounting" />
+    <Using Include="ManagedDrive.Core.Persistence" />
+    <Using Include="ManagedDrive.Core.Snapshots" />
   </ItemGroup>
 
 </Project>

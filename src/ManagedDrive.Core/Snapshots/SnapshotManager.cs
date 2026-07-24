@@ -1,7 +1,7 @@
 using System.Security.Cryptography;
 using System.Text.RegularExpressions;
 
-namespace ManagedDrive.Core;
+namespace ManagedDrive.Core.Snapshots;
 
 /// <summary>
 /// Builds, lists, and prunes timestamped snapshot copies of a disk's <c>.mdr</c> image,

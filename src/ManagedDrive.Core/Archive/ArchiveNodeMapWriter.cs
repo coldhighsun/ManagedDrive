@@ -3,7 +3,7 @@ using SharpCompress.Writers;
 using SharpCompress.Writers.SevenZip;
 using SharpCompress.Writers.Zip;
 
-namespace ManagedDrive.Core;
+namespace ManagedDrive.Core.Archive;
 
 /// <summary>
 /// Archive container format supported by <see cref="ArchiveNodeMapWriter"/>.

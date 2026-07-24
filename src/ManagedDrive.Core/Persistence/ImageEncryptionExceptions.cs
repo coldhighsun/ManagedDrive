@@ -1,4 +1,4 @@
-namespace ManagedDrive.Core;
+namespace ManagedDrive.Core.Persistence;
 
 /// <summary>
 /// Thrown by <see cref="DiskImageSerializer.Load"/> when the image is password-protected but no

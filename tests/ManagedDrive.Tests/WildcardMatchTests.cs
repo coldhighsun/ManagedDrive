@@ -1,5 +1,3 @@
-using ManagedDrive.Core;
-
 namespace ManagedDrive.Tests;
 
 public sealed class WildcardMatchTests

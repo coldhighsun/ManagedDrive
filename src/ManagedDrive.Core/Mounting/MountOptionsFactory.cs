@@ -1,4 +1,4 @@
-namespace ManagedDrive.Core;
+namespace ManagedDrive.Core.Mounting;
 
 /// <summary>
 /// Per-field override values for a mount, sourced from CLI flags. Any field left <c>null</c>

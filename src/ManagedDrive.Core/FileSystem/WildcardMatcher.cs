@@ -1,4 +1,4 @@
-namespace ManagedDrive.Core;
+namespace ManagedDrive.Core.FileSystem;
 
 /// <summary>
 /// Case-insensitive glob matcher supporting <c>*</c> (zero or more characters) and

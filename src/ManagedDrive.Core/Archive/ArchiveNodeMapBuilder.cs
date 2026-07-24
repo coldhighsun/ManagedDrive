@@ -1,6 +1,6 @@
 using SharpCompress.Archives;
 
-namespace ManagedDrive.Core;
+namespace ManagedDrive.Core.Archive;
 
 /// <summary>
 /// Builds a <see cref="FileNodeMap"/> by extracting an archive (zip, 7z, rar, tar, and any other

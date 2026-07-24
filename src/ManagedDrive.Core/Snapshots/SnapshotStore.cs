@@ -1,7 +1,7 @@
 using System.IO.Compression;
 using System.Security.Cryptography;
 
-namespace ManagedDrive.Core;
+namespace ManagedDrive.Core.Snapshots;
 
 /// <summary>
 /// Reads and writes the content-addressable snapshot storage format: a small per-snapshot

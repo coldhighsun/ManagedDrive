@@ -1,6 +1,6 @@
 using FileInfo = Fsp.Interop.FileInfo;
 
-namespace ManagedDrive.Core;
+namespace ManagedDrive.Core.FileSystem;
 
 /// <summary>
 /// Builds and iterates the directory-entry list for a WinFsp <c>ReadDirectoryEntry</c> sequence.

@@ -570,7 +570,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
                 AutoMount = overrides.AutoMount,
                 AutoSaveIntervalMinutes = overrides.AutoSaveIntervalMinutes,
                 CompressionLevel = overrides.CompressionLevel is { } compressionLevel
-                    ? (Core.ImageCompressionLevel)compressionLevel
+                    ? (ManagedDrive.Core.Mounting.ImageCompressionLevel)compressionLevel
                     : null,
                 MaxSnapshotCount = overrides.MaxSnapshotCount,
                 MaxSnapshotSizeBytes = overrides.MaxSnapshotSizeBytes,

@@ -14,4 +14,8 @@
     <ProjectReference Include="..\..\src\ManagedDrive.Core\ManagedDrive.Core.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Using Include="ManagedDrive.Core.Mounting" />
+  </ItemGroup>
+
 </Project>

@@ -1,4 +1,4 @@
-namespace ManagedDrive.Core;
+namespace ManagedDrive.Core.FileSystem;
 
 /// <summary>
 /// An immutable snapshot of a single content read or write: when it happened and which file

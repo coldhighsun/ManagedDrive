@@ -1,4 +1,4 @@
-namespace ManagedDrive.Core;
+namespace ManagedDrive.Core.DiskCreation;
 
 /// <summary>
 /// Converts between raw byte counts and the MB/GB (value, unit) pairs used by the

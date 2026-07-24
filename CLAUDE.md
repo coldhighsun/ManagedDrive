@@ -29,7 +29,7 @@ The solution file is `ManagedDrive.slnx` (Visual Studio 2022+ format).
 
 `Directory.Build.props` sets `Nullable enable` and `ImplicitUsings enable` globally — do not add explicit `using` directives for implicitly imported namespaces, and follow nullable annotation conventions throughout.
 
-`ManagedDrive.App/GlobalUsings.cs` adds project-wide `global using` directives for namespaces referenced across most files: all `ManagedDrive.App.*` sub-namespaces, `ManagedDrive.Core`, `Microsoft.Win32`, `System.ComponentModel`, `System.Diagnostics`, `System.IO`, `System.Windows`, and `System.Windows.Threading`. Don't re-add explicit `using` directives for these in individual files — only add file-specific ones (e.g. `System.Windows.Controls`, `System.Windows.Input`, `System.Text.Json`).
+`ManagedDrive.App/GlobalUsings.cs` adds project-wide `global using` directives for namespaces referenced across most files: all `ManagedDrive.App.*` sub-namespaces, all `ManagedDrive.Core.*` sub-namespaces (see Core layer below — `Core` itself has no types at its root, only sub-namespaces), `Microsoft.Win32`, `System.ComponentModel`, `System.Diagnostics`, `System.IO`, `System.Windows`, and `System.Windows.Threading`. Don't re-add explicit `using` directives for these in individual files — only add file-specific ones (e.g. `System.Windows.Controls`, `System.Windows.Input`, `System.Text.Json`). `ManagedDrive.Tests` and `ManagedDrive.Benchmarks` mirror this via `<Using Include="..." />` items in their `.csproj` rather than a `GlobalUsings.cs` file.
 
 The solution has six projects. `Core`, `App`, `Tests`, and `Benchmarks` target `net10.0-windows`; `Cli.Core` and `Cli` are portable/console-subsystem and target plain `net10.0`:
 
@@ -41,6 +41,15 @@ The solution has six projects. `Core`, `App`, `Tests`, and `Benchmarks` target `
 - **`ManagedDrive.Benchmarks`** — BenchmarkDotNet throughput/latency comparisons against physical disk; part of the `.slnx` solution but not shipped. See Benchmarks below.
 
 ### Core layer (`ManagedDrive.Core`)
+
+Types are organized into sub-namespace folders (no types live directly in the bare `ManagedDrive.Core` namespace):
+`FileSystem` (`FileNode`, `FileNodeMap`, `MemoryFileSystem`, `WildcardMatcher`, `DirectoryEnumeration`, `ContentAccessInfo`),
+`Mounting` (`DiskOptions`, `ImageCompressionLevel`, `RamDisk`, `MountManager`, `MountOptionsFactory`),
+`Persistence` (`DiskImageSerializer`, the image-encryption exceptions),
+`Snapshots` (`SnapshotManager`, `SnapshotStore`),
+`Archive` (`ArchiveNodeMapBuilder`, `ArchiveNodeMapWriter`),
+`DiskCreation` (`CreateDiskOptionsBuilder`, `ByteUnitConverter` — pure validation logic for the App layer's create-disk dialog).
+Core's own `GlobalUsings.cs` global-uses all six sub-namespaces so files can reference each other without per-file `using` directives; consumers (`App`, `Tests`, `Benchmarks`) do the same at the project level (see above).
 
 Data flows: `MountManager` → `RamDisk.Create()` → `MemoryFileSystem` + `FileSystemHost` (WinFsp).
 

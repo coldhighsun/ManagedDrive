@@ -1,5 +1,4 @@
 using System.IO.Compression;
-using ManagedDrive.Core;
 
 namespace ManagedDrive.Tests;
 

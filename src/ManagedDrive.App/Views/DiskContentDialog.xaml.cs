@@ -1,5 +1,4 @@
 using ManagedDrive.Cli.Core;
-using ManagedDrive.Core;
 using System.Collections.ObjectModel;
 using System.Globalization;
 using System.Windows.Controls;
