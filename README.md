@@ -291,15 +291,15 @@ Run `mdrive --help` or `mdrive <command> --help` for the full option list.
 
 #### Certain installers may fail when TEMP is set to a RAM disk
 
-The issue: the installer **executable itself runs from the RAM disk**, not just extracted files. WinFsp mounts drives in the current user's session device namespace, so a system-level process (e.g. winget's Package Manager service) launching from `Z:\Temp\WinGet\...\setup.exe` can't resolve that drive letter and fails with:
+WinFsp mounts a drive letter into the **current logon session's** device namespace, so processes in another session or logon (a system service in session 0, or an elevated process running under the linked admin token) can't resolve that drive letter. There are two distinct failure modes:
 
-> `0x800704b3` — The network path was not found
+1. **Cross-session drive-letter visibility.** A system-level process (e.g. winget's Package Manager service) launching from `Z:\Temp\...\setup.exe` can't see the drive and fails with `0x800704b3` (*The network path was not found*). Known affected: **WeChatWin_\*.exe**, **7z\*.exe**, **Git-\*.exe**. This class *can* be resolved by the optional SYSTEM helper service (below), which publishes a global (`\GLOBAL??`) symlink for the drive.
 
-Known affected: **WeChatWin_\*.exe**, **7z\*.exe**, **Git-\*.exe** (not all winget packages are affected).
+2. **MSI installers via the Windows Installer service.** `msiexec`'s server half runs as SYSTEM in session 0 and performs a *volume-identity* query (Mount Manager lookup) on the source volume before reading it. WinFsp's per-session mount is **not registered with the Windows Mount Manager**, so this query fails with system error `1005` (*The volume does not contain a recognized file system*) → MSI error `2755`/`1603`. The helper service's global drive-letter symlink does **not** fix this — the volume still isn't a Mount-Manager-registered system volume. This affects `winget` installs of MSI packages and standalone `.msi` files whose source sits on the RAM disk. **This is out of scope for the helper service** and would require mounting via the Windows Mount Manager (a larger, service-hosted mount rearchitecture).
 
-This is an architectural limitation of WinFsp user-mode file systems, not something ManagedDrive can work around.
+**Optional SYSTEM helper service** (`ManagedDriveHelper`): when installed and running, it publishes a cross-session global symlink for whichever disk is the current TEMP target, resolving failure mode 1. It does not address failure mode 2.
 
-**Fix:** Reset TEMP to the Windows default (toolbar button) and retry, or download the installer directly from the vendor's site and run it manually.
+**Fix / workaround for MSI installs:** reset TEMP to the Windows default (toolbar button) before installing MSI-based software, then retry — or download the installer from the vendor and run it manually.
 
 ManagedDrive warns once when TEMP is set to a RAM disk, and again on every startup while it stays that way.
 
@@ -593,15 +593,15 @@ mdrive exit
 
 #### 将 TEMP 设为内存盘后，某些安装包可能报错
 
-问题根源：安装程序**本身就是从内存盘运行**，不只是文件被解压到内存盘。WinFsp 把驱动器挂载在当前用户的会话设备命名空间中，若系统级进程（如 winget 的软件包管理器服务）从 `Z:\Temp\WinGet\...\setup.exe` 这类路径启动，会因无法解析该盘符而报错：
+WinFsp 把盘符挂载在**当前登录会话（logon session）**的设备命名空间中，因此其他会话或其他登录令牌下的进程（session 0 的系统服务、或提权后跑在链接管理员令牌下的进程）无法解析该盘符。这里有两种不同的失败模式：
 
-> `0x800704b3` — 网络路径键入不正确 / The network path was not found
+1. **跨会话盘符可见性。** 系统级进程（如 winget 的软件包管理器服务）从 `Z:\Temp\...\setup.exe` 启动时看不到该盘，报 `0x800704b3`（*网络路径未找到*）。已知受影响：**WeChatWin\_\*.exe**（微信）、**7z\*.exe**（7-Zip）、**Git-\*.exe**（Git）。这一类**可以**由下面的可选 SYSTEM 辅助服务解决——它会为该盘发布一个全局（`\GLOBAL??`）符号链接。
 
-已知受影响：**WeChatWin\_\*.exe**（微信）、**7z\*.exe**（7-Zip）、**Git-\*.exe**（Git），并非所有 winget 包都受影响。
+2. **通过 Windows Installer 服务安装的 MSI。** `msiexec` 的服务端半边以 SYSTEM 身份跑在 session 0，在读取源文件前会对源卷做一次**卷身份查询**（询问卷装载管理器 Mount Manager）。WinFsp 的 per-session 挂载**没有在 Windows Mount Manager 里注册**，所以该查询以系统错误 `1005`（*卷未包含可识别的文件系统*）失败 → MSI 错误 `2755`/`1603`。辅助服务发布的全局盘符符号链接**修不了**这个——卷依然不是 Mount-Manager 注册的系统卷。这会影响 `winget` 安装 MSI 包、以及源文件位于内存盘上的独立 `.msi` 文件。**这不在辅助服务的能力范围内**，根治需要改为通过 Windows Mount Manager 挂载（属于更大的、服务化挂载的重构）。
 
-这是 WinFsp 用户态文件系统的架构性限制，无法在用户空间绕过。
+**可选 SYSTEM 辅助服务**（`ManagedDriveHelper`）：安装并运行后，它会为当前作为 TEMP 目标的那个盘发布跨会话全局符号链接，解决失败模式 1；对失败模式 2 无效。
 
-**解决办法：** 用工具栏按钮把 TEMP 恢复为 Windows 默认值后重试，或直接前往官网下载安装包手动安装。
+**MSI 安装的解决办法：** 安装 MSI 类软件前，先用工具栏按钮把 TEMP 恢复为 Windows 默认值再重试；或直接前往官网下载安装包手动安装。
 
 ManagedDrive 会在 TEMP 被设为内存盘时提示一次，此后只要 TEMP 仍指向内存盘，每次启动都会再次提示——恢复默认值即可停止。
 
