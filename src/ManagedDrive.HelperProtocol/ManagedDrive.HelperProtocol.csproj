@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Shared pipe protocol + client between the user-mode app (ManagedDrive.App) and the
+    SYSTEM helper service (ManagedDrive.Service). Deliberately dependency-free so the service
+    does not transitively load Core's mixed-mode winfsp-msil.dll.
+  -->
+
+</Project>

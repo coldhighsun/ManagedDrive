@@ -16,6 +16,7 @@ public partial class App
 
     private CliPipeServer? _cliPipeServer;
     private DiskNotificationService? _diskNotificationService;
+    private GlobalMountCoordinator? _globalMountCoordinator;
     private bool _isExiting;
     private MainViewModel? _mainViewModel;
     private MainWindow? _mainWindow;
@@ -117,6 +118,12 @@ public partial class App
         _tempDirCompatChecker = new(_settings, _trayIconController, () => _mainWindow is { IsLoaded: true } ? _mainWindow : null);
         _mountManager.ActivityDetected += _trayIconController.OnActivityDetected;
         _diskNotificationService = new(_mainViewModel, _trayIconController, () => _mainWindow!.IsVisible);
+
+        // Constructed before AutoMountDisksAsync so that an auto-mounted disk which is already the
+        // TEMP target gets its global symlink published at startup. Rooted as a field only to keep
+        // its Disks.CollectionChanged subscription alive.
+        _globalMountCoordinator = new(_mainViewModel);
+
         _tempDirCompatChecker.CheckOnStartup(config);
 
         _updateCheckService = new(_settings, _trayIconController, () => _mainWindow is { IsLoaded: true } ? _mainWindow : null);

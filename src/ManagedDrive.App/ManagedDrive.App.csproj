@@ -36,6 +36,7 @@
   <ItemGroup>
     <ProjectReference Include="..\ManagedDrive.Core\ManagedDrive.Core.csproj" />
     <ProjectReference Include="..\ManagedDrive.Cli.Core\ManagedDrive.Cli.Core.csproj" />
+    <ProjectReference Include="..\ManagedDrive.HelperProtocol\ManagedDrive.HelperProtocol.csproj" />
   </ItemGroup>
 
   <ItemGroup>

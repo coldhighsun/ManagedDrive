@@ -650,6 +650,46 @@ public sealed class RamDisk : IDisposable
     private static extern void SHChangeNotify(uint wEventId, uint uFlags, string? dwItem1, string? dwItem2);
 
     /// <summary>
+    /// Resolves the underlying NT device path (e.g. <c>\Device\Volume{GUID}</c>) that this disk's
+    /// drive-letter mount point currently maps to, via <c>QueryDosDevice</c>. Read-only and
+    /// non-privileged, but it must be called from the user's own session — the drive-letter
+    /// symlink WinFsp created lives in that session's DOS-device namespace, so a SYSTEM process
+    /// could not resolve it. The result is handed to the helper service to publish a global
+    /// symlink.
+    /// </summary>
+    /// <param name="devicePath">
+    /// On success, the resolved NT device path; otherwise <c>null</c>.
+    /// </param>
+    /// <returns>
+    /// <c>true</c> if the mount point is a drive letter that resolved to a device path;
+    /// <c>false</c> otherwise.
+    /// </returns>
+    public bool TryGetVolumeDevicePath(out string? devicePath)
+    {
+        devicePath = null;
+
+        var mountPoint = MountPoint;
+        if (!IsDriveLetter(mountPoint))
+        {
+            return false;
+        }
+
+        var buffer = new char[1024];
+        var length = QueryDosDevice(mountPoint, buffer, (uint)buffer.Length);
+        if (length == 0)
+        {
+            return false;
+        }
+
+        // QueryDosDevice returns a double-null-terminated list; the first entry is the target.
+        devicePath = new string(buffer, 0, (int)length).Split('\0', 2)[0];
+        return devicePath.Length > 0;
+    }
+
+    [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Auto)]
+    private static extern uint QueryDosDevice(string deviceName, char[] targetPath, uint max);
+
+    /// <summary>
     /// Polls <see cref="System.IO.DriveInfo.GetDrives"/> until the drive letter described by
     /// <paramref name="mountPoint"/> is reported by the OS, or a 2.5-second timeout elapses.
     /// </summary>
