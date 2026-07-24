@@ -114,7 +114,10 @@ jobs:
         # separate winget package for Inno Setup 7. "--scope machine" keeps the install
         # location predictable (windows-latest runners already ship Inno Setup 6 under
         # Program Files (x86), so a version-specific, non-wildcard lookup is required below).
-        run: winget install --id JRSoftware.InnoSetup.7 --scope machine --silent --accept-package-agreements --accept-source-agreements
+        # "--source winget" restricts the search to the community repo and skips updating
+        # the msstore source, which otherwise fails on runners with an unmet Microsoft Store
+        # terms-of-transaction/region-detection agreement (0x8a15000f).
+        run: winget install --id JRSoftware.InnoSetup.7 --source winget --scope machine --silent --accept-package-agreements --accept-source-agreements
         shell: pwsh
 
       - name: Build installer
