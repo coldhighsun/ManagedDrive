@@ -147,6 +147,7 @@ jobs:
           tag_name: ${{ github.ref_name }}
           name: ManagedDrive ${{ github.ref_name }}
           generate_release_notes: true
+          prerelease: auto
           files: |
             ManagedDrive-${{ steps.version.outputs.tag }}-win-x64-portable.zip
             installer/Output/ManagedDrive-Setup-${{ steps.version.outputs.version }}.exe
