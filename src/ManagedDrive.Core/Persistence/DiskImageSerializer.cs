@@ -278,6 +278,10 @@ public static class DiskImageSerializer
 
             throw;
         }
+        finally
+        {
+            CryptographicOperations.ZeroMemory(nodeRegionBytes);
+        }
     }
 
     /// <summary>
@@ -363,15 +367,22 @@ public static class DiskImageSerializer
             nodeRegionBytes = reader.ReadBytes((int)(stream.Length - stream.Position));
         }
 
-        var compressed = level != ImageCompressionLevel.None;
-        using var nodeRegionStream = new MemoryStream(nodeRegionBytes);
-        using var payloadReader = new BinaryReader(
-            compressed
-                ? new GZipStream(nodeRegionStream, CompressionMode.Decompress, leaveOpen: true)
-                : nodeRegionStream,
-            System.Text.Encoding.UTF8);
+        try
+        {
+            var compressed = level != ImageCompressionLevel.None;
+            using var nodeRegionStream = new MemoryStream(nodeRegionBytes);
+            using var payloadReader = new BinaryReader(
+                compressed
+                    ? new GZipStream(nodeRegionStream, CompressionMode.Decompress, leaveOpen: true)
+                    : nodeRegionStream,
+                System.Text.Encoding.UTF8);
 
-        return ReadNodes(payloadReader);
+            return ReadNodes(payloadReader);
+        }
+        finally
+        {
+            CryptographicOperations.ZeroMemory(nodeRegionBytes);
+        }
     }
 
     private static void ReadHeader(
@@ -472,18 +483,25 @@ public static class DiskImageSerializer
         byte[] tag)
     {
         var kek = Rfc2898DeriveBytes.Pbkdf2(password, salt, iterations, HashAlgorithmName.SHA256, CekSize);
-        var cek = new byte[wrappedCek.Length];
         try
         {
-            using var aesGcm = new AesGcm(kek, TagSize);
-            aesGcm.Decrypt(nonce, wrappedCek, tag, cek);
-        }
-        catch (CryptographicException)
-        {
-            throw new ImagePasswordIncorrectException();
-        }
+            var cek = new byte[wrappedCek.Length];
+            try
+            {
+                using var aesGcm = new AesGcm(kek, TagSize);
+                aesGcm.Decrypt(nonce, wrappedCek, tag, cek);
+            }
+            catch (CryptographicException)
+            {
+                throw new ImagePasswordIncorrectException();
+            }
 
-        return cek;
+            return cek;
+        }
+        finally
+        {
+            CryptographicOperations.ZeroMemory(kek);
+        }
     }
 
     private static byte[] WrapCek(
@@ -495,16 +513,23 @@ public static class DiskImageSerializer
         out byte[] tag)
     {
         var kek = Rfc2898DeriveBytes.Pbkdf2(password, salt, iterations, HashAlgorithmName.SHA256, CekSize);
-        nonce = RandomNumberGenerator.GetBytes(NonceSize);
-        var wrapped = new byte[cek.Length];
-        var localTag = new byte[TagSize];
-        using (var aesGcm = new AesGcm(kek, TagSize))
+        try
         {
-            aesGcm.Encrypt(nonce, cek, wrapped, localTag);
-        }
+            nonce = RandomNumberGenerator.GetBytes(NonceSize);
+            var wrapped = new byte[cek.Length];
+            var localTag = new byte[TagSize];
+            using (var aesGcm = new AesGcm(kek, TagSize))
+            {
+                aesGcm.Encrypt(nonce, cek, wrapped, localTag);
+            }
 
-        tag = localTag;
-        return wrapped;
+            tag = localTag;
+            return wrapped;
+        }
+        finally
+        {
+            CryptographicOperations.ZeroMemory(kek);
+        }
     }
 
     private static void WriteNode(BinaryWriter writer, string path, FileNode node)
