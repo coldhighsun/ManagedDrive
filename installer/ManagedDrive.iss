@@ -283,9 +283,10 @@ end;
 // Checks whether the user-level TEMP variable currently points at a drive letter that a saved
 // ManagedDrive disk profile uses as its mount point. Mirrors TempDirCompatChecker.IsTempOnAnyDisk
 // (App layer), but reads the persisted profile list from settings.json instead of live
-// DiskViewModels, since the uninstaller cannot assume the app is running. settings.json is
-// written via JsonSerializer.Serialize with default (indented, PascalCase) options, so a plain
-// substring search for the "MountPoint": "<Letter>: pattern is reliable without a JSON parser.
+// DiskViewModels, since neither Setup nor the uninstaller can assume the app is running.
+// settings.json is written via JsonSerializer.Serialize with default (indented, PascalCase)
+// options, so a plain substring search for the "MountPoint": "<Letter>: pattern is reliable
+// without a JSON parser. Shared by InitializeSetup and InitializeUninstall below.
 function IsTempOnManagedDriveMountPoint(): Boolean;
 var
   TempValue, SettingsPath, NeedlePrefix, DriveLetter: string;
@@ -307,6 +308,27 @@ begin
 
   NeedlePrefix := '"MountPoint": "' + DriveLetter + ':';
   Result := Pos(NeedlePrefix, SettingsContent) > 0;
+end;
+
+function InitializeSetup(): Boolean;
+begin
+  Result := True;
+
+  if IsTempOnManagedDriveMountPoint() then
+  begin
+    MsgBox(
+      'TEMP is currently set to a ManagedDrive RAM disk. Installing or upgrading now may close ' +
+      'ManagedDrive and unmount that disk while Setup still needs a working TEMP directory for ' +
+      'its own files, which can make Setup fail partway through.'#13#10#13#10 +
+      'Please open ManagedDrive and reset TEMP to its default location (Tray menu > Reset TEMP ' +
+      'Dirs, or untoggle TEMP on the disk), then run this installer again.'#13#10#13#10 +
+      '当前 TEMP 目录设置在了 ManagedDrive 内存盘上。现在安装或升级可能会关闭 ManagedDrive 并卸载该' +
+      '盘，而安装程序自身仍需要一个可用的 TEMP 目录来存放临时文件，这会导致安装过程中途失败。'#13#10#13#10 +
+      '请先打开 ManagedDrive，将 TEMP 还原为系统默认设置（托盘菜单 > 重置 TEMP 目录，或取消该磁盘' +
+      '的 TEMP 设置），然后再次运行本安装程序。',
+      mbError, MB_OK);
+    Result := False;
+  end;
 end;
 
 function InitializeUninstall(): Boolean;
