@@ -205,6 +205,8 @@
     <sys:String x:Key="Tip.RunAtStartup">Start ManagedDrive automatically when Windows starts</sys:String>
     <sys:String x:Key="Tip.StartMinimized">Hide the main window on startup and show only the system tray icon</sys:String>
     <sys:String x:Key="Tip.ContextMenuEnabled">Add a right-click menu entry to mount zip/7z/rar/tar archives directly as a RAM disk</sys:String>
+    <sys:String x:Key="Settings.AutoCheckForUpdates">Automatically check for updates</sys:String>
+    <sys:String x:Key="Tip.AutoCheckForUpdates">Check GitHub for a newer version once a day at startup</sys:String>
     <sys:String x:Key="ShellMenu.ImportArchive">Mount as RAM disk (ManagedDrive)</sys:String>
 
     <!-- Shared buttons -->
@@ -292,6 +294,15 @@
     <sys:String x:Key="About.WinFspLicense">© 2015-2026 Bill Zissimopoulos — GNU GPLv2 (FUSE exception) or commercial license</sys:String>
     <sys:String x:Key="About.ViewSharpCompress">Powered by SharpCompress</sys:String>
     <sys:String x:Key="About.SharpCompressLicense">© 2025 Adam Hathcock — MIT License</sys:String>
+    <sys:String x:Key="About.UpdateAvailable">A new version ({0}) is available. Click to download.</sys:String>
+
+    <!-- Update available -->
+    <sys:String x:Key="Update.DialogTitle">Update Available</sys:String>
+    <sys:String x:Key="Update.DialogBody">A new version of ManagedDrive ({0}) is available.&#x0a;&#x0a;Would you like to view the release page?</sys:String>
+    <sys:String x:Key="Update.ViewRelease">View Release</sys:String>
+    <sys:String x:Key="Update.SkipThisVersion">Skip This Version</sys:String>
+    <sys:String x:Key="Update.RemindMeLater">Remind Me Later</sys:String>
+    <sys:String x:Key="Update.BalloonBody">ManagedDrive {0} is available. Click About to view details.</sys:String>
 
     <!-- SaveFileDialog -->
     <sys:String x:Key="SaveDlg.Title">Select Image File</sys:String>

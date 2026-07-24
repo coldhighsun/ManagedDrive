@@ -20,6 +20,7 @@ public partial class SettingsDialog
         RunAtStartupBox.IsChecked = StartupManager.IsEnabled;
         StartMinimizedBox.IsChecked = config.StartMinimized;
         ContextMenuEnabledBox.IsChecked = ShellContextMenuManager.IsRegistered;
+        AutoCheckForUpdatesBox.IsChecked = config.AutoCheckForUpdates;
 
         LanguageBox.Items.Add(new ComboBoxItem { Content = Loc.Get("Lang.System"), Tag = "" });
         foreach (var (tag, displayName) in LanguageManager.SupportedLanguages)
@@ -94,6 +95,9 @@ public partial class SettingsDialog
             Disks = _original.Disks,
             TempDirCompatWarningShown = _original.TempDirCompatWarningShown,
             ContextMenuEnabled = contextMenuEnabled,
+            AutoCheckForUpdates = AutoCheckForUpdatesBox.IsChecked == true,
+            LastUpdateCheckUtc = _original.LastUpdateCheckUtc,
+            SkippedVersion = _original.SkippedVersion,
         };
 
         DialogResult = true;

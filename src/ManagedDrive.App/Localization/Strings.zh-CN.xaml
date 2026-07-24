@@ -205,6 +205,8 @@
     <sys:String x:Key="Tip.RunAtStartup">Windows 启动时自动运行 ManagedDrive</sys:String>
     <sys:String x:Key="Tip.StartMinimized">启动时隐藏主窗口，仅显示系统托盘图标</sys:String>
     <sys:String x:Key="Tip.ContextMenuEnabled">添加右键菜单项，可直接将 zip/7z/rar/tar 压缩包挂载为内存盘</sys:String>
+    <sys:String x:Key="Settings.AutoCheckForUpdates">自动检查更新</sys:String>
+    <sys:String x:Key="Tip.AutoCheckForUpdates">启动时每天检查一次 GitHub 上是否有新版本</sys:String>
     <sys:String x:Key="ShellMenu.ImportArchive">挂载为内存盘 (ManagedDrive)</sys:String>
 
     <!-- Shared buttons -->
@@ -292,6 +294,15 @@
     <sys:String x:Key="About.WinFspLicense">© 2015-2026 Bill Zissimopoulos — GNU GPLv2（附 FUSE 例外）或商业许可</sys:String>
     <sys:String x:Key="About.ViewSharpCompress">基于 SharpCompress 构建</sys:String>
     <sys:String x:Key="About.SharpCompressLicense">© 2025 Adam Hathcock — MIT 许可证</sys:String>
+    <sys:String x:Key="About.UpdateAvailable">发现新版本 {0}，点击下载。</sys:String>
+
+    <!-- Update available -->
+    <sys:String x:Key="Update.DialogTitle">发现新版本</sys:String>
+    <sys:String x:Key="Update.DialogBody">ManagedDrive 有新版本 ({0}) 可用。&#x0a;&#x0a;是否查看发布页面？</sys:String>
+    <sys:String x:Key="Update.ViewRelease">查看发布页面</sys:String>
+    <sys:String x:Key="Update.SkipThisVersion">跳过此版本</sys:String>
+    <sys:String x:Key="Update.RemindMeLater">稍后提醒</sys:String>
+    <sys:String x:Key="Update.BalloonBody">ManagedDrive {0} 已发布，点击"关于"查看详情。</sys:String>
 
     <!-- SaveFileDialog -->
     <sys:String x:Key="SaveDlg.Title">选择镜像文件</sys:String>

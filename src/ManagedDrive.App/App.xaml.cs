@@ -35,6 +35,7 @@ public partial class App
     private TempDirCompatChecker? _tempDirCompatChecker;
     private TrayIconController? _trayIconController;
     private TrayTooltipController? _trayTooltipController;
+    private UpdateCheckService? _updateCheckService;
 
     private void App_Exit(object sender, ExitEventArgs e)
     {
@@ -117,6 +118,10 @@ public partial class App
         _mountManager.ActivityDetected += _trayIconController.OnActivityDetected;
         _diskNotificationService = new(_mainViewModel, _trayIconController, () => _mainWindow!.IsVisible);
         _tempDirCompatChecker.CheckOnStartup(config);
+
+        _updateCheckService = new(_settings, _trayIconController, () => _mainWindow is { IsLoaded: true } ? _mainWindow : null);
+        _mainViewModel.UpdateCheckService = _updateCheckService;
+        _ = _updateCheckService.CheckOnStartupAsync(config);
 
         if (config.StartMinimized)
         {
@@ -255,7 +260,7 @@ public partial class App
 
     private void ShowAboutDialog()
     {
-        var dialog = new AboutDialog();
+        var dialog = new AboutDialog(_updateCheckService);
         if (_mainWindow is { IsLoaded: true })
         {
             dialog.Owner = _mainWindow;
