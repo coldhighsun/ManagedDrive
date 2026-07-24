@@ -35,6 +35,216 @@ public sealed class SnapshotManagerTests : IDisposable
         Assert.EndsWith("-2.mdr", third);
     }
 
+    [Fact]
+    public void DeleteSnapshot_InvalidSnapshotFileName_Throws()
+    {
+        var invalidPath = Path.Combine(_dir, "not-a-snapshot.txt");
+
+        Assert.Throws<ArgumentException>(() => SnapshotManager.DeleteSnapshot(_mainImagePath, invalidPath));
+    }
+
+    [Fact]
+    public void DeleteSnapshot_NonExistentPath_IsNoOp()
+    {
+        WriteSnapshotWithFile(new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), "\\a.txt", [1, 2, 3]);
+
+        var neverWritten = SnapshotManager.BuildSnapshotPath(_mainImagePath, new(2026, 1, 2, 0, 0, 0, TimeSpan.Zero));
+        SnapshotManager.DeleteSnapshot(_mainImagePath, neverWritten);
+
+        Assert.Single(SnapshotManager.ListSnapshots(_mainImagePath));
+        Assert.Equal(1, BlobCount);
+    }
+
+    [Fact]
+    public void DeleteSnapshot_OrphanedBlob_IsGarbageCollectedWhenNoRemainingSnapshotReferencesIt()
+    {
+        WriteSnapshotWithFile(new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), "\\a.txt", [3, 3, 3]);
+        var snapshot = Assert.Single(SnapshotManager.ListSnapshots(_mainImagePath));
+
+        Assert.Equal(1, BlobCount);
+
+        SnapshotManager.DeleteSnapshot(_mainImagePath, snapshot.Path);
+
+        Assert.Equal(0, BlobCount);
+    }
+
+    [Fact]
+    public void DeleteSnapshot_RemovesOnlyTargetIndex_LeavesOthersIntact()
+    {
+        WriteSnapshotWithFile(new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), "\\a.txt", [1, 2, 3]);
+        WriteSnapshotWithFile(new(2026, 1, 2, 0, 0, 0, TimeSpan.Zero), "\\b.txt", [4, 5, 6]);
+        WriteSnapshotWithFile(new(2026, 1, 3, 0, 0, 0, TimeSpan.Zero), "\\c.txt", [7, 8, 9]);
+
+        var snapshots = SnapshotManager.ListSnapshots(_mainImagePath);
+        var target = snapshots[1];
+
+        SnapshotManager.DeleteSnapshot(_mainImagePath, target.Path);
+
+        Assert.False(File.Exists(target.Path));
+        var remaining = SnapshotManager.ListSnapshots(_mainImagePath);
+        Assert.Equal(2, remaining.Count);
+        Assert.DoesNotContain(remaining, s => s.Path == target.Path);
+    }
+
+    [Fact]
+    public void DeleteSnapshot_SharedBlobStillReferencedByRemainingSnapshot_IsNotGarbageCollected()
+    {
+        var shared = new byte[] { 1, 1, 1 };
+        var unique = new byte[] { 2, 2, 2 };
+
+        var nodeMapA = new FileNodeMap();
+        nodeMapA.Add("\\", MakeDir());
+        nodeMapA.Add("\\shared.txt", MakeFile(shared));
+        nodeMapA.Add("\\unique.txt", MakeFile(unique));
+        SnapshotManager.WriteSnapshot(nodeMapA, 1024, "Label", _mainImagePath,
+            new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), ImageCompressionLevel.None);
+
+        var nodeMapB = new FileNodeMap();
+        nodeMapB.Add("\\", MakeDir());
+        nodeMapB.Add("\\shared.txt", MakeFile(shared));
+        SnapshotManager.WriteSnapshot(nodeMapB, 1024, "Label", _mainImagePath,
+            new(2026, 1, 2, 0, 0, 0, TimeSpan.Zero), ImageCompressionLevel.None);
+
+        Assert.Equal(2, BlobCount);
+
+        var oldest = SnapshotManager.ListSnapshots(_mainImagePath)[0];
+        SnapshotManager.DeleteSnapshot(_mainImagePath, oldest.Path);
+
+        Assert.Equal(1, BlobCount);
+        var remaining = Assert.Single(SnapshotManager.ListSnapshots(_mainImagePath));
+        var loaded = SnapshotManager.LoadSnapshot(remaining.Path, out _, out _);
+        Assert.True(loaded.TryGet("\\shared.txt", out _));
+    }
+
+    [Fact]
+    public void DiffAgainstCurrent_AnyChangeKind_HasChangesIsTrue()
+    {
+        WriteSnapshotWithFile(new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), "\\a.txt", [1, 2, 3]);
+        var snapshot = Assert.Single(SnapshotManager.ListSnapshots(_mainImagePath));
+
+        var current = new FileNodeMap();
+        current.Add("\\", MakeDir());
+        current.Add("\\a.txt", MakeFile([1, 2, 3]));
+        current.Add("\\b.txt", MakeFile([4, 5, 6]));
+
+        var diff = SnapshotManager.DiffAgainstCurrent(snapshot.Path, current);
+
+        Assert.True(diff.HasChanges);
+    }
+
+    [Fact]
+    public void DiffAgainstCurrent_DetectsAddedFile()
+    {
+        WriteSnapshotWithFile(new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), "\\a.txt", [1, 2, 3]);
+        var snapshot = Assert.Single(SnapshotManager.ListSnapshots(_mainImagePath));
+
+        var current = new FileNodeMap();
+        current.Add("\\", MakeDir());
+        current.Add("\\a.txt", MakeFile([1, 2, 3]));
+        current.Add("\\b.txt", MakeFile([4, 5, 6]));
+
+        var diff = SnapshotManager.DiffAgainstCurrent(snapshot.Path, current);
+
+        Assert.Equal(["\\b.txt"], diff.AddedFiles);
+        Assert.Empty(diff.RemovedFiles);
+        Assert.Empty(diff.ModifiedFiles);
+        Assert.Equal(1, diff.UnchangedFileCount);
+    }
+
+    [Fact]
+    public void DiffAgainstCurrent_DetectsModifiedFile()
+    {
+        WriteSnapshotWithFile(new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), "\\a.txt", [1, 2, 3]);
+        var snapshot = Assert.Single(SnapshotManager.ListSnapshots(_mainImagePath));
+
+        var current = new FileNodeMap();
+        current.Add("\\", MakeDir());
+        current.Add("\\a.txt", MakeFile([9, 9, 9]));
+
+        var diff = SnapshotManager.DiffAgainstCurrent(snapshot.Path, current);
+
+        Assert.Equal(["\\a.txt"], diff.ModifiedFiles);
+        Assert.Empty(diff.AddedFiles);
+        Assert.Empty(diff.RemovedFiles);
+        Assert.Equal(0, diff.UnchangedFileCount);
+    }
+
+    [Fact]
+    public void DiffAgainstCurrent_DetectsRemovedFile()
+    {
+        var nodeMap = new FileNodeMap();
+        nodeMap.Add("\\", MakeDir());
+        nodeMap.Add("\\a.txt", MakeFile([1, 2, 3]));
+        nodeMap.Add("\\b.txt", MakeFile([4, 5, 6]));
+        SnapshotManager.WriteSnapshot(nodeMap, 1024, "Label", _mainImagePath,
+            new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), ImageCompressionLevel.None);
+        var snapshot = Assert.Single(SnapshotManager.ListSnapshots(_mainImagePath));
+
+        var current = new FileNodeMap();
+        current.Add("\\", MakeDir());
+        current.Add("\\a.txt", MakeFile([1, 2, 3]));
+
+        var diff = SnapshotManager.DiffAgainstCurrent(snapshot.Path, current);
+
+        Assert.Equal(["\\b.txt"], diff.RemovedFiles);
+        Assert.Empty(diff.AddedFiles);
+        Assert.Empty(diff.ModifiedFiles);
+        Assert.Equal(1, diff.UnchangedFileCount);
+    }
+
+    [Fact]
+    public void DiffAgainstCurrent_EmptyFileUnchanged_NotListedAsModified()
+    {
+        var nodeMap = new FileNodeMap();
+        nodeMap.Add("\\", MakeDir());
+        nodeMap.Add("\\empty.txt", MakeFile([]));
+        SnapshotManager.WriteSnapshot(nodeMap, 1024, "Label", _mainImagePath,
+            new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), ImageCompressionLevel.None);
+        var snapshot = Assert.Single(SnapshotManager.ListSnapshots(_mainImagePath));
+
+        var current = new FileNodeMap();
+        current.Add("\\", MakeDir());
+        current.Add("\\empty.txt", MakeFile([]));
+
+        var diff = SnapshotManager.DiffAgainstCurrent(snapshot.Path, current);
+
+        Assert.Empty(diff.ModifiedFiles);
+        Assert.Equal(1, diff.UnchangedFileCount);
+    }
+
+    [Fact]
+    public void DiffAgainstCurrent_IdenticalContents_HasChangesIsFalse()
+    {
+        WriteSnapshotWithFile(new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), "\\a.txt", [1, 2, 3]);
+        var snapshot = Assert.Single(SnapshotManager.ListSnapshots(_mainImagePath));
+
+        var current = new FileNodeMap();
+        current.Add("\\", MakeDir());
+        current.Add("\\a.txt", MakeFile([1, 2, 3]));
+
+        var diff = SnapshotManager.DiffAgainstCurrent(snapshot.Path, current);
+
+        Assert.False(diff.HasChanges);
+    }
+
+    [Fact]
+    public void DiffAgainstCurrent_UnchangedFile_NotListedAsModified()
+    {
+        WriteSnapshotWithFile(new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), "\\a.txt", [1, 2, 3]);
+        var snapshot = Assert.Single(SnapshotManager.ListSnapshots(_mainImagePath));
+
+        var current = new FileNodeMap();
+        current.Add("\\", MakeDir());
+        current.Add("\\a.txt", MakeFile([1, 2, 3]));
+
+        var diff = SnapshotManager.DiffAgainstCurrent(snapshot.Path, current);
+
+        Assert.Empty(diff.AddedFiles);
+        Assert.Empty(diff.RemovedFiles);
+        Assert.Empty(diff.ModifiedFiles);
+        Assert.Equal(1, diff.UnchangedFileCount);
+    }
+
     public void Dispose()
     {
         try
@@ -55,6 +265,24 @@ public sealed class SnapshotManagerTests : IDisposable
     }
 
     [Fact]
+    public void ListSnapshotContents_ReturnsAllPathsWithSizes()
+    {
+        var nodeMap = new FileNodeMap();
+        nodeMap.Add("\\", MakeDir());
+        nodeMap.Add("\\Sub", MakeDir());
+        nodeMap.Add("\\a.txt", MakeFile([1, 2, 3]));
+        SnapshotManager.WriteSnapshot(nodeMap, 1024, "Label", _mainImagePath,
+            new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), ImageCompressionLevel.None);
+
+        var snapshot = Assert.Single(SnapshotManager.ListSnapshots(_mainImagePath));
+        var entries = SnapshotManager.ListSnapshotContents(snapshot.Path);
+
+        Assert.Contains(entries, e => e.Path == "\\" && e.IsDirectory);
+        Assert.Contains(entries, e => e.Path == "\\Sub" && e.IsDirectory);
+        Assert.Contains(entries, e => e.Path == "\\a.txt" && !e.IsDirectory && e.SizeBytes == 3);
+    }
+
+    [Fact]
     public void LoadSnapshot_EncryptedBlobWithoutCek_ThrowsPasswordRequired()
     {
         var cek = DiskImageSerializer.GenerateCek();
@@ -68,6 +296,23 @@ public sealed class SnapshotManagerTests : IDisposable
 
         Assert.Throws<ImagePasswordRequiredException>(() =>
             SnapshotManager.LoadSnapshot(snapshot.Path, out _, out _, cek: null));
+    }
+
+    [Fact]
+    public void LoadSnapshot_EncryptedBlobWithWrongCek_ThrowsPasswordIncorrect()
+    {
+        var cek = DiskImageSerializer.GenerateCek();
+        var wrongCek = DiskImageSerializer.GenerateCek();
+        var nodeMap = new FileNodeMap();
+        nodeMap.Add("\\", MakeDir());
+        nodeMap.Add("\\a.txt", MakeFile([1, 2, 3]));
+        SnapshotManager.WriteSnapshot(nodeMap, 1024, "Label", _mainImagePath,
+            new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), ImageCompressionLevel.Fastest, cek);
+
+        var snapshot = Assert.Single(SnapshotManager.ListSnapshots(_mainImagePath));
+
+        Assert.Throws<ImagePasswordIncorrectException>(() =>
+            SnapshotManager.LoadSnapshot(snapshot.Path, out _, out _, wrongCek));
     }
 
     [Fact]
@@ -197,87 +442,6 @@ public sealed class SnapshotManagerTests : IDisposable
     }
 
     [Fact]
-    public void DeleteSnapshot_RemovesOnlyTargetIndex_LeavesOthersIntact()
-    {
-        WriteSnapshotWithFile(new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), "\\a.txt", [1, 2, 3]);
-        WriteSnapshotWithFile(new(2026, 1, 2, 0, 0, 0, TimeSpan.Zero), "\\b.txt", [4, 5, 6]);
-        WriteSnapshotWithFile(new(2026, 1, 3, 0, 0, 0, TimeSpan.Zero), "\\c.txt", [7, 8, 9]);
-
-        var snapshots = SnapshotManager.ListSnapshots(_mainImagePath);
-        var target = snapshots[1];
-
-        SnapshotManager.DeleteSnapshot(_mainImagePath, target.Path);
-
-        Assert.False(File.Exists(target.Path));
-        var remaining = SnapshotManager.ListSnapshots(_mainImagePath);
-        Assert.Equal(2, remaining.Count);
-        Assert.DoesNotContain(remaining, s => s.Path == target.Path);
-    }
-
-    [Fact]
-    public void DeleteSnapshot_SharedBlobStillReferencedByRemainingSnapshot_IsNotGarbageCollected()
-    {
-        var shared = new byte[] { 1, 1, 1 };
-        var unique = new byte[] { 2, 2, 2 };
-
-        var nodeMapA = new FileNodeMap();
-        nodeMapA.Add("\\", MakeDir());
-        nodeMapA.Add("\\shared.txt", MakeFile(shared));
-        nodeMapA.Add("\\unique.txt", MakeFile(unique));
-        SnapshotManager.WriteSnapshot(nodeMapA, 1024, "Label", _mainImagePath,
-            new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), ImageCompressionLevel.None);
-
-        var nodeMapB = new FileNodeMap();
-        nodeMapB.Add("\\", MakeDir());
-        nodeMapB.Add("\\shared.txt", MakeFile(shared));
-        SnapshotManager.WriteSnapshot(nodeMapB, 1024, "Label", _mainImagePath,
-            new(2026, 1, 2, 0, 0, 0, TimeSpan.Zero), ImageCompressionLevel.None);
-
-        Assert.Equal(2, BlobCount);
-
-        var oldest = SnapshotManager.ListSnapshots(_mainImagePath)[0];
-        SnapshotManager.DeleteSnapshot(_mainImagePath, oldest.Path);
-
-        Assert.Equal(1, BlobCount);
-        var remaining = Assert.Single(SnapshotManager.ListSnapshots(_mainImagePath));
-        var loaded = SnapshotManager.LoadSnapshot(remaining.Path, out _, out _);
-        Assert.True(loaded.TryGet("\\shared.txt", out _));
-    }
-
-    [Fact]
-    public void DeleteSnapshot_OrphanedBlob_IsGarbageCollectedWhenNoRemainingSnapshotReferencesIt()
-    {
-        WriteSnapshotWithFile(new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), "\\a.txt", [3, 3, 3]);
-        var snapshot = Assert.Single(SnapshotManager.ListSnapshots(_mainImagePath));
-
-        Assert.Equal(1, BlobCount);
-
-        SnapshotManager.DeleteSnapshot(_mainImagePath, snapshot.Path);
-
-        Assert.Equal(0, BlobCount);
-    }
-
-    [Fact]
-    public void DeleteSnapshot_NonExistentPath_IsNoOp()
-    {
-        WriteSnapshotWithFile(new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), "\\a.txt", [1, 2, 3]);
-
-        var neverWritten = SnapshotManager.BuildSnapshotPath(_mainImagePath, new(2026, 1, 2, 0, 0, 0, TimeSpan.Zero));
-        SnapshotManager.DeleteSnapshot(_mainImagePath, neverWritten);
-
-        Assert.Single(SnapshotManager.ListSnapshots(_mainImagePath));
-        Assert.Equal(1, BlobCount);
-    }
-
-    [Fact]
-    public void DeleteSnapshot_InvalidSnapshotFileName_Throws()
-    {
-        var invalidPath = Path.Combine(_dir, "not-a-snapshot.txt");
-
-        Assert.Throws<ArgumentException>(() => SnapshotManager.DeleteSnapshot(_mainImagePath, invalidPath));
-    }
-
-    [Fact]
     public void WriteSnapshot_DifferingContent_CreatesSeparateBlobs()
     {
         WriteSnapshotWithFile(new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), "\\a.txt", [1, 2, 3]);
@@ -350,153 +514,6 @@ public sealed class SnapshotManagerTests : IDisposable
         WriteSnapshotWithFile(new(2026, 1, 2, 0, 0, 0, TimeSpan.Zero), "\\b.txt", content);
 
         Assert.Equal(1, BlobCount);
-    }
-
-    [Fact]
-    public void ListSnapshotContents_ReturnsAllPathsWithSizes()
-    {
-        var nodeMap = new FileNodeMap();
-        nodeMap.Add("\\", MakeDir());
-        nodeMap.Add("\\Sub", MakeDir());
-        nodeMap.Add("\\a.txt", MakeFile([1, 2, 3]));
-        SnapshotManager.WriteSnapshot(nodeMap, 1024, "Label", _mainImagePath,
-            new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), ImageCompressionLevel.None);
-
-        var snapshot = Assert.Single(SnapshotManager.ListSnapshots(_mainImagePath));
-        var entries = SnapshotManager.ListSnapshotContents(snapshot.Path);
-
-        Assert.Contains(entries, e => e.Path == "\\" && e.IsDirectory);
-        Assert.Contains(entries, e => e.Path == "\\Sub" && e.IsDirectory);
-        Assert.Contains(entries, e => e.Path == "\\a.txt" && !e.IsDirectory && e.SizeBytes == 3);
-    }
-
-    [Fact]
-    public void DiffAgainstCurrent_DetectsAddedFile()
-    {
-        WriteSnapshotWithFile(new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), "\\a.txt", [1, 2, 3]);
-        var snapshot = Assert.Single(SnapshotManager.ListSnapshots(_mainImagePath));
-
-        var current = new FileNodeMap();
-        current.Add("\\", MakeDir());
-        current.Add("\\a.txt", MakeFile([1, 2, 3]));
-        current.Add("\\b.txt", MakeFile([4, 5, 6]));
-
-        var diff = SnapshotManager.DiffAgainstCurrent(snapshot.Path, current);
-
-        Assert.Equal(["\\b.txt"], diff.AddedFiles);
-        Assert.Empty(diff.RemovedFiles);
-        Assert.Empty(diff.ModifiedFiles);
-        Assert.Equal(1, diff.UnchangedFileCount);
-    }
-
-    [Fact]
-    public void DiffAgainstCurrent_DetectsRemovedFile()
-    {
-        var nodeMap = new FileNodeMap();
-        nodeMap.Add("\\", MakeDir());
-        nodeMap.Add("\\a.txt", MakeFile([1, 2, 3]));
-        nodeMap.Add("\\b.txt", MakeFile([4, 5, 6]));
-        SnapshotManager.WriteSnapshot(nodeMap, 1024, "Label", _mainImagePath,
-            new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), ImageCompressionLevel.None);
-        var snapshot = Assert.Single(SnapshotManager.ListSnapshots(_mainImagePath));
-
-        var current = new FileNodeMap();
-        current.Add("\\", MakeDir());
-        current.Add("\\a.txt", MakeFile([1, 2, 3]));
-
-        var diff = SnapshotManager.DiffAgainstCurrent(snapshot.Path, current);
-
-        Assert.Equal(["\\b.txt"], diff.RemovedFiles);
-        Assert.Empty(diff.AddedFiles);
-        Assert.Empty(diff.ModifiedFiles);
-        Assert.Equal(1, diff.UnchangedFileCount);
-    }
-
-    [Fact]
-    public void DiffAgainstCurrent_DetectsModifiedFile()
-    {
-        WriteSnapshotWithFile(new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), "\\a.txt", [1, 2, 3]);
-        var snapshot = Assert.Single(SnapshotManager.ListSnapshots(_mainImagePath));
-
-        var current = new FileNodeMap();
-        current.Add("\\", MakeDir());
-        current.Add("\\a.txt", MakeFile([9, 9, 9]));
-
-        var diff = SnapshotManager.DiffAgainstCurrent(snapshot.Path, current);
-
-        Assert.Equal(["\\a.txt"], diff.ModifiedFiles);
-        Assert.Empty(diff.AddedFiles);
-        Assert.Empty(diff.RemovedFiles);
-        Assert.Equal(0, diff.UnchangedFileCount);
-    }
-
-    [Fact]
-    public void DiffAgainstCurrent_UnchangedFile_NotListedAsModified()
-    {
-        WriteSnapshotWithFile(new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), "\\a.txt", [1, 2, 3]);
-        var snapshot = Assert.Single(SnapshotManager.ListSnapshots(_mainImagePath));
-
-        var current = new FileNodeMap();
-        current.Add("\\", MakeDir());
-        current.Add("\\a.txt", MakeFile([1, 2, 3]));
-
-        var diff = SnapshotManager.DiffAgainstCurrent(snapshot.Path, current);
-
-        Assert.Empty(diff.AddedFiles);
-        Assert.Empty(diff.RemovedFiles);
-        Assert.Empty(diff.ModifiedFiles);
-        Assert.Equal(1, diff.UnchangedFileCount);
-    }
-
-    [Fact]
-    public void DiffAgainstCurrent_IdenticalContents_HasChangesIsFalse()
-    {
-        WriteSnapshotWithFile(new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), "\\a.txt", [1, 2, 3]);
-        var snapshot = Assert.Single(SnapshotManager.ListSnapshots(_mainImagePath));
-
-        var current = new FileNodeMap();
-        current.Add("\\", MakeDir());
-        current.Add("\\a.txt", MakeFile([1, 2, 3]));
-
-        var diff = SnapshotManager.DiffAgainstCurrent(snapshot.Path, current);
-
-        Assert.False(diff.HasChanges);
-    }
-
-    [Fact]
-    public void DiffAgainstCurrent_AnyChangeKind_HasChangesIsTrue()
-    {
-        WriteSnapshotWithFile(new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), "\\a.txt", [1, 2, 3]);
-        var snapshot = Assert.Single(SnapshotManager.ListSnapshots(_mainImagePath));
-
-        var current = new FileNodeMap();
-        current.Add("\\", MakeDir());
-        current.Add("\\a.txt", MakeFile([1, 2, 3]));
-        current.Add("\\b.txt", MakeFile([4, 5, 6]));
-
-        var diff = SnapshotManager.DiffAgainstCurrent(snapshot.Path, current);
-
-        Assert.True(diff.HasChanges);
-    }
-
-    [Fact]
-    public void DiffAgainstCurrent_EmptyFileUnchanged_NotListedAsModified()
-    {
-        var nodeMap = new FileNodeMap();
-        nodeMap.Add("\\", MakeDir());
-        nodeMap.Add("\\empty.txt", MakeFile([]));
-        SnapshotManager.WriteSnapshot(nodeMap, 1024, "Label", _mainImagePath,
-            new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), ImageCompressionLevel.None);
-        var snapshot = Assert.Single(SnapshotManager.ListSnapshots(_mainImagePath));
-
-        var current = new FileNodeMap();
-        current.Add("\\", MakeDir());
-        current.Add("\\empty.txt", MakeFile([]));
-
-        var diff = SnapshotManager.DiffAgainstCurrent(snapshot.Path, current);
-
-        Assert.Empty(diff.ModifiedFiles);
-        Assert.Equal(1, diff.UnchangedFileCount);
     }
 
     [Fact]
