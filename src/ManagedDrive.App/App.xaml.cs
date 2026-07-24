@@ -148,6 +148,7 @@ public partial class App
         _mainViewModel.ExitRequested += async (_, _) => await ShutdownAsync();
         _mainWindow = new(_mainViewModel);
         _mainWindow.Closing += MainWindow_Closing;
+        _mainWindow.IsVisibleChanged += OnMainWindowVisibleChanged;
 
         // Force the HWND to exist now (on the UI thread) so OnSessionEnding can reference it from
         // the SystemEvents thread even when the window stays hidden in the tray.
@@ -492,6 +493,16 @@ public partial class App
         });
     }
 
+    private void OnDiskActivityObserved(object? sender, DiskViewModel.DiskActivityEventArgs e)
+    {
+        if (sender is not DiskViewModel vm)
+        {
+            return;
+        }
+
+        _mainViewModel?.ShowDiskActivityStatus(vm.MountPoint, vm.VolumeLabel, e.IsWrite, e.FilePath);
+    }
+
     private void OnDiskCapacityAdjusted(DiskViewModel vm)
     {
         var originalMb = vm.OriginalCapacityBytesOnLoad!.Value / (1024 * 1024);
@@ -534,6 +545,25 @@ public partial class App
         }
 
         _mainViewModel?.StatusText = Loc.Format("Status.SaveFailed", vm.MountPoint, ex.Message);
+    }
+
+    /// <summary>
+    /// Fires whenever the main window is hidden (minimized to tray) or shown again. Toggles each
+    /// disk's <see cref="DiskViewModel.SetActivityTrackingEnabled"/> to match, since nothing is
+    /// bound to the status bar while the window is hidden.
+    /// </summary>
+    private void OnMainWindowVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)
+    {
+        if (_mainViewModel == null)
+        {
+            return;
+        }
+
+        var isVisible = _mainWindow!.IsVisible;
+        foreach (var vm in _mainViewModel.Disks)
+        {
+            vm.SetActivityTrackingEnabled(isVisible);
+        }
     }
 
     /// <summary>
@@ -679,6 +709,7 @@ public partial class App
         _timerShowTrayInfoPopup.Tick += (_, _) =>
         {
             _timerShowTrayInfoPopup.Stop();
+            _mainViewModel?.RefreshForTrayTooltip();
             PositionTrayPopup();
             _trayInfoPopup!.IsOpen = true;
             _timerPollCursor.Start();
@@ -734,6 +765,8 @@ public partial class App
                 {
                     vm.HighUsageWarning += OnDiskHighUsageWarning;
                     vm.SaveFailed += OnDiskSaveFailed;
+                    vm.ActivityObserved += OnDiskActivityObserved;
+                    vm.SetActivityTrackingEnabled(_mainWindow is { IsVisible: true });
 
                     if (vm is { CapacityAdjustedOnLoad: true, Disk.Options.SourceArchivePath: null })
                     {
@@ -748,6 +781,7 @@ public partial class App
                 {
                     vm.HighUsageWarning -= OnDiskHighUsageWarning;
                     vm.SaveFailed -= OnDiskSaveFailed;
+                    vm.ActivityObserved -= OnDiskActivityObserved;
                 }
             }
         };
