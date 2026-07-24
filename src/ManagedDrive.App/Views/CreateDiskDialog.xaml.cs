@@ -8,10 +8,6 @@ namespace ManagedDrive.App.Views;
 /// </summary>
 public partial class CreateDiskDialog
 {
-    private const int MaxPasswordLength = 64;
-
-    private const int MinPasswordLength = 8;
-
     private static readonly List<ImageCompressionLevel> CompressionLevels = [
         ImageCompressionLevel.None,
         ImageCompressionLevel.Fastest,
@@ -112,18 +108,9 @@ public partial class CreateDiskDialog
 
         VolumeLabelBox.Text = existing.VolumeLabel;
 
-        var capacityMb = existing.CapacityBytes / (1024UL * 1024);
-        var capacityGb = existing.CapacityBytes / (1024UL * 1024 * 1024);
-        if (capacityGb > 0 && existing.CapacityBytes % (1024UL * 1024 * 1024) == 0)
-        {
-            CapacityUnitBox.SelectedItem = "GB";
-            _capacityValue = (int)capacityGb;
-        }
-        else
-        {
-            CapacityUnitBox.SelectedItem = "MB";
-            _capacityValue = (int)capacityMb;
-        }
+        var (capacityValue, capacityIsGb) = ByteUnitConverter.SplitToUnit(existing.CapacityBytes);
+        CapacityUnitBox.SelectedItem = capacityIsGb ? "GB" : "MB";
+        _capacityValue = capacityValue;
 
         _capacityMaximum = GetMaxCapacityValue();
         CapacitySlider.Maximum = _capacityMaximum;
@@ -155,20 +142,10 @@ public partial class CreateDiskDialog
                 SnapshotSizeEnabledBox.IsChecked = true;
                 SnapshotSizePanel.IsEnabled = true;
 
-                var sizeMb = maxSizeBytes / (1024UL * 1024);
-                var sizeGb = maxSizeBytes / (1024UL * 1024 * 1024);
-                if (sizeGb > 0 && maxSizeBytes % (1024UL * 1024 * 1024) == 0)
-                {
-                    SnapshotSizeUnitBox.SelectedItem = "GB";
-                    SnapshotSizeSlider.Maximum = GetMaxSnapshotSizeValue();
-                    SnapshotSizeValue = (int)sizeGb;
-                }
-                else
-                {
-                    SnapshotSizeUnitBox.SelectedItem = "MB";
-                    SnapshotSizeSlider.Maximum = GetMaxSnapshotSizeValue();
-                    SnapshotSizeValue = (int)Math.Max(1, sizeMb);
-                }
+                var (sizeValue, sizeIsGb) = ByteUnitConverter.SplitToUnit(maxSizeBytes);
+                SnapshotSizeUnitBox.SelectedItem = sizeIsGb ? "GB" : "MB";
+                SnapshotSizeSlider.Maximum = GetMaxSnapshotSizeValue();
+                SnapshotSizeValue = sizeValue;
             }
         }
 
@@ -238,18 +215,9 @@ public partial class CreateDiskDialog
         ClearImagePathButton.IsEnabled = false;
         ImportNoteText.Visibility = Visibility.Visible;
 
-        var capacityMb = importCapacityBytes / (1024UL * 1024);
-        var capacityGb = importCapacityBytes / (1024UL * 1024 * 1024);
-        if (capacityGb > 0 && importCapacityBytes % (1024UL * 1024 * 1024) == 0)
-        {
-            CapacityUnitBox.SelectedItem = "GB";
-            _capacityValue = (int)capacityGb;
-        }
-        else
-        {
-            CapacityUnitBox.SelectedItem = "MB";
-            _capacityValue = (int)capacityMb;
-        }
+        var (importCapValue, importCapIsGb) = ByteUnitConverter.SplitToUnit(importCapacityBytes);
+        CapacityUnitBox.SelectedItem = importCapIsGb ? "GB" : "MB";
+        _capacityValue = importCapValue;
 
         _capacityMaximum = Math.Max(_capacityValue, GetMaxCapacityValue());
         CapacitySlider.Maximum = _capacityMaximum;
@@ -301,18 +269,9 @@ public partial class CreateDiskDialog
         ClearImagePathButton.IsEnabled = false;
         ArchiveImportNoteText.Visibility = Visibility.Visible;
 
-        var capacityMb = importTotalBytes / (1024UL * 1024);
-        var capacityGb = importTotalBytes / (1024UL * 1024 * 1024);
-        if (capacityGb > 0 && importTotalBytes % (1024UL * 1024 * 1024) == 0)
-        {
-            CapacityUnitBox.SelectedItem = "GB";
-            _capacityValue = (int)capacityGb;
-        }
-        else
-        {
-            CapacityUnitBox.SelectedItem = "MB";
-            _capacityValue = (int)capacityMb;
-        }
+        var (archiveCapValue, archiveCapIsGb) = ByteUnitConverter.SplitToUnit(importTotalBytes);
+        CapacityUnitBox.SelectedItem = archiveCapIsGb ? "GB" : "MB";
+        _capacityValue = archiveCapValue;
 
         _capacityMaximum = Math.Max(_capacityValue, GetMaxCapacityValue());
         CapacitySlider.Maximum = _capacityMaximum;
@@ -430,58 +389,6 @@ public partial class CreateDiskDialog
         public override string ToString() => Display;
     }
 
-    private static bool IsValidImagePath(string path)
-    {
-        try
-        {
-            if (!Path.IsPathRooted(path))
-            {
-                return false;
-            }
-
-            var directory = Path.GetDirectoryName(path);
-            if (string.IsNullOrEmpty(directory) || !Directory.Exists(directory))
-            {
-                return false;
-            }
-
-            _ = Path.GetFullPath(path);
-            return true;
-        }
-        catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException)
-        {
-            return false;
-        }
-    }
-
-    /// <summary>
-    /// Validates that the given image path is not a snapshot file name and is not already used as
-    /// another active disk's persistence target. These checks do not depend on the selected drive
-    /// letter, so they can run the moment the user picks an image file (see
-    /// <see cref="OpenImagePathDialog"/>) as well as at build time.
-    /// </summary>
-    /// <param name="imagePath">The image file path to validate.</param>
-    /// <param name="error">The localized error message when validation fails; empty otherwise.</param>
-    /// <returns><c>true</c> when the path is available; otherwise <c>false</c>.</returns>
-    private bool TryValidateImagePathAvailable(string imagePath, out string error)
-    {
-        if (SnapshotManager.IsSnapshotFileName(Path.GetFileName(imagePath)))
-        {
-            error = Loc.Get("Val.ImagePathIsSnapshot");
-            return false;
-        }
-
-        if (_otherDisks.Any(d => d.PersistImagePath != null &&
-            string.Equals(d.PersistImagePath, imagePath, StringComparison.OrdinalIgnoreCase)))
-        {
-            error = Loc.Get("Val.ImagePathInUse");
-            return false;
-        }
-
-        error = string.Empty;
-        return true;
-    }
-
     private void AutoSaveBox_CheckedChanged(object sender, RoutedEventArgs e)
     {
         UpdateAutoSaveIntervalPanelState();
@@ -525,11 +432,7 @@ public partial class CreateDiskDialog
         UpdateCompressionWarning();
     }
 
-    private int ComputeMaxValueForUnit(bool isGb)
-    {
-        var divisor = isGb ? 1024UL * 1024 * 1024 : 1024UL * 1024;
-        return (int)Math.Max(1, Math.Min(_maxCapacityBytes / divisor, int.MaxValue));
-    }
+    private int ComputeMaxValueForUnit(bool isGb) => ByteUnitConverter.MaxValueForUnit(_maxCapacityBytes, isGb);
 
     private void EncryptImageBox_CheckedChanged(object sender, RoutedEventArgs e)
     {
@@ -613,9 +516,10 @@ public partial class CreateDiskDialog
 
         if (dlg.ShowDialog() == true)
         {
-            if (!TryValidateImagePathAvailable(dlg.FileName, out var error))
+            var availability = CreateDiskOptionsBuilder.ValidateImagePathAvailable(dlg.FileName, _otherDisks);
+            if (availability != CreateDiskValidationError.None)
             {
-                MessageBox.Show(error, Loc.Get("Val.Title"), MessageBoxButton.OK, MessageBoxImage.Warning);
+                MessageBox.Show(MapError(availability), Loc.Get("Val.Title"), MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
 
@@ -656,256 +560,106 @@ public partial class CreateDiskDialog
         }
     }
 
-    private bool TryBuildArchiveImportOptions(string mountPoint, out DiskOptions? options, out string error)
-    {
-        options = null;
-
-        double? highUsageWarnPercent = null;
-        if (HighUsageWarnBox.IsChecked == true)
-        {
-            if (_highUsageWarnPercentValue < 1 || _highUsageWarnPercentValue > 99)
-            {
-                error = Loc.Get("Val.BadHighUsagePercent");
-                return false;
-            }
-
-            highUsageWarnPercent = _highUsageWarnPercentValue;
-        }
-
-        options = new()
-        {
-            MountPoint = mountPoint,
-            VolumeLabel = _importVolumeLabel,
-            CapacityBytes = _importCapacityBytes,
-            ReadOnly = true,
-            AutoMount = AutoMountBox.IsChecked == true,
-            SourceArchivePath = _importArchivePath,
-            HighUsageWarnPercent = highUsageWarnPercent,
-        };
-
-        error = string.Empty;
-        return true;
-    }
-
+    /// <summary>
+    /// Reads the dialog's controls into a <see cref="CreateDiskInput"/> and validates/builds the
+    /// options via <see cref="CreateDiskOptionsBuilder"/>. On success, <see cref="Result"/>,
+    /// <see cref="Password"/>, and <see cref="PasswordChanged"/> are populated by the caller path.
+    /// </summary>
     private bool TryBuildOptions(out DiskOptions? options, out string error)
     {
         options = null;
-
-        if (DriveLetterBox.SelectedItem is not string mountPoint)
-        {
-            error = Loc.Get("Val.NoDriveLetter");
-            return false;
-        }
-
-        if (_isArchiveImportMode)
-        {
-            return TryBuildArchiveImportOptions(mountPoint, out options, out error);
-        }
-
-        ulong capacityBytes;
-        if (_isImportMode)
-        {
-            capacityBytes = _importCapacityBytes;
-        }
-        else
-        {
-            var maxCapacity = GetMaxCapacityValue();
-            if (_capacityValue <= 0 || _capacityValue > maxCapacity)
-            {
-                error = string.Format(Loc.Get("Val.BadCapacity"), maxCapacity, CapacityUnitBox.SelectedItem);
-                return false;
-            }
-
-            var isGb = CapacityUnitBox.SelectedItem as string == "GB";
-            capacityBytes = isGb
-                ? (ulong)_capacityValue * 1024 * 1024 * 1024
-                : (ulong)_capacityValue * 1024 * 1024;
-        }
-
-        var imagePath = string.IsNullOrWhiteSpace(ImagePathBox.Text)
-            ? null
-            : ImagePathBox.Text.Trim();
-
-        if (imagePath != null)
-        {
-            if (!IsValidImagePath(imagePath))
-            {
-                error = Loc.Get("Val.BadImagePath");
-                return false;
-            }
-
-            if (!TryValidateImagePathAvailable(imagePath, out error))
-            {
-                return false;
-            }
-
-            // Depends on the currently selected drive letter (which may change after the image
-            // file is picked), so this check stays here rather than at selection time.
-            var allMountPoints = _otherDisks.Select(d => d.MountPoint).Append(mountPoint);
-            if (allMountPoints.Any(mp => imagePath.StartsWith(mp, StringComparison.OrdinalIgnoreCase)))
-            {
-                error = Loc.Get("Val.ImagePathOnRamDisk");
-                return false;
-            }
-        }
-
-        var isReadOnly = ReadOnlyBox.IsChecked == true;
-
-        if (isReadOnly)
-        {
-            if (imagePath == null)
-            {
-                error = Loc.Get("Val.ReadOnlyRequiresImage");
-                return false;
-            }
-
-            if (!File.Exists(imagePath))
-            {
-                error = Loc.Get("Val.ReadOnlyImageNotFound");
-                return false;
-            }
-        }
-
-        uint? autoSaveIntervalMinutes = null;
-        if (AutoSaveBox.IsChecked == true && !isReadOnly)
-        {
-            if (imagePath == null)
-            {
-                error = Loc.Get("Val.AutoSaveNoImage");
-                return false;
-            }
-
-            if (_intervalValue < 1 || _intervalValue > 60)
-            {
-                error = Loc.Get("Val.BadAutoSaveInterval");
-                return false;
-            }
-
-            autoSaveIntervalMinutes = (uint)_intervalValue;
-        }
-
-        uint? maxSnapshotCount = null;
-        ulong? maxSnapshotSizeBytes = null;
-        if (autoSaveIntervalMinutes is not null)
-        {
-            if (SnapshotCountEnabledBox.IsChecked == true)
-            {
-                if (_snapshotCountValue < 1 || _snapshotCountValue > 20)
-                {
-                    error = Loc.Get("Val.BadSnapshotCount");
-                    return false;
-                }
-
-                maxSnapshotCount = (uint)_snapshotCountValue;
-            }
-
-            if (SnapshotSizeEnabledBox.IsChecked == true)
-            {
-                if (_snapshotSizeValue < 1)
-                {
-                    error = Loc.Get("Val.BadSnapshotSize");
-                    return false;
-                }
-
-                var isSizeGb = SnapshotSizeUnitBox.SelectedItem as string == "GB";
-                maxSnapshotSizeBytes = isSizeGb
-                    ? (ulong)_snapshotSizeValue * 1024 * 1024 * 1024
-                    : (ulong)_snapshotSizeValue * 1024 * 1024;
-            }
-        }
-
-        double? highUsageWarnPercent = null;
-        if (HighUsageWarnBox.IsChecked == true)
-        {
-            if (_highUsageWarnPercentValue < 1 || _highUsageWarnPercentValue > 99)
-            {
-                error = Loc.Get("Val.BadHighUsagePercent");
-                return false;
-            }
-
-            highUsageWarnPercent = _highUsageWarnPercentValue;
-        }
-
-        if (!TryResolvePassword(out error))
-        {
-            return false;
-        }
-
-        options = new()
-        {
-            MountPoint = mountPoint,
-            VolumeLabel = _isImportMode ? _importVolumeLabel : VolumeLabelBox.Text.Trim(),
-            CapacityBytes = capacityBytes,
-            ReadOnly = isReadOnly,
-            AutoMount = AutoMountBox.IsChecked == true,
-            PersistImagePath = imagePath,
-            AutoSaveIntervalMinutes = autoSaveIntervalMinutes,
-            CompressionLevel = (CompressionLevelBox.SelectedItem as CompressionLevelItem)?.Level
-                ?? ImageCompressionLevel.Fastest,
-            MaxSnapshotCount = maxSnapshotCount,
-            MaxSnapshotSizeBytes = maxSnapshotSizeBytes,
-            HighUsageWarnPercent = highUsageWarnPercent,
-            SaveImageOnExit = SaveOnExitBox.IsChecked == true,
-        };
-
-        error = string.Empty;
-        return true;
-    }
-
-    private bool TryResolvePassword(out string error)
-    {
         Password = null;
         PasswordChanged = false;
 
-        if (EncryptImageBox.IsChecked != true)
-        {
-            // Explicitly unchecked while editing an already-encrypted disk means "remove
-            // password protection"; otherwise there is simply nothing to change.
-            PasswordChanged = _wasEncrypted;
-            error = string.Empty;
-            return true;
-        }
+        var input = BuildInput();
+        var result = CreateDiskOptionsBuilder.Build(input);
 
-        var password1 = PasswordBox1.Password;
-        var password2 = PasswordBox2.Password;
-
-        if (string.IsNullOrEmpty(password1) && string.IsNullOrEmpty(password2))
+        if (!result.Success)
         {
-            error = Loc.Get("Val.PasswordRequired");
+            error = MapError(result.Error);
             return false;
         }
 
-        if (password1 != password2)
-        {
-            error = Loc.Get("Val.PasswordMismatch");
-            return false;
-        }
-
-        if (_wasEncrypted && password1 == _originalPassword)
-        {
-            // Editing an already-encrypted disk with the fields left as-is: keep the current
-            // password unchanged.
-            error = string.Empty;
-            return true;
-        }
-
-        if (password1.Length < MinPasswordLength)
-        {
-            error = Loc.Format("Val.PasswordTooShort", MinPasswordLength);
-            return false;
-        }
-
-        if (password1.Length > MaxPasswordLength)
-        {
-            error = Loc.Format("Val.PasswordTooLong", MaxPasswordLength);
-            return false;
-        }
-
-        Password = password1;
-        PasswordChanged = true;
+        options = result.Options;
+        Password = result.Password;
+        PasswordChanged = result.PasswordChanged;
         error = string.Empty;
         return true;
     }
+
+    /// <summary>
+    /// Snapshots the current control values into a WPF-free <see cref="CreateDiskInput"/>.
+    /// </summary>
+    private CreateDiskInput BuildInput()
+    {
+        var mode = _isArchiveImportMode
+            ? CreateDiskMode.ImportArchive
+            : _isImportMode
+                ? CreateDiskMode.ImportImage
+                : CreateDiskMode.Create;
+
+        return new()
+        {
+            MountPoint = DriveLetterBox.SelectedItem as string,
+            Mode = mode,
+            ImportCapacityBytes = _importCapacityBytes,
+            ImportVolumeLabel = _importVolumeLabel,
+            ImportArchivePath = _importArchivePath,
+            CapacityValue = _capacityValue,
+            CapacityIsGb = CapacityUnitBox.SelectedItem as string == "GB",
+            MaxCapacityValue = GetMaxCapacityValue(),
+            VolumeLabel = VolumeLabelBox.Text,
+            ImagePathText = ImagePathBox.Text,
+            IsReadOnly = ReadOnlyBox.IsChecked == true,
+            AutoMount = AutoMountBox.IsChecked == true,
+            AutoSaveEnabled = AutoSaveBox.IsChecked == true,
+            IntervalValue = _intervalValue,
+            SnapshotCountEnabled = SnapshotCountEnabledBox.IsChecked == true,
+            SnapshotCountValue = _snapshotCountValue,
+            SnapshotSizeEnabled = SnapshotSizeEnabledBox.IsChecked == true,
+            SnapshotSizeValue = _snapshotSizeValue,
+            SnapshotSizeIsGb = SnapshotSizeUnitBox.SelectedItem as string == "GB",
+            HighUsageWarnEnabled = HighUsageWarnBox.IsChecked == true,
+            HighUsageWarnPercentValue = _highUsageWarnPercentValue,
+            CompressionLevel = (CompressionLevelBox.SelectedItem as CompressionLevelItem)?.Level
+                ?? ImageCompressionLevel.Fastest,
+            SaveImageOnExit = SaveOnExitBox.IsChecked == true,
+            EncryptChecked = EncryptImageBox.IsChecked == true,
+            Password1 = PasswordBox1.Password,
+            Password2 = PasswordBox2.Password,
+            WasEncrypted = _wasEncrypted,
+            OriginalPassword = _originalPassword,
+            OtherDisks = _otherDisks,
+        };
+    }
+
+    /// <summary>
+    /// Maps a <see cref="CreateDiskValidationError"/> to its localized message.
+    /// </summary>
+    private string MapError(CreateDiskValidationError error) => error switch
+    {
+        CreateDiskValidationError.NoDriveLetter => Loc.Get("Val.NoDriveLetter"),
+        CreateDiskValidationError.BadCapacity =>
+            string.Format(Loc.Get("Val.BadCapacity"), GetMaxCapacityValue(), CapacityUnitBox.SelectedItem),
+        CreateDiskValidationError.BadImagePath => Loc.Get("Val.BadImagePath"),
+        CreateDiskValidationError.ImagePathIsSnapshot => Loc.Get("Val.ImagePathIsSnapshot"),
+        CreateDiskValidationError.ImagePathInUse => Loc.Get("Val.ImagePathInUse"),
+        CreateDiskValidationError.ImagePathOnRamDisk => Loc.Get("Val.ImagePathOnRamDisk"),
+        CreateDiskValidationError.ReadOnlyRequiresImage => Loc.Get("Val.ReadOnlyRequiresImage"),
+        CreateDiskValidationError.ReadOnlyImageNotFound => Loc.Get("Val.ReadOnlyImageNotFound"),
+        CreateDiskValidationError.AutoSaveNoImage => Loc.Get("Val.AutoSaveNoImage"),
+        CreateDiskValidationError.BadAutoSaveInterval => Loc.Get("Val.BadAutoSaveInterval"),
+        CreateDiskValidationError.BadSnapshotCount => Loc.Get("Val.BadSnapshotCount"),
+        CreateDiskValidationError.BadSnapshotSize => Loc.Get("Val.BadSnapshotSize"),
+        CreateDiskValidationError.BadHighUsagePercent => Loc.Get("Val.BadHighUsagePercent"),
+        CreateDiskValidationError.PasswordRequired => Loc.Get("Val.PasswordRequired"),
+        CreateDiskValidationError.PasswordMismatch => Loc.Get("Val.PasswordMismatch"),
+        CreateDiskValidationError.PasswordTooShort =>
+            Loc.Format("Val.PasswordTooShort", CreateDiskOptionsBuilder.MinPasswordLength),
+        CreateDiskValidationError.PasswordTooLong =>
+            Loc.Format("Val.PasswordTooLong", CreateDiskOptionsBuilder.MaxPasswordLength),
+        _ => Loc.Get("Val.Title"),
+    };
 
     private void UpdateAutoSaveEnabledState()
     {
