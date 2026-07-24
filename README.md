@@ -98,18 +98,13 @@ Alternatively open `ManagedDrive.slnx` in Visual Studio 2022+ and press **F5**.
 ```
 ManagedDrive/
 ├── src/
-│   ├── ManagedDrive.Core/          # In-memory file system engine (WinFsp)
-│   │   ├── DiskOptions.cs          #   Immutable mount configuration record
-│   │   ├── FileNode.cs             #   Single file or directory node
-│   │   ├── FileNodeMap.cs          #   Thread-safe path→node dictionary
-│   │   ├── MemoryFileSystem.cs     #   FileSystemBase implementation (all WinFsp callbacks)
-│   │   ├── RamDisk.cs              #   Mount/unmount lifecycle wrapper
-│   │   ├── MountManager.cs         #   Multi-disk manager
-│   │   ├── DiskImageSerializer.cs  #   Binary persistence (.mdr format)
-│   │   ├── SnapshotManager.cs      #   Timestamped snapshot naming, listing, pruning, GC
-│   │   ├── SnapshotStore.cs        #   Snapshot index format + content-addressed blob store
-│   │   ├── ArchiveNodeMapBuilder.cs #  Extracts zip/7z/rar/tar (via SharpCompress) into a FileNodeMap for read-only import
-│   │   └── ImageEncryptionExceptions.cs # Thrown by DiskImageSerializer.Load when a password is missing/incorrect
+│   ├── ManagedDrive.Core/          # In-memory file system engine (WinFsp); organized into sub-namespace folders, GlobalUsings.cs global-uses all of them
+│   │   ├── FileSystem/             #   FileNode, FileNodeMap, MemoryFileSystem (FileSystemBase, all WinFsp callbacks), WildcardMatcher, DirectoryEnumeration, ContentAccessInfo
+│   │   ├── Mounting/               #   DiskOptions (+ ImageCompressionLevel), RamDisk, MountManager, MountOptionsFactory (CLI mount-options merge)
+│   │   ├── Persistence/            #   DiskImageSerializer (.mdr format), ImageEncryptionExceptions
+│   │   ├── Snapshots/              #   SnapshotManager, SnapshotStore
+│   │   ├── Archive/                #   ArchiveNodeMapBuilder (import), ArchiveNodeMapWriter (export)
+│   │   └── DiskCreation/           #   CreateDiskOptionsBuilder, ByteUnitConverter — pure, unit-tested validation logic for the App layer's create-disk dialog
 │   │
 │   └── ManagedDrive.App/           # WPF desktop application
 │       ├── Localization/           #   ResourceDictionary strings (en-US, zh-CN)
@@ -117,12 +112,12 @@ ManagedDrive/
 │       ├── Helpers/                #   ByteFormatter, HintHelper (watermark/placeholder text)
 │       ├── Infrastructure/         #   RelayCommand
 │       ├── Models/                 #   AppConfiguration, DiskProfile
-│       ├── Services/               #   SettingsStore, StartupManager, TempDirResetService
+│       ├── Services/               #   SettingsStore, StartupManager, TempDirResetService, ShellContextMenuManager, SystemMemoryInfo, plus six services split out of App.xaml.cs: TrayIconController, TrayTooltipController, DiskNotificationService, TempDirCompatChecker, SessionEndingSaveHandler, WinFspPrerequisite
 │       ├── ViewModels/             #   MainViewModel, DiskViewModel
-│       ├── Views/                  #   CreateDiskDialog, CloneDiskDialog, DiskContentDialog, RestoreSnapshotDialog, SettingsDialog, ConfirmDialog, AboutDialog, TrayTooltipView, PasswordPromptDialog
+│       ├── Views/                  #   CreateDiskDialog, CloneDiskDialog, DiskContentDialog, RestoreSnapshotDialog, SettingsDialog, SnapshotDiffDialog, ConfirmDialog, AboutDialog, TrayTooltipView, PasswordPromptDialog
 │       ├── GlobalUsings.cs         #   Project-wide global using directives
 │       ├── MainWindow.xaml(.cs)    #   Main window
-│       ├── App.xaml(.cs)           #   Startup, tray icon, auto-mount
+│       ├── App.xaml(.cs)           #   Startup/shutdown orchestration and window navigation; tray/notification/TEMP/prerequisite concerns live in Services/ (above)
 │       └── Cli/                    #   Named-pipe server forwarding CLI commands into the running app
 │
 │   ├── ManagedDrive.Cli.Core/      # Shared CLI parsing/protocol library — no reference to ManagedDrive.Core (keeps the pipe-only mdrive.exe client free of winfsp.net/SharpCompress) and no Spectre.Console (keeps ManagedDrive.App's dependency footprint small)
@@ -143,11 +138,16 @@ ManagedDrive/
 │       ├── FileNodeTests.cs
 │       ├── FileNodeMapTests.cs
 │       ├── MemoryFileSystemCloneTests.cs
+│       ├── DirectoryEnumerationTests.cs
+│       ├── WildcardMatchTests.cs
 │       ├── DiskImageSerializerTests.cs
 │       ├── RamDiskCapacityTests.cs
 │       ├── SnapshotManagerTests.cs
 │       ├── ArchiveNodeMapBuilderTests.cs
-│       └── WildcardMatchTests.cs
+│       ├── ArchiveNodeMapWriterTests.cs
+│       ├── MountOptionsFactoryTests.cs
+│       ├── CreateDiskOptionsBuilderTests.cs
+│       └── ByteUnitConverterTests.cs
 │
 └── benchmarks/
     └── ManagedDrive.Benchmarks/    # BenchmarkDotNet throughput/latency benchmarks
@@ -247,7 +247,7 @@ Random reads are slower on the RAM disk for the same reason sequential reads are
 dotnet test tests/ManagedDrive.Tests
 ```
 
-Tests cover `FileNode` (allocation unit alignment, index numbers, deep-copy cloning), `FileNodeMap` (CRUD, case-insensitive lookup, child pagination, rename, capacity tracking), `MemoryFileSystem` disk-cloning (copying contents between disks, target-too-small and read-only-target rejection, clone independence), `DiskImageSerializer` (save/load round-trips across every compression level, legacy version-1 images, concurrent map mutation during save), and the wildcard glob matcher used by directory listing. Mount/unmount integration tests require the WinFsp driver and must be run manually.
+Tests cover `FileNode` (allocation unit alignment, index numbers, deep-copy cloning), `FileNodeMap` (CRUD, case-insensitive lookup, child pagination, rename, capacity tracking), `MemoryFileSystem` disk-cloning (copying contents between disks, target-too-small and read-only-target rejection, clone independence), directory enumeration and the wildcard glob matcher used by directory listing, `DiskImageSerializer` (save/load round-trips across every compression level, legacy version-1 images, concurrent map mutation during save), archive import/export, `MountOptionsFactory` (the saved-profile/CLI-overrides merge used by `mdrive mount`/`mount-archive`), and `CreateDiskOptionsBuilder`/`ByteUnitConverter` (the create-disk dialog's validation logic, extracted into Core specifically so it's testable without WPF). Mount/unmount integration tests require the WinFsp driver and must be run manually.
 
 ### Running Benchmarks
 
@@ -399,18 +399,13 @@ dotnet run --project src/ManagedDrive.App -c Release
 ```
 ManagedDrive/
 ├── src/
-│   ├── ManagedDrive.Core/          # 内存文件系统引擎（WinFsp）
-│   │   ├── DiskOptions.cs          #   不可变挂载配置记录
-│   │   ├── FileNode.cs             #   单个文件或目录节点
-│   │   ├── FileNodeMap.cs          #   线程安全的路径→节点字典
-│   │   ├── MemoryFileSystem.cs     #   FileSystemBase 实现（所有 WinFsp 回调）
-│   │   ├── RamDisk.cs              #   挂载/卸载生命周期封装
-│   │   ├── MountManager.cs         #   多磁盘管理器
-│   │   ├── DiskImageSerializer.cs  #   二进制持久化（.mdr 格式）
-│   │   ├── SnapshotManager.cs      #   带时间戳的快照命名、列表、清理与垃圾回收
-│   │   ├── SnapshotStore.cs        #   快照索引格式 + 内容寻址块存储
-│   │   ├── ArchiveNodeMapBuilder.cs #  通过 SharpCompress 解压 zip/7z/rar/tar 为 FileNodeMap，用于只读导入
-│   │   └── ImageEncryptionExceptions.cs # DiskImageSerializer.Load 在密码缺失/错误时抛出的异常
+│   ├── ManagedDrive.Core/          # 内存文件系统引擎（WinFsp）；按子命名空间分文件夹组织，GlobalUsings.cs 统一 global-use 所有子命名空间
+│   │   ├── FileSystem/             #   FileNode、FileNodeMap、MemoryFileSystem（FileSystemBase，全部 WinFsp 回调）、WildcardMatcher、DirectoryEnumeration、ContentAccessInfo
+│   │   ├── Mounting/               #   DiskOptions（含 ImageCompressionLevel）、RamDisk、MountManager、MountOptionsFactory（CLI 挂载选项合并）
+│   │   ├── Persistence/            #   DiskImageSerializer（.mdr 格式）、ImageEncryptionExceptions
+│   │   ├── Snapshots/              #   SnapshotManager、SnapshotStore
+│   │   ├── Archive/                #   ArchiveNodeMapBuilder（导入）、ArchiveNodeMapWriter（导出）
+│   │   └── DiskCreation/           #   CreateDiskOptionsBuilder、ByteUnitConverter——App 层创建磁盘对话框的纯校验逻辑，已配单元测试
 │   │
 │   └── ManagedDrive.App/           # WPF 桌面应用程序
 │       ├── Localization/           #   ResourceDictionary 字符串（en-US、zh-CN）
@@ -418,12 +413,12 @@ ManagedDrive/
 │       ├── Helpers/                #   ByteFormatter、HintHelper（水印/占位文本）
 │       ├── Infrastructure/         #   RelayCommand
 │       ├── Models/                 #   AppConfiguration、DiskProfile
-│       ├── Services/               #   SettingsStore、StartupManager、TempDirResetService
+│       ├── Services/               #   SettingsStore、StartupManager、TempDirResetService、ShellContextMenuManager、SystemMemoryInfo，以及从 App.xaml.cs 拆出的六个服务：TrayIconController、TrayTooltipController、DiskNotificationService、TempDirCompatChecker、SessionEndingSaveHandler、WinFspPrerequisite
 │       ├── ViewModels/             #   MainViewModel、DiskViewModel
-│       ├── Views/                  #   CreateDiskDialog、CloneDiskDialog、DiskContentDialog、RestoreSnapshotDialog、SettingsDialog、ConfirmDialog、AboutDialog、TrayTooltipView、PasswordPromptDialog
+│       ├── Views/                  #   CreateDiskDialog、CloneDiskDialog、DiskContentDialog、RestoreSnapshotDialog、SettingsDialog、SnapshotDiffDialog、ConfirmDialog、AboutDialog、TrayTooltipView、PasswordPromptDialog
 │       ├── GlobalUsings.cs         #   项目级全局 using 指令
 │       ├── MainWindow.xaml(.cs)    #   主窗口
-│       ├── App.xaml(.cs)           #   启动、托盘图标、自动挂载
+│       ├── App.xaml(.cs)           #   启动/关闭编排与窗口导航；托盘、通知、TEMP、前置检查等职责已拆分至上面的 Services/
 │       └── Cli/                    #   将 CLI 命令转发进运行中应用的命名管道服务端
 │
 │   ├── ManagedDrive.Cli.Core/      # 共享的 CLI 解析/协议库——不引用 ManagedDrive.Core（使仅需管道通信的 mdrive.exe 客户端无需携带 winfsp.net/SharpCompress），也不依赖 Spectre.Console（避免拖大 ManagedDrive.App 的发布体积）
@@ -444,11 +439,16 @@ ManagedDrive/
 │       ├── FileNodeTests.cs
 │       ├── FileNodeMapTests.cs
 │       ├── MemoryFileSystemCloneTests.cs
+│       ├── DirectoryEnumerationTests.cs
+│       ├── WildcardMatchTests.cs
 │       ├── DiskImageSerializerTests.cs
 │       ├── RamDiskCapacityTests.cs
 │       ├── SnapshotManagerTests.cs
 │       ├── ArchiveNodeMapBuilderTests.cs
-│       └── WildcardMatchTests.cs
+│       ├── ArchiveNodeMapWriterTests.cs
+│       ├── MountOptionsFactoryTests.cs
+│       ├── CreateDiskOptionsBuilderTests.cs
+│       └── ByteUnitConverterTests.cs
 │
 └── benchmarks/
     └── ManagedDrive.Benchmarks/    # BenchmarkDotNet 吞吐量/延迟基准测试
@@ -548,7 +548,7 @@ ManagedDrive 使用 **WinFsp**（Windows 文件系统代理）将内存目录树
 dotnet test tests/ManagedDrive.Tests
 ```
 
-测试覆盖 `FileNode`（分配单元对齐、索引编号、深拷贝克隆）、`FileNodeMap`（增删改查、大小写无关查找、子节点分页、重命名、容量追踪）、`MemoryFileSystem` 的磁盘克隆逻辑（跨磁盘复制内容、目标容量不足与目标只读时的拒绝、克隆节点的独立性）、`DiskImageSerializer`（各压缩级别的保存/加载往返、旧版本 1 镜像、保存期间并发修改磁盘节点）以及目录枚举所用的通配符匹配逻辑。挂载/卸载集成测试需要 WinFsp 驱动程序，须手动运行。
+测试覆盖 `FileNode`（分配单元对齐、索引编号、深拷贝克隆）、`FileNodeMap`（增删改查、大小写无关查找、子节点分页、重命名、容量追踪）、`MemoryFileSystem` 的磁盘克隆逻辑（跨磁盘复制内容、目标容量不足与目标只读时的拒绝、克隆节点的独立性）、目录枚举及目录列表所用的通配符匹配逻辑、`DiskImageSerializer`（各压缩级别的保存/加载往返、旧版本 1 镜像、保存期间并发修改磁盘节点）、压缩包导入/导出、`MountOptionsFactory`（`mdrive mount`/`mount-archive` 所用的已存配置与 CLI 覆盖项合并逻辑），以及 `CreateDiskOptionsBuilder`/`ByteUnitConverter`（创建磁盘对话框的校验逻辑，专门下沉到 Core 以便脱离 WPF 单测）。挂载/卸载集成测试需要 WinFsp 驱动程序，须手动运行。
 
 ### 运行基准测试
 
