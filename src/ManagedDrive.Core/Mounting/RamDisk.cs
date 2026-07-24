@@ -338,6 +338,14 @@ public sealed class RamDisk : IDisposable
 
             _host.Unmount();
             _host.Dispose();
+
+            if (_cek is not null)
+            {
+                System.Security.Cryptography.CryptographicOperations.ZeroMemory(_cek);
+                _cek = null;
+            }
+
+            _password = null;
             _disposed = true;
         }
     }
@@ -499,6 +507,11 @@ public sealed class RamDisk : IDisposable
         }
         else
         {
+            if (_cek is not null)
+            {
+                System.Security.Cryptography.CryptographicOperations.ZeroMemory(_cek);
+            }
+
             _password = null;
             _cek = null;
 
