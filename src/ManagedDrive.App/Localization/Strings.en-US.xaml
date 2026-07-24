@@ -123,6 +123,9 @@
     <sys:String x:Key="Tip.EncryptImage">Protect the saved image with a password. The password is only held in memory and is never saved to disk — it must be re-entered after restarting the app.</sys:String>
     <sys:String x:Key="CreateDisk.Password">Password:</sys:String>
     <sys:String x:Key="CreateDisk.ConfirmPassword">Confirm:</sys:String>
+    <sys:String x:Key="CreateDisk.PasswordStrengthWeak">Weak password</sys:String>
+    <sys:String x:Key="CreateDisk.PasswordStrengthMedium">Medium-strength password</sys:String>
+    <sys:String x:Key="CreateDisk.PasswordStrengthStrong">Strong password</sys:String>
     <sys:String x:Key="Val.PasswordRequired">Enter a password, or uncheck "Encrypt image".</sys:String>
     <sys:String x:Key="Val.PasswordMismatch">The password and confirmation do not match.</sys:String>
     <sys:String x:Key="Val.PasswordTooShort">Password must be at least {0} characters.</sys:String>

@@ -123,6 +123,9 @@
     <sys:String x:Key="Tip.EncryptImage">使用密码保护保存的镜像文件。密码仅保存在内存中，不会写入磁盘——重启应用后需要重新输入。</sys:String>
     <sys:String x:Key="CreateDisk.Password">密码：</sys:String>
     <sys:String x:Key="CreateDisk.ConfirmPassword">确认密码：</sys:String>
+    <sys:String x:Key="CreateDisk.PasswordStrengthWeak">密码强度：弱</sys:String>
+    <sys:String x:Key="CreateDisk.PasswordStrengthMedium">密码强度：中</sys:String>
+    <sys:String x:Key="CreateDisk.PasswordStrengthStrong">密码强度：强</sys:String>
     <sys:String x:Key="Val.PasswordRequired">请输入密码，或取消勾选“加密镜像”。</sys:String>
     <sys:String x:Key="Val.PasswordMismatch">两次输入的密码不一致。</sys:String>
     <sys:String x:Key="Val.PasswordTooShort">密码长度不能少于 {0} 位。</sys:String>
