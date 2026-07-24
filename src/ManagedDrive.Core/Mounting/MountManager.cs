@@ -31,7 +31,15 @@ public sealed class MountManager : IDisposable
     /// <summary>
     /// Unmounts and disposes all active disks.
     /// </summary>
-    public void Dispose()
+    public void Dispose() => Dispose(null);
+
+    /// <summary>
+    /// Unmounts and disposes all active disks, as <see cref="Dispose()"/>, but reports overall
+    /// save progress across all disks via <paramref name="onOverallProgress"/> (the disk
+    /// currently being saved, and a fraction in [0, 1] across the whole disposal).
+    /// </summary>
+    /// <param name="onOverallProgress">Optional overall progress callback.</param>
+    public void Dispose(Action<RamDisk, double>? onOverallProgress)
     {
         List<RamDisk> all;
 
@@ -41,10 +49,22 @@ public sealed class MountManager : IDisposable
             _disks.Clear();
         }
 
-        foreach (var disk in all)
+        var count = all.Count;
+
+        for (var i = 0; i < count; i++)
         {
+            var disk = all[i];
+            var diskIndex = i;
+
             disk.ContentAccessed -= OnDiskContentAccessed;
-            disk.Dispose();
+            onOverallProgress?.Invoke(disk, (double)diskIndex / count);
+
+            var perDiskProgress = onOverallProgress is null
+                ? null
+                : new Progress<double>(p => onOverallProgress(disk, (diskIndex + p) / count));
+            disk.Dispose(perDiskProgress);
+
+            onOverallProgress?.Invoke(disk, (double)(diskIndex + 1) / count);
         }
     }
 

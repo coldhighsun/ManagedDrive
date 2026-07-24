@@ -463,36 +463,41 @@
             Opacity="0.92"
             Visibility="{Binding IsExiting, Converter={StaticResource BoolToVis}}"
             Panel.ZIndex="100">
-        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
-            <TextBlock Text="&#xE895;" FontFamily="Segoe Fluent Icons" FontSize="20"
-                       Foreground="{DynamicResource AppPrimary}"
-                       RenderTransformOrigin="0.5,0.5">
-                <TextBlock.RenderTransform>
-                    <RotateTransform x:Name="ExitSpinnerRotate" Angle="0"/>
-                </TextBlock.RenderTransform>
-                <TextBlock.Style>
-                    <Style TargetType="TextBlock">
-                        <Style.Triggers>
-                            <DataTrigger Binding="{Binding IsExiting}" Value="True">
-                                <DataTrigger.EnterActions>
-                                    <BeginStoryboard x:Name="ExitSpinStoryboard">
-                                        <Storyboard>
-                                            <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(RotateTransform.Angle)"
-                                                              From="0" To="360" Duration="0:0:1"
-                                                              RepeatBehavior="Forever"/>
-                                        </Storyboard>
-                                    </BeginStoryboard>
-                                </DataTrigger.EnterActions>
-                                <DataTrigger.ExitActions>
-                                    <StopStoryboard BeginStoryboardName="ExitSpinStoryboard"/>
-                                </DataTrigger.ExitActions>
-                            </DataTrigger>
-                        </Style.Triggers>
-                    </Style>
-                </TextBlock.Style>
-            </TextBlock>
-            <TextBlock Text="{DynamicResource Msg.ExitSaving}" FontSize="14" Margin="8,0,0,0"
-                       Foreground="{DynamicResource AppForeground}" VerticalAlignment="Center"/>
+        <StackPanel Orientation="Vertical" HorizontalAlignment="Center" VerticalAlignment="Center" Width="280">
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,0,0,8">
+                <TextBlock Text="&#xE895;" FontFamily="Segoe Fluent Icons" FontSize="20"
+                           Foreground="{DynamicResource AppPrimary}"
+                           RenderTransformOrigin="0.5,0.5">
+                    <TextBlock.RenderTransform>
+                        <RotateTransform x:Name="ExitSpinnerRotate" Angle="0"/>
+                    </TextBlock.RenderTransform>
+                    <TextBlock.Style>
+                        <Style TargetType="TextBlock">
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsExiting}" Value="True">
+                                    <DataTrigger.EnterActions>
+                                        <BeginStoryboard x:Name="ExitSpinStoryboard">
+                                            <Storyboard>
+                                                <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(RotateTransform.Angle)"
+                                                                  From="0" To="360" Duration="0:0:1"
+                                                                  RepeatBehavior="Forever"/>
+                                            </Storyboard>
+                                        </BeginStoryboard>
+                                    </DataTrigger.EnterActions>
+                                    <DataTrigger.ExitActions>
+                                        <StopStoryboard BeginStoryboardName="ExitSpinStoryboard"/>
+                                    </DataTrigger.ExitActions>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBlock.Style>
+                </TextBlock>
+                <TextBlock Text="{Binding ExitSaveStatusText}" FontSize="14" Margin="8,0,0,0"
+                           Foreground="{DynamicResource AppForeground}" VerticalAlignment="Center"/>
+            </StackPanel>
+            <ProgressBar Style="{StaticResource SlimProgressBar}"
+                         Minimum="0" Maximum="1"
+                         Value="{Binding ExitSaveProgress, Mode=OneWay}"/>
         </StackPanel>
     </Border>
 
