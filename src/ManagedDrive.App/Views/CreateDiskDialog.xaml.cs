@@ -400,6 +400,52 @@ public partial class CreateDiskDialog
         IntervalValue = (int)e.NewValue;
     }
 
+    /// <summary>
+    /// Snapshots the current control values into a WPF-free <see cref="CreateDiskInput"/>.
+    /// </summary>
+    private CreateDiskInput BuildInput()
+    {
+        var mode = _isArchiveImportMode
+            ? CreateDiskMode.ImportArchive
+            : _isImportMode
+                ? CreateDiskMode.ImportImage
+                : CreateDiskMode.Create;
+
+        return new()
+        {
+            MountPoint = DriveLetterBox.SelectedItem as string,
+            Mode = mode,
+            ImportCapacityBytes = _importCapacityBytes,
+            ImportVolumeLabel = _importVolumeLabel,
+            ImportArchivePath = _importArchivePath,
+            CapacityValue = _capacityValue,
+            CapacityIsGb = CapacityUnitBox.SelectedItem as string == "GB",
+            MaxCapacityValue = GetMaxCapacityValue(),
+            VolumeLabel = VolumeLabelBox.Text,
+            ImagePathText = ImagePathBox.Text,
+            IsReadOnly = ReadOnlyBox.IsChecked == true,
+            AutoMount = AutoMountBox.IsChecked == true,
+            AutoSaveEnabled = AutoSaveBox.IsChecked == true,
+            IntervalValue = _intervalValue,
+            SnapshotCountEnabled = SnapshotCountEnabledBox.IsChecked == true,
+            SnapshotCountValue = _snapshotCountValue,
+            SnapshotSizeEnabled = SnapshotSizeEnabledBox.IsChecked == true,
+            SnapshotSizeValue = _snapshotSizeValue,
+            SnapshotSizeIsGb = SnapshotSizeUnitBox.SelectedItem as string == "GB",
+            HighUsageWarnEnabled = HighUsageWarnBox.IsChecked == true,
+            HighUsageWarnPercentValue = _highUsageWarnPercentValue,
+            CompressionLevel = (CompressionLevelBox.SelectedItem as CompressionLevelItem)?.Level
+                ?? ImageCompressionLevel.Fastest,
+            SaveImageOnExit = SaveOnExitBox.IsChecked == true,
+            EncryptChecked = EncryptImageBox.IsChecked == true,
+            Password1 = PasswordBox1.Password,
+            Password2 = PasswordBox2.Password,
+            WasEncrypted = _wasEncrypted,
+            OriginalPassword = _originalPassword,
+            OtherDisks = _otherDisks,
+        };
+    }
+
     private void CapacitySlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
     {
         CapacityValue = (int)e.NewValue;
@@ -437,6 +483,7 @@ public partial class CreateDiskDialog
     private void EncryptImageBox_CheckedChanged(object sender, RoutedEventArgs e)
     {
         PasswordPanel.IsEnabled = EncryptImageBox.IsChecked == true;
+        UpdatePasswordStrengthHint();
     }
 
     private int GetMaxCapacityValue()
@@ -491,6 +538,34 @@ public partial class CreateDiskDialog
         }
     }
 
+    /// <summary>
+    /// Maps a <see cref="CreateDiskValidationError"/> to its localized message.
+    /// </summary>
+    private string MapError(CreateDiskValidationError error) => error switch
+    {
+        CreateDiskValidationError.NoDriveLetter => Loc.Get("Val.NoDriveLetter"),
+        CreateDiskValidationError.BadCapacity =>
+            string.Format(Loc.Get("Val.BadCapacity"), GetMaxCapacityValue(), CapacityUnitBox.SelectedItem),
+        CreateDiskValidationError.BadImagePath => Loc.Get("Val.BadImagePath"),
+        CreateDiskValidationError.ImagePathIsSnapshot => Loc.Get("Val.ImagePathIsSnapshot"),
+        CreateDiskValidationError.ImagePathInUse => Loc.Get("Val.ImagePathInUse"),
+        CreateDiskValidationError.ImagePathOnRamDisk => Loc.Get("Val.ImagePathOnRamDisk"),
+        CreateDiskValidationError.ReadOnlyRequiresImage => Loc.Get("Val.ReadOnlyRequiresImage"),
+        CreateDiskValidationError.ReadOnlyImageNotFound => Loc.Get("Val.ReadOnlyImageNotFound"),
+        CreateDiskValidationError.AutoSaveNoImage => Loc.Get("Val.AutoSaveNoImage"),
+        CreateDiskValidationError.BadAutoSaveInterval => Loc.Get("Val.BadAutoSaveInterval"),
+        CreateDiskValidationError.BadSnapshotCount => Loc.Get("Val.BadSnapshotCount"),
+        CreateDiskValidationError.BadSnapshotSize => Loc.Get("Val.BadSnapshotSize"),
+        CreateDiskValidationError.BadHighUsagePercent => Loc.Get("Val.BadHighUsagePercent"),
+        CreateDiskValidationError.PasswordRequired => Loc.Get("Val.PasswordRequired"),
+        CreateDiskValidationError.PasswordMismatch => Loc.Get("Val.PasswordMismatch"),
+        CreateDiskValidationError.PasswordTooShort =>
+            Loc.Format("Val.PasswordTooShort", CreateDiskOptionsBuilder.MinPasswordLength),
+        CreateDiskValidationError.PasswordTooLong =>
+            Loc.Format("Val.PasswordTooLong", CreateDiskOptionsBuilder.MaxPasswordLength),
+        _ => Loc.Get("Val.Title"),
+    };
+
     private void OK_Click(object sender, RoutedEventArgs e)
     {
         if (!TryBuildOptions(out var options, out var error))
@@ -527,6 +602,11 @@ public partial class CreateDiskDialog
             UpdateCompressionLevelState();
             UpdateAutoSaveEnabledState();
         }
+    }
+
+    private void PasswordBox1_PasswordChanged(object sender, RoutedEventArgs e)
+    {
+        UpdatePasswordStrengthHint();
     }
 
     private void ReadOnlyBox_CheckedChanged(object sender, RoutedEventArgs e)
@@ -586,80 +666,6 @@ public partial class CreateDiskDialog
         error = string.Empty;
         return true;
     }
-
-    /// <summary>
-    /// Snapshots the current control values into a WPF-free <see cref="CreateDiskInput"/>.
-    /// </summary>
-    private CreateDiskInput BuildInput()
-    {
-        var mode = _isArchiveImportMode
-            ? CreateDiskMode.ImportArchive
-            : _isImportMode
-                ? CreateDiskMode.ImportImage
-                : CreateDiskMode.Create;
-
-        return new()
-        {
-            MountPoint = DriveLetterBox.SelectedItem as string,
-            Mode = mode,
-            ImportCapacityBytes = _importCapacityBytes,
-            ImportVolumeLabel = _importVolumeLabel,
-            ImportArchivePath = _importArchivePath,
-            CapacityValue = _capacityValue,
-            CapacityIsGb = CapacityUnitBox.SelectedItem as string == "GB",
-            MaxCapacityValue = GetMaxCapacityValue(),
-            VolumeLabel = VolumeLabelBox.Text,
-            ImagePathText = ImagePathBox.Text,
-            IsReadOnly = ReadOnlyBox.IsChecked == true,
-            AutoMount = AutoMountBox.IsChecked == true,
-            AutoSaveEnabled = AutoSaveBox.IsChecked == true,
-            IntervalValue = _intervalValue,
-            SnapshotCountEnabled = SnapshotCountEnabledBox.IsChecked == true,
-            SnapshotCountValue = _snapshotCountValue,
-            SnapshotSizeEnabled = SnapshotSizeEnabledBox.IsChecked == true,
-            SnapshotSizeValue = _snapshotSizeValue,
-            SnapshotSizeIsGb = SnapshotSizeUnitBox.SelectedItem as string == "GB",
-            HighUsageWarnEnabled = HighUsageWarnBox.IsChecked == true,
-            HighUsageWarnPercentValue = _highUsageWarnPercentValue,
-            CompressionLevel = (CompressionLevelBox.SelectedItem as CompressionLevelItem)?.Level
-                ?? ImageCompressionLevel.Fastest,
-            SaveImageOnExit = SaveOnExitBox.IsChecked == true,
-            EncryptChecked = EncryptImageBox.IsChecked == true,
-            Password1 = PasswordBox1.Password,
-            Password2 = PasswordBox2.Password,
-            WasEncrypted = _wasEncrypted,
-            OriginalPassword = _originalPassword,
-            OtherDisks = _otherDisks,
-        };
-    }
-
-    /// <summary>
-    /// Maps a <see cref="CreateDiskValidationError"/> to its localized message.
-    /// </summary>
-    private string MapError(CreateDiskValidationError error) => error switch
-    {
-        CreateDiskValidationError.NoDriveLetter => Loc.Get("Val.NoDriveLetter"),
-        CreateDiskValidationError.BadCapacity =>
-            string.Format(Loc.Get("Val.BadCapacity"), GetMaxCapacityValue(), CapacityUnitBox.SelectedItem),
-        CreateDiskValidationError.BadImagePath => Loc.Get("Val.BadImagePath"),
-        CreateDiskValidationError.ImagePathIsSnapshot => Loc.Get("Val.ImagePathIsSnapshot"),
-        CreateDiskValidationError.ImagePathInUse => Loc.Get("Val.ImagePathInUse"),
-        CreateDiskValidationError.ImagePathOnRamDisk => Loc.Get("Val.ImagePathOnRamDisk"),
-        CreateDiskValidationError.ReadOnlyRequiresImage => Loc.Get("Val.ReadOnlyRequiresImage"),
-        CreateDiskValidationError.ReadOnlyImageNotFound => Loc.Get("Val.ReadOnlyImageNotFound"),
-        CreateDiskValidationError.AutoSaveNoImage => Loc.Get("Val.AutoSaveNoImage"),
-        CreateDiskValidationError.BadAutoSaveInterval => Loc.Get("Val.BadAutoSaveInterval"),
-        CreateDiskValidationError.BadSnapshotCount => Loc.Get("Val.BadSnapshotCount"),
-        CreateDiskValidationError.BadSnapshotSize => Loc.Get("Val.BadSnapshotSize"),
-        CreateDiskValidationError.BadHighUsagePercent => Loc.Get("Val.BadHighUsagePercent"),
-        CreateDiskValidationError.PasswordRequired => Loc.Get("Val.PasswordRequired"),
-        CreateDiskValidationError.PasswordMismatch => Loc.Get("Val.PasswordMismatch"),
-        CreateDiskValidationError.PasswordTooShort =>
-            Loc.Format("Val.PasswordTooShort", CreateDiskOptionsBuilder.MinPasswordLength),
-        CreateDiskValidationError.PasswordTooLong =>
-            Loc.Format("Val.PasswordTooLong", CreateDiskOptionsBuilder.MaxPasswordLength),
-        _ => Loc.Get("Val.Title"),
-    };
 
     private void UpdateAutoSaveEnabledState()
     {
@@ -724,6 +730,26 @@ public partial class CreateDiskDialog
     private void UpdateHighUsageWarnPercentState()
     {
         HighUsageWarnPercentPanel?.IsEnabled = HighUsageWarnBox.IsChecked == true;
+    }
+
+    private void UpdatePasswordStrengthHint()
+    {
+        if (EncryptImageBox.IsChecked != true || PasswordBox1.Password.Length == 0)
+        {
+            PasswordStrengthText.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        var (key, brushKey) = PasswordStrengthEstimator.Estimate(PasswordBox1.Password) switch
+        {
+            PasswordStrength.Weak => ("CreateDisk.PasswordStrengthWeak", "AppWarning"),
+            PasswordStrength.Medium => ("CreateDisk.PasswordStrengthMedium", "AppForegroundLight"),
+            _ => ("CreateDisk.PasswordStrengthStrong", "AppForegroundLight"),
+        };
+
+        PasswordStrengthText.Text = Loc.Get(key);
+        PasswordStrengthText.Foreground = (System.Windows.Media.Brush)FindResource(brushKey);
+        PasswordStrengthText.Visibility = Visibility.Visible;
     }
 
     private void UpdateSnapshotCountDisplay()

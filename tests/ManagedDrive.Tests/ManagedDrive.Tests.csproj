@@ -17,10 +17,12 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\ManagedDrive.Core\ManagedDrive.Core.csproj" />
+    <ProjectReference Include="..\..\src\ManagedDrive.App\ManagedDrive.App.csproj" />
   </ItemGroup>
 
   <ItemGroup>
     <Using Include="Xunit" />
+    <Using Include="ManagedDrive.App.Infrastructure" />
     <Using Include="ManagedDrive.Core.Archive" />
     <Using Include="ManagedDrive.Core.DiskCreation" />
     <Using Include="ManagedDrive.Core.FileSystem" />

@@ -232,9 +232,11 @@
                               Checked="EncryptImageBox_CheckedChanged" Unchecked="EncryptImageBox_CheckedChanged"/>
 
                     <Grid Grid.Row="11" x:Name="PasswordPanel" IsEnabled="False" Style="{StaticResource DimWhenDisabled}">
-                        <Grid.RowDefinitions>                            
+                        <Grid.RowDefinitions>
                             <RowDefinition Height="Auto"/>
                             <RowDefinition Height="6"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="4"/>
                             <RowDefinition Height="Auto"/>
                         </Grid.RowDefinitions>
                         <Grid.ColumnDefinitions>
@@ -244,10 +246,13 @@
                         </Grid.ColumnDefinitions>
                         <TextBlock Grid.Row="0" Grid.Column="0" Text="{DynamicResource CreateDisk.Password}"
                                    Foreground="{DynamicResource AppForeground}" VerticalAlignment="Center"/>
-                        <PasswordBox Grid.Row="0" Grid.Column="2" x:Name="PasswordBox1"/>
+                        <PasswordBox Grid.Row="0" Grid.Column="2" x:Name="PasswordBox1"
+                                     PasswordChanged="PasswordBox1_PasswordChanged"/>
                         <TextBlock Grid.Row="2" Grid.Column="0" Text="{DynamicResource CreateDisk.ConfirmPassword}"
                                    Foreground="{DynamicResource AppForeground}" VerticalAlignment="Center"/>
                         <PasswordBox Grid.Row="2" Grid.Column="2" x:Name="PasswordBox2"/>
+                        <TextBlock Grid.Row="4" Grid.Column="2" x:Name="PasswordStrengthText"
+                                   FontSize="11" Visibility="Collapsed"/>
                     </Grid>
 
                     <!-- Section divider: image/compression/encryption above, auto-save/snapshots below -->
