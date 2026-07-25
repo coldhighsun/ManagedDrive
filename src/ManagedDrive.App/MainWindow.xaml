@@ -50,12 +50,14 @@
                             WindowChrome.IsHitTestVisibleInChrome="True">
                     <Button Style="{StaticResource IconButton}"
                             Command="{Binding CreateDiskCommand}"
-                            ToolTip="{DynamicResource Tip.NewDisk}">
+                            ToolTip="{DynamicResource Tip.NewDisk}"
+                            AutomationProperties.Name="{DynamicResource Tip.NewDisk}">
                         <TextBlock Style="{StaticResource IconText}" Text="&#xE710;"/>
                     </Button>
                     <Button x:Name="ImportBtn" Style="{StaticResource IconButton}"
                             Click="ImportBtn_Click"
-                            ToolTip="{DynamicResource Tip.Import}">
+                            ToolTip="{DynamicResource Tip.Import}"
+                            AutomationProperties.Name="{DynamicResource Tip.Import}">
                         <Button.ContextMenu>
                             <ContextMenu>
                                 <MenuItem Header="{DynamicResource Btn.ImportDisk}"
@@ -70,16 +72,20 @@
                     </Button>
                     <Button Style="{StaticResource IconButton}"
                             Command="{Binding ResetTempDirsCommand}"
-                            ToolTip="{DynamicResource Tip.ResetTempDirs}">
+                            ToolTip="{DynamicResource Tip.ResetTempDirs}"
+                            AutomationProperties.Name="{DynamicResource Tip.ResetTempDirs}">
                         <TextBlock Style="{StaticResource IconText}" Text="&#xE7A7;"/>
                     </Button>
                     <Button Style="{StaticResource IconButton}"
                             Command="{Binding SettingsCommand}"
-                            ToolTip="{DynamicResource Tip.Settings}">
+                            ToolTip="{DynamicResource Tip.Settings}"
+                            AutomationProperties.Name="{DynamicResource Tip.Settings}">
                         <TextBlock Style="{StaticResource IconText}" Text="&#xE713;"/>
                     </Button>
                     <Button x:Name="OverflowBtn" Style="{StaticResource IconButton}"
-                            Click="OverflowBtn_Click">
+                            Click="OverflowBtn_Click"
+                            ToolTip="{DynamicResource Tip.More}"
+                            AutomationProperties.Name="{DynamicResource Tip.More}">
                         <Button.ContextMenu>
                             <ContextMenu x:Name="OverflowMenu">
                                 <MenuItem Header="{DynamicResource Menu.About}"
@@ -92,12 +98,14 @@
                     </Button>
                     <Button Style="{StaticResource IconButton}"
                             Click="MinimizeButton_Click"
-                            ToolTip="{DynamicResource Tip.Minimize}">
+                            ToolTip="{DynamicResource Tip.Minimize}"
+                            AutomationProperties.Name="{DynamicResource Tip.Minimize}">
                         <TextBlock Style="{StaticResource IconText}" Text="&#xE921;" FontSize="12"/>
                     </Button>
                     <Button Style="{StaticResource IconButton}"
                             Click="CloseButton_Click"
-                            ToolTip="{DynamicResource Tip.HideToTray}">
+                            ToolTip="{DynamicResource Tip.HideToTray}"
+                            AutomationProperties.Name="{DynamicResource Tip.HideToTray}">
                         <TextBlock Style="{StaticResource IconText}" Text="&#xE8BB;"/>
                     </Button>
                 </StackPanel>
@@ -125,6 +133,7 @@
                            FontSize="11"
                            TextTrimming="CharacterEllipsis"
                            Margin="0,0,12,0"
+                           ToolTip="{Binding StatusText}"
                            Foreground="{DynamicResource AppForegroundLight}"/>
             </DockPanel>
         </Border>
@@ -270,6 +279,7 @@
                                             Background="{DynamicResource AppSurface}"
                                             BorderBrush="{DynamicResource AppDivider}" BorderThickness="1"
                                             ToolTip="{DynamicResource Card.ReadOnly}"
+                                            AutomationProperties.Name="{DynamicResource Card.ReadOnly}"
                                             Visibility="{Binding IsReadOnly, Converter={StaticResource BoolToVis}}">
                                         <TextBlock Text="&#xE72E;" Style="{StaticResource IconText}" FontSize="10"
                                                    Foreground="{DynamicResource AppForegroundLight}"/>
@@ -278,6 +288,7 @@
                                             Background="{DynamicResource AppSurface}"
                                             BorderBrush="{DynamicResource AppDivider}" BorderThickness="1"
                                             ToolTip="{DynamicResource Btn.RestoreDefaultTemp}"
+                                            AutomationProperties.Name="{DynamicResource Btn.RestoreDefaultTemp}"
                                             Visibility="{Binding IsCurrentTempDir, Converter={StaticResource BoolToVis}}">
                                         <TextBlock Text="&#xE8B7;" Style="{StaticResource IconText}" FontSize="10"
                                                    Foreground="{DynamicResource AppForeground}"/>
@@ -286,6 +297,7 @@
                                             Background="{DynamicResource AppSurface}"
                                             BorderBrush="{DynamicResource AppDivider}" BorderThickness="1"
                                             ToolTip="{Binding SourcePath}"
+                                            AutomationProperties.Name="{Binding SourcePath}"
                                             Visibility="{Binding HasImagePath, Converter={StaticResource BoolToVis}}">
                                         <TextBlock Text="&#xE74E;" Style="{StaticResource IconText}" FontSize="10"
                                                    Foreground="{DynamicResource AppForegroundLight}"/>
@@ -294,6 +306,7 @@
                                             Background="{DynamicResource AppSurface}"
                                             BorderBrush="{DynamicResource AppDivider}" BorderThickness="1"
                                             ToolTip="{DynamicResource Card.Encrypted}"
+                                            AutomationProperties.Name="{DynamicResource Card.Encrypted}"
                                             Visibility="{Binding IsPasswordProtected, Converter={StaticResource BoolToVis}}">
                                         <TextBlock Text="&#xE192;" Style="{StaticResource IconText}" FontSize="10"
                                                    Foreground="{DynamicResource AppForegroundLight}"/>
