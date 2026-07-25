@@ -385,6 +385,8 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     /// </summary>
     public void ExitWithoutConfirmation()
     {
+        _logger.LogInformation("Exit requested via CLI.");
+
         if (IsTempOnAnyRamDisk())
         {
             TempDirResetService.Reset();
@@ -404,6 +406,8 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     /// </returns>
     public Task<(bool Success, string Message)> FormatByMountPointAsync(string mountPoint)
     {
+        _logger.LogInformation("CLI format requested for {MountPoint}.", mountPoint);
+
         var vm = Disks.FirstOrDefault(d => string.Equals(d.MountPoint, mountPoint, StringComparison.OrdinalIgnoreCase));
         if (vm == null)
         {
@@ -412,11 +416,13 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 
         if (!vm.Disk.Format())
         {
+            _logger.LogWarning("CLI format failed for {MountPoint}: disk is read-only.", mountPoint);
             return Task.FromResult((false, Loc.Get("Msg.FormatDiskReadOnly")));
         }
 
         vm.Refresh();
         StatusText = Loc.Format("Status.FormatDisk", mountPoint);
+        _logger.LogInformation("CLI format completed for {MountPoint}.", mountPoint);
         return Task.FromResult((true, StatusText));
     }
 
@@ -471,6 +477,8 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     /// </returns>
     public async Task<(bool Success, string Message)> MountArchiveAsync(string archivePath, string? mountPoint, CliMountOverrides overrides)
     {
+        _logger.LogInformation("CLI mount-archive requested: {ArchivePath} -> {MountPoint}.", archivePath, mountPoint ?? "(auto)");
+
         if (mountPoint == null)
         {
             mountPoint = FindFreeDriveLetter();
@@ -516,11 +524,13 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             AddDiskSorted(new(disk));
             SaveSettings();
             StatusText = Loc.Format("Status.MountedWithCapacity", disk.MountPoint, options.VolumeLabel, options.CapacityBytes / (1024 * 1024));
+            _logger.LogInformation("CLI mount-archive succeeded: {ArchivePath} -> {MountPoint}.", archivePath, disk.MountPoint);
             Process.Start("explorer.exe", disk.MountPoint);
             return (true, StatusText);
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "CLI mount-archive failed for {ArchivePath}.", archivePath);
             return (false, Loc.Format("Msg.MountFailed", ex.Message));
         }
     }
@@ -536,6 +546,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     /// </returns>
     public async Task<bool> MountFromProfileAsync(DiskProfile profile)
     {
+        _logger.LogInformation("Auto-mounting saved profile {MountPoint}.", profile.MountPoint);
         var options = ProfileToOptions(profile);
 
         try
@@ -543,6 +554,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             var disk = await MountWithPasswordRetryAsync(options);
             if (disk is null)
             {
+                _logger.LogWarning("Auto-mount failed for {MountPoint}.", profile.MountPoint);
                 StatusText = Loc.Format("Status.AutoMountFailed", profile.MountPoint, Loc.Get("Status.MountFailed"));
                 ResetTempIfPointingAt(profile.MountPoint);
                 return false;
@@ -554,6 +566,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "Auto-mount failed for {MountPoint}.", profile.MountPoint);
             StatusText = Loc.Format("Status.AutoMountFailed", profile.MountPoint, ex.Message);
             ResetTempIfPointingAt(profile.MountPoint);
             return false;
@@ -585,6 +598,8 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     /// </returns>
     public async Task<(bool Success, string Message)> MountImageAsync(string imagePath, string mountPoint, CliMountOverrides overrides)
     {
+        _logger.LogInformation("CLI mount requested: {ImagePath} -> {MountPoint}.", imagePath, mountPoint);
+
         if (Disks.Any(d => string.Equals(d.MountPoint, mountPoint, StringComparison.OrdinalIgnoreCase)))
         {
             return (false, Loc.Format("Val.MountPointAlreadyMounted", mountPoint));
@@ -640,18 +655,22 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             AddDiskSorted(new(disk));
             SaveSettings();
             StatusText = Loc.Format("Status.MountedWithCapacity", disk.MountPoint, options.VolumeLabel, options.CapacityBytes / (1024 * 1024));
+            _logger.LogInformation("CLI mount succeeded: {ImagePath} -> {MountPoint}.", imagePath, disk.MountPoint);
             return (true, StatusText);
         }
         catch (ImagePasswordRequiredException)
         {
+            _logger.LogWarning("CLI mount failed for {ImagePath}: password required.", imagePath);
             return (false, Loc.Get("Val.CliPasswordRequired"));
         }
         catch (ImagePasswordIncorrectException)
         {
+            _logger.LogWarning("CLI mount failed for {ImagePath}: incorrect password.", imagePath);
             return (false, Loc.Get("Val.CliPasswordIncorrect"));
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "CLI mount failed for {ImagePath}.", imagePath);
             return (false, Loc.Format("Msg.MountFailed", ex.Message));
         }
     }
@@ -668,6 +687,8 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     /// </returns>
     public async Task<(bool Success, string Message)> SaveByMountPointAsync(string mountPoint)
     {
+        _logger.LogInformation("CLI save requested for {MountPoint}.", mountPoint);
+
         var vm = Disks.FirstOrDefault(d => string.Equals(d.MountPoint, mountPoint, StringComparison.OrdinalIgnoreCase));
         if (vm == null)
         {
@@ -685,10 +706,12 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "CLI save failed for {MountPoint}.", mountPoint);
             return (false, Loc.Format("Msg.SaveImageFailed", ex.Message));
         }
 
         StatusText = Loc.Format("Status.ImageSaved", mountPoint);
+        _logger.LogInformation("CLI save completed for {MountPoint}.", mountPoint);
         return (true, StatusText);
     }
 
@@ -708,6 +731,8 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     /// </returns>
     public async Task<bool> UnmountByMountPointAsync(string mountPoint, bool deleteImage = false)
     {
+        _logger.LogInformation("CLI unmount requested for {MountPoint} (deleteImage: {DeleteImage}).", mountPoint, deleteImage);
+
         var vm = Disks.FirstOrDefault(d => string.Equals(d.MountPoint, mountPoint, StringComparison.OrdinalIgnoreCase));
         if (vm == null)
         {
@@ -891,6 +916,8 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 
     private void ExecuteAbout()
     {
+        _logger.LogInformation("About dialog opened.");
+
         var dialog = new AboutDialog(UpdateCheckService);
         if (Application.Current.MainWindow is { IsLoaded: true } mainWindow)
         {
@@ -938,6 +965,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 
             if (!target.Disk.TryCloneFrom(vm.Disk, out var error))
             {
+                _logger.LogWarning("Clone disk failed: {Source} -> {Target}: {Error}", vm.MountPoint, target.MountPoint, error);
                 MessageBox.Show(
                     error,
                     "ManagedDrive",
@@ -948,9 +976,11 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 
             target.Refresh();
             StatusText = Loc.Format("Status.DiskCloned", vm.MountPoint, target.MountPoint);
+            _logger.LogInformation("Disk cloned: {Source} -> {Target}.", vm.MountPoint, target.MountPoint);
         }
         else if (dialog.ExportPath is { } exportPath)
         {
+            _logger.LogInformation("Disk export requested: {Source} -> {ExportPath}.", vm.MountPoint, exportPath);
             BusyOverlay.Start(Loc.Get("Busy.ExportingImage"));
             try
             {
@@ -964,9 +994,11 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
                     await Task.Run(() => vm.Disk.ExportToImage(exportPath, dialog.ExportCompressionLevel, progress: progress));
                 }
                 StatusText = Loc.Format("Status.DiskExported", vm.MountPoint, exportPath);
+                _logger.LogInformation("Disk export completed: {Source} -> {ExportPath}.", vm.MountPoint, exportPath);
             }
             catch (Exception ex)
             {
+                _logger.LogError(ex, "Disk export failed: {Source} -> {ExportPath}.", vm.MountPoint, exportPath);
                 MessageBox.Show(
                     Loc.Format("Msg.SaveImageFailed", ex.Message),
                     "ManagedDrive",
@@ -992,6 +1024,8 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             return;
         }
 
+        _logger.LogInformation("Create disk requested: {MountPoint}, capacity {CapacityBytes} bytes.",
+            dialog.Result!.MountPoint, dialog.Result!.CapacityBytes);
         await MountAndAddAsync(dialog.Result!, dialog.PasswordChanged ? dialog.Password : null);
     }
 
@@ -1016,6 +1050,8 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         var old = vm.Disk.Options;
         var needsRemount = newOptions.MountPoint != old.MountPoint || newOptions.ReadOnly != old.ReadOnly;
 
+        _logger.LogInformation("Edit disk requested: {MountPoint} (remount: {NeedsRemount}).", vm.MountPoint, needsRemount);
+
         if (dialog.PasswordChanged && dialog.Password is null && vm.Disk.IsPasswordProtected)
         {
             var confirmRemove = new ConfirmDialog(
@@ -1029,6 +1065,12 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             {
                 return;
             }
+
+            _logger.LogInformation("Password removal confirmed for disk {MountPoint}.", vm.MountPoint);
+        }
+        else if (dialog.PasswordChanged)
+        {
+            _logger.LogInformation("Password changed for disk {MountPoint}.", vm.MountPoint);
         }
 
         if (needsRemount)
@@ -1073,9 +1115,11 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
                 AddDiskSorted(new(disk));
                 SaveSettings();
                 StatusText = Loc.Format("Status.MountedWithCapacity", disk.MountPoint, newOptions.VolumeLabel, newOptions.CapacityBytes / (1024 * 1024));
+                _logger.LogInformation("Edit disk remount succeeded: {OldMountPoint} -> {NewMountPoint}.", oldMountPoint, disk.MountPoint);
             }
             catch (Exception ex)
             {
+                _logger.LogError(ex, "Edit disk remount failed: {OldMountPoint} -> {NewMountPoint}.", oldMountPoint, newOptions.MountPoint);
                 vm.Dispose();
                 Disks.Remove(vm);
                 MessageBox.Show(
@@ -1105,6 +1149,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 
             if (error != null)
             {
+                _logger.LogWarning("Edit disk failed for {MountPoint}: {Error}", vm.MountPoint, error);
                 MessageBox.Show(
                     error,
                     Loc.Get("Msg.EditDiskConfirmTitle"),
@@ -1116,11 +1161,14 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             vm.Refresh();
             SaveSettings();
             StatusText = Loc.Format("Status.MountedWithCapacity", vm.MountPoint, newOptions.VolumeLabel, newOptions.CapacityBytes / (1024 * 1024));
+            _logger.LogInformation("Edit disk applied live for {MountPoint}.", vm.MountPoint);
         }
     }
 
     private void ExecuteExit()
     {
+        _logger.LogInformation("Exit requested from UI.");
+
         if (Disks.Count == 0)
         {
             ExitRequested?.Invoke(this, EventArgs.Empty);
@@ -1171,8 +1219,11 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             return;
         }
 
+        _logger.LogInformation("Format disk confirmed for {MountPoint}.", vm.MountPoint);
+
         if (!vm.Disk.Format())
         {
+            _logger.LogWarning("Format disk failed for {MountPoint}: disk is read-only.", vm.MountPoint);
             MessageBox.Show(
                 Loc.Get("Msg.FormatDiskReadOnly"),
                 "ManagedDrive",
@@ -1183,6 +1234,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 
         vm.Refresh();
         StatusText = Loc.Format("Status.FormatDisk", vm.MountPoint);
+        _logger.LogInformation("Format disk completed for {MountPoint}.", vm.MountPoint);
         MessageBox.Show(
             Loc.Format("Msg.FormatDiskSuccess", vm.MountPoint),
             "ManagedDrive",
@@ -1242,6 +1294,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             return;
         }
 
+        _logger.LogInformation("Import archive requested: {ArchivePath} -> {MountPoint}.", openDialog.FileName, dialog.Result!.MountPoint);
         BusyOverlay.Start(Loc.Get("Busy.ImportingArchive"), indeterminate: totalBytes == 0);
         try
         {
@@ -1306,6 +1359,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             return;
         }
 
+        _logger.LogInformation("Import disk image requested: {ImagePath} -> {MountPoint}.", openDialog.FileName, dialog.Result!.MountPoint);
         await MountAndAddAsync(dialog.Result!);
     }
 
@@ -1323,10 +1377,12 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             return;
         }
 
+        _logger.LogInformation("Reset TEMP dirs confirmed.");
         var success = await Task.Run(TempDirResetService.Reset);
 
         if (success)
         {
+            _logger.LogInformation("Reset TEMP dirs succeeded.");
             MessageBox.Show(
                 Loc.Get("Msg.ResetTempSuccess"),
                 "ManagedDrive",
@@ -1335,6 +1391,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         }
         else
         {
+            _logger.LogWarning("Reset TEMP dirs failed.");
             MessageBox.Show(
                 Loc.Get("Msg.ResetTempFailed"),
                 "ManagedDrive",
@@ -1383,11 +1440,13 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             return;
         }
 
+        _logger.LogInformation("Restore snapshot confirmed for {MountPoint}: {SnapshotPath}.", vm.MountPoint, selectedPath);
         string? error = null;
         var success = await Task.Run(() => vm.Disk.TryRestoreFromSnapshot(selectedPath, out error));
 
         if (!success)
         {
+            _logger.LogWarning("Restore snapshot failed for {MountPoint}: {Error}", vm.MountPoint, error);
             MessageBox.Show(
                 error,
                 "ManagedDrive",
@@ -1398,6 +1457,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 
         vm.Refresh();
         StatusText = Loc.Format("Status.SnapshotRestored", vm.MountPoint);
+        _logger.LogInformation("Restore snapshot completed for {MountPoint}.", vm.MountPoint);
     }
 
     private async void ExecuteSaveImage(DiskViewModel? vm)
@@ -1429,6 +1489,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             SaveSettings();
         }
 
+        _logger.LogInformation("Save image requested for {MountPoint}.", vm.MountPoint);
         vm.IsSaving = true;
         BusyOverlay.Start(Loc.Get("Busy.SavingImage"));
         try
@@ -1436,9 +1497,11 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             var progress = new Progress<double>(BusyOverlay.Report);
             await Task.Run(() => vm.Disk.SaveToImageWithSnapshot(progress));
             StatusText = Loc.Format("Status.ImageSaved", vm.MountPoint);
+            _logger.LogInformation("Save image completed for {MountPoint}.", vm.MountPoint);
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "Save image failed for {MountPoint}.", vm.MountPoint);
             MessageBox.Show(
                 Loc.Format("Msg.SaveImageFailed", ex.Message),
                 "ManagedDrive",
@@ -1462,6 +1525,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             var updated = dialog.Result!;
             updated.Disks = config.Disks;
             _settingsStore.Save(updated);
+            _logger.LogInformation("Settings saved.");
         }
     }
 
@@ -1474,6 +1538,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 
         if (vm.IsCurrentTempDir)
         {
+            _logger.LogInformation("TEMP dir reset requested (was pointing at {MountPoint}).", vm.MountPoint);
             var success = await Task.Run(TempDirResetService.Reset);
 
             if (success)
@@ -1487,6 +1552,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             }
             else
             {
+                _logger.LogWarning("TEMP dir reset failed.");
                 MessageBox.Show(
                     Loc.Get("Msg.ResetTempFailed"),
                     "ManagedDrive",
@@ -1514,6 +1580,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             }
 
             var tempPath = Path.Combine(vm.MountPoint, "Temp");
+            _logger.LogInformation("Set TEMP dir requested: {TempPath}.", tempPath);
             var success = await Task.Run(() => TempDirResetService.Set(tempPath));
 
             if (success)
@@ -1528,6 +1595,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             }
             else
             {
+                _logger.LogWarning("Set TEMP dir failed: {TempPath}.", tempPath);
                 MessageBox.Show(
                     Loc.Get("Msg.SetTempDirFailed"),
                     "ManagedDrive",
@@ -1569,6 +1637,8 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         var persistImagePath = vm.PersistImagePath;
         var sourceArchivePath = vm.Disk.Options.SourceArchivePath;
 
+        _logger.LogInformation("Unmount confirmed for {MountPoint} (deleteImage: {DeleteImage}).", vm.MountPoint, deleteImage);
+
         if (vm.IsCurrentTempDir)
         {
             await Task.Run(TempDirResetService.Reset);
@@ -1583,6 +1653,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 
         SaveSettings();
         StatusText = Loc.Format("Status.Unmounted", mountPoint);
+        _logger.LogInformation("Unmount completed for {MountPoint}.", mountPoint);
     }
 
     private void ExecuteViewDiskContents(DiskViewModel? vm)
@@ -1629,9 +1700,11 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             AddDiskSorted(new(disk));
             SaveSettings();
             StatusText = Loc.Format("Status.MountedWithCapacity", disk.MountPoint, options.VolumeLabel, options.CapacityBytes / (1024 * 1024));
+            _logger.LogInformation("Disk mounted: {MountPoint}, label {VolumeLabel}.", disk.MountPoint, options.VolumeLabel);
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "Mount failed for {MountPoint}.", options.MountPoint);
             MessageBox.Show(
                 Loc.Format("Msg.MountFailed", ex.Message),
                 "ManagedDrive",
