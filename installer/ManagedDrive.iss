@@ -13,6 +13,9 @@
 #define WinFspMsiName "winfsp-2.2.26194.msi"
 #define HelperServiceName "ManagedDriveHelper"
 #define HelperServiceExeName "ManagedDriveHelper.exe"
+; Must match App.xaml.cs::SingleInstanceMutexName exactly - this is how Setup detects a running
+; instance without shelling out to tasklist/wmic.
+#define AppMutexName "Global\ManagedDrive-4A7C2E1B-9F3D-4B8A-A1C5-3E6D2F0B8C9A"
 
 [Setup]
 AppId={{9B6F0F1A-6E0D-4A6B-8C7E-6C6D9B0E5A11}
@@ -33,6 +36,14 @@ PrivilegesRequired=admin
 UninstallDisplayIcon={app}\ManagedDrive.exe
 SetupIconFile=..\src\ManagedDrive.App\ManagedDrive.ico
 WizardStyle=modern
+; Restrict Restart Manager's file-in-use detection to our own exe rather than every *.exe/*.dll
+; under {app} (the default filter). This is a fallback path only - InitializeSetup() below already
+; asks the running app to close itself gracefully (via "mdrive.exe exit", which saves every mounted
+; disk's image) before this page is ever evaluated, so in the common case there is nothing left for
+; Restart Manager to find here.
+CloseApplicationsFilter: {app}\ManagedDrive.exe
+CloseApplications=yes
+RestartApplications=yes
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
@@ -314,12 +325,69 @@ end;
 // MsgBox when a user is present to read it, or a Log(...) entry when running silently (e.g.
 // winget install --silent, /VERYSILENT), where a blocking MsgBox would never be seen/dismissed
 // but the reason should still be diagnosable via Setup's /LOG= output.
-procedure ReportTempOnRamDiskWarning(const EnMessage, ZhMessage: string);
+procedure ReportAbortReason(const EnMessage, ZhMessage: string);
 begin
   if WizardSilent() then
     Log('Aborting: ' + EnMessage)
   else
     MsgBox(EnMessage + #13#10#13#10 + ZhMessage, mbError, MB_OK);
+end;
+
+function IsManagedDriveRunning(): Boolean;
+begin
+  Result := CheckForMutexes('{#AppMutexName}');
+end;
+
+// Asks an already-running ManagedDrive instance to exit via "mdrive.exe exit" - the same CLI
+// command the tray icon's own Exit menu item ultimately triggers (MainViewModel.ExitRequested ->
+// App.ShutdownAsync), which saves every mounted disk's image before the process terminates. This
+// is deliberately run up front (from InitializeSetup, before the wizard shows any page) rather
+// than left to Restart Manager on the "Preparing to Install" page: RmShutdown's graceful mode has
+// its own timeout unrelated to how long saving a large/compressed/encrypted disk can take, and its
+// forced mode (TerminateProcess) skips saving entirely. Returns True once the app has exited (or
+// was never running); False if it is still running after the timeout below, so the caller can
+// decide whether to continue (falling back to Restart Manager later in the wizard) or abort.
+function CloseManagedDriveGracefully(): Boolean;
+const
+  TimeoutMs = 30000;
+  PollIntervalMs = 500;
+var
+  MdrivePath: string;
+  ResultCode, Elapsed: Integer;
+begin
+  Result := True;
+
+  if not IsManagedDriveRunning() then
+    exit;
+
+  MdrivePath := ExpandConstant('{app}') + '\mdrive.exe';
+  if not FileExists(MdrivePath) then
+  begin
+    Log('ManagedDrive appears to be running but mdrive.exe was not found at "' + MdrivePath +
+      '"; cannot request a graceful exit.');
+    Result := False;
+    exit;
+  end;
+
+  Log('ManagedDrive is running; requesting a graceful exit via "mdrive.exe exit" so it can save ' +
+    'mounted disks before Setup replaces its files.');
+
+  if not Exec(MdrivePath, 'exit', '', SW_HIDE, ewNoWait, ResultCode) then
+    Log('Failed to launch "mdrive.exe exit": ' + SysErrorMessage(ResultCode));
+
+  Elapsed := 0;
+  while IsManagedDriveRunning() and (Elapsed < TimeoutMs) do
+  begin
+    Sleep(PollIntervalMs);
+    Elapsed := Elapsed + PollIntervalMs;
+  end;
+
+  Result := not IsManagedDriveRunning();
+
+  if Result then
+    Log('ManagedDrive exited gracefully.')
+  else
+    Log(Format('ManagedDrive is still running after waiting %d ms for a graceful exit.', [TimeoutMs]));
 end;
 
 function InitializeSetup(): Boolean;
@@ -328,7 +396,7 @@ begin
 
   if IsTempOnManagedDriveMountPoint() then
   begin
-    ReportTempOnRamDiskWarning(
+    ReportAbortReason(
       'TEMP is currently set to a ManagedDrive RAM disk. Installing or upgrading now may close ' +
       'ManagedDrive and unmount that disk while Setup still needs a working TEMP directory for ' +
       'its own files, which can make Setup fail partway through.'#13#10#13#10 +
@@ -339,6 +407,69 @@ begin
       '请先打开 ManagedDrive，将 TEMP 还原为系统默认设置（托盘菜单 > 重置 TEMP 目录，或取消该磁盘' +
       '的 TEMP 设置），然后再次运行本安装程序。');
     Result := False;
+    exit;
+  end;
+
+  if not IsManagedDriveRunning() then
+    exit;
+
+  // Running silently (e.g. winget/CI), there is no one to ask - just close it ourselves via
+  // mdrive.exe and abort if that doesn't work out, same as the interactive Yes path below.
+  if WizardSilent() then
+  begin
+    if not CloseManagedDriveGracefully() then
+    begin
+      ReportAbortReason(
+        'ManagedDrive is still running and could not be closed automatically in time to save its ' +
+        'RAM disk contents. Please close it manually (tray icon menu > Exit) and run Setup again.',
+        'ManagedDrive 仍在运行，未能在超时时间内自动关闭以保存内存盘内容。请通过托盘图标菜单手动退出' +
+        '后再重新运行安装程序。');
+      Result := False;
+    end;
+    exit;
+  end;
+
+  // Interactive: let the user choose, rather than closing the app out from under them
+  // unannounced. Yes = Setup closes it via "mdrive.exe exit" (saves every mounted disk first);
+  // No = abort Setup so the user can close it manually (tray icon menu > Exit) and re-run.
+  if MsgBox(
+    'ManagedDrive is currently running. It needs to be closed before Setup can continue.'#13#10#13#10 +
+    'Click Yes to let Setup close it automatically (it will save all mounted RAM disks first). ' +
+    'Click No to exit Setup so you can close it yourself.'#13#10#13#10 +
+    'ManagedDrive 当前正在运行，需要先关闭才能继续安装。'#13#10#13#10 +
+    '点击"是"让安装程序自动关闭它（会先保存所有已挂载的内存盘）。点击"否"退出安装程序，自行手动关闭' +
+    'ManagedDrive 后再重新运行安装程序。',
+    mbConfirmation, MB_YESNO) = IDNO then
+  begin
+    Result := False;
+    exit;
+  end;
+
+  if not CloseManagedDriveGracefully() then
+  begin
+    ReportAbortReason(
+      'ManagedDrive is still running and could not be closed automatically in time to save its ' +
+      'RAM disk contents. Please close it manually (tray icon menu > Exit) and run Setup again.',
+      'ManagedDrive 仍在运行，未能在超时时间内自动关闭以保存内存盘内容。请通过托盘图标菜单手动退出' +
+      '后再重新运行安装程序。');
+    Result := False;
+  end;
+end;
+
+// Appends an explanation to Setup's built-in "Preparing to Install" page whenever it lists
+// ManagedDrive as needing to be closed. This should be rare in practice - InitializeSetup already
+// closes ManagedDrive gracefully before this page is ever reached - but it covers the edge case of
+// the app being relaunched between that check and this page (e.g. its own [Run]-less auto-restart
+// logic, or the user starting it again by hand), where Restart Manager's own closing offer would
+// otherwise appear with no context.
+procedure CurPageChanged(CurPageID: Integer);
+begin
+  if (CurPageID = wpPreparing) and IsManagedDriveRunning() then
+  begin
+    WizardForm.PreparingLabel.Caption := WizardForm.PreparingLabel.Caption + #13#10#13#10 +
+      'ManagedDrive will be closed automatically; it saves the contents of every mounted RAM ' +
+      'disk to its image file before exiting, so no data will be lost.'#13#10 +
+      'ManagedDrive 将会被自动关闭；关闭前会先将所有已挂载内存盘的内容保存到镜像文件，不会丢失数据。';
   end;
 end;
 
@@ -348,7 +479,7 @@ begin
 
   if IsTempOnManagedDriveMountPoint() then
   begin
-    ReportTempOnRamDiskWarning(
+    ReportAbortReason(
       'TEMP is currently set to a ManagedDrive RAM disk. Uninstalling now will leave TEMP ' +
       'pointing at a drive that no longer exists.'#13#10#13#10 +
       'Please open ManagedDrive and reset TEMP to its default location (Tray menu > Reset TEMP ' +
