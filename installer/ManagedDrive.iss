@@ -352,6 +352,20 @@ begin
   Result := CheckForMutexes('{#AppMutexName}');
 end;
 
+// Resolves the directory a previous install (if any) landed in, by reading the uninstall entry
+// Inno Setup itself writes on every install. Needed because InitializeSetup() runs before {app}
+// is resolved at all - ExpandConstant('{app}') throws "constant expanded before initialized" if
+// called this early. Uses HKLM64 explicitly since ArchitecturesInstallIn64BitMode=x64compatible
+// writes the uninstall key to the 64-bit registry view. Returns '' on a fresh install, where
+// there is no previous instance to be running in the first place.
+function GetInstalledAppDir(): string;
+begin
+  if not RegQueryStringValue(HKLM64,
+    'SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\{9B6F0F1A-6E0D-4A6B-8C7E-6C6D9B0E5A11}_is1',
+    'Inno Setup: App Path', Result) then
+    Result := '';
+end;
+
 // Asks an already-running ManagedDrive instance to exit via "mdrive.exe exit" - the same CLI
 // command the tray icon's own Exit menu item ultimately triggers (MainViewModel.ExitRequested ->
 // App.ShutdownAsync), which saves every mounted disk's image before the process terminates. This
@@ -363,7 +377,7 @@ end;
 // decide whether to continue (falling back to Restart Manager later in the wizard) or abort.
 function CloseManagedDriveGracefully(): Boolean;
 var
-  MdrivePath: string;
+  AppDir, MdrivePath: string;
   ResultCode, Elapsed: Integer;
 begin
   Result := True;
@@ -371,7 +385,16 @@ begin
   if not IsManagedDriveRunning() then
     exit;
 
-  MdrivePath := ExpandConstant('{app}') + '\mdrive.exe';
+  AppDir := GetInstalledAppDir();
+  if AppDir = '' then
+  begin
+    Log('ManagedDrive appears to be running but its installed directory could not be resolved ' +
+      'from the registry; cannot request a graceful exit.');
+    Result := False;
+    exit;
+  end;
+
+  MdrivePath := AddBackslash(AppDir) + 'mdrive.exe';
   if not FileExists(MdrivePath) then
   begin
     Log('ManagedDrive appears to be running but mdrive.exe was not found at "' + MdrivePath +
