@@ -34,6 +34,7 @@ public partial class App
     /// </summary>
     private IntPtr _mainWindowHandle;
 
+    private bool _minimizedToTrayBalloonShown;
     private MountManager? _mountManager;
 
     /// <summary>
@@ -320,7 +321,12 @@ public partial class App
         e.Cancel = true;
         _mainWindow!.Hide();
         _trayIconController!.Visible = true;
-        _trayIconController.ShowBalloonTip("ManagedDrive", Loc.Get("Msg.StartedMinimized"), System.Windows.Forms.ToolTipIcon.Info);
+
+        if (!_minimizedToTrayBalloonShown)
+        {
+            _minimizedToTrayBalloonShown = true;
+            _trayIconController.ShowBalloonTip("ManagedDrive", Loc.Get("Msg.StartedMinimized"), System.Windows.Forms.ToolTipIcon.Info);
+        }
     }
 
     private void OnAppDomainUnhandledException(object sender, UnhandledExceptionEventArgs e)
