@@ -34,6 +34,7 @@
     <sys:String x:Key="Tip.MaximizeRestore">Maximize/Restore</sys:String>
     <sys:String x:Key="Tip.HideToTray">Hide to tray</sys:String>
     <sys:String x:Key="Tip.CloseDialog">Close</sys:String>
+    <sys:String x:Key="Tip.Import">Import a disk image or archive</sys:String>
     <sys:String x:Key="Col.MountPoint">Mount Point</sys:String>
     <sys:String x:Key="Col.Label">Label</sys:String>
     <sys:String x:Key="Col.Capacity">Capacity</sys:String>

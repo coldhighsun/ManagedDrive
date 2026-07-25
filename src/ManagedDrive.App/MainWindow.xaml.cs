@@ -20,7 +20,11 @@ public partial class MainWindow
 
     private void MinimizeButton_Click(object sender, RoutedEventArgs e) => WindowState = WindowState.Minimized;
 
-    private void OverflowBtn_Click(object sender, RoutedEventArgs e)
+    private void ImportBtn_Click(object sender, RoutedEventArgs e) => OpenAttachedContextMenu(sender);
+
+    private void OverflowBtn_Click(object sender, RoutedEventArgs e) => OpenAttachedContextMenu(sender);
+
+    private void OpenAttachedContextMenu(object sender)
     {
         if (sender is FrameworkElement { ContextMenu: not null } btn)
         {
