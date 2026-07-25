@@ -13,22 +13,10 @@ public partial class MainWindow
     {
         InitializeComponent();
         DataContext = viewModel;
-        StateChanged += MainWindow_StateChanged;
+        WindowMaximizeHelper.HookMaximizeBehavior(this);
     }
 
     private void CloseButton_Click(object sender, RoutedEventArgs e) => Close();
-
-    /// <summary>
-    /// The window supports resizing but not fullscreen; this reverts any attempt to
-    /// maximize (Win+Up, edge-drag snap, double-click on the caption area) back to normal.
-    /// </summary>
-    private void MainWindow_StateChanged(object? sender, EventArgs e)
-    {
-        if (WindowState == WindowState.Maximized)
-        {
-            WindowState = WindowState.Normal;
-        }
-    }
 
     private void MinimizeButton_Click(object sender, RoutedEventArgs e) => WindowState = WindowState.Minimized;
 
