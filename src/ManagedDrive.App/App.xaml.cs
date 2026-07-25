@@ -173,6 +173,7 @@ public partial class App
         }
 
         await AutoMountDisksAsync();
+        _tempDirCompatChecker.CheckAfterAutoMount(config, _mainViewModel.Disks);
 
         _cliPipeServer = new(_mainViewModel);
         _cliPipeServer.Start();

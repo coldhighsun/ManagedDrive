@@ -98,6 +98,52 @@ public sealed class TempDirCompatChecker
     }
 
     /// <summary>
+    /// Runs a post-auto-mount safety check: if TEMP still points at a drive letter matching a
+    /// saved disk profile, but no <em>currently live</em> disk actually occupies that mount point,
+    /// TEMP is dangling — the disk it targeted failed to auto-mount (or an earlier crash skipped
+    /// the reset that would normally happen on unmount/edit) and TEMP would otherwise be silently
+    /// pointing at an inaccessible directory for the rest of the session. Resets TEMP and warns.
+    /// </summary>
+    /// <remarks>
+    /// This is a safety net layered on top of <see cref="CheckOnStartup"/> and
+    /// <c>MainViewModel.ResetTempIfPointingAt</c> (which already handles the common in-session
+    /// auto-mount-failure case) — it catches whatever those miss, e.g. a profile that was removed
+    /// or renamed while TEMP still referenced its old mount point. Must run <em>after</em>
+    /// auto-mounting has finished, since it distinguishes "will mount shortly" from "failed to
+    /// mount" by checking the live <paramref name="disks"/> collection.
+    /// </remarks>
+    public void CheckAfterAutoMount(AppConfiguration config, IEnumerable<DiskViewModel> disks)
+    {
+        var userTemp = Environment.GetEnvironmentVariable("TEMP", EnvironmentVariableTarget.User);
+        if (string.IsNullOrEmpty(userTemp))
+        {
+            return;
+        }
+
+        var expanded = Environment.ExpandEnvironmentVariables(userTemp);
+        if (expanded.Length < 2 || !char.IsLetter(expanded[0]) || expanded[1] != ':')
+        {
+            return;
+        }
+
+        var mountPoint = char.ToUpperInvariant(expanded[0]) + ":";
+        var isKnownProfile = config.Disks.Any(d =>
+            string.Equals(d.MountPoint, mountPoint, StringComparison.OrdinalIgnoreCase));
+        if (!isKnownProfile || IsTempOnAnyDisk(disks))
+        {
+            return;
+        }
+
+        TempDirResetService.Reset();
+
+        MessageBox.Show(
+            Loc.Format("Msg.StartupTempResetDangling", expanded),
+            "ManagedDrive",
+            MessageBoxButton.OK,
+            MessageBoxImage.Warning);
+    }
+
+    /// <summary>
     /// Runs the tray "Reset TEMP Dirs" action: confirms with the user, resets TEMP/TMP to Windows
     /// defaults, and reports the outcome via a balloon tip.
     /// </summary>
