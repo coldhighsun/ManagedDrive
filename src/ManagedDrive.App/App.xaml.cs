@@ -197,11 +197,28 @@ public partial class App
             return;
         }
 
+        var profiles = _settings.Load().Disks.Where(p => p.AutoMount).ToList();
+        if (profiles.Count == 0)
+        {
+            return;
+        }
+
         // Mounted one at a time (not Task.WhenAll) so that password prompts for encrypted disks
         // appear sequentially rather than all at once.
-        foreach (var profile in _settings.Load().Disks.Where(p => p.AutoMount))
+        try
         {
-            await _mainViewModel.MountFromProfileAsync(profile);
+            for (var i = 0; i < profiles.Count; i++)
+            {
+                // StatusText's setter is private, so re-call Start() each iteration to update the
+                // text; that also resets Progress to 0, so re-report it right after.
+                _mainViewModel.BusyOverlay.Start(Loc.Format("Busy.LoadingDisks", i + 1, profiles.Count));
+                _mainViewModel.BusyOverlay.Report((double)i / profiles.Count);
+                await _mainViewModel.MountFromProfileAsync(profiles[i]);
+            }
+        }
+        finally
+        {
+            _mainViewModel.BusyOverlay.Stop();
         }
     }
 
