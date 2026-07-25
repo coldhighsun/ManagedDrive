@@ -252,6 +252,8 @@
 
     <!-- MessageBox bodies -->
     <sys:String x:Key="Msg.AlreadyRunning">ManagedDrive 已在运行。</sys:String>
+    <sys:String x:Key="Msg.UnexpectedErrorTitle">ManagedDrive – 发生意外错误</sys:String>
+    <sys:String x:Key="Msg.UnexpectedErrorBody">发生了一个意外错误，已记录到日志：&#x0a;&#x0a;{0}&#x0a;&#x0a;ManagedDrive 将尝试继续运行。</sys:String>
     <sys:String x:Key="Msg.StartupTempReset">您的 Windows 临时目录指向了：&#x0a;&#x0a;  {0}&#x0a;&#x0a;该内存盘未配置自动挂载，临时目录将无法访问，已自动重置为系统默认临时目录。</sys:String>
     <sys:String x:Key="Msg.WinFspMissingTitle">ManagedDrive – 缺少必要组件</sys:String>
     <sys:String x:Key="Msg.WinFspMissingBody">此程序需要 WinFsp 2.2.x，但未在系统中检测到。&#x0a;&#x0a;点击「是」跳转下载页面，点击「否」退出。</sys:String>

@@ -3,6 +3,7 @@
   <ItemGroup>
     <PackageReference Include="winfsp.net" />
     <PackageReference Include="SharpCompress" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
   </ItemGroup>
 
   <ItemGroup>

@@ -10,6 +10,7 @@ namespace ManagedDrive.Core.Snapshots;
 public static partial class SnapshotManager
 {
     private const string TimestampFormat = "yyyyMMdd-HHmmss";
+    private static readonly ILogger Logger = AppLog.CreateLogger(typeof(SnapshotManager));
 
     /// <summary>
     /// Builds a unique snapshot file path in the same directory as <paramref name="mainImagePath"/>,
@@ -46,11 +47,13 @@ public static partial class SnapshotManager
             {
                 File.Delete(snapshot.Path);
             }
-            catch (IOException)
+            catch (IOException ex)
             {
+                Logger.LogWarning(ex, "Failed to delete snapshot '{Path}'", snapshot.Path);
             }
-            catch (UnauthorizedAccessException)
+            catch (UnauthorizedAccessException ex)
             {
+                Logger.LogWarning(ex, "Failed to delete snapshot '{Path}'", snapshot.Path);
             }
         }
 
@@ -62,11 +65,13 @@ public static partial class SnapshotManager
                 Directory.Delete(blobDirectory, recursive: true);
             }
         }
-        catch (IOException)
+        catch (IOException ex)
         {
+            Logger.LogWarning(ex, "Failed to delete blob directory '{Path}'", blobDirectory);
         }
-        catch (UnauthorizedAccessException)
+        catch (UnauthorizedAccessException ex)
         {
+            Logger.LogWarning(ex, "Failed to delete blob directory '{Path}'", blobDirectory);
         }
     }
 
@@ -88,11 +93,13 @@ public static partial class SnapshotManager
         {
             File.Delete(snapshotPath);
         }
-        catch (IOException)
+        catch (IOException ex)
         {
+            Logger.LogWarning(ex, "Failed to delete snapshot '{Path}'", snapshotPath);
         }
-        catch (UnauthorizedAccessException)
+        catch (UnauthorizedAccessException ex)
         {
+            Logger.LogWarning(ex, "Failed to delete snapshot '{Path}'", snapshotPath);
         }
 
         GarbageCollectBlobs(mainImagePath);
@@ -295,12 +302,14 @@ public static partial class SnapshotManager
                 totalBytes -= (ulong)snapshot.SizeBytes;
                 remainingCount--;
             }
-            catch (IOException)
+            catch (IOException ex)
             {
                 // Best-effort pruning; leave this file for the next attempt.
+                Logger.LogWarning(ex, "Failed to prune snapshot '{Path}'", snapshot.Path);
             }
-            catch (UnauthorizedAccessException)
+            catch (UnauthorizedAccessException ex)
             {
+                Logger.LogWarning(ex, "Failed to prune snapshot '{Path}'", snapshot.Path);
             }
 
             index++;
@@ -382,11 +391,13 @@ public static partial class SnapshotManager
             {
                 File.Delete(blobPath);
             }
-            catch (IOException)
+            catch (IOException ex)
             {
+                Logger.LogWarning(ex, "Failed to delete unreferenced blob '{Path}'", blobPath);
             }
-            catch (UnauthorizedAccessException)
+            catch (UnauthorizedAccessException ex)
             {
+                Logger.LogWarning(ex, "Failed to delete unreferenced blob '{Path}'", blobPath);
             }
         }
     }
