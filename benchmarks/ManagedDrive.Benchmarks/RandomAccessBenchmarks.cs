@@ -18,6 +18,7 @@ public class RandomAccessBenchmarks
     private string _ramSourceFile = null!;
     private byte[] _readBuffer = null!;
     private long[] _readOffsets = null!;
+    private long[] _alignedReadOffsets = null!;
     private string _tempDir = null!;
     private string _tempSmallFileDir = null!;
     private string _tempSourceFile = null!;
@@ -47,7 +48,10 @@ public class RandomAccessBenchmarks
         Directory.CreateDirectory(_ramSmallFileDir);
     }
 
-    [Benchmark(Description = "PhysicalDisk RandomRead")]
+    // Reads a 16 MB source file written in Setup(); at this size the whole file typically stays in the
+    // Windows page cache, so this measures OS-cache-hit random reads, not physical SSD seeks. See the
+    // "(uncached)" variant for real medium performance.
+    [Benchmark(Description = "PhysicalDisk RandomRead (OS cache)")]
     public void PhysicalDisk_RandomRead()
     {
         using var fs = new FileStream(_tempSourceFile, FileMode.Open, FileAccess.Read, FileShare.Read);
@@ -57,6 +61,12 @@ public class RandomAccessBenchmarks
             fs.ReadExactly(_readBuffer, 0, _readBuffer.Length);
         }
     }
+
+    // Bypasses the OS page cache so each random block read hits the SSD — the honest comparison against
+    // the RAM disk, whose random reads always pay the WinFsp user-mode round-trip.
+    [Benchmark(Description = "PhysicalDisk RandomRead (uncached)")]
+    public void PhysicalDisk_RandomReadUncached() =>
+        UnbufferedIo.ReadBlocksAt(_tempSourceFile, _alignedReadOffsets, BlockBytes);
 
     [Benchmark(Description = "PhysicalDisk SmallFileHighFrequencyWrite", Baseline = true)]
     public void PhysicalDisk_SmallFileHighFrequencyWrite()
@@ -69,7 +79,7 @@ public class RandomAccessBenchmarks
         }
     }
 
-    [Benchmark(Description = "RamDisk RandomRead")]
+    [Benchmark(Description = "RamDisk RandomRead (OS cache)")]
     public void RamDisk_RandomRead()
     {
         using var fs = new FileStream(_ramSourceFile, FileMode.Open, FileAccess.Read, FileShare.Read);
@@ -79,6 +89,11 @@ public class RandomAccessBenchmarks
             fs.ReadExactly(_readBuffer, 0, _readBuffer.Length);
         }
     }
+
+    // Forces each random block read through WinFsp (no OS cache), matching "PhysicalDisk RandomRead (uncached)".
+    [Benchmark(Description = "RamDisk RandomRead (uncached)")]
+    public void RamDisk_RandomReadUncached() =>
+        UnbufferedIo.ReadBlocksAt(_ramSourceFile, _alignedReadOffsets, BlockBytes);
 
     [Benchmark(Description = "RamDisk SmallFileHighFrequencyWrite")]
     public void RamDisk_SmallFileHighFrequencyWrite()
@@ -115,8 +130,14 @@ public class RandomAccessBenchmarks
 
         var rng = new Random(1234);
         _readOffsets = new long[RandomReadCount];
+        _alignedReadOffsets = new long[RandomReadCount];
         for (var i = 0; i < RandomReadCount; i++)
+        {
             _readOffsets[i] = rng.NextInt64(0, SourceFileBytes - BlockBytes);
+            // NO_BUFFERING requires sector-aligned offsets; round each offset down to a BlockBytes
+            // (4 KB) boundary for the uncached variants.
+            _alignedReadOffsets[i] = _readOffsets[i] & ~((long)BlockBytes - 1);
+        }
 
         _readBuffer = new byte[BlockBytes];
         _writeBuffer = new byte[BlockBytes];

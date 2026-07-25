@@ -4,6 +4,8 @@
     <OutputType>Exe</OutputType>
     <IsPackable>false</IsPackable>
     <MinVerSkip>true</MinVerSkip>
+    <!-- Required for the aligned native buffer used by the unbuffered (NO_BUFFERING) read benchmarks. -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
 
   <ItemGroup>
