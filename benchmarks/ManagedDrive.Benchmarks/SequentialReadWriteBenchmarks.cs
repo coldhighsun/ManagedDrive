@@ -36,13 +36,24 @@ public class SequentialReadWriteBenchmarks
             Directory.Delete(_tempDir, recursive: true);
     }
 
-    [Benchmark(Description = "PhysicalDisk Read")]
+    // NOTE: This reads a file that was just written in Setup(), so the data is still resident in
+    // the Windows unified page cache (kernel-side RAM). It therefore measures an OS-cache hit, not
+    // a real SSD read — no I/O reaches the disk. Kept as a baseline; compare against the "(uncached)"
+    // variant below for actual medium throughput.
+    [Benchmark(Description = "PhysicalDisk Read (OS cache)")]
     public void PhysicalDisk_SequentialRead()
     {
         using var fs = new FileStream(_tempFile, FileMode.Open, FileAccess.Read,
             FileShare.Read, bufferSize: 4096, FileOptions.SequentialScan);
         fs.ReadExactly(_readBuffer, 0, _readBuffer.Length);
     }
+
+    // Bypasses the OS page cache (FILE_FLAG_NO_BUFFERING) so the read hits the physical SSD. This is
+    // the honest comparison point against the RAM disk: the RAM disk goes through user-mode WinFsp on
+    // every read, so it cannot beat an OS-cache hit, but it should beat a genuine uncached SSD read.
+    [Benchmark(Description = "PhysicalDisk Read (uncached)")]
+    public void PhysicalDisk_SequentialReadUncached() =>
+        UnbufferedIo.ReadFull(_tempFile, FileSizeBytes);
 
     [Benchmark(Description = "PhysicalDisk Write", Baseline = true)]
     public void PhysicalDisk_SequentialWrite()
@@ -52,13 +63,19 @@ public class SequentialReadWriteBenchmarks
         fs.Write(_writeBuffer, 0, _writeBuffer.Length);
     }
 
-    [Benchmark(Description = "RamDisk Read")]
+    [Benchmark(Description = "RamDisk Read (OS cache)")]
     public void RamDisk_SequentialRead()
     {
         using var fs = new FileStream(_ramFile, FileMode.Open, FileAccess.Read,
             FileShare.Read, bufferSize: 4096, FileOptions.SequentialScan);
         fs.ReadExactly(_readBuffer, 0, _readBuffer.Length);
     }
+
+    // Forces every read through the WinFsp user-mode round-trip (no OS cache to absorb it), isolating
+    // the RAM disk's raw read path for an apples-to-apples comparison with "PhysicalDisk Read (uncached)".
+    [Benchmark(Description = "RamDisk Read (uncached)")]
+    public void RamDisk_SequentialReadUncached() =>
+        UnbufferedIo.ReadFull(_ramFile, FileSizeBytes);
 
     [Benchmark(Description = "RamDisk Write")]
     public void RamDisk_SequentialWrite()

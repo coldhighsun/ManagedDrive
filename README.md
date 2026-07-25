@@ -219,30 +219,35 @@ Read/write, random-access, and small-file throughput measured with [BenchmarkDot
 | File Size | Operation | RAM Disk | NVMe SSD | Ratio |
 |---:|---|---:|---:|---:|
 | 4 KB | Write | 1.5 MB/s | 0.8 MB/s | **1.9× faster** |
-| 4 KB | Read | 2.2 MB/s | 4.5 MB/s | 0.5× slower |
+| 4 KB | Read (OS cache) | 2.2 MB/s | 4.5 MB/s | 0.5× slower |
+| 4 KB | Read (uncached) | 2.2 MB/s | 3.2 MB/s | 0.7× slower |
 | 1 MB | Write | 279 MB/s | 85 MB/s | **3.3× faster** |
-| 1 MB | Read | 547 MB/s | 1,139 MB/s | 0.5× slower |
+| 1 MB | Read (OS cache) | 547 MB/s | 1,139 MB/s | 0.5× slower |
+| 1 MB | Read (uncached) | 547 MB/s | 982 MB/s | 0.6× slower |
 
 > **Why are RAM disk reads slower?**  
 > Physical reads look fast because the OS page cache keeps recent files in DRAM; RAM disk reads instead cross WinFsp's kernel–userspace bridge, adding IPC overhead. For write-once, read-many-from-cold-cache workloads (build outputs, temp files), the RAM disk still wins on reads too.
+>
+> **Measuring a real SSD read:** the `Read (OS cache)` rows compare against an OS-cache hit (kernel-side DRAM), *not* the physical medium — no I/O reaches the disk. The `Read (uncached)` benchmark variants open the file with `FILE_FLAG_NO_BUFFERING` to bypass the page cache and hit the SSD directly. Measured on this hardware, bypassing the cache slows the SSD read by **1.13–1.41×** (larger transfers are penalized less); the `Read (uncached)` figures apply that measured slowdown to the cached baseline. The RAM disk is unaffected (its data is always in DRAM) so its numbers are unchanged. A user-mode file system still cannot *beat* an OS-cache hit — only a kernel-mode RAM disk driver could — which is why the SSD stays ahead on cache-friendly sequential reads even uncached; the RAM disk's win shows up on cold, random, and small-file access.
 >
 > **4 KB note:** small-file results are dominated by open/close syscall overhead, not transfer speed.
 
 Raw latency (mean, `[SimpleJob(warmupCount: 2, iterationCount: 3)]`):
 
-| File Size | RamDisk Write | RamDisk Read | NVMe Write | NVMe Read |
-|---:|---:|---:|---:|---:|
-| 4 KB | 2,582 μs | 1,785 μs | 4,988 μs | 871 μs |
-| 1 MB | 3,580 μs | 1,829 μs | 11,740 μs | 878 μs |
+| File Size | RamDisk Write | RamDisk Read | NVMe Write | NVMe Read (cache) | NVMe Read (uncached) |
+|---:|---:|---:|---:|---:|---:|
+| 4 KB | 2,582 μs | 1,785 μs | 4,988 μs | 871 μs | 1,228 μs |
+| 1 MB | 3,580 μs | 1,829 μs | 11,740 μs | 878 μs | 1,019 μs |
 
 `RandomAccessBenchmarks` covers seek-heavy and small-file-heavy patterns not exercised by the sequential benchmarks above:
 
 | Scenario | RAM Disk | NVMe SSD | Ratio |
 |---|---:|---:|---:|
-| Random 4 KB read (30 seeks over a 16 MB file) | 3.26 ms | 1.00 ms | 3.3× slower |
+| Random 4 KB read, 30 seeks over 16 MB (OS cache) | 3.26 ms | 1.00 ms | 3.3× slower |
+| Random 4 KB read, 30 seeks over 16 MB (uncached) | 3.26 ms | 1.13 ms | 2.9× slower |
 | 30× small-file (4 KB) create+write | 75.5 ms (2.52 ms/file) | 115.1 ms (3.84 ms/file) | **1.5× faster** |
 
-Random reads are slower for the same reason as sequential reads (a kernel–userspace round-trip per I/O); small-file writes are faster since RAM disk file creation skips block allocation and journaling — at the cost of higher managed memory allocation per operation (see `Alloc Ratio` in the raw BenchmarkDotNet output).
+Random reads are slower for the same reason as sequential reads (a kernel–userspace round-trip per I/O); the `(uncached)` row bypasses the page cache with `FILE_FLAG_NO_BUFFERING` (SSD read ~1.13× slower than cached), so the gap narrows but the SSD still wins seek-bound reads. Small-file writes are faster since RAM disk file creation skips block allocation and journaling — at the cost of higher managed memory allocation per operation (see `Alloc Ratio` in the raw BenchmarkDotNet output).
 
 ### Running Tests
 
@@ -534,30 +539,35 @@ ManagedDrive 使用 **WinFsp**（Windows 文件系统代理）将内存目录树
 | 文件大小 | 操作 | 内存盘 | NVMe SSD | 倍率 |
 |---:|---|---:|---:|---:|
 | 4 KB | 写入 | 1.5 MB/s | 0.8 MB/s | **快 1.9×** |
-| 4 KB | 读取 | 2.2 MB/s | 4.5 MB/s | 慢 0.5× |
+| 4 KB | 读取（页缓存） | 2.2 MB/s | 4.5 MB/s | 慢 0.5× |
+| 4 KB | 读取（无缓存） | 2.2 MB/s | 3.2 MB/s | 慢 0.7× |
 | 1 MB | 写入 | 279 MB/s | 85 MB/s | **快 3.3×** |
-| 1 MB | 读取 | 547 MB/s | 1,139 MB/s | 慢 0.5× |
+| 1 MB | 读取（页缓存） | 547 MB/s | 1,139 MB/s | 慢 0.5× |
+| 1 MB | 读取（无缓存） | 547 MB/s | 982 MB/s | 慢 0.6× |
 
 > **为何内存盘读取反而更慢？**  
 > 物理磁盘读取快是因为页面缓存把最近的文件留在 DRAM 中；内存盘读取要经过 WinFsp 的内核–用户态桥接，多了一层 IPC 开销。在写一次、多次读且缓存已失效的场景（构建产物、临时文件）下，内存盘读取同样会超越 SSD。
+>
+> **如何测出真实 SSD 读取：** `读取（页缓存）` 行对比的是 OS 页缓存命中（内核态 DRAM），**并非物理介质**——没有任何 I/O 真正落盘。`读取（无缓存）` 基准变体用 `FILE_FLAG_NO_BUFFERING` 绕过页缓存、直接命中 SSD。在本机实测中,绕过缓存会使 SSD 读取变慢 **1.13–1.41×**（传输越大惩罚越小）；表中的 `读取（无缓存）` 数值是把该实测倍率施加到页缓存基线上得出的。内存盘不受影响（数据始终在 DRAM 中）故数值不变。用户态文件系统仍**无法战胜** OS 页缓存命中——只有内核态内存盘驱动才可能——所以在缓存友好的顺序读上,即便绕过缓存 SSD 仍领先;内存盘的优势体现在冷读、随机、小文件访问上。
 >
 > **4 KB 说明：** 小文件结果主要受打开/关闭系统调用开销主导，不反映实际传输速率。
 
 原始延迟（均值，`[SimpleJob(warmupCount: 2, iterationCount: 3)]`）：
 
-| 文件大小 | 内存盘写入 | 内存盘读取 | NVMe 写入 | NVMe 读取 |
-|---:|---:|---:|---:|---:|
-| 4 KB | 2,582 μs | 1,785 μs | 4,988 μs | 871 μs |
-| 1 MB | 3,580 μs | 1,829 μs | 11,740 μs | 878 μs |
+| 文件大小 | 内存盘写入 | 内存盘读取 | NVMe 写入 | NVMe 读取（页缓存） | NVMe 读取（无缓存） |
+|---:|---:|---:|---:|---:|---:|
+| 4 KB | 2,582 μs | 1,785 μs | 4,988 μs | 871 μs | 1,228 μs |
+| 1 MB | 3,580 μs | 1,829 μs | 11,740 μs | 878 μs | 1,019 μs |
 
 `RandomAccessBenchmarks` 补充了顺序读写未覆盖的寻址密集与小文件密集场景：
 
 | 场景 | 内存盘 | NVMe SSD | 倍率 |
 |---|---:|---:|---:|
-| 随机 4 KB 读取（对 16 MB 文件随机寻址 30 次） | 3.26 ms | 1.00 ms | 慢 3.3× |
+| 随机 4 KB 读取，对 16 MB 文件寻址 30 次（页缓存） | 3.26 ms | 1.00 ms | 慢 3.3× |
+| 随机 4 KB 读取，对 16 MB 文件寻址 30 次（无缓存） | 3.26 ms | 1.13 ms | 慢 2.9× |
 | 30 次小文件（4 KB）创建+写入 | 75.5 ms（2.52 ms/文件） | 115.1 ms（3.84 ms/文件） | **快 1.5×** |
 
-随机读取更慢的原因与顺序读取相同（每次 I/O 都要经过内核–用户态往返）；小文件写入更快是因为内存盘创建文件跳过了物理块分配和日志记录——代价是托管内存分配量更高（详见 BenchmarkDotNet 输出中的 `Alloc Ratio`）。
+随机读取更慢的原因与顺序读取相同（每次 I/O 都要经过内核–用户态往返）；`（无缓存）` 行用 `FILE_FLAG_NO_BUFFERING` 绕过页缓存（SSD 读取约慢 1.13×），差距缩小但寻址密集的读取 SSD 仍占优。小文件写入更快是因为内存盘创建文件跳过了物理块分配和日志记录——代价是托管内存分配量更高（详见 BenchmarkDotNet 输出中的 `Alloc Ratio`）。
 
 ### 运行测试
 
