@@ -634,6 +634,10 @@ public sealed class RamDisk : IDisposable
         host.UnicodeOnDisk = true;
         host.PersistentAcls = true;
         host.FileInfoTimeout = 1000;
+        // Only invoke the Cleanup callback when a file was actually modified. Read-only opens (the
+        // common read-after-write and random-read path) then skip the user-mode Cleanup round-trip
+        // entirely, shrinking WinFsp's per-handle overhead. Matches the official WinFsp memfs sample.
+        host.PostCleanupWhenModifiedOnly = true;
         host.VolumeCreationTime = (ulong)DateTimeOffset.UtcNow.ToFileTime();
         host.VolumeSerialNumber = (uint)new Random().Next(int.MaxValue / 2);
     }
