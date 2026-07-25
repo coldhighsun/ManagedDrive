@@ -113,7 +113,7 @@ ManagedDrive/
 │       ├── Helpers/                #   ByteFormatter, HintHelper (watermark/placeholder text)
 │       ├── Infrastructure/         #   RelayCommand, PasswordStrengthEstimator
 │       ├── Models/                 #   AppConfiguration, DiskProfile
-│       ├── Services/               #   SettingsStore, StartupManager, TempDirResetService, ShellContextMenuManager, SystemMemoryInfo, UpdateCheckService, plus six services split out of App.xaml.cs: TrayIconController, TrayTooltipController, DiskNotificationService, TempDirCompatChecker, SessionEndingSaveHandler, WinFspPrerequisite
+│       ├── Services/               #   SettingsStore, StartupManager, TempDirResetService, ShellContextMenuManager, SystemMemoryInfo, UpdateCheckService, GlobalMountCoordinator (talks to the SYSTEM helper service below), plus six services split out of App.xaml.cs: TrayIconController, TrayTooltipController, DiskNotificationService, TempDirCompatChecker, SessionEndingSaveHandler, WinFspPrerequisite
 │       ├── ViewModels/             #   MainViewModel, DiskViewModel
 │       ├── Views/                  #   CreateDiskDialog, CloneDiskDialog, DiskContentDialog, RestoreSnapshotDialog, SettingsDialog, SnapshotDiffDialog, ConfirmDialog, AboutDialog, UpdateAvailableDialog, TrayTooltipView, PasswordPromptDialog
 │       ├── GlobalUsings.cs         #   Project-wide global using directives
@@ -130,9 +130,19 @@ ManagedDrive/
 │   │   ├── ImageCompressionLevel.cs #  Standalone copy of Core's enum of the same name, kept in sync manually; the App layer casts between the two at the CLI/app boundary
 │   │   └── ByteFormatter.cs        #   Human-readable byte-size formatting (shared with the App layer)
 │   │
-│   └── ManagedDrive.Cli/           # `mdrive` console-subsystem entry point (only project referencing Spectre.Console)
-│       ├── Program.cs              #   Forwards args over the pipe, auto-launching ManagedDrive.exe if needed
-│       └── CliOutputRenderer.cs    #   Renders a CliResponse to the terminal (colors, tables) via Spectre.Console
+│   ├── ManagedDrive.Cli/           # `mdrive` console-subsystem entry point (only project referencing Spectre.Console)
+│   │   ├── Program.cs              #   Forwards args over the pipe, auto-launching ManagedDrive.exe if needed
+│   │   └── CliOutputRenderer.cs    #   Renders a CliResponse to the terminal (colors, tables) via Spectre.Console
+│   │
+│   ├── ManagedDrive.HelperProtocol/ # Dependency-free named-pipe protocol + client shared between the app and the SYSTEM helper service (kept dependency-free so the service doesn't load Core's mixed-mode winfsp-msil.dll)
+│   │   ├── HelperPipeProtocol.cs   #   Wire format (line-delimited JSON)
+│   │   └── HelperPipeClient.cs     #   Client-side send logic, used by App's GlobalMountCoordinator
+│   │
+│   └── ManagedDrive.Service/       # `ManagedDriveHelper.exe`, the optional LocalSystem Windows service that publishes global (\GLOBAL??) DOS-device symlinks for cross-session TEMP visibility (see Known Issues)
+│       ├── Program.cs              #   Microsoft.Extensions.Hosting.WindowsServices entry point
+│       ├── HelperPipeService.cs    #   BackgroundService listening on the named pipe for publish/unpublish requests
+│       ├── GlobalMountManager.cs   #   DefineDosDevice calls + HKLM registry persistence/reconciliation
+│       └── NativeMethods.cs        #   P/Invoke declarations
 │
 ├── tests/
 │   └── ManagedDrive.Tests/         # xUnit v3 unit tests (pure-managed code only)
@@ -433,7 +443,7 @@ ManagedDrive/
 │       ├── Helpers/                #   ByteFormatter、HintHelper（水印/占位文本）
 │       ├── Infrastructure/         #   RelayCommand, PasswordStrengthEstimator
 │       ├── Models/                 #   AppConfiguration、DiskProfile
-│       ├── Services/               #   SettingsStore、StartupManager、TempDirResetService、ShellContextMenuManager、SystemMemoryInfo、UpdateCheckService，以及从 App.xaml.cs 拆出的六个服务：TrayIconController、TrayTooltipController、DiskNotificationService、TempDirCompatChecker、SessionEndingSaveHandler、WinFspPrerequisite
+│       ├── Services/               #   SettingsStore、StartupManager、TempDirResetService、ShellContextMenuManager、SystemMemoryInfo、UpdateCheckService、GlobalMountCoordinator（与下方 SYSTEM 辅助服务通信），以及从 App.xaml.cs 拆出的六个服务：TrayIconController、TrayTooltipController、DiskNotificationService、TempDirCompatChecker、SessionEndingSaveHandler、WinFspPrerequisite
 │       ├── ViewModels/             #   MainViewModel、DiskViewModel
 │       ├── Views/                  #   CreateDiskDialog、CloneDiskDialog、DiskContentDialog、RestoreSnapshotDialog、SettingsDialog、SnapshotDiffDialog、ConfirmDialog、AboutDialog、UpdateAvailableDialog、TrayTooltipView、PasswordPromptDialog
 │       ├── GlobalUsings.cs         #   项目级全局 using 指令
@@ -450,9 +460,19 @@ ManagedDrive/
 │   │   ├── ImageCompressionLevel.cs #  Core 中同名枚举的独立副本，需手动保持同步；App 层在 CLI/应用边界做两者间的转换
 │   │   └── ByteFormatter.cs        #   人类可读的字节大小格式化（与 App 层共用）
 │   │
-│   └── ManagedDrive.Cli/           # `mdrive` 控制台子系统入口点（唯一引用 Spectre.Console 的项目）
-│       ├── Program.cs              #   将参数通过管道转发，必要时自动启动 ManagedDrive.exe
-│       └── CliOutputRenderer.cs    #   用 Spectre.Console 把 CliResponse 渲染为终端输出（颜色、表格）
+│   ├── ManagedDrive.Cli/           # `mdrive` 控制台子系统入口点（唯一引用 Spectre.Console 的项目）
+│   │   ├── Program.cs              #   将参数通过管道转发，必要时自动启动 ManagedDrive.exe
+│   │   └── CliOutputRenderer.cs    #   用 Spectre.Console 把 CliResponse 渲染为终端输出（颜色、表格）
+│   │
+│   ├── ManagedDrive.HelperProtocol/ # 应用与 SYSTEM 辅助服务之间共享的、无外部依赖的命名管道协议+客户端（保持无依赖，使服务不会加载 Core 混合模式的 winfsp-msil.dll）
+│   │   ├── HelperPipeProtocol.cs   #   线上协议格式（行分隔 JSON）
+│   │   └── HelperPipeClient.cs     #   客户端发送逻辑，供 App 层的 GlobalMountCoordinator 使用
+│   │
+│   └── ManagedDrive.Service/       # `ManagedDriveHelper.exe`——可选的 LocalSystem Windows 服务，发布全局（\GLOBAL??）DOS 设备符号链接以实现跨会话 TEMP 可见性（见"已知问题"）
+│       ├── Program.cs              #   Microsoft.Extensions.Hosting.WindowsServices 入口点
+│       ├── HelperPipeService.cs    #   监听命名管道、处理发布/取消发布请求的 BackgroundService
+│       ├── GlobalMountManager.cs   #   DefineDosDevice 调用及 HKLM 注册表持久化/协调
+│       └── NativeMethods.cs        #   P/Invoke 声明
 │
 ├── tests/
 │   └── ManagedDrive.Tests/         # xUnit v3 单元测试（仅纯托管代码）
