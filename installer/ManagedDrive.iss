@@ -41,7 +41,7 @@ WizardStyle=modern
 ; asks the running app to close itself gracefully (via "mdrive.exe exit", which saves every mounted
 ; disk's image) before this page is ever evaluated, so in the common case there is nothing left for
 ; Restart Manager to find here.
-CloseApplicationsFilter: {app}\ManagedDrive.exe
+CloseApplicationsFilter={app}\ManagedDrive.exe
 CloseApplications=yes
 RestartApplications=yes
 
