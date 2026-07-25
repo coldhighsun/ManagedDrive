@@ -34,6 +34,10 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 
         StatusText = Loc.Get("Status.Ready");
 
+        // Surface an empty-list flag for the main window's empty-state guidance overlay.
+        // Subscribing to CollectionChanged covers every add/remove path in one place.
+        Disks.CollectionChanged += (_, _) => OnPropertyChanged(nameof(IsEmpty));
+
         CreateDiskCommand = new(_ => ExecuteCreateDisk());
         ImportDiskCommand = new(_ => ExecuteImportDisk());
         ImportArchiveCommand = new(_ => ExecuteImportArchive());
@@ -161,6 +165,12 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     /// Gets the observable list of active disk view models displayed in the main grid.
     /// </summary>
     public ObservableCollection<DiskViewModel> Disks { get; } = [];
+
+    /// <summary>
+    /// Gets a value indicating whether no disks are currently mounted. Bound by the main
+    /// window to show its empty-state guidance overlay.
+    /// </summary>
+    public bool IsEmpty => Disks.Count == 0;
 
     /// <summary>
     /// Gets the command that opens the "Edit Disk" dialog for the selected disk.

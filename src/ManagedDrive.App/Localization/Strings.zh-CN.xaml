@@ -108,6 +108,8 @@
     <sys:String x:Key="Card.ReadOnlyNoImage">只读 · 无镜像</sys:String>
     <sys:String x:Key="Card.Encrypted">已加密</sys:String>
     <sys:String x:Key="Card.HighUsage">剩余空间不足</sys:String>
+    <sys:String x:Key="Empty.Title">尚未挂载磁盘</sys:String>
+    <sys:String x:Key="Empty.Subtitle">新建一个 RAM 磁盘,或导入已有的镜像/压缩包即可开始。</sys:String>
     <sys:String x:Key="Val.AutoSaveNoImage">开启自动保存前请先选择镜像文件。</sys:String>
     <sys:String x:Key="Val.ImagePathOnRamDisk">镜像文件不能位于内存盘上。</sys:String>
     <sys:String x:Key="Val.ImagePathInUse">该镜像文件已被其他内存盘使用。</sys:String>

@@ -138,7 +138,8 @@
             </DockPanel>
         </Border>
 
-        <!-- Disk card list -->
+        <!-- Disk card list (with empty-state guidance overlaid when no disks are mounted) -->
+        <Grid>
         <ListBox ItemsSource="{Binding Disks}"
                  SelectedItem="{Binding SelectedDisk}"
                  ScrollViewer.HorizontalScrollBarVisibility="Disabled"
@@ -528,6 +529,39 @@
                 </DataTemplate>
             </ListBox.ItemTemplate>
         </ListBox>
+
+        <!-- Empty state: shown when no disks are mounted -->
+        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center"
+                    MaxWidth="320" Margin="24"
+                    IsHitTestVisible="{Binding IsEmpty}"
+                    Visibility="{Binding IsEmpty, Converter={StaticResource BoolToVis}}">
+            <Border Width="72" Height="72" CornerRadius="16"
+                    Background="{DynamicResource AppSurface}"
+                    BorderBrush="{DynamicResource AppDivider}" BorderThickness="1"
+                    HorizontalAlignment="Center">
+                <TextBlock Text="&#xEDA2;" Style="{StaticResource IconText}" FontSize="34"
+                           Foreground="{DynamicResource AppForegroundLight}"
+                           HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Border>
+            <TextBlock Text="{DynamicResource Empty.Title}"
+                       FontSize="16" FontWeight="Medium"
+                       Foreground="{DynamicResource AppForeground}"
+                       HorizontalAlignment="Center" Margin="0,16,0,0"/>
+            <TextBlock Text="{DynamicResource Empty.Subtitle}"
+                       FontSize="12" TextWrapping="Wrap" TextAlignment="Center"
+                       Foreground="{DynamicResource AppForegroundLight}"
+                       HorizontalAlignment="Center" Margin="0,6,0,0"/>
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,20,0,0">
+                <Button Style="{StaticResource RaisedButton}"
+                        Content="{DynamicResource Btn.NewDisk}"
+                        Command="{Binding CreateDiskCommand}"/>
+                <Button Style="{StaticResource OutlinedButton}"
+                        Content="{DynamicResource Btn.ImportDisk}"
+                        Command="{Binding ImportDiskCommand}"
+                        Margin="8,0,0,0"/>
+            </StackPanel>
+        </StackPanel>
+        </Grid>
 
     </DockPanel>
 
