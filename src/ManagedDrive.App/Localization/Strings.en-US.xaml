@@ -98,6 +98,7 @@
     <sys:String x:Key="Msg.ExitSaving">Saving disk images, please wait...</sys:String>
     <sys:String x:Key="Msg.ExitSavingDisk">Saving "{0}"...</sys:String>
     <sys:String x:Key="Busy.SavingImage">Saving disk image...</sys:String>
+    <sys:String x:Key="Busy.LoadingDisks">Loading disk {0} of {1}...</sys:String>
     <sys:String x:Key="Busy.ImportingArchive">Importing archive...</sys:String>
     <sys:String x:Key="Busy.ExportingImage">Exporting disk image...</sys:String>
     <sys:String x:Key="Card.ReadOnly">Read-only</sys:String>
@@ -156,8 +157,8 @@
     <sys:String x:Key="Val.NoExportPath">Please choose a destination image file.</sys:String>
     <sys:String x:Key="Msg.CloneDiskConfirmTitle">Clone Disk</sys:String>
     <sys:String x:Key="Msg.CloneDiskConfirmBody">Copy the contents of {0} to {1} ({2})?&#x0a;&#x0a;All existing files and folders on {1} will be permanently replaced.</sys:String>
-    <sys:String x:Key="Status.DiskCloned">Cloned {0} to {1}.</sys:String>
-    <sys:String x:Key="Status.DiskExported">Exported {0} to {1}.</sys:String>
+    <sys:String x:Key="Status.DiskCloned">Cloned {0} to {1}</sys:String>
+    <sys:String x:Key="Status.DiskExported">Exported {0} to {1}</sys:String>
 
     <!-- RestoreSnapshotDialog -->
     <sys:String x:Key="RestoreSnapshot.Title">Restore Snapshot</sys:String>
@@ -193,7 +194,7 @@
     <sys:String x:Key="DiskContent.TypeFileGeneric">File</sys:String>
     <sys:String x:Key="Btn.Close">Close</sys:String>
     <sys:String x:Key="Msg.RestoreSnapshotConfirmBody">Restore {0} ({1}) from snapshot {2}?&#x0a;&#x0a;Current contents will be replaced.</sys:String>
-    <sys:String x:Key="Status.SnapshotRestored">Restored {0} from a snapshot.</sys:String>
+    <sys:String x:Key="Status.SnapshotRestored">Restored {0} from a snapshot</sys:String>
 
     <!-- SettingsDialog -->
     <sys:String x:Key="Settings.Title">Settings</sys:String>
@@ -236,17 +237,17 @@
     <sys:String x:Key="Shutdown.SavingReason">Saving disk images before shutdown…</sys:String>
 
     <!-- Status bar -->
-    <sys:String x:Key="Status.Ready">Ready.</sys:String>
+    <sys:String x:Key="Status.Ready">Ready</sys:String>
     <sys:String x:Key="Status.AvailableMemory">{0} system memory available</sys:String>
-    <sys:String x:Key="Status.Mounted">Mounted {0} ({1}).</sys:String>
-    <sys:String x:Key="Status.MountedWithCapacity">Mounted {0} ({1}, {2} MB).</sys:String>
+    <sys:String x:Key="Status.Mounted">Mounted {0} ({1})</sys:String>
+    <sys:String x:Key="Status.MountedWithCapacity">Mounted {0} ({1}, {2} MB)</sys:String>
     <sys:String x:Key="Status.AutoMountFailed">Auto-mount '{0}' failed: {1}</sys:String>
-    <sys:String x:Key="Status.MountFailed">Mount failed.</sys:String>
-    <sys:String x:Key="Status.ImageSaved">Image saved for {0}.</sys:String>
+    <sys:String x:Key="Status.MountFailed">Mount failed</sys:String>
+    <sys:String x:Key="Status.ImageSaved">Image saved for {0}</sys:String>
     <sys:String x:Key="Status.SaveFailed">Save failed for {0}: {1}</sys:String>
-    <sys:String x:Key="Status.CapacityAdjusted">{0}: capacity auto-raised from {1} MB to {2} MB to fit the loaded image.</sys:String>
-    <sys:String x:Key="Status.Unmounted">Unmounted {0}.</sys:String>
-    <sys:String x:Key="Status.TempDirSet">Temp directory set to {0}.</sys:String>
+    <sys:String x:Key="Status.CapacityAdjusted">{0}: capacity auto-raised from {1} MB to {2} MB to fit the loaded image</sys:String>
+    <sys:String x:Key="Status.Unmounted">Unmounted {0}</sys:String>
+    <sys:String x:Key="Status.TempDirSet">Temp directory set to {0}</sys:String>
     <sys:String x:Key="Status.DiskRead">{0} reading "{1}"...</sys:String>
     <sys:String x:Key="Status.DiskWrite">{0} writing "{1}"...</sys:String>
 
@@ -266,7 +267,7 @@
     <sys:String x:Key="Msg.FormatDiskConfirmBody">Format {0} ({1})?&#x0a;&#x0a;All files and folders on this disk will be permanently deleted.</sys:String>
     <sys:String x:Key="Msg.FormatDiskReadOnly">Cannot format a read-only disk.</sys:String>
     <sys:String x:Key="Msg.FormatDiskSuccess">{0} has been formatted. All files and folders have been deleted.</sys:String>
-    <sys:String x:Key="Status.FormatDisk">Formatted {0}.</sys:String>
+    <sys:String x:Key="Status.FormatDisk">Formatted {0}</sys:String>
     <sys:String x:Key="Msg.UnmountConfirmTitle">Unmount Disk</sys:String>
     <sys:String x:Key="Msg.UnmountConfirmBody">Unmount {0} ({1})?&#x0a;&#x0a;Any data not saved to an image file will be lost.</sys:String>
     <sys:String x:Key="Msg.DeleteImageOption">Also delete the image file</sys:String>

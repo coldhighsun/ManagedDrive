@@ -108,6 +108,8 @@
                            Foreground="{DynamicResource AppForegroundLight}"/>
                 <TextBlock Text="{Binding StatusText}"
                            FontSize="11"
+                           TextTrimming="CharacterEllipsis"
+                           Margin="0,0,12,0"
                            Foreground="{DynamicResource AppForegroundLight}"/>
             </DockPanel>
         </Border>

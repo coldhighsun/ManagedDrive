@@ -98,6 +98,7 @@
     <sys:String x:Key="Msg.ExitSaving">正在保存磁盘镜像，请稍候...</sys:String>
     <sys:String x:Key="Msg.ExitSavingDisk">正在保存 "{0}"...</sys:String>
     <sys:String x:Key="Busy.SavingImage">正在保存磁盘映像…</sys:String>
+    <sys:String x:Key="Busy.LoadingDisks">正在加载磁盘 {0}/{1}…</sys:String>
     <sys:String x:Key="Busy.ImportingArchive">正在导入归档…</sys:String>
     <sys:String x:Key="Busy.ExportingImage">正在导出磁盘映像…</sys:String>
     <sys:String x:Key="Card.ReadOnly">只读</sys:String>
@@ -156,8 +157,8 @@
     <sys:String x:Key="Val.NoExportPath">请选择目标镜像文件。</sys:String>
     <sys:String x:Key="Msg.CloneDiskConfirmTitle">克隆磁盘</sys:String>
     <sys:String x:Key="Msg.CloneDiskConfirmBody">将 {0} 的内容复制到 {1}（{2}）？&#x0a;&#x0a;{1} 上现有的所有文件和文件夹将被永久替换。</sys:String>
-    <sys:String x:Key="Status.DiskCloned">已将 {0} 克隆到 {1}。</sys:String>
-    <sys:String x:Key="Status.DiskExported">已将 {0} 导出到 {1}。</sys:String>
+    <sys:String x:Key="Status.DiskCloned">已将 {0} 克隆到 {1}</sys:String>
+    <sys:String x:Key="Status.DiskExported">已将 {0} 导出到 {1}</sys:String>
 
     <!-- RestoreSnapshotDialog -->
     <sys:String x:Key="RestoreSnapshot.Title">恢复快照</sys:String>
@@ -193,7 +194,7 @@
     <sys:String x:Key="DiskContent.TypeFileGeneric">文件</sys:String>
     <sys:String x:Key="Btn.Close">关闭</sys:String>
     <sys:String x:Key="Msg.RestoreSnapshotConfirmBody">从快照 {2} 恢复 {0}（{1}）？&#x0a;&#x0a;当前内容将被替换。</sys:String>
-    <sys:String x:Key="Status.SnapshotRestored">已从快照恢复 {0}。</sys:String>
+    <sys:String x:Key="Status.SnapshotRestored">已从快照恢复 {0}</sys:String>
 
     <!-- SettingsDialog -->
     <sys:String x:Key="Settings.Title">设置</sys:String>
@@ -236,17 +237,17 @@
     <sys:String x:Key="Shutdown.SavingReason">正在关机前保存磁盘镜像…</sys:String>
 
     <!-- Status bar -->
-    <sys:String x:Key="Status.Ready">就绪。</sys:String>
+    <sys:String x:Key="Status.Ready">就绪</sys:String>
     <sys:String x:Key="Status.AvailableMemory">系统内存可用 {0}</sys:String>
-    <sys:String x:Key="Status.Mounted">已挂载 {0}（{1}）。</sys:String>
-    <sys:String x:Key="Status.MountedWithCapacity">已挂载 {0}（{1}，{2} MB）。</sys:String>
+    <sys:String x:Key="Status.Mounted">已挂载 {0}（{1}）</sys:String>
+    <sys:String x:Key="Status.MountedWithCapacity">已挂载 {0}（{1}，{2} MB）</sys:String>
     <sys:String x:Key="Status.AutoMountFailed">自动挂载"{0}"失败：{1}</sys:String>
-    <sys:String x:Key="Status.MountFailed">挂载失败。</sys:String>
-    <sys:String x:Key="Status.ImageSaved">已保存 {0} 的镜像。</sys:String>
+    <sys:String x:Key="Status.MountFailed">挂载失败</sys:String>
+    <sys:String x:Key="Status.ImageSaved">已保存 {0} 的镜像</sys:String>
     <sys:String x:Key="Status.SaveFailed">{0} 保存失败：{1}</sys:String>
-    <sys:String x:Key="Status.CapacityAdjusted">{0}：容量已从 {1} MB 自动提升到 {2} MB，以容纳已加载的镜像。</sys:String>
-    <sys:String x:Key="Status.Unmounted">已卸载 {0}。</sys:String>
-    <sys:String x:Key="Status.TempDirSet">临时文件夹已设置为 {0}。</sys:String>
+    <sys:String x:Key="Status.CapacityAdjusted">{0}：容量已从 {1} MB 自动提升到 {2} MB，以容纳已加载的镜像</sys:String>
+    <sys:String x:Key="Status.Unmounted">已卸载 {0}</sys:String>
+    <sys:String x:Key="Status.TempDirSet">临时文件夹已设置为 {0}</sys:String>
     <sys:String x:Key="Status.DiskRead">{0} 正在读取 "{1}"...</sys:String>
     <sys:String x:Key="Status.DiskWrite">{0} 正在写入 "{1}"...</sys:String>
 
@@ -266,7 +267,7 @@
     <sys:String x:Key="Msg.FormatDiskConfirmBody">确认格式化 {0}（{1}）？&#x0a;&#x0a;该磁盘上的所有文件和文件夹将被永久删除。</sys:String>
     <sys:String x:Key="Msg.FormatDiskReadOnly">只读磁盘无法格式化。</sys:String>
     <sys:String x:Key="Msg.FormatDiskSuccess">{0} 已完成格式化，所有文件和文件夹已删除。</sys:String>
-    <sys:String x:Key="Status.FormatDisk">已格式化 {0}。</sys:String>
+    <sys:String x:Key="Status.FormatDisk">已格式化 {0}</sys:String>
     <sys:String x:Key="Msg.UnmountConfirmTitle">卸载磁盘</sys:String>
     <sys:String x:Key="Msg.UnmountConfirmBody">确认卸载 {0}（{1}）？&#x0a;&#x0a;未保存到镜像文件的数据将会丢失。</sys:String>
     <sys:String x:Key="Msg.DeleteImageOption">同时删除镜像文件</sys:String>
