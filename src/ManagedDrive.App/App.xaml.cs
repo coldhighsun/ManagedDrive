@@ -262,10 +262,11 @@ public partial class App
 
         Log.Logger = new LoggerConfiguration()
             .MinimumLevel.Information()
-            .WriteTo.File(
+            .WriteTo.Async(sinkConfig => sinkConfig.File(
                 Path.Combine(logDirectory, "log-.txt"),
-                rollingInterval: RollingInterval.Day,
-                retainedFileCountLimit: 14)
+                fileSizeLimitBytes: 20 * 1024 * 1024,
+                rollOnFileSizeLimit: true,
+                retainedFileCountLimit: 5))
             .CreateLogger();
 
         var services = new ServiceCollection();
@@ -274,6 +275,7 @@ public partial class App
 
         AppLog.Configure(_serviceProvider.GetRequiredService<ILoggerFactory>());
         _logger = _serviceProvider.GetRequiredService<ILogger<App>>();
+        _logger.LogInformation("ManagedDrive started (version {Version}).", GetType().Assembly.GetName().Version);
     }
 
     private async void ExitApplication()
