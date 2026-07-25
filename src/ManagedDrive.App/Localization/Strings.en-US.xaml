@@ -36,6 +36,7 @@
     <sys:String x:Key="Tip.CloseDialog">Close</sys:String>
     <sys:String x:Key="Tip.Import">Import a disk image or archive</sys:String>
     <sys:String x:Key="Tip.More">More options</sys:String>
+    <sys:String x:Key="Tip.EditDisk">Edit the selected disk</sys:String>
     <sys:String x:Key="Col.MountPoint">Mount Point</sys:String>
     <sys:String x:Key="Col.Label">Label</sys:String>
     <sys:String x:Key="Col.Capacity">Capacity</sys:String>
@@ -106,6 +107,7 @@
     <sys:String x:Key="Card.ReadOnly">Read-only</sys:String>
     <sys:String x:Key="Card.ReadOnlyNoImage">Read-only · No image</sys:String>
     <sys:String x:Key="Card.Encrypted">Password-protected</sys:String>
+    <sys:String x:Key="Card.HighUsage">Low free space</sys:String>
     <sys:String x:Key="Val.AutoSaveNoImage">Select an image file before enabling auto-save.</sys:String>
     <sys:String x:Key="Val.ImagePathOnRamDisk">The image file cannot be located on a RAM disk.</sys:String>
     <sys:String x:Key="Val.ImagePathInUse">This image file is already used by another RAM disk.</sys:String>
