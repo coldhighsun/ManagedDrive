@@ -36,12 +36,14 @@ PrivilegesRequired=admin
 UninstallDisplayIcon={app}\ManagedDrive.exe
 SetupIconFile=..\src\ManagedDrive.App\ManagedDrive.ico
 WizardStyle=modern
-; Restrict Restart Manager's file-in-use detection to our own exe rather than every *.exe/*.dll
-; under {app} (the default filter). This is a fallback path only - InitializeSetup() below already
-; asks the running app to close itself gracefully (via "mdrive.exe exit", which saves every mounted
-; disk's image) before this page is ever evaluated, so in the common case there is nothing left for
-; Restart Manager to find here.
-CloseApplicationsFilter={app}\ManagedDrive.exe
+; Restrict Restart Manager's file-in-use detection to our own exe rather than every
+; *.exe/*.dll/*.chm file Setup installs (the default filter). Must be a bare filename
+; wildcard, not a path — {app} cannot be used here since this is evaluated before the
+; install directory is determined. This is a fallback path only - InitializeSetup()
+; below already asks the running app to close itself gracefully (via "mdrive.exe exit",
+; which saves every mounted disk's image) before this page is ever evaluated, so in the
+; common case there is nothing left for Restart Manager to find here.
+CloseApplicationsFilter=ManagedDrive.exe
 CloseApplications=yes
 RestartApplications=yes
 
@@ -272,6 +274,17 @@ begin
       InstallWinFspSilently()
     else
       Log('WinFsp 2.2.x already installed; skipping.');
+
+    // Reinstall/upgrade: stop the running service *before* [Files] copies the new
+    // ManagedDriveHelper.exe over it. CloseApplicationsFilter/Restart Manager only cover
+    // ManagedDrive.exe (see the [Setup] comment above) and know nothing about services, so
+    // without this the file copy silently fails to overwrite the locked exe and the old
+    // binary stays in place even after the service is restarted in ssPostInstall below.
+    if IsHelperServiceInstalled() then
+    begin
+      Log('Helper service already registered; stopping before files are copied so the exe can be overwritten.');
+      StopHelperService();
+    end;
   end;
 
   if CurStep = ssPostInstall then
@@ -285,11 +298,8 @@ begin
       InstallHelperServiceSilently()
     else
     begin
-      // Reinstall/upgrade: the exe on disk under {app} has just been replaced, but the
-      // already-running service process still has the old file mapped in memory - restart
-      // it so the new binary actually takes effect.
-      Log('Helper service already registered; restarting to pick up the updated binary.');
-      StopHelperService();
+      // Already stopped in ssInstall above; start it again now that the new binary is in place.
+      Log('Starting helper service with the updated binary.');
       StartHelperService();
     end;
   end;
