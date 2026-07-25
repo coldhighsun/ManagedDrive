@@ -53,6 +53,21 @@
                             ToolTip="{DynamicResource Tip.NewDisk}">
                         <TextBlock Style="{StaticResource IconText}" Text="&#xE710;"/>
                     </Button>
+                    <Button x:Name="ImportBtn" Style="{StaticResource IconButton}"
+                            Click="ImportBtn_Click"
+                            ToolTip="{DynamicResource Tip.Import}">
+                        <Button.ContextMenu>
+                            <ContextMenu>
+                                <MenuItem Header="{DynamicResource Btn.ImportDisk}"
+                                          ToolTip="{DynamicResource Tip.ImportDisk}"
+                                          Command="{Binding ImportDiskCommand}"/>
+                                <MenuItem Header="{DynamicResource Btn.ImportArchive}"
+                                          ToolTip="{DynamicResource Tip.ImportArchive}"
+                                          Command="{Binding ImportArchiveCommand}"/>
+                            </ContextMenu>
+                        </Button.ContextMenu>
+                        <TextBlock Style="{StaticResource IconText}" Text="&#xE8B5;"/>
+                    </Button>
                     <Button Style="{StaticResource IconButton}"
                             Command="{Binding ResetTempDirsCommand}"
                             ToolTip="{DynamicResource Tip.ResetTempDirs}">

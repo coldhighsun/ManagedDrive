@@ -34,6 +34,7 @@
     <sys:String x:Key="Tip.MaximizeRestore">最大化/还原</sys:String>
     <sys:String x:Key="Tip.HideToTray">最小化到系统托盘</sys:String>
     <sys:String x:Key="Tip.CloseDialog">关闭</sys:String>
+    <sys:String x:Key="Tip.Import">导入磁盘镜像或压缩包</sys:String>
     <sys:String x:Key="Col.MountPoint">挂载点</sys:String>
     <sys:String x:Key="Col.Label">卷标</sys:String>
     <sys:String x:Key="Col.Capacity">容量</sys:String>
