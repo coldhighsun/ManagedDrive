@@ -73,6 +73,10 @@ const
   // Desktop Runtime installer for the 10.0 channel, so we never have to chase patch versions.
   DotNetDesktopRuntimeEvergreenUrl = 'https://aka.ms/dotnet/10.0/windowsdesktop-runtime-win-x64.exe';
   DotNetDownloadPageUrl = 'https://dotnet.microsoft.com/download/dotnet/10.0';
+  // Used by CloseManagedDriveGracefully() below - Pascal Script only supports local `var`
+  // sections inside functions/procedures, not local `const`.
+  GracefulExitTimeoutMs = 30000;
+  GracefulExitPollIntervalMs = 500;
 
 // Mirrors ManagedDrive.App's App.xaml.cs::CheckWinFspPrerequisite() detection:
 // HKLM InstallDir -> <InstallDir>\bin\winfsp-msil.dll must exist with a 2.2.x file version.
@@ -348,9 +352,6 @@ end;
 // was never running); False if it is still running after the timeout below, so the caller can
 // decide whether to continue (falling back to Restart Manager later in the wizard) or abort.
 function CloseManagedDriveGracefully(): Boolean;
-const
-  TimeoutMs = 30000;
-  PollIntervalMs = 500;
 var
   MdrivePath: string;
   ResultCode, Elapsed: Integer;
@@ -376,10 +377,10 @@ begin
     Log('Failed to launch "mdrive.exe exit": ' + SysErrorMessage(ResultCode));
 
   Elapsed := 0;
-  while IsManagedDriveRunning() and (Elapsed < TimeoutMs) do
+  while IsManagedDriveRunning() and (Elapsed < GracefulExitTimeoutMs) do
   begin
-    Sleep(PollIntervalMs);
-    Elapsed := Elapsed + PollIntervalMs;
+    Sleep(GracefulExitPollIntervalMs);
+    Elapsed := Elapsed + GracefulExitPollIntervalMs;
   end;
 
   Result := not IsManagedDriveRunning();
@@ -387,7 +388,7 @@ begin
   if Result then
     Log('ManagedDrive exited gracefully.')
   else
-    Log(Format('ManagedDrive is still running after waiting %d ms for a graceful exit.', [TimeoutMs]));
+    Log(Format('ManagedDrive is still running after waiting %d ms for a graceful exit.', [GracefulExitTimeoutMs]));
 end;
 
 function InitializeSetup(): Boolean;
