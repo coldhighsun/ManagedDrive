@@ -354,6 +354,17 @@
                                                    Foreground="{DynamicResource AppForegroundLight}"/>
                                         <TextBlock Text="{Binding UsedPercent, StringFormat='  ({0:0}%)'}" FontSize="12"
                                                    Foreground="{DynamicResource AppForegroundLight}"/>
+                                        <!-- Non-color high-usage indicator (icon + text) for color-blind accessibility -->
+                                        <TextBlock Text="&#xE7BA;" Style="{StaticResource IconText}" FontSize="11"
+                                                   Foreground="{DynamicResource AppWarning}"
+                                                   VerticalAlignment="Center" Margin="8,0,3,0"
+                                                   ToolTip="{DynamicResource Card.HighUsage}"
+                                                   AutomationProperties.Name="{DynamicResource Card.HighUsage}"
+                                                   Visibility="{Binding IsHighUsage, Converter={StaticResource BoolToVis}}"/>
+                                        <TextBlock Text="{DynamicResource Card.HighUsage}" FontSize="12"
+                                                   Foreground="{DynamicResource AppWarning}"
+                                                   VerticalAlignment="Center"
+                                                   Visibility="{Binding IsHighUsage, Converter={StaticResource BoolToVis}}"/>
                                     </StackPanel>
                                 </StackPanel>
 
@@ -398,6 +409,34 @@
                                            HorizontalAlignment="Right"/>
                             </StackPanel>
 
+                            <!-- Hover inline quick actions (fade in on card hover; right-click menu remains the full set) -->
+                            <StackPanel x:Name="HoverActions" Grid.ColumnSpan="3"
+                                        Orientation="Horizontal"
+                                        HorizontalAlignment="Right" VerticalAlignment="Top"
+                                        Panel.ZIndex="5" Opacity="0" IsHitTestVisible="False">
+                                <Button Style="{StaticResource IconButton}" Width="30" Height="30"
+                                        ToolTip="{DynamicResource Tip.EditDisk}"
+                                        AutomationProperties.Name="{DynamicResource Tip.EditDisk}"
+                                        Command="{Binding Tag.EditDiskCommand, ElementName=Card}"
+                                        CommandParameter="{Binding}">
+                                    <TextBlock Style="{StaticResource IconText}" Text="&#xE70F;" FontSize="14"/>
+                                </Button>
+                                <Button Style="{StaticResource IconButton}" Width="30" Height="30"
+                                        ToolTip="{DynamicResource Tip.SaveImage}"
+                                        AutomationProperties.Name="{DynamicResource Tip.SaveImage}"
+                                        Command="{Binding Tag.SaveImageCommand, ElementName=Card}"
+                                        CommandParameter="{Binding}">
+                                    <TextBlock Style="{StaticResource IconText}" Text="&#xE74E;" FontSize="14"/>
+                                </Button>
+                                <Button Style="{StaticResource IconButton}" Width="30" Height="30"
+                                        ToolTip="{DynamicResource Tip.Unmount}"
+                                        AutomationProperties.Name="{DynamicResource Tip.Unmount}"
+                                        Command="{Binding Tag.UnmountCommand, ElementName=Card}"
+                                        CommandParameter="{Binding}">
+                                    <TextBlock Style="{StaticResource IconText}" Text="&#xE896;" FontSize="14"/>
+                                </Button>
+                            </StackPanel>
+
                             <!-- Saving overlay -->
                             <Border Grid.ColumnSpan="3"
                                     Background="{DynamicResource AppSurface}"
@@ -440,6 +479,10 @@
                         </Grid>
                     </Border>
                     <DataTemplate.Triggers>
+                        <Trigger SourceName="Card" Property="IsMouseOver" Value="True">
+                            <Setter TargetName="HoverActions" Property="Opacity" Value="1"/>
+                            <Setter TargetName="HoverActions" Property="IsHitTestVisible" Value="True"/>
+                        </Trigger>
                         <DataTrigger Value="True">
                             <DataTrigger.Binding>
                                 <Binding Path="IsSelected"
