@@ -13,6 +13,7 @@ public sealed class RamDisk : IDisposable
     private const uint EventDriveAdd = 0x00000100;
     private const uint FlagFlush = 0x1000;
     private const uint FlagPath = 0x0005;
+    private static readonly ILogger<RamDisk> Logger = AppLog.CreateLogger<RamDisk>();
     private readonly Lock _autoSaveLock = new();
     private readonly MemoryFileSystem _fs;
     private readonly FileSystemHost _host;
@@ -336,9 +337,12 @@ public sealed class RamDisk : IDisposable
                             SaveToImage(progress);
                         }
                     }
-                    catch
+                    catch (Exception ex)
                     {
-                        // Best-effort final save.
+                        // SaveToImage already raised SaveFailed before rethrowing, so UI
+                        // subscribers are notified; this is best-effort and must not throw
+                        // out of Dispose.
+                        Logger.LogWarning(ex, "Final save to '{ImagePath}' failed during Dispose", Options.PersistImagePath);
                     }
                 }
             }

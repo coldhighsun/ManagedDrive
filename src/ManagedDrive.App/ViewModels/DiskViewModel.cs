@@ -298,6 +298,7 @@ public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
     {
         _refreshTimer.Stop();
         _refreshTimer.Tick -= OnRefreshTick;
+        _activityThrottleTimer.Stop();
         _activityThrottleTimer.Tick -= OnActivityThrottleTick;
         SetActivityTrackingEnabled(false);
         Disk.SaveFailed -= OnDiskSaveFailed;

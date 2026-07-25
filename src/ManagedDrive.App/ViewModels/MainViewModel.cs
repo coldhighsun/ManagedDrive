@@ -12,6 +12,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     private static readonly TimeSpan DiskActivityStatusDuration = TimeSpan.FromSeconds(2.5);
 
     private readonly DispatcherTimer _diskActivityStatusTimer;
+    private readonly ILogger<MainViewModel> _logger;
     private readonly DispatcherTimer _memoryRefreshTimer;
     private readonly MountManager _mountManager;
     private readonly SettingsStore _settingsStore;
@@ -23,10 +24,12 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     /// <param name="mountManager">The application-wide mount manager.</param>
     /// <param name="settingsStore">The settings store used by the Settings dialog.</param>
     /// <param name="initialConfig">The configuration loaded at startup.</param>
-    public MainViewModel(MountManager mountManager, SettingsStore settingsStore, AppConfiguration initialConfig)
+    /// <param name="logger">Logger resolved from the DI container built in <see cref="App"/>.</param>
+    public MainViewModel(MountManager mountManager, SettingsStore settingsStore, AppConfiguration initialConfig, ILogger<MainViewModel> logger)
     {
         _mountManager = mountManager;
         _settingsStore = settingsStore;
+        _logger = logger;
         _tempDirCompatWarningShown = initialConfig.TempDirCompatWarningShown;
 
         StatusText = Loc.Get("Status.Ready");
@@ -176,6 +179,33 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     }
 
     /// <summary>
+    /// Gets the overall progress fraction (0-1) of the final disk save(s) performed while
+    /// <see cref="IsExiting"/> is <c>true</c>. Driven by <see cref="ReportExitSaveProgress"/>.
+    /// </summary>
+    public double ExitSaveProgress
+    {
+        get;
+        private set
+        {
+            field = value;
+            OnPropertyChanged(nameof(ExitSaveProgress));
+        }
+    }
+
+    /// <summary>
+    /// Gets the status text shown above the exit-saving progress bar.
+    /// </summary>
+    public string ExitSaveStatusText
+    {
+        get;
+        private set
+        {
+            field = value;
+            OnPropertyChanged(nameof(ExitSaveStatusText));
+        }
+    } = string.Empty;
+
+    /// <summary>
     /// Gets the command that formats (clears all content from) the selected disk.
     /// </summary>
     public RelayCommand FormatDiskCommand
@@ -219,46 +249,6 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
                 ExitSaveStatusText = Loc.Get("Msg.ExitSaving");
             }
         }
-    }
-
-    /// <summary>
-    /// Gets the overall progress fraction (0-1) of the final disk save(s) performed while
-    /// <see cref="IsExiting"/> is <c>true</c>. Driven by <see cref="ReportExitSaveProgress"/>.
-    /// </summary>
-    public double ExitSaveProgress
-    {
-        get;
-        private set
-        {
-            field = value;
-            OnPropertyChanged(nameof(ExitSaveProgress));
-        }
-    }
-
-    /// <summary>
-    /// Gets the status text shown above the exit-saving progress bar.
-    /// </summary>
-    public string ExitSaveStatusText
-    {
-        get;
-        private set
-        {
-            field = value;
-            OnPropertyChanged(nameof(ExitSaveStatusText));
-        }
-    } = string.Empty;
-
-    /// <summary>
-    /// Updates <see cref="ExitSaveProgress"/> and <see cref="ExitSaveStatusText"/> during the
-    /// final on-exit save. Called from <c>App.ShutdownAsync</c> via
-    /// <see cref="ManagedDrive.Core.Mounting.MountManager.Dispose(Action{ManagedDrive.Core.Mounting.RamDisk, double})"/>.
-    /// </summary>
-    /// <param name="mountPoint">The mount point of the disk currently being saved.</param>
-    /// <param name="fraction">Overall progress across all disks, in [0, 1].</param>
-    internal void ReportExitSaveProgress(string mountPoint, double fraction)
-    {
-        ExitSaveProgress = fraction;
-        ExitSaveStatusText = Loc.Format("Msg.ExitSavingDisk", mountPoint);
     }
 
     /// <summary>
@@ -745,6 +735,19 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         RefreshAvailableMemory();
     }
 
+    /// <summary>
+    /// Updates <see cref="ExitSaveProgress"/> and <see cref="ExitSaveStatusText"/> during the
+    /// final on-exit save. Called from <c>App.ShutdownAsync</c> via
+    /// <see cref="ManagedDrive.Core.Mounting.MountManager.Dispose(Action{ManagedDrive.Core.Mounting.RamDisk, double})"/>.
+    /// </summary>
+    /// <param name="mountPoint">The mount point of the disk currently being saved.</param>
+    /// <param name="fraction">Overall progress across all disks, in [0, 1].</param>
+    internal void ReportExitSaveProgress(string mountPoint, double fraction)
+    {
+        ExitSaveProgress = fraction;
+        ExitSaveStatusText = Loc.Format("Msg.ExitSavingDisk", mountPoint);
+    }
+
     internal void SaveSettings()
     {
         var current = _settingsStore.Load();
@@ -778,33 +781,6 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         StatusText = Loc.Format(isWrite ? "Status.DiskWrite" : "Status.DiskRead", mountPoint, fileName);
         _diskActivityStatusTimer.Stop();
         _diskActivityStatusTimer.Start();
-    }
-
-    /// <summary>
-    /// Deletes a disk's backing <c>.mdr</c> image (plus its snapshots) or source archive file, if
-    /// <paramref name="deleteImage"/> is set and the corresponding path is non-null. Shared by the
-    /// interactive unmount flow (<see cref="ExecuteUnmount"/>) and the CLI unmount command
-    /// (<see cref="UnmountByMountPointAsync"/>).
-    /// </summary>
-    private static async Task DeleteDiskImageIfRequestedAsync(bool deleteImage, string? persistImagePath, string? sourceArchivePath)
-    {
-        if (deleteImage && persistImagePath != null)
-        {
-            try
-            {
-                File.Delete(persistImagePath);
-            }
-            catch { }
-            await Task.Run(() => SnapshotManager.DeleteAllSnapshots(persistImagePath));
-        }
-        else if (deleteImage && sourceArchivePath != null)
-        {
-            try
-            {
-                File.Delete(sourceArchivePath);
-            }
-            catch { }
-        }
     }
 
     /// <summary>
@@ -868,6 +844,39 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             i++;
         }
         Disks.Insert(i, vm);
+    }
+
+    /// <summary>
+    /// Deletes a disk's backing <c>.mdr</c> image (plus its snapshots) or source archive file, if
+    /// <paramref name="deleteImage"/> is set and the corresponding path is non-null. Shared by the
+    /// interactive unmount flow (<see cref="ExecuteUnmount"/>) and the CLI unmount command
+    /// (<see cref="UnmountByMountPointAsync"/>).
+    /// </summary>
+    private async Task DeleteDiskImageIfRequestedAsync(bool deleteImage, string? persistImagePath, string? sourceArchivePath)
+    {
+        if (deleteImage && persistImagePath != null)
+        {
+            try
+            {
+                File.Delete(persistImagePath);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to delete image '{Path}'", persistImagePath);
+            }
+            await Task.Run(() => SnapshotManager.DeleteAllSnapshots(persistImagePath));
+        }
+        else if (deleteImage && sourceArchivePath != null)
+        {
+            try
+            {
+                File.Delete(sourceArchivePath);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to delete source archive '{Path}'", sourceArchivePath);
+            }
+        }
     }
 
     private void ExecuteAbout()

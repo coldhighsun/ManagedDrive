@@ -1,4 +1,7 @@
 using ManagedDrive.Cli.Core;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging.Abstractions;
+using Serilog;
 using System.Windows.Interop;
 
 namespace ManagedDrive.App;
@@ -13,11 +16,13 @@ namespace ManagedDrive.App;
 public partial class App
 {
     private const string SingleInstanceMutexName = "Global\\ManagedDrive-4A7C2E1B-9F3D-4B8A-A1C5-3E6D2F0B8C9A";
+    private static readonly TimeSpan ExitDisposeTimeout = TimeSpan.FromSeconds(20);
 
     private CliPipeServer? _cliPipeServer;
     private DiskNotificationService? _diskNotificationService;
     private GlobalMountCoordinator? _globalMountCoordinator;
     private bool _isExiting;
+    private ILogger<App> _logger = NullLoggerFactory.Instance.CreateLogger<App>();
     private MainViewModel? _mainViewModel;
     private MainWindow? _mainWindow;
 
@@ -30,6 +35,17 @@ public partial class App
     private IntPtr _mainWindowHandle;
 
     private MountManager? _mountManager;
+
+    /// <summary>
+    /// DI container root, built by <see cref="ConfigureServices"/>. Currently only backs the
+    /// logging infrastructure (<see cref="ILoggerFactory"/>/<see cref="ILogger{T}"/>) and
+    /// <see cref="MainViewModel"/>'s injected logger — most of this class's other collaborators
+    /// (tray/services) are still wired up manually because their constructors take runtime
+    /// delegates (window-visibility callbacks, tray actions) that don't fit a container
+    /// registration cleanly. Disposing this also disposes the registered <see cref="ILoggerFactory"/>.
+    /// </summary>
+    private ServiceProvider? _serviceProvider;
+
     private SessionEndingSaveHandler? _sessionEndingSaveHandler;
     private SettingsStore? _settings;
     private Mutex? _singleInstanceMutex;
@@ -44,6 +60,10 @@ public partial class App
         {
             SystemEvents.SessionEnding -= _sessionEndingSaveHandler.OnSessionEnding;
         }
+        if (_mountManager != null && _trayIconController != null)
+        {
+            _mountManager.ActivityDetected -= _trayIconController.OnActivityDetected;
+        }
         _mainViewModel?.SaveSettings();
         _trayIconController?.Dispose();
         _mainViewModel?.Dispose();
@@ -51,16 +71,31 @@ public partial class App
         _cliPipeServer?.Dispose();
 
         // Safety net: if ShutdownAsync already disposed the mount manager, this is a no-op.
-        Task.Run(() => _mountManager?.Dispose()).Wait();
+        // Bounded so a stuck final save can't hang process exit indefinitely.
+        if (!Task.Run(() => _mountManager?.Dispose()).Wait(ExitDisposeTimeout))
+        {
+            _logger.LogWarning("MountManager.Dispose did not complete within the exit timeout of {Timeout}", ExitDisposeTimeout);
+        }
         if (_singleInstanceMutex != null)
         {
             _singleInstanceMutex.ReleaseMutex();
             _singleInstanceMutex.Dispose();
         }
+
+        Log.CloseAndFlush();
+        _serviceProvider?.Dispose();
     }
 
     private async void App_Startup(object sender, StartupEventArgs e)
     {
+        ConfigureServices();
+        RegisterGlobalExceptionHandlers();
+
+        _settings = new();
+        var config = _settings.Load();
+        LanguageManager.Instance.ApplyDefault(config.Language);
+        ThemeManager.Instance.ApplyDefault(config.Theme);
+
         _singleInstanceMutex = new(true, SingleInstanceMutexName, out var createdNew);
         if (!createdNew)
         {
@@ -82,7 +117,7 @@ public partial class App
             }
 
             MessageBox.Show(
-                "ManagedDrive is already running.",
+                Loc.Get("Msg.AlreadyRunning"),
                 "ManagedDrive",
                 MessageBoxButton.OK,
                 MessageBoxImage.Information);
@@ -90,17 +125,12 @@ public partial class App
             return;
         }
 
-        _settings = new();
-        var config = _settings.Load();
-        LanguageManager.Instance.ApplyDefault(config.Language);
-        ThemeManager.Instance.ApplyDefault(config.Theme);
-
         CheckWinFspPrerequisite();
 
         _mountManager = new();
         _sessionEndingSaveHandler = new(_mountManager, () => _mainWindowHandle);
         SystemEvents.SessionEnding += _sessionEndingSaveHandler.OnSessionEnding;
-        _mainViewModel = new(_mountManager, _settings, config);
+        _mainViewModel = new(_mountManager, _settings, config, _serviceProvider!.GetRequiredService<ILogger<MainViewModel>>());
         _mainViewModel.ExitRequested += async (_, _) => await ShutdownAsync();
         _mainWindow = new(_mainViewModel);
         _mainWindow.Closing += MainWindow_Closing;
@@ -196,6 +226,37 @@ public partial class App
         Shutdown();
     }
 
+    /// <summary>
+    /// Builds the DI container: registers Serilog-backed logging (<see cref="ILoggerFactory"/>/
+    /// <see cref="ILogger{T}"/>) and wires the resulting factory through <see cref="AppLog"/> so
+    /// <c>Core</c> types get a real logger too (<c>SnapshotManager</c> is a static class and
+    /// <c>RamDisk</c> is constructed via a static factory, so neither can take a
+    /// constructor-injected logger without breaking their public API — <see cref="AppLog"/> is
+    /// the documented bridge for those two, still ultimately backed by this container).
+    /// Must run before <see cref="RegisterGlobalExceptionHandlers"/> so unhandled exceptions
+    /// from that point on are captured.
+    /// </summary>
+    private void ConfigureServices()
+    {
+        var logDirectory = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "ManagedDrive", "logs");
+
+        Log.Logger = new LoggerConfiguration()
+            .MinimumLevel.Information()
+            .WriteTo.File(
+                Path.Combine(logDirectory, "log-.txt"),
+                rollingInterval: RollingInterval.Day,
+                retainedFileCountLimit: 14)
+            .CreateLogger();
+
+        var services = new ServiceCollection();
+        services.AddLogging(builder => builder.AddSerilog(dispose: true));
+        _serviceProvider = services.BuildServiceProvider();
+
+        AppLog.Configure(_serviceProvider.GetRequiredService<ILoggerFactory>());
+        _logger = _serviceProvider.GetRequiredService<ILogger<App>>();
+    }
+
     private async void ExitApplication()
     {
         var tempOnRamDisk = _mainViewModel != null && TempDirCompatChecker.IsTempOnAnyDisk(_mainViewModel.Disks);
@@ -244,6 +305,25 @@ public partial class App
         _trayIconController.ShowBalloonTip("ManagedDrive", Loc.Get("Msg.StartedMinimized"), System.Windows.Forms.ToolTipIcon.Info);
     }
 
+    private void OnAppDomainUnhandledException(object sender, UnhandledExceptionEventArgs e)
+    {
+        // Last-resort fallback for non-UI-thread fatal exceptions; the process cannot be kept
+        // alive at this point, so this only guarantees the failure is on disk before it dies.
+        _logger.LogCritical(e.ExceptionObject as Exception, "Fatal unhandled exception outside the UI thread");
+        Log.CloseAndFlush();
+    }
+
+    private void OnDispatcherUnhandledException(object sender, DispatcherUnhandledExceptionEventArgs e)
+    {
+        _logger.LogError(e.Exception, "Unhandled exception on the UI thread");
+        MessageBox.Show(
+            Loc.Format("Msg.UnexpectedErrorBody", e.Exception.Message),
+            Loc.Get("Msg.UnexpectedErrorTitle"),
+            MessageBoxButton.OK,
+            MessageBoxImage.Error);
+        e.Handled = true;
+    }
+
     /// <summary>
     /// Fires whenever the main window is hidden (minimized to tray) or shown again. Toggles each
     /// disk's <see cref="DiskViewModel.SetActivityTrackingEnabled"/> to match, since nothing is
@@ -261,6 +341,24 @@ public partial class App
         {
             vm.SetActivityTrackingEnabled(isVisible);
         }
+    }
+
+    private void OnUnobservedTaskException(object? sender, UnobservedTaskExceptionEventArgs e)
+    {
+        _logger.LogWarning(e.Exception, "Unobserved task exception");
+        e.SetObserved();
+    }
+
+    /// <summary>
+    /// Registers process-wide exception handlers so an unhandled exception on the UI thread
+    /// (including one thrown by an <c>async void</c> command that resumes on the WPF dispatcher
+    /// after an <c>await</c>) is logged and shown to the user instead of crashing the process.
+    /// </summary>
+    private void RegisterGlobalExceptionHandlers()
+    {
+        DispatcherUnhandledException += OnDispatcherUnhandledException;
+        AppDomain.CurrentDomain.UnhandledException += OnAppDomainUnhandledException;
+        TaskScheduler.UnobservedTaskException += OnUnobservedTaskException;
     }
 
     private Task ResetTempDirsFromTrayAsync() => _tempDirCompatChecker!.ResetFromTrayAsync();
