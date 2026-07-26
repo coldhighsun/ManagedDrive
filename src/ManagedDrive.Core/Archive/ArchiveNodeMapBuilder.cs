@@ -118,11 +118,12 @@ public static class ArchiveNodeMapBuilder
     {
         var size = (ulong)entry.Size;
         var allocationSize = FileNode.AlignToAllocationUnit(size);
-        var data = new byte[allocationSize];
+        var data = FileContent.CreateZeroed(allocationSize);
 
-        using var entryStream = entry.OpenEntryStream();
-        using var target = new MemoryStream(data, 0, (int)size, writable: true);
-        entryStream.CopyTo(target);
+        using (var entryStream = entry.OpenEntryStream())
+        {
+            data.FillFromStream(entryStream, (long)size);
+        }
 
         var node = new FileNode
         {

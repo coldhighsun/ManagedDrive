@@ -355,7 +355,9 @@ public static partial class SnapshotManager
     private static byte[] ComputeHash(FileNode node)
     {
         var fileSize = (int)Math.Min(node.FileInfo.FileSize, (ulong)node.FileData!.Length);
-        return SHA256.HashData(node.FileData.AsSpan(0, fileSize));
+        using var incrementalHash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+        node.FileData.HashInto(incrementalHash, fileSize);
+        return incrementalHash.GetHashAndReset();
     }
 
     /// <summary>

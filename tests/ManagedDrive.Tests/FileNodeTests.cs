@@ -73,7 +73,7 @@ public sealed class FileNodeTests
             FilePath = "\\file.txt",
             LeafName = "file.txt",
             FileInfo = { FileAttributes = (uint)FileAttributes.Normal, FileSize = 3 },
-            FileData = [1, 2, 3],
+            FileData = FileContent.FromSpan([1, 2, 3], 512),
             FileSecurity = [9, 8],
         };
 
@@ -82,20 +82,22 @@ public sealed class FileNodeTests
         Assert.Equal(original.FilePath, clone.FilePath);
         Assert.Equal(original.LeafName, clone.LeafName);
         Assert.Equal(original.FileInfo.FileSize, clone.FileInfo.FileSize);
-        Assert.Equal(original.FileData, clone.FileData);
+        Assert.Equal(original.FileData!.ToArray(3), clone.FileData!.ToArray(3));
         Assert.Equal(original.FileSecurity, clone.FileSecurity);
     }
 
     [Fact]
     public void Clone_ReturnsIndependentBuffers()
     {
-        var original = new FileNode { FileData = [1, 2, 3], FileSecurity = [9, 8] };
+        var original = new FileNode { FileData = FileContent.FromSpan([1, 2, 3], 512), FileSecurity = [9, 8] };
         var clone = original.Clone();
 
-        clone.FileData![0] = 99;
-        clone.FileSecurity![0] = 77;
+        // FileNode.Clone must produce independent FileContent and FileSecurity instances
+        // (deep chunk-level independence of FileContent itself is covered in FileContentTests).
+        Assert.False(ReferenceEquals(original.FileData, clone.FileData));
+        Assert.False(ReferenceEquals(original.FileSecurity, clone.FileSecurity));
 
-        Assert.Equal(1, original.FileData[0]);
-        Assert.Equal(9, original.FileSecurity[0]);
+        clone.FileSecurity![0] = 77;
+        Assert.Equal(9, original.FileSecurity![0]);
     }
 }

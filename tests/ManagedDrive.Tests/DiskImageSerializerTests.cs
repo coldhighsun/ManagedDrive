@@ -210,7 +210,7 @@ public sealed class DiskImageSerializerTests
             Assert.Equal("MyLabel", volumeLabel);
             Assert.Equal(2, loaded.Count);
             Assert.True(loaded.TryGet("\\File.txt", out var node));
-            Assert.Equal("hello world"u8.ToArray(), node!.FileData!.Take("hello world"u8.Length).ToArray());
+            Assert.Equal("hello world"u8.ToArray(), node!.FileData!.ToArray("hello world"u8.Length));
             Assert.Null(cek);
         }
         finally
@@ -242,7 +242,7 @@ public sealed class DiskImageSerializerTests
             Assert.Equal("MyLabel", volumeLabel);
             Assert.Equal(2, loaded.Count);
             Assert.True(loaded.TryGet("\\File.txt", out var node));
-            Assert.Equal("hello world"u8.ToArray(), node!.FileData!.Take("hello world"u8.Length).ToArray());
+            Assert.Equal("hello world"u8.ToArray(), node!.FileData!.ToArray("hello world"u8.Length));
             Assert.Equal(cek, loadedCek);
         }
         finally
@@ -259,8 +259,6 @@ public sealed class DiskImageSerializerTests
     private static FileNode MakeFile(byte[] content)
     {
         var aligned = FileNode.AlignToAllocationUnit((ulong)content.Length);
-        var data = new byte[aligned];
-        Buffer.BlockCopy(content, 0, data, 0, content.Length);
 
         return new()
         {
@@ -270,7 +268,7 @@ public sealed class DiskImageSerializerTests
                 FileSize = (ulong)content.Length,
                 AllocationSize = aligned,
             },
-            FileData = data,
+            FileData = FileContent.FromSpan(content, aligned),
         };
     }
 }

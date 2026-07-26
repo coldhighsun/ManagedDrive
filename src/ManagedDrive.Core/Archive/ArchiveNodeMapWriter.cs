@@ -75,7 +75,9 @@ public static class ArchiveNodeMapWriter
             }
 
             var size = (int)node.FileInfo.FileSize;
-            using var entryStream = new MemoryStream(node.FileData ?? [], 0, size, writable: false);
+            using var entryStream = node.FileData is null
+                ? (Stream)new MemoryStream()
+                : node.FileData.AsReadOnlyStream(size);
             writer.Write(entryKey, entryStream, modificationTime);
 
             if (totalBytes > 0)

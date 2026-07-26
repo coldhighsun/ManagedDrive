@@ -1,5 +1,4 @@
 using Fsp;
-using System.Runtime.InteropServices;
 using System.Security.AccessControl;
 using FileInfo = Fsp.Interop.FileInfo;
 using VolumeInfo = Fsp.Interop.VolumeInfo;
@@ -244,7 +243,7 @@ public sealed class MemoryFileSystem : FileSystemBase
 
         if (aligned > 0 && !node.IsDirectory)
         {
-            node.FileData = new byte[aligned];
+            node.FileData = FileContent.CreateZeroed(aligned);
         }
 
         NodeMap.Add(fileName, node);
@@ -476,7 +475,7 @@ public sealed class MemoryFileSystem : FileSystemBase
 
         NodeMap.UpdateAllocationSize(node, aligned);
         node.FileInfo.FileSize = 0;
-        node.FileData = aligned > 0 ? new byte[aligned] : null;
+        node.FileData = aligned > 0 ? FileContent.CreateZeroed(aligned) : null;
 
         var now = FileTimeNow();
         node.FileInfo.LastAccessTime = now;
@@ -515,7 +514,7 @@ public sealed class MemoryFileSystem : FileSystemBase
 
         if (toRead > 0 && node.FileData != null)
         {
-            Marshal.Copy(node.FileData, (int)offset, buffer, (int)toRead);
+            node.FileData.ReadTo(offset, buffer, toRead);
             bytesTransferred = toRead;
             var readNow = DateTimeOffset.UtcNow;
             Interlocked.Exchange(ref _lastContentReadTicks, readNow.UtcTicks);
@@ -770,7 +769,7 @@ public sealed class MemoryFileSystem : FileSystemBase
 
         if (length > 0 && node.FileData != null)
         {
-            Marshal.Copy(buffer, node.FileData, (int)writeOffset, (int)length);
+            node.FileData.WriteFrom(buffer, writeOffset, length);
         }
 
         bytesTransferred = length;
@@ -897,16 +896,14 @@ public sealed class MemoryFileSystem : FileSystemBase
 
             if (aligned > 0)
             {
-                var newBuffer = new byte[aligned];
                 if (node.FileData != null)
                 {
-                    Buffer.BlockCopy(
-                        node.FileData, 0,
-                        newBuffer, 0,
-                        (int)Math.Min((ulong)node.FileData.Length, aligned));
+                    node.FileData.Resize(aligned);
                 }
-
-                node.FileData = newBuffer;
+                else
+                {
+                    node.FileData = FileContent.CreateZeroed(aligned);
+                }
             }
             else
             {

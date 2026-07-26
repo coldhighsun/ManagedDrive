@@ -8,11 +8,11 @@ namespace ManagedDrive.Core.FileSystem;
 public sealed class FileNode
 {
     /// <summary>
-    /// In-memory content buffer. <c>null</c> for directories.
+    /// In-memory content buffer. <c>null</c> for directories and zero-length files.
     /// Its logical length is <see cref="Fsp.Interop.FileInfo.AllocationSize"/>;
     /// the valid data range is <c>[0, FileInfo.FileSize)</c>.
     /// </summary>
-    public byte[]? FileData;
+    public FileContent? FileData;
 
     /// <summary>
     /// WinFsp file metadata: attributes, sizes, timestamps, and index number.
@@ -99,7 +99,7 @@ public sealed class FileNode
         {
             FileInfo = FileInfo,
             FileSecurity = FileSecurity?.ToArray(),
-            FileData = FileData?.ToArray(),
+            FileData = FileData?.Clone(),
             FilePath = FilePath,
             LeafName = LeafName,
         };
