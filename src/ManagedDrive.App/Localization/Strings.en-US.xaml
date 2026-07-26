@@ -25,8 +25,6 @@
     <sys:String x:Key="Tip.NewDisk">Create and mount a new RAM disk</sys:String>
     <sys:String x:Key="Tip.ImportDisk">Mount an existing .mdr image file</sys:String>
     <sys:String x:Key="Tip.ImportArchive">Mount the contents of an archive file (zip, 7z, rar, tar, ...) as a read-only disk</sys:String>
-    <sys:String x:Key="Tip.Unmount">Unmount the selected disk</sys:String>
-    <sys:String x:Key="Tip.SaveImage">Save the selected disk's contents to its image file</sys:String>
     <sys:String x:Key="Tip.Refresh">Refresh usage statistics</sys:String>
     <sys:String x:Key="Tip.Settings">Application settings</sys:String>
     <sys:String x:Key="Tip.ResetTempDirs">Reset Windows Temp Directories to defaults</sys:String>
@@ -36,7 +34,6 @@
     <sys:String x:Key="Tip.CloseDialog">Close</sys:String>
     <sys:String x:Key="Tip.Import">Import a disk image or archive</sys:String>
     <sys:String x:Key="Tip.More">More options</sys:String>
-    <sys:String x:Key="Tip.EditDisk">Edit the selected disk</sys:String>
     <sys:String x:Key="Col.MountPoint">Mount Point</sys:String>
     <sys:String x:Key="Col.Label">Label</sys:String>
     <sys:String x:Key="Col.Capacity">Capacity</sys:String>

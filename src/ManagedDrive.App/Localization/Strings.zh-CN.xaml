@@ -25,8 +25,6 @@
     <sys:String x:Key="Tip.NewDisk">创建并挂载新的 RAM 磁盘</sys:String>
     <sys:String x:Key="Tip.ImportDisk">挂载一个已有的 .mdr 镜像文件</sys:String>
     <sys:String x:Key="Tip.ImportArchive">将压缩包（zip、7z、rar、tar 等）的内容挂载为一个只读磁盘</sys:String>
-    <sys:String x:Key="Tip.Unmount">卸载所选磁盘</sys:String>
-    <sys:String x:Key="Tip.SaveImage">将所选磁盘内容保存到镜像文件</sys:String>
     <sys:String x:Key="Tip.Refresh">刷新使用情况统计</sys:String>
     <sys:String x:Key="Tip.Settings">应用程序设置</sys:String>
     <sys:String x:Key="Tip.ResetTempDirs">将 Windows 临时目录重置为默认值</sys:String>
@@ -36,7 +34,6 @@
     <sys:String x:Key="Tip.CloseDialog">关闭</sys:String>
     <sys:String x:Key="Tip.Import">导入磁盘镜像或压缩包</sys:String>
     <sys:String x:Key="Tip.More">更多选项</sys:String>
-    <sys:String x:Key="Tip.EditDisk">编辑所选磁盘</sys:String>
     <sys:String x:Key="Col.MountPoint">挂载点</sys:String>
     <sys:String x:Key="Col.Label">卷标</sys:String>
     <sys:String x:Key="Col.Capacity">容量</sys:String>
