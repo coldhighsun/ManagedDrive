@@ -322,6 +322,66 @@ public sealed class FileNodeMapTests
         Assert.Equal(4352UL, map.GetTotalAllocated());
     }
 
+    [Fact]
+    public async Task ConcurrentReadersAndWriters_DoNotCorruptState()
+    {
+        var map = new FileNodeMap();
+        map.Add("\\", MakeDir());
+
+        // Seed a stable set of files that readers will look up throughout the run.
+        for (var i = 0; i < 100; i++)
+        {
+            var node = MakeFile();
+            node.FileInfo.AllocationSize = 512;
+            map.Add($"\\stable{i}.txt", node);
+        }
+
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+        var token = cts.Token;
+        var exceptions = new System.Collections.Concurrent.ConcurrentQueue<Exception>();
+
+        void Guard(Action body)
+        {
+            try
+            {
+                while (!token.IsCancellationRequested)
+                {
+                    body();
+                }
+            }
+            catch (Exception ex)
+            {
+                exceptions.Enqueue(ex);
+            }
+        }
+
+        var readers = Enumerable.Range(0, 4).Select(r => Task.Run(() => Guard(() =>
+        {
+            map.TryGet("\\stable50.txt", out _);
+            _ = map.GetChildren("\\", null).Count();
+            _ = map.GetTotalAllocated();
+            _ = map.Count;
+        })));
+
+        var writers = Enumerable.Range(0, 4).Select(w => Task.Run(() => Guard(() =>
+        {
+            var path = $"\\churn{w}.txt";
+            var node = MakeFile();
+            node.FileInfo.AllocationSize = 1024;
+            map.Add(path, node);
+            map.UpdateAllocationSize(node, 2048);
+            map.Remove(path);
+        })));
+
+        await Task.WhenAll([.. readers, .. writers]);
+
+        Assert.Empty(exceptions);
+
+        // The stable set (root + 100 files) must be intact and its total unchanged.
+        Assert.Equal(101, map.Count);
+        Assert.Equal(100UL * 512, map.GetTotalAllocated());
+    }
+
     private static FileNode MakeDir() => new()
     {
         FileInfo = { FileAttributes = (uint)FileAttributes.Directory },
