@@ -157,6 +157,16 @@ procedure PromptForDotNetDesktopRuntime();
 var
   ErrorCode: Integer;
 begin
+  // Silent runs (winget, CI, /VERYSILENT) have no one to answer a blocking MsgBox - just log it,
+  // same as ReportAbortReason() does elsewhere in this script.
+  if WizardSilent() then
+  begin
+    Log('.NET 10 Desktop Runtime could not be installed automatically; skipping interactive ' +
+      'prompt because Setup is running silently. .NET-related features will not work until it ' +
+      'is installed manually from ' + DotNetDownloadPageUrl);
+    exit;
+  end;
+
   if MsgBox('ManagedDrive requires the .NET 10 Desktop Runtime, which could not be installed ' +
     'automatically. Open the official download page now? You can also install it later and ' +
     '.NET-related features will start working once it is installed.',
