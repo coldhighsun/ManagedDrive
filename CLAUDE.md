@@ -50,7 +50,8 @@ Types are organized into sub-namespace folders (no types live directly in the ba
 `Persistence` (`DiskImageSerializer`, the image-encryption exceptions),
 `Snapshots` (`SnapshotManager`, `SnapshotStore`),
 `Archive` (`ArchiveNodeMapBuilder`, `ArchiveNodeMapWriter` — the export-direction inverse, writing a `FileNodeMap` out to a new zip or 7z file),
-`DiskCreation` (`CreateDiskOptionsBuilder`, `ByteUnitConverter` — pure validation logic for the App layer's create-disk dialog).
+`DiskCreation` (`CreateDiskOptionsBuilder`, `ByteUnitConverter` — pure validation logic for the App layer's create-disk dialog),
+`Diagnostics` (`AppLog` — static logging entry point for Core types that can't take a constructor-injected `ILogger<T>` without breaking public API, namely the static `SnapshotManager` and the static-factory `RamDisk.Create`; returns a no-op logger until `AppLog.Configure` is called).
 Core's own `GlobalUsings.cs` global-uses all six sub-namespaces so files can reference each other without per-file `using` directives; consumers (`App`, `Tests`, `Benchmarks`) do the same at the project level (see above).
 
 Data flows: `MountManager` → `RamDisk.Create()` → `MemoryFileSystem` + `FileSystemHost` (WinFsp).
@@ -81,6 +82,7 @@ Data flows: `MountManager` → `RamDisk.Create()` → `MemoryFileSystem` + `File
 Standard WPF MVVM:
 
 - `App.xaml.cs` — application entry point, now limited to startup/shutdown orchestration and window navigation; tray icon, tray tooltip, disk notifications, TEMP compatibility, session-ending save, and the WinFsp prerequisite check are each delegated to a dedicated `Services/` class (below). `App_Startup` creates `MountManager` + `SettingsStore`, constructs `MainViewModel`, constructs those services in dependency order, auto-mounts profiles with `AutoMount = true`, and saves settings on exit. Enforces single-instance via a named `Mutex` (GUID `Global\ManagedDrive-4A7C2E1B-…`; bypassed when `DOTNET_ENVIRONMENT="Development"`).
+  - **Logging** — `ConfigureServices()` (called before `RegisterGlobalExceptionHandlers`, so unhandled exceptions from that point on are captured) builds a Serilog file logger (async sink, `%APPDATA%\ManagedDrive\logs\log-*.txt`, rolls at 20 MB, keeps 5 files) wrapped in a DI `ServiceCollection`/`ILoggerFactory`, then bridges it into Core via `AppLog.Configure` (see `Diagnostics.AppLog` above) so both layers log through the same sink. All user-initiated operations (mount/unmount/format/save/etc.) log through `ILogger<T>` (App) or `AppLog.CreateLogger<T>()` (Core) rather than `Console.WriteLine`.
   - `Services/WinFspPrerequisite` — static `IsInstalled()` check (registry + DLL file version); `App` still owns showing the install-prompt dialog and calling `Shutdown()` when missing.
   - `Services/TrayIconController` — owns the `System.Windows.Forms.NotifyIcon`, its context menu (theme/language-aware), and the three-icon (normal/read/write) activity-flash indicator driven by `MountManager.ActivityDetected`. Exposes `MouseMoved`, `Visible`, and `ShowBalloonTip` for the other tray-related services to consume without reaching into WinForms types directly.
   - `Services/TrayTooltipController` — owns the hover popup (`TrayTooltipView`) shown near the tray icon: cursor-tracking timers, show/hide/cooldown state, and popup positioning. Depends only on `TrayIconController.MouseMoved` for the cursor's screen position.
