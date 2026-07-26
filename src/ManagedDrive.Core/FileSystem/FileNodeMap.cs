@@ -5,11 +5,14 @@ namespace ManagedDrive.Core.FileSystem;
 /// tree of the in-memory file system. Keys are absolute paths using <c>\</c> as the separator
 /// (e.g., <c>\Folder\File.txt</c>). The root directory is stored under the key <c>\</c>.
 /// </summary>
-public sealed class FileNodeMap
+public sealed class FileNodeMap : IDisposable
 {
     private readonly SortedDictionary<string, FileNode> _map = new(StringComparer.OrdinalIgnoreCase);
 
-    private readonly Lock _syncRoot = new();
+    // Read/write lock instead of a mutual-exclusion lock: lookups and directory enumerations
+    // (the read-heavy majority) can proceed concurrently, and a full-scan enumeration no longer
+    // blocks unrelated metadata lookups. Structural mutations still take the exclusive write lock.
+    private readonly ReaderWriterLockSlim _syncRoot = new(LockRecursionPolicy.NoRecursion);
 
     private ulong _totalAllocated;
 
@@ -20,9 +23,14 @@ public sealed class FileNodeMap
     {
         get
         {
-            lock (_syncRoot)
+            _syncRoot.EnterReadLock();
+            try
             {
                 return _map.Count;
+            }
+            finally
+            {
+                _syncRoot.ExitReadLock();
             }
         }
     }
@@ -35,7 +43,8 @@ public sealed class FileNodeMap
     /// <param name="node">The file node to store.</param>
     public void Add(string filePath, FileNode node)
     {
-        lock (_syncRoot)
+        _syncRoot.EnterWriteLock();
+        try
         {
             if (_map.TryGetValue(filePath, out var existing))
             {
@@ -47,6 +56,10 @@ public sealed class FileNodeMap
             _map[filePath] = node;
             _totalAllocated += node.FileInfo.AllocationSize;
         }
+        finally
+        {
+            _syncRoot.ExitWriteLock();
+        }
     }
 
     /// <summary>
@@ -54,7 +67,8 @@ public sealed class FileNodeMap
     /// </summary>
     public void ClearAll()
     {
-        lock (_syncRoot)
+        _syncRoot.EnterWriteLock();
+        try
         {
             var toRemove = new List<string>();
             foreach (var key in _map.Keys)
@@ -71,6 +85,10 @@ public sealed class FileNodeMap
                 _map.Remove(key);
             }
         }
+        finally
+        {
+            _syncRoot.ExitWriteLock();
+        }
     }
 
     /// <summary>
@@ -81,9 +99,14 @@ public sealed class FileNodeMap
     /// </returns>
     public IReadOnlyList<KeyValuePair<string, FileNode>> GetAllNodes()
     {
-        lock (_syncRoot)
+        _syncRoot.EnterReadLock();
+        try
         {
             return [.. _map];
+        }
+        finally
+        {
+            _syncRoot.ExitReadLock();
         }
     }
 
@@ -105,7 +128,8 @@ public sealed class FileNodeMap
         var prefix = dirPath.Length == 1 ? dirPath : (dirPath + "\\");
 
         List<KeyValuePair<string, FileNode>> matches = [];
-        lock (_syncRoot)
+        _syncRoot.EnterReadLock();
+        try
         {
             // _map is sorted (OrdinalIgnoreCase), so all keys sharing this prefix form a
             // contiguous run. Skip until it starts, collect while it holds, then stop.
@@ -144,6 +168,10 @@ public sealed class FileNodeMap
                 matches.Add(kvp);
             }
         }
+        finally
+        {
+            _syncRoot.ExitReadLock();
+        }
 
         return matches;
     }
@@ -156,9 +184,14 @@ public sealed class FileNodeMap
     /// </returns>
     public ulong GetTotalAllocated()
     {
-        lock (_syncRoot)
+        _syncRoot.EnterReadLock();
+        try
         {
             return _totalAllocated;
+        }
+        finally
+        {
+            _syncRoot.ExitReadLock();
         }
     }
 
@@ -168,12 +201,17 @@ public sealed class FileNodeMap
     /// <param name="filePath">Absolute file-system path.</param>
     public void Remove(string filePath)
     {
-        lock (_syncRoot)
+        _syncRoot.EnterWriteLock();
+        try
         {
             if (_map.Remove(filePath, out var removed))
             {
                 _totalAllocated -= removed.FileInfo.AllocationSize;
             }
+        }
+        finally
+        {
+            _syncRoot.ExitWriteLock();
         }
     }
 
@@ -185,7 +223,8 @@ public sealed class FileNodeMap
     /// <param name="newPath">New absolute path for the directory.</param>
     public void RenameDescendants(string oldPath, string newPath)
     {
-        lock (_syncRoot)
+        _syncRoot.EnterWriteLock();
+        try
         {
             var prefix = oldPath + "\\";
             var keys = new List<string>();
@@ -207,6 +246,10 @@ public sealed class FileNodeMap
                 _map[newKey] = descendant;
             }
         }
+        finally
+        {
+            _syncRoot.ExitWriteLock();
+        }
     }
 
     /// <summary>
@@ -219,9 +262,14 @@ public sealed class FileNodeMap
     /// </returns>
     public bool TryGet(string filePath, out FileNode? node)
     {
-        lock (_syncRoot)
+        _syncRoot.EnterReadLock();
+        try
         {
             return _map.TryGetValue(filePath, out node);
+        }
+        finally
+        {
+            _syncRoot.ExitReadLock();
         }
     }
 
@@ -235,12 +283,26 @@ public sealed class FileNodeMap
     /// <param name="newAllocationSize">The new allocation size, in bytes.</param>
     public void UpdateAllocationSize(FileNode node, ulong newAllocationSize)
     {
-        lock (_syncRoot)
+        _syncRoot.EnterWriteLock();
+        try
         {
             _totalAllocated -= node.FileInfo.AllocationSize;
             node.FileInfo.AllocationSize = newAllocationSize;
             _totalAllocated += newAllocationSize;
         }
+        finally
+        {
+            _syncRoot.ExitWriteLock();
+        }
+    }
+
+    /// <summary>
+    /// Releases the reader/writer lock backing this map. Call only once the owning file system is
+    /// no longer serving callbacks.
+    /// </summary>
+    public void Dispose()
+    {
+        _syncRoot.Dispose();
     }
 
     private static string ComputeLeafName(string filePath)

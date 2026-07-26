@@ -350,6 +350,9 @@ public sealed class RamDisk : IDisposable
             _host.Unmount();
             _host.Dispose();
 
+            // The host is unmounted, so no WinFsp callbacks can still touch the map.
+            _fs.NodeMap.Dispose();
+
             if (_cek is not null)
             {
                 System.Security.Cryptography.CryptographicOperations.ZeroMemory(_cek);
