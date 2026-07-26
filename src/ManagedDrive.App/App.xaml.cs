@@ -266,6 +266,7 @@ public partial class App
                 Path.Combine(logDirectory, "log-.txt"),
                 fileSizeLimitBytes: 20 * 1024 * 1024,
                 rollOnFileSizeLimit: true,
+                rollingInterval: RollingInterval.Day,
                 retainedFileCountLimit: 5))
             .CreateLogger();
 
