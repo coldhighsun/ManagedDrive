@@ -43,6 +43,10 @@ public partial class DiskContentDialog
             NonClientFrameEdges = NonClientFrameEdges.None,
         });
 
+        // Only resizable dialog in the app, so it's the only one that can be maximized — without
+        // this, the borderless + transparent window ignores the taskbar's work area and covers it.
+        WindowMaximizeHelper.HookMaximizeBehavior(this);
+
         var nodes = target.Disk.GetAllNodes();
         var root = BuildTree(nodes);
         _rootNodes = root.Children.Values.Select(ToNode).ToList();
