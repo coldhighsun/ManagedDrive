@@ -501,7 +501,7 @@ public sealed class SnapshotManagerTests : IDisposable
             Assert.True(hasA || hasB);
 
             var node = hasA ? nodeA : nodeB;
-            Assert.Equal(shared, node!.FileData!.AsSpan(0, shared.Length).ToArray());
+            Assert.Equal(shared, node!.FileData!.ToArray(shared.Length));
         }
     }
 
@@ -561,7 +561,7 @@ public sealed class SnapshotManagerTests : IDisposable
         Assert.Equal(4, loaded.Count);
 
         Assert.True(loaded.TryGet("\\file.txt", out var fileNode));
-        Assert.Equal(content, fileNode!.FileData!.AsSpan(0, content.Length).ToArray());
+        Assert.Equal(content, fileNode!.FileData!.ToArray(content.Length));
         Assert.Equal((ulong)content.Length, fileNode.FileInfo.FileSize);
 
         Assert.True(loaded.TryGet("\\empty.txt", out var emptyNode));
@@ -581,8 +581,6 @@ public sealed class SnapshotManagerTests : IDisposable
     {
         var fileSize = (ulong)content.Length;
         var allocationSize = FileNode.AlignToAllocationUnit(fileSize);
-        var data = new byte[allocationSize];
-        Buffer.BlockCopy(content, 0, data, 0, content.Length);
 
         return new()
         {
@@ -592,7 +590,7 @@ public sealed class SnapshotManagerTests : IDisposable
                 FileSize = fileSize,
                 AllocationSize = allocationSize,
             },
-            FileData = data,
+            FileData = FileContent.FromSpan(content, allocationSize),
         };
     }
 

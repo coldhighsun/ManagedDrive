@@ -99,7 +99,7 @@ internal static class SnapshotStore
                 }
                 else
                 {
-                    node.FileData = new byte[FileNode.AlignToAllocationUnit(header.AllocationSize)];
+                    node.FileData = FileContent.CreateZeroed(FileNode.AlignToAllocationUnit(header.AllocationSize));
                 }
             }
 
@@ -241,7 +241,7 @@ internal static class SnapshotStore
         }
     }
 
-    private static void EnsureBlobWritten(string blobDirectory, byte[] hash, byte[] data, int length, ImageCompressionLevel level, byte[]? cek)
+    private static void EnsureBlobWritten(string blobDirectory, byte[] hash, FileContent data, int length, ImageCompressionLevel level, byte[]? cek)
     {
         var blobPath = HashToBlobPath(blobDirectory, hash);
         if (File.Exists(blobPath))
@@ -259,14 +259,14 @@ internal static class SnapshotStore
             using var ms = new MemoryStream();
             using (var gzip = new GZipStream(ms, ToCompressionLevel(level), leaveOpen: true))
             {
-                gzip.Write(data, 0, length);
+                data.CopyTo(gzip, length);
             }
 
             payload = ms.ToArray();
         }
         else
         {
-            payload = data.AsSpan(0, length).ToArray();
+            payload = data.ToArray(length);
         }
 
         var flag = compress ? BlobFlagCompressed : 0;
@@ -320,7 +320,7 @@ internal static class SnapshotStore
         }
     }
 
-    private static byte[] ReadBlob(string blobDirectory, byte[] hash, string nodePath, ulong fileSize, ulong allocationSize, byte[]? cek)
+    private static FileContent ReadBlob(string blobDirectory, byte[] hash, string nodePath, ulong fileSize, ulong allocationSize, byte[]? cek)
     {
         var blobPath = HashToBlobPath(blobDirectory, hash);
         if (!File.Exists(blobPath))
@@ -393,9 +393,7 @@ internal static class SnapshotStore
         }
 
         var aligned = FileNode.AlignToAllocationUnit(allocationSize);
-        var fileData = new byte[aligned];
-        Buffer.BlockCopy(content, 0, fileData, 0, content.Length);
-        return fileData;
+        return FileContent.FromSpan(content, aligned);
     }
 
     private static void ReadHeader(BinaryReader reader)
@@ -502,7 +500,14 @@ internal static class SnapshotStore
         }
 
         var fileSize = (int)Math.Min(node.FileInfo.FileSize, (ulong)node.FileData.Length);
-        var hash = SHA256.HashData(node.FileData.AsSpan(0, fileSize));
+
+        byte[] hash;
+        using (var incrementalHash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256))
+        {
+            node.FileData.HashInto(incrementalHash, fileSize);
+            hash = incrementalHash.GetHashAndReset();
+        }
+
         EnsureBlobWritten(blobDirectory, hash, node.FileData, fileSize, level, cek);
 
         writer.Write((byte)1); // HasBlob marker

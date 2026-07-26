@@ -67,10 +67,10 @@ public sealed class ArchiveNodeMapBuilderTests
             Assert.True(nodeMap.TryGet("\\Folder\\SubFolder\\File.txt", out var file));
             Assert.False(file!.IsDirectory);
             Assert.Equal(11UL, file.FileInfo.FileSize);
-            Assert.Equal("hello world"u8.ToArray(), file.FileData![..11]);
+            Assert.Equal("hello world"u8.ToArray(), file.FileData!.ToArray(11));
 
             Assert.True(nodeMap.TryGet("\\Root.txt", out var rootFile));
-            Assert.Equal("root content"u8.ToArray(), rootFile!.FileData![..12]);
+            Assert.Equal("root content"u8.ToArray(), rootFile!.FileData!.ToArray(12));
         }
         finally
         {

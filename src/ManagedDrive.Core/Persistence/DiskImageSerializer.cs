@@ -436,13 +436,9 @@ public static class DiskImageSerializer
         var dataLen = reader.ReadInt64();
         if (dataLen > 0 && !node.IsDirectory)
         {
-            var fileContent = reader.ReadBytes((int)dataLen);
             var aligned = FileNode.AlignToAllocationUnit(node.FileInfo.AllocationSize);
-            node.FileData = new byte[aligned];
-            Buffer.BlockCopy(
-                fileContent, 0,
-                node.FileData, 0,
-                Math.Min(fileContent.Length, node.FileData.Length));
+            node.FileData = FileContent.CreateZeroed(aligned);
+            node.FileData.FillFromStream(reader.BaseStream, dataLen);
         }
         else if (dataLen > 0)
         {
@@ -553,7 +549,7 @@ public static class DiskImageSerializer
         {
             var fileSize = Math.Min(node.FileInfo.FileSize, (ulong)node.FileData.Length);
             writer.Write((long)fileSize);
-            writer.Write(node.FileData, 0, (int)fileSize);
+            node.FileData.CopyTo(writer.BaseStream, (long)fileSize);
         }
         else
         {

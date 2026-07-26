@@ -43,10 +43,10 @@ public sealed class ArchiveNodeMapWriterTests
 
             Assert.True(restored.TryGet("\\Folder\\File.txt", out var file));
             Assert.False(file!.IsDirectory);
-            Assert.Equal("hello world"u8.ToArray(), file.FileData![..(int)file.FileInfo.FileSize]);
+            Assert.Equal("hello world"u8.ToArray(), file.FileData!.ToArray((long)file.FileInfo.FileSize));
 
             Assert.True(restored.TryGet("\\Root.txt", out var rootFile));
-            Assert.Equal("root content"u8.ToArray(), rootFile!.FileData![..(int)rootFile.FileInfo.FileSize]);
+            Assert.Equal("root content"u8.ToArray(), rootFile!.FileData!.ToArray((long)rootFile.FileInfo.FileSize));
 
             Assert.True(restored.TryGet("\\EmptyFolder", out var emptyFolder));
             Assert.True(emptyFolder!.IsDirectory);
@@ -95,12 +95,10 @@ public sealed class ArchiveNodeMapWriterTests
     {
         var size = (ulong)content.Length;
         var allocationSize = FileNode.AlignToAllocationUnit(size);
-        var data = new byte[allocationSize];
-        content.CopyTo(data, 0);
 
         return new()
         {
-            FileData = data,
+            FileData = FileContent.FromSpan(content, allocationSize),
             FileSecurity = FileNode.DefaultSecurityDescriptorBytes,
             FileInfo =
             {
