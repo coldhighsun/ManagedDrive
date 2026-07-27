@@ -100,7 +100,7 @@ public sealed class TrayTooltipController
             return false;
         }
 
-        var dpi = System.Windows.Media.VisualTreeHelper.GetDpi(System.Windows.Application.Current.MainWindow ?? new Window());
+        var dpi = System.Windows.Media.VisualTreeHelper.GetDpi(Application.Current.MainWindow ?? new Window());
         var margin = 16.0;
         var left = _trayInfoPopup.HorizontalOffset * dpi.DpiScaleX - margin;
         var top = _trayInfoPopup.VerticalOffset * dpi.DpiScaleY - margin;
@@ -117,7 +117,7 @@ public sealed class TrayTooltipController
         var popupHeight = child?.DesiredSize.Height ?? 80;
         var popupWidth = child?.DesiredSize.Width ?? 200;
 
-        var dpi = System.Windows.Media.VisualTreeHelper.GetDpi(System.Windows.Application.Current.MainWindow ?? new Window());
+        var dpi = System.Windows.Media.VisualTreeHelper.GetDpi(Application.Current.MainWindow ?? new Window());
         var x = _iconScreenPoint.X / dpi.DpiScaleX;
         var y = _iconScreenPoint.Y / dpi.DpiScaleY;
 

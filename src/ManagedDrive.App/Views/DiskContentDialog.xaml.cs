@@ -21,7 +21,7 @@ public partial class DiskContentDialog
 {
     private readonly HashSet<DiskContentNode> _expandedNodes = [];
     private readonly ObservableCollection<DiskContentRow> _rows = [];
-    private List<DiskContentNode> _rootNodes = [];
+    private readonly List<DiskContentNode> _rootNodes = [];
     private bool _sortAscending = true;
     private SortKey _sortKey = SortKey.Name;
 
@@ -221,7 +221,7 @@ public partial class DiskContentDialog
             return;
         }
 
-        _sortAscending = _sortKey == key ? !_sortAscending : true;
+        _sortAscending = _sortKey != key || !_sortAscending;
         _sortKey = key;
 
         SortRecursively(_rootNodes, BuildComparer(_sortKey, _sortAscending));
@@ -249,9 +249,9 @@ public partial class DiskContentDialog
     }
 
     private SortKey? ResolveSortKey(object column) =>
-            column == NameColumn ? SortKey.Name :
-            column == SizeColumn ? SortKey.Size :
-            column == TypeColumn ? SortKey.Type :
+            Equals(column, NameColumn) ? SortKey.Name :
+            Equals(column, SizeColumn) ? SortKey.Size :
+            Equals(column, TypeColumn) ? SortKey.Type :
             null;
 
     /// <summary>

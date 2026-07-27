@@ -361,7 +361,7 @@ public sealed class FileNodeMapTests
             _ = map.GetChildren("\\", null).Count();
             _ = map.GetTotalAllocated();
             _ = map.Count;
-        })));
+        }), token));
 
         var writers = Enumerable.Range(0, 4).Select(w => Task.Run(() => Guard(() =>
         {
@@ -371,7 +371,7 @@ public sealed class FileNodeMapTests
             map.Add(path, node);
             map.UpdateAllocationSize(node, 2048);
             map.Remove(path);
-        })));
+        }), token));
 
         await Task.WhenAll([.. readers, .. writers]);
 

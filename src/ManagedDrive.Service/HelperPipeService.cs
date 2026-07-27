@@ -44,71 +44,6 @@ public sealed class HelperPipeService(GlobalMountManager mountManager, ILogger<H
         }
     }
 
-    private async Task ReconcileLoopAsync(CancellationToken stoppingToken)
-    {
-        using var timer = new PeriodicTimer(ReconcileInterval);
-        try
-        {
-            while (await timer.WaitForNextTickAsync(stoppingToken))
-            {
-                mountManager.Reconcile();
-            }
-        }
-        catch (OperationCanceledException)
-        {
-            // Shutting down.
-        }
-    }
-
-    private async Task HandleConnectionAsync(NamedPipeServerStream pipe, CancellationToken ct)
-    {
-        logger.LogDebug("Client connected. PID={Pid}", NativeMethods.GetClientProcessId(pipe.SafePipeHandle));
-
-        using var reader = new StreamReader(pipe, leaveOpen: true);
-        await using var writer = new StreamWriter(pipe, leaveOpen: true) { AutoFlush = true };
-
-        var requestJson = await reader.ReadLineAsync(ct);
-        if (requestJson == null)
-        {
-            return;
-        }
-
-        var request = HelperPipeProtocol.DeserializeRequest(requestJson);
-        var response = Handle(request);
-
-        await writer.WriteLineAsync(HelperPipeProtocol.SerializeResponse(response).AsMemory(), ct);
-    }
-
-    private HelperResponse Handle(HelperRequest request)
-    {
-        switch (request.Op)
-        {
-            case HelperPipeProtocol.OpPing:
-                return new HelperResponse(true, "pong");
-
-            case HelperPipeProtocol.OpPublish:
-                if (request.Letter == null || request.DevicePath == null)
-                {
-                    return new HelperResponse(false, "publish requires Letter and DevicePath.");
-                }
-
-                var (pubOk, pubMsg) = mountManager.Publish(request.Letter, request.DevicePath);
-                return new HelperResponse(pubOk, pubMsg);
-
-            case HelperPipeProtocol.OpUnpublish:
-                if (request.Letter == null)
-                {
-                    return new HelperResponse(false, "unpublish requires Letter.");
-                }
-
-                var (unpubOk, unpubMsg) = mountManager.Unpublish(request.Letter);
-                return new HelperResponse(unpubOk, unpubMsg);
-
-            default:
-                return new HelperResponse(false, $"Unknown op '{request.Op}'.");
-        }
-    }
-
     /// <summary>
     /// Creates a pipe whose DACL explicitly allows medium-integrity user processes to connect —
     /// required because this SYSTEM-hosted pipe would otherwise be inaccessible to the user-mode
@@ -142,5 +77,71 @@ public sealed class HelperPipeService(GlobalMountManager mountManager, ILogger<H
             inBufferSize: 0,
             outBufferSize: 0,
             security);
+    }
+
+    private HelperResponse Handle(HelperRequest request)
+    {
+        switch (request.Op)
+        {
+            case HelperPipeProtocol.OpPing:
+                return new HelperResponse(true, "pong");
+
+            case HelperPipeProtocol.OpPublish:
+                if (request.Letter == null || request.DevicePath == null)
+                {
+                    return new HelperResponse(false, "publish requires Letter and DevicePath.");
+                }
+
+                var (pubOk, pubMsg) = mountManager.Publish(request.Letter, request.DevicePath);
+                return new HelperResponse(pubOk, pubMsg);
+
+            case HelperPipeProtocol.OpUnpublish:
+                if (request.Letter == null)
+                {
+                    return new HelperResponse(false, "unpublish requires Letter.");
+                }
+
+                var (unpubOk, unpubMsg) = mountManager.Unpublish(request.Letter);
+                return new HelperResponse(unpubOk, unpubMsg);
+
+            default:
+                return new HelperResponse(false, $"Unknown op '{request.Op}'.");
+        }
+    }
+
+    private async Task HandleConnectionAsync(NamedPipeServerStream pipe, CancellationToken ct)
+    {
+        logger.LogDebug("Client connected. PID={Pid}", NativeMethods.GetClientProcessId(pipe.SafePipeHandle));
+
+        using var reader = new StreamReader(pipe, leaveOpen: true);
+        await using var writer = new StreamWriter(pipe, leaveOpen: true);
+        writer.AutoFlush = true;
+
+        var requestJson = await reader.ReadLineAsync(ct);
+        if (requestJson == null)
+        {
+            return;
+        }
+
+        var request = HelperPipeProtocol.DeserializeRequest(requestJson);
+        var response = Handle(request);
+
+        await writer.WriteLineAsync(HelperPipeProtocol.SerializeResponse(response).AsMemory(), ct);
+    }
+
+    private async Task ReconcileLoopAsync(CancellationToken stoppingToken)
+    {
+        using var timer = new PeriodicTimer(ReconcileInterval);
+        try
+        {
+            while (await timer.WaitForNextTickAsync(stoppingToken))
+            {
+                mountManager.Reconcile();
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // Shutting down.
+        }
     }
 }

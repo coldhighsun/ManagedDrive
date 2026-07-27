@@ -39,7 +39,7 @@ public class FileContentTests
     [Fact]
     public void MultiChunkFile_AllocatesFullChunksPlusRightSizedTail()
     {
-        var content = FileContent.CreateZeroed((ulong)(FileContent.ChunkSize + 512));
+        var content = FileContent.CreateZeroed(FileContent.ChunkSize + 512);
 
         // One full 64 KiB chunk + a 512-byte tail, not two full chunks.
         Assert.Equal(FileContent.ChunkSize + 512, content.BackingByteCount);
@@ -51,7 +51,7 @@ public class FileContentTests
         var content = FileContent.CreateZeroed(4096);
         Assert.Equal(4096, content.BackingByteCount);
 
-        content.Resize((ulong)(FileContent.ChunkSize + 512));
+        content.Resize(FileContent.ChunkSize + 512);
 
         // The former 4 KiB tail is promoted to a full chunk; new tail is 512 bytes.
         Assert.Equal(FileContent.ChunkSize + 512, content.BackingByteCount);
@@ -106,13 +106,13 @@ public class FileContentTests
     {
         // Fill the first two chunks with non-zero data, shrink into chunk 0, then grow back and
         // confirm the re-exposed region reads as zero rather than the old data.
-        var content = FileContent.CreateZeroed((ulong)(FileContent.ChunkSize * 2));
+        var content = FileContent.CreateZeroed(FileContent.ChunkSize * 2);
         var filler = new byte[FileContent.ChunkSize * 2];
         Array.Fill(filler, (byte)0xAB);
         WriteBytes(content, 0, filler);
 
         content.Resize(1024);
-        content.Resize((ulong)(FileContent.ChunkSize * 2));
+        content.Resize(FileContent.ChunkSize * 2);
 
         // Bytes past the retained 1024 must be zero, not 0xAB.
         var exposed = ReadBytes(content, 1024, FileContent.ChunkSize);
