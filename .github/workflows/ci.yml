@@ -96,6 +96,15 @@ jobs:
             -o publish-fx/
         shell: pwsh
 
+      - name: Publish wingetex (win-x64, framework-dependent)
+        run: |
+          dotnet publish src/ManagedDrive.WingetExtension/ManagedDrive.WingetExtension.csproj `
+            -c Release `
+            -r win-x64 `
+            --no-self-contained `
+            -o publish-fx/
+        shell: pwsh
+
       - name: Resolve version from tag
         id: version
         run: |
