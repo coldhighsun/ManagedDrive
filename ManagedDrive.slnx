@@ -12,18 +12,24 @@
   <Folder Name="/.github/">
     <File Path=".github/workflows/ci.yml" />
   </Folder>
-  <Folder Name="/src/">
-    <Project Path="src/ManagedDrive.App/ManagedDrive.App.csproj" />
-    <Project Path="src/ManagedDrive.Core/ManagedDrive.Core.csproj" />
-    <Project Path="src/ManagedDrive.HelperProtocol/ManagedDrive.HelperProtocol.csproj" />
-    <Project Path="src/ManagedDrive.Service/ManagedDrive.Service.csproj" />
-  </Folder>
+  <Folder Name="/src/" />
   <Folder Name="/benchmarks/">
     <Project Path="benchmarks/ManagedDrive.Benchmarks/ManagedDrive.Benchmarks.csproj" />
+  </Folder>
+  <Folder Name="/src/app/">
+    <Project Path="src/ManagedDrive.App/ManagedDrive.App.csproj" />
+    <Project Path="src/ManagedDrive.Core/ManagedDrive.Core.csproj" />
   </Folder>
   <Folder Name="/src/cli/">
     <Project Path="src/ManagedDrive.Cli.Core/ManagedDrive.Cli.Core.csproj" />
     <Project Path="src/ManagedDrive.Cli/ManagedDrive.Cli.csproj" />
+  </Folder>
+  <Folder Name="/src/service/">
+    <Project Path="src/ManagedDrive.HelperProtocol/ManagedDrive.HelperProtocol.csproj" />
+    <Project Path="src/ManagedDrive.Service/ManagedDrive.Service.csproj" />
+  </Folder>
+  <Folder Name="/src/winget/">
+    <Project Path="src/ManagedDrive.WingetExtension/ManagedDrive.WingetExtension.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/ManagedDrive.Tests/ManagedDrive.Tests.csproj" />
