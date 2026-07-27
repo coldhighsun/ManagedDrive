@@ -64,7 +64,7 @@ Two artifacts are published on the [Releases](https://github.com/coldhighsun/Man
 
 If using the ZIP, extract it anywhere and run `ManagedDrive.exe` directly. `ManagedDrive.exe` is a single-file executable — the ZIP contains it plus one small companion `winfsp-msil.dll` (the managed WinFsp interop assembly, which can't be embedded in the single-file bundle) that must stay next to it. The only registry write is the optional "Run at startup" setting; nothing else touches the registry. WinFsp must be installed separately first with the ZIP (see Prerequisites below); the installer handles this automatically.
 
-The ZIP also includes `mdrive.exe`, a companion CLI (see [CLI Usage](#cli-usage) below), and `wgx.exe`, a `winget` wrapper (see [wgx: winget wrapper](#wgx-winget-wrapper) below). Add the extraction folder to your `PATH` to run `mdrive`/`wgx` from any shell. The installer adds both to the machine-wide `PATH` automatically.
+The ZIP also includes `mdrive.exe`, a companion CLI (see [CLI Usage](#cli-usage) below), and `wingetx.exe`, a `winget` wrapper (see [wingetx: winget wrapper](#wingetx-winget-wrapper) below). Add the extraction folder to your `PATH` to run `mdrive`/`wingetx` from any shell. The installer adds both to the machine-wide `PATH` automatically.
 
 ### Prerequisites
 
@@ -111,7 +111,7 @@ ManagedDrive/
 │   ├── ManagedDrive.Cli/               # `mdrive.exe`, the console entry point
 │   ├── ManagedDrive.HelperProtocol/    # Named-pipe protocol shared between the app and the SYSTEM helper service
 │   ├── ManagedDrive.Service/           # `ManagedDriveHelper.exe`, optional LocalSystem service publishing global DOS-device symlinks for cross-session TEMP visibility (see Known Issues)
-│   └── ManagedDrive.WingetExtension/   # `wgx.exe`, a transparent winget wrapper (see wgx: winget wrapper)
+│   └── ManagedDrive.WingetExtension/   # `wingetx.exe`, a transparent winget wrapper (see wingetx: winget wrapper)
 ├── tests/
 │   └── ManagedDrive.Tests/             # xUnit v3 unit tests (pure-managed code only)
 └── benchmarks/
@@ -222,21 +222,21 @@ mdrive exit
 
 Run `mdrive --help` or `mdrive <command> --help` for the full option list.
 
-### wgx: winget wrapper
+### wingetx: winget wrapper
 
-`wgx.exe` is a transparent wrapper around `winget` that ships alongside `ManagedDrive.exe`/`mdrive.exe`. Use it as a drop-in replacement for `winget`:
+`wingetx.exe` is a transparent wrapper around `winget` that ships alongside `ManagedDrive.exe`/`mdrive.exe`. Use it as a drop-in replacement for `winget`:
 
 ```powershell
-wgx install <package>
-wgx upgrade <package>
+wingetx install <package>
+wingetx upgrade <package>
 ```
 
-If `%TEMP%` isn't currently on a ManagedDrive volume, or the requested subcommand isn't `install`/`upgrade`, `wgx` just forwards the call to `winget.exe` unchanged — so it's always safe to alias `winget` to `wgx`.
+If `%TEMP%` isn't currently on a ManagedDrive volume, or the requested subcommand isn't `install`/`upgrade`, `wingetx` just forwards the call to `winget.exe` unchanged — so it's always safe to alias `winget` to `wingetx`.
 
-When `%TEMP%` **is** set to a ManagedDrive volume, `wgx install`/`wgx upgrade` routes MSI- and exe-based packages through `winget download` followed by a manual launch of the downloaded installer (`msiexec` for MSI/WiX, the installer exe directly otherwise), instead of a plain `winget install`. This sidesteps both failure modes described in [Known Issues](#known-issues) below: `msiexec`'s Mount-Manager source-volume check, and the cross-session exit-code-1 issue affecting exe installers. Installer types it can't confidently handle this way (msix, appx, zip, portable, ...) are forwarded to plain `winget install`/`upgrade` automatically.
+When `%TEMP%` **is** set to a ManagedDrive volume, `wingetx install`/`wingetx upgrade` routes MSI- and exe-based packages through `winget download` followed by a manual launch of the downloaded installer (`msiexec` for MSI/WiX, the installer exe directly otherwise), instead of a plain `winget install`. This sidesteps both failure modes described in [Known Issues](#known-issues) below: `msiexec`'s Mount-Manager source-volume check, and the cross-session exit-code-1 issue affecting exe installers. Installer types it can't confidently handle this way (msix, appx, zip, portable, ...) are forwarded to plain `winget install`/`upgrade` automatically.
 
 - The installer's UI stays visible (`SilentWithProgress` switches) unless `--silent` or `--disable-interactivity` is passed, matching `winget`'s own behavior.
-- The downloaded installer is staged in `%LOCALAPPDATA%\Temp\wgx` — a real, non-WinFsp volume — before it's launched.
+- The downloaded installer is staged in `%LOCALAPPDATA%\Temp\wingetx` — a real, non-WinFsp volume — before it's launched.
 
 ### Known Issues
 
@@ -257,7 +257,7 @@ WinFsp mounts a drive letter into the **current logon session's** device namespa
   ```
   Remove later with `sc stop ManagedDriveHelper` then `sc delete ManagedDriveHelper`. Entirely optional — ManagedDrive works normally without it; skipping it just leaves failure mode 1 unresolved.
 
-**Fixing MSI installs:** reset TEMP to the Windows default (toolbar button) before installing MSI-based software, then retry — or download the installer from the vendor and run it manually. Or use [`wgx`](#wgx-winget-wrapper) in place of `winget`, which works around both failure modes without touching TEMP.
+**Fixing MSI installs:** reset TEMP to the Windows default (toolbar button) before installing MSI-based software, then retry — or download the installer from the vendor and run it manually. Or use [`wingetx`](#wingetx-winget-wrapper) in place of `winget`, which works around both failure modes without touching TEMP.
 
 ManagedDrive warns once when TEMP is set to a RAM disk, and again on every startup while it stays that way.
 
@@ -324,7 +324,7 @@ This project bundles [WinFsp](https://winfsp.dev/) and [SharpCompress](https://g
 
 若使用 ZIP，解压到任意目录后直接运行 `ManagedDrive.exe` 即可。`ManagedDrive.exe` 是单文件可执行程序——ZIP 中还附带一个体积很小的 `winfsp-msil.dll`（WinFsp 托管互操作程序集，无法打包进单文件中），需与 exe 保持在同一目录下。唯一会写入注册表的操作是可选的"开机自启"设置，除此之外不会写入注册表。使用 ZIP 时仍需提前单独安装 WinFsp（见下方环境要求）；安装程序会自动处理这一步。
 
-ZIP 中还包含 `mdrive.exe`（配套命令行工具，见下方[命令行用法](#命令行用法)）和 `wgx.exe`（`winget` 包装工具，见下方[wgx: winget 包装工具](#wgx-winget-包装工具)）。将解压目录加入 `PATH` 后即可在任意终端中运行 `mdrive`/`wgx`。安装程序会自动将两者加入系统级 `PATH`。
+ZIP 中还包含 `mdrive.exe`（配套命令行工具，见下方[命令行用法](#命令行用法)）和 `wingetx.exe`（`winget` 包装工具，见下方[wingetx: winget 包装工具](#wingetx-winget-包装工具)）。将解压目录加入 `PATH` 后即可在任意终端中运行 `mdrive`/`wingetx`。安装程序会自动将两者加入系统级 `PATH`。
 
 ### 环境要求
 
@@ -371,7 +371,7 @@ ManagedDrive/
 │   ├── ManagedDrive.Cli/               # `mdrive.exe` 控制台入口点
 │   ├── ManagedDrive.HelperProtocol/    # 应用与 SYSTEM 辅助服务之间共享的命名管道协议
 │   ├── ManagedDrive.Service/           # `ManagedDriveHelper.exe`——可选的 LocalSystem 服务，发布全局 DOS 设备符号链接以实现跨会话 TEMP 可见性（见"已知问题"）
-│   └── ManagedDrive.WingetExtension/   # `wgx.exe`——透明的 winget 包装工具（见"wgx: winget 包装工具"）
+│   └── ManagedDrive.WingetExtension/   # `wingetx.exe`——透明的 winget 包装工具（见"wingetx: winget 包装工具"）
 ├── tests/
 │   └── ManagedDrive.Tests/             # xUnit v3 单元测试（仅纯托管代码）
 └── benchmarks/
@@ -482,21 +482,21 @@ mdrive exit
 
 运行 `mdrive --help` 或 `mdrive <命令> --help` 可查看完整的选项列表。
 
-### wgx: winget 包装工具
+### wingetx: winget 包装工具
 
-`wgx.exe` 是 `winget` 的透明包装工具，随 `ManagedDrive.exe`/`mdrive.exe` 一同发布。可直接把它当作 `winget` 的替代品使用：
+`wingetx.exe` 是 `winget` 的透明包装工具，随 `ManagedDrive.exe`/`mdrive.exe` 一同发布。可直接把它当作 `winget` 的替代品使用：
 
 ```powershell
-wgx install <包名>
-wgx upgrade <包名>
+wingetx install <包名>
+wingetx upgrade <包名>
 ```
 
-如果 `%TEMP%` 当前不在 ManagedDrive 内存盘上，或所调用的子命令不是 `install`/`upgrade`，`wgx` 会原样把调用转发给 `winget.exe`——因此把 `winget` 直接别名为 `wgx` 始终是安全的。
+如果 `%TEMP%` 当前不在 ManagedDrive 内存盘上，或所调用的子命令不是 `install`/`upgrade`，`wingetx` 会原样把调用转发给 `winget.exe`——因此把 `winget` 直接别名为 `wingetx` 始终是安全的。
 
-当 `%TEMP%` **确实**设为 ManagedDrive 内存盘时，`wgx install`/`wgx upgrade` 会将 MSI 及 exe 类型的包改为先执行 `winget download`，再手动启动下载好的安装程序（MSI/WiX 用 `msiexec`，其余直接运行安装包本身），而不是直接执行 `winget install`。这样可以绕开下方[已知问题](#已知问题)中描述的两种失败模式：`msiexec` 的卷装载管理器（Mount Manager）源卷检查，以及影响 exe 安装包的跨会话退出码 1 问题。它无法确信处理的安装包类型（msix、appx、zip、便携版等）会自动转发给普通的 `winget install`/`upgrade`。
+当 `%TEMP%` **确实**设为 ManagedDrive 内存盘时，`wingetx install`/`wingetx upgrade` 会将 MSI 及 exe 类型的包改为先执行 `winget download`，再手动启动下载好的安装程序（MSI/WiX 用 `msiexec`，其余直接运行安装包本身），而不是直接执行 `winget install`。这样可以绕开下方[已知问题](#已知问题)中描述的两种失败模式：`msiexec` 的卷装载管理器（Mount Manager）源卷检查，以及影响 exe 安装包的跨会话退出码 1 问题。它无法确信处理的安装包类型（msix、appx、zip、便携版等）会自动转发给普通的 `winget install`/`upgrade`。
 
 - 除非传入 `--silent` 或 `--disable-interactivity`，安装程序界面默认保持可见（`SilentWithProgress` 开关），与 `winget` 自身行为一致。
-- 下载的安装包会先暂存到 `%LOCALAPPDATA%\Temp\wgx`（一个真实的、非 WinFsp 的卷）再启动。
+- 下载的安装包会先暂存到 `%LOCALAPPDATA%\Temp\wingetx`（一个真实的、非 WinFsp 的卷）再启动。
 
 ### 已知问题
 
@@ -517,7 +517,7 @@ WinFsp 把盘符挂载在**当前登录会话（logon session）**的设备命�
   ```
   之后可用 `sc stop ManagedDriveHelper` 再 `sc delete ManagedDriveHelper` 移除。完全是可选的——不做这一步 ManagedDrive 照常挂载和使用，只是失败模式 1 得不到解决。
 
-**MSI 安装的解决办法：** 安装 MSI 类软件前，先用工具栏按钮把 TEMP 恢复为 Windows 默认值再重试；或直接前往官网下载安装包手动安装；也可以用 [`wgx`](#wgx-winget-包装工具) 代替 `winget`——它无需重置 TEMP 即可绕开上述两种失败模式。
+**MSI 安装的解决办法：** 安装 MSI 类软件前，先用工具栏按钮把 TEMP 恢复为 Windows 默认值再重试；或直接前往官网下载安装包手动安装；也可以用 [`wingetx`](#wingetx-winget-包装工具) 代替 `winget`——它无需重置 TEMP 即可绕开上述两种失败模式。
 
 ManagedDrive 会在 TEMP 被设为内存盘时提示一次，此后只要 TEMP 仍指向内存盘，每次启动都会再次提示——恢复默认值即可停止。
 

@@ -17,7 +17,7 @@ internal static class SilentInstaller
         var downloadDirectory = CreateRealTempDirectory();
         try
         {
-            Console.WriteLine($"wgx: downloading {string.Join(' ', packageSelectorArgs)} installer...");
+            Console.WriteLine($"wingetx: downloading {string.Join(' ', packageSelectorArgs)} installer...");
 
             var downloadArgs = new List<string>
             {
@@ -40,7 +40,7 @@ internal static class SilentInstaller
                 .FirstOrDefault();
             if (manifestPath is null)
             {
-                Console.Error.WriteLine("wgx: winget download reported success but produced no manifest file; falling back to `winget install`.");
+                Console.Error.WriteLine("wingetx: winget download reported success but produced no manifest file; falling back to `winget install`.");
                 exitCode = 0;
                 return false;
             }
@@ -56,7 +56,7 @@ internal static class SilentInstaller
 
             if (WingetManifestReader.IsMsiBased(installerInfo.InstallerType))
             {
-                Console.WriteLine("wgx: running installer (this may take a moment)...");
+                Console.WriteLine("wingetx: running installer (this may take a moment)...");
                 var msiexecArgs = new List<string> { "/i", installerPath };
                 msiexecArgs.AddRange(SplitSwitches(switches));
                 exitCode = ProcessForwarder.Run("msiexec", msiexecArgs);
@@ -65,7 +65,7 @@ internal static class SilentInstaller
 
             if (WingetManifestReader.IsExeBased(installerInfo.InstallerType))
             {
-                Console.WriteLine("wgx: running installer (this may take a moment)...");
+                Console.WriteLine("wingetx: running installer (this may take a moment)...");
                 exitCode = ProcessForwarder.Run(installerPath, SplitSwitches(switches).ToList());
                 return true;
             }
@@ -75,7 +75,7 @@ internal static class SilentInstaller
         }
         catch (Exception ex) when (ex is InvalidOperationException or NotSupportedException)
         {
-            Console.Error.WriteLine($"wgx: {ex.Message}");
+            Console.Error.WriteLine($"wingetx: {ex.Message}");
             exitCode = 1;
             return true;
         }
@@ -91,7 +91,7 @@ internal static class SilentInstaller
     // profile instead of a machine-wide directory shared by every user/service on the box.
     private static string CreateRealTempDirectory()
     {
-        var userTempRoot = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Temp", "wgx");
+        var userTempRoot = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Temp", "wingetx");
         var directory = Path.Combine(userTempRoot, Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(directory);
         return directory;
