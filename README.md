@@ -64,7 +64,7 @@ Two artifacts are published on the [Releases](https://github.com/coldhighsun/Man
 
 If using the ZIP, extract it anywhere and run `ManagedDrive.exe` directly. `ManagedDrive.exe` is a single-file executable — the ZIP contains it plus one small companion `winfsp-msil.dll` (the managed WinFsp interop assembly, which can't be embedded in the single-file bundle) that must stay next to it. The only registry write is the optional "Run at startup" setting; nothing else touches the registry. WinFsp must be installed separately first with the ZIP (see Prerequisites below); the installer handles this automatically.
 
-The ZIP also includes `mdrive.exe`, a companion CLI (see [CLI Usage](#cli-usage) below). Add the extraction folder to your `PATH` to run `mdrive` from any shell.
+The ZIP also includes `mdrive.exe`, a companion CLI (see [CLI Usage](#cli-usage) below), and `wgx.exe`, a `winget` wrapper (see [wgx: winget wrapper](#wgx-winget-wrapper) below). Add the extraction folder to your `PATH` to run `mdrive`/`wgx` from any shell. The installer adds both to the machine-wide `PATH` automatically.
 
 ### Prerequisites
 
@@ -99,76 +99,23 @@ Alternatively open `ManagedDrive.slnx` in Visual Studio 2022+ and press **F5**.
 ```
 ManagedDrive/
 ├── src/
-│   ├── ManagedDrive.Core/          # In-memory file system engine (WinFsp); organized into sub-namespace folders, GlobalUsings.cs global-uses all of them
-│   │   ├── FileSystem/             #   FileNode, FileNodeMap, MemoryFileSystem (FileSystemBase, all WinFsp callbacks), WildcardMatcher, DirectoryEnumeration, ContentAccessInfo
-│   │   ├── Mounting/               #   DiskOptions (+ ImageCompressionLevel), RamDisk, MountManager, MountOptionsFactory (CLI mount-options merge)
-│   │   ├── Persistence/            #   DiskImageSerializer (.mdr format), ImageEncryptionExceptions
-│   │   ├── Snapshots/              #   SnapshotManager, SnapshotStore
-│   │   ├── Archive/                #   ArchiveNodeMapBuilder (import), ArchiveNodeMapWriter (export)
-│   │   └── DiskCreation/           #   CreateDiskOptionsBuilder, ByteUnitConverter — pure, unit-tested validation logic for the App layer's create-disk dialog
-│   │
-│   └── ManagedDrive.App/           # WPF desktop application
-│       ├── Localization/           #   ResourceDictionary strings (en-US, zh-CN)
-│       ├── Themes/                 #   AppTheme.xaml styles + light/dark color palettes, ThemeManager
-│       ├── Helpers/                #   ByteFormatter, HintHelper (watermark/placeholder text)
-│       ├── Infrastructure/         #   RelayCommand, PasswordStrengthEstimator
-│       ├── Models/                 #   AppConfiguration, DiskProfile
-│       ├── Services/               #   SettingsStore, StartupManager, TempDirResetService, ShellContextMenuManager, SystemMemoryInfo, UpdateCheckService, GlobalMountCoordinator (talks to the SYSTEM helper service below), plus six services split out of App.xaml.cs: TrayIconController, TrayTooltipController, DiskNotificationService, TempDirCompatChecker, SessionEndingSaveHandler, WinFspPrerequisite
-│       ├── ViewModels/             #   MainViewModel, DiskViewModel
-│       ├── Views/                  #   CreateDiskDialog, CloneDiskDialog, DiskContentDialog, RestoreSnapshotDialog, SettingsDialog, SnapshotDiffDialog, ConfirmDialog, AboutDialog, UpdateAvailableDialog, TrayTooltipView, PasswordPromptDialog
-│       ├── GlobalUsings.cs         #   Project-wide global using directives
-│       ├── MainWindow.xaml(.cs)    #   Main window
-│       ├── App.xaml(.cs)           #   Startup/shutdown orchestration and window navigation; tray/notification/TEMP/prerequisite concerns live in Services/ (above)
-│       └── Cli/                    #   Named-pipe server forwarding CLI commands into the running app
-│
-│   ├── ManagedDrive.Cli.Core/      # Shared CLI parsing/protocol library — no reference to ManagedDrive.Core (keeps the pipe-only mdrive.exe client free of winfsp.net/SharpCompress) and no Spectre.Console (keeps ManagedDrive.App's dependency footprint small)
-│   │   ├── CliCommandProcessor.cs  #   System.CommandLine subcommands (mount/unmount/format/save/list/exit); returns a structured CliOutcome, not rendered text
-│   │   ├── ICliDiskController.cs   #   Abstraction the App layer implements to execute CLI commands
-│   │   ├── CliPipeClient.cs        #   Sends a command to the running app's named pipe
-│   │   ├── CliPipeProtocol.cs      #   Wire format shared by client and server (structured CliResponse, not pre-rendered text)
-│   │   ├── CliMountOverrides.cs    #   Optional per-mount overrides parsed from CLI flags
-│   │   ├── ImageCompressionLevel.cs #  Standalone copy of Core's enum of the same name, kept in sync manually; the App layer casts between the two at the CLI/app boundary
-│   │   └── ByteFormatter.cs        #   Human-readable byte-size formatting (shared with the App layer)
-│   │
-│   ├── ManagedDrive.Cli/           # `mdrive` console-subsystem entry point (only project referencing Spectre.Console)
-│   │   ├── Program.cs              #   Forwards args over the pipe, auto-launching ManagedDrive.exe if needed
-│   │   └── CliOutputRenderer.cs    #   Renders a CliResponse to the terminal (colors, tables) via Spectre.Console
-│   │
-│   ├── ManagedDrive.HelperProtocol/ # Dependency-free named-pipe protocol + client shared between the app and the SYSTEM helper service (kept dependency-free so the service doesn't load Core's mixed-mode winfsp-msil.dll)
-│   │   ├── HelperPipeProtocol.cs   #   Wire format (line-delimited JSON)
-│   │   └── HelperPipeClient.cs     #   Client-side send logic, used by App's GlobalMountCoordinator
-│   │
-│   └── ManagedDrive.Service/       # `ManagedDriveHelper.exe`, the optional LocalSystem Windows service that publishes global (\GLOBAL??) DOS-device symlinks for cross-session TEMP visibility (see Known Issues)
-│       ├── Program.cs              #   Microsoft.Extensions.Hosting.WindowsServices entry point
-│       ├── HelperPipeService.cs    #   BackgroundService listening on the named pipe for publish/unpublish requests
-│       ├── GlobalMountManager.cs   #   DefineDosDevice calls + HKLM registry persistence/reconciliation
-│       └── NativeMethods.cs        #   P/Invoke declarations
-│
+│   ├── ManagedDrive.Core/              # In-memory file system engine (WinFsp), no UI dependency
+│   │   ├── FileSystem/                 #   FileNode, FileNodeMap, MemoryFileSystem, WildcardMatcher, DirectoryEnumeration
+│   │   ├── Mounting/                   #   DiskOptions, RamDisk, MountManager, MountOptionsFactory
+│   │   ├── Persistence/                #   DiskImageSerializer (.mdr format)
+│   │   ├── Snapshots/                  #   SnapshotManager, SnapshotStore
+│   │   ├── Archive/                    #   ArchiveNodeMapBuilder (import), ArchiveNodeMapWriter (export)
+│   │   └── DiskCreation/               #   CreateDiskOptionsBuilder, ByteUnitConverter
+│   ├── ManagedDrive.App/               # WPF desktop application — tray icon, dialogs, settings, localization/theming
+│   ├── ManagedDrive.Cli.Core/          # Shared CLI parsing/protocol library (System.CommandLine + named-pipe wire format)
+│   ├── ManagedDrive.Cli/               # `mdrive.exe`, the console entry point
+│   ├── ManagedDrive.HelperProtocol/    # Named-pipe protocol shared between the app and the SYSTEM helper service
+│   ├── ManagedDrive.Service/           # `ManagedDriveHelper.exe`, optional LocalSystem service publishing global DOS-device symlinks for cross-session TEMP visibility (see Known Issues)
+│   └── ManagedDrive.WingetExtension/   # `wgx.exe`, a transparent winget wrapper (see wgx: winget wrapper)
 ├── tests/
-│   └── ManagedDrive.Tests/         # xUnit v3 unit tests (pure-managed code only)
-│       ├── FileNodeTests.cs
-│       ├── FileNodeMapTests.cs
-│       ├── MemoryFileSystemCloneTests.cs
-│       ├── DirectoryEnumerationTests.cs
-│       ├── WildcardMatchTests.cs
-│       ├── DiskImageSerializerTests.cs
-│       ├── RamDiskCapacityTests.cs
-│       ├── SnapshotManagerTests.cs
-│       ├── ArchiveNodeMapBuilderTests.cs
-│       ├── ArchiveNodeMapWriterTests.cs
-│       ├── MountOptionsFactoryTests.cs
-│       ├── CreateDiskOptionsBuilderTests.cs
-│       ├── ByteUnitConverterTests.cs
-│       ├── PasswordStrengthEstimatorTests.cs
-│       └── RecordingProgress.cs           #   Shared IProgress<double> test double
-│
+│   └── ManagedDrive.Tests/             # xUnit v3 unit tests (pure-managed code only)
 └── benchmarks/
-    └── ManagedDrive.Benchmarks/    # BenchmarkDotNet throughput/latency benchmarks
-        ├── Program.cs
-        ├── DriveLetterHelper.cs             #   Picks a free mount point (D:-Z:) for the RAM disk
-        ├── SequentialReadWriteBenchmarks.cs #  Sequential read/write at 4 KB and 1 MB
-        ├── RandomAccessBenchmarks.cs        #  Random-seek reads and small-file high-frequency writes
-        └── ConcurrentAccessBenchmarks.cs    #  Multi-threaded reads/writes to disjoint files, measuring FileNodeMap lock contention
+    └── ManagedDrive.Benchmarks/        # BenchmarkDotNet throughput/latency benchmarks
 ```
 
 ### How It Works
@@ -214,51 +161,23 @@ Snapshots use a separate format from `.mdr` images. For `disk.mdr`, snapshots ar
 
 ### Performance
 
-Read/write, random-access, and small-file throughput measured with [BenchmarkDotNet](https://benchmarkdotnet.org/) on:
-
-| | |
-|---|---|
-| **CPU** | Intel Core i9-13980HX, 24C/32T, 2.2 GHz base |
-| **RAM** | 64 GB |
-| **Disk** | KIOXIA KXG8AZNV1T02 NVMe SSD (1 TB) |
-| **OS** | Windows 11 Pro (Build 26200) |
-| **Runtime** | .NET 10.0.10 · BenchmarkDotNet 0.15.8 |
-
-`SequentialReadWriteBenchmarks` creates/reads a single file via `FileStream` at 4 KB and 1 MB (writes with `FileOptions.WriteThrough`, reads with `FileOptions.SequentialScan`; the `uncached` variants open with `FILE_FLAG_NO_BUFFERING` to bypass the page cache).
-
-| File Size | Operation | RAM Disk | NVMe SSD | Ratio |
-|---:|---|---:|---:|---:|
-| 4 KB | Write | 2.2 MB/s | 0.8 MB/s | **2.9× faster** |
-| 4 KB | Read (OS cache) | 3.0 MB/s | 3.0 MB/s | ≈ parity |
-| 4 KB | Read (uncached) | 3.0 MB/s | 3.0 MB/s | ≈ parity |
-| 1 MB | Write | 580 MB/s | 104 MB/s | **5.6× faster** |
-| 1 MB | Read (OS cache) | 643 MB/s | 677 MB/s | 0.95× slower |
-| 1 MB | Read (uncached) | 740 MB/s | 771 MB/s | 0.96× slower |
-
-> **Writes are the RAM disk's decisive win** — 2.9× faster on 4 KB files and 5.6× on 1 MB, since it skips block allocation, journaling, and the physical write.
->
-> **Reads land roughly at parity with an OS-cache hit.** A user-mode file system crosses WinFsp's kernel–userspace bridge, so it can't consistently *beat* the kernel's own DRAM page cache — only a kernel-mode driver could. At these sizes syscall and open/close overhead dominates transfer time, so the bridge cost is small and the two land close; the RAM disk's read advantage instead shows up on cold, random, and small-file access (see below), not on cache-friendly sequential reads. The physical `Read (OS cache)` figures are kernel-side DRAM hits — no I/O reaches the medium — and vary run-to-run with page-cache state, which is why the read ratios move around more than the writes.
->
-> **4 KB note:** small-file results are dominated by open/close syscall overhead, not transfer speed.
-
-Raw latency (mean, `[SimpleJob(warmupCount: 2, iterationCount: 3)]`):
-
-| File Size | RamDisk Write | RamDisk Read | NVMe Write | NVMe Read (cache) | NVMe Read (uncached) |
-|---:|---:|---:|---:|---:|---:|
-| 4 KB | 1,740 μs | 1,285 μs | 5,092 μs | 1,304 μs | 1,314 μs |
-| 1 MB | 1,724 μs | 1,555 μs | 9,618 μs | 1,477 μs | 1,298 μs |
-
-Writes also allocate far less managed memory now that file content is held in chunked, right-sized buffers: a 4 KB write allocates ~5.8 KB (down from ~65 KB when each file rounded up to a full buffer), and large sequential writes no longer reallocate and copy the whole file as it grows.
-
-`RandomAccessBenchmarks` covers seek-heavy and small-file-heavy patterns not exercised by the sequential benchmarks above:
+Measured with [BenchmarkDotNet](https://benchmarkdotnet.org/) (Intel Core i9-13980HX, 64 GB RAM, KIOXIA KXG8AZNV1T02 NVMe SSD, Windows 11 Pro, .NET 10.0.10):
 
 | Scenario | RAM Disk | NVMe SSD | Ratio |
 |---|---:|---:|---:|
-| Random 4 KB read, 30 seeks over 16 MB (OS cache) | 1.88 ms | 1.62 ms | 1.2× slower |
-| Random 4 KB read, 30 seeks over 16 MB (uncached) | 2.25 ms | 1.56 ms | 1.4× slower |
+| Sequential write, 4 KB | 2.2 MB/s | 0.8 MB/s | **2.9× faster** |
+| Sequential write, 1 MB | 580 MB/s | 104 MB/s | **5.6× faster** |
+| Sequential read, 4 KB / 1 MB | 3.0 MB/s / 643 MB/s | 3.0 MB/s / 677 MB/s | ≈ parity |
+| Random 4 KB read, 30 seeks over 16 MB | 1.9–2.3 ms | 1.6 ms | ~1.2–1.4× slower |
 | 30× small-file (4 KB) create+write | 51.6 ms (1.72 ms/file) | 80.7 ms (2.69 ms/file) | **1.6× faster** |
 
-Random reads are modestly slower for the same reason as sequential reads — each seek pays a kernel–userspace round-trip through WinFsp — and, as with sequential reads, the physical baseline swings with page-cache state (here the `(uncached)` SSD read lands about even with its cached run, within measurement variance). Small-file create+write is where the RAM disk pulls ahead (**1.6× faster**): file creation skips block allocation and journaling. That win comes at the cost of higher managed-memory allocation per operation (see `Alloc Ratio` in the raw BenchmarkDotNet output) — though far less than before now that content buffers are chunked and right-sized.
+- **Writes win big** — the RAM disk skips block allocation, journaling, and the physical write.
+- **Sequential reads land near parity with an OS-cache hit** — a user-mode file system crosses WinFsp's kernel–userspace bridge, so it can't consistently beat the kernel's own DRAM page cache; only a kernel-mode driver could. These numbers vary run-to-run with page-cache state.
+- **Random reads are modestly slower** — each seek pays a kernel–userspace round-trip through WinFsp.
+- **Small-file create+write is the other big win** — file creation skips block allocation and journaling, at the cost of higher managed-memory allocation per operation.
+- Writes allocate far less managed memory now that file content is held in chunked, right-sized buffers (a 4 KB write allocates ~5.8 KB, down from ~65 KB when each file rounded up to a full buffer).
+
+Run `dotnet run --project benchmarks/ManagedDrive.Benchmarks -c Release` for raw latency numbers and further scenarios (see [Running Benchmarks](#running-benchmarks) below).
 
 ### Running Tests
 
@@ -303,32 +222,42 @@ mdrive exit
 
 Run `mdrive --help` or `mdrive <command> --help` for the full option list.
 
+### wgx: winget wrapper
+
+`wgx.exe` is a transparent wrapper around `winget` that ships alongside `ManagedDrive.exe`/`mdrive.exe`. Use it as a drop-in replacement for `winget`:
+
+```powershell
+wgx install <package>
+wgx upgrade <package>
+```
+
+If `%TEMP%` isn't currently on a ManagedDrive volume, or the requested subcommand isn't `install`/`upgrade`, `wgx` just forwards the call to `winget.exe` unchanged — so it's always safe to alias `winget` to `wgx`.
+
+When `%TEMP%` **is** set to a ManagedDrive volume, `wgx install`/`wgx upgrade` routes MSI- and exe-based packages through `winget download` followed by a manual launch of the downloaded installer (`msiexec` for MSI/WiX, the installer exe directly otherwise), instead of a plain `winget install`. This sidesteps both failure modes described in [Known Issues](#known-issues) below: `msiexec`'s Mount-Manager source-volume check, and the cross-session exit-code-1 issue affecting exe installers. Installer types it can't confidently handle this way (msix, appx, zip, portable, ...) are forwarded to plain `winget install`/`upgrade` automatically.
+
+- The installer's UI stays visible (`SilentWithProgress` switches) unless `--silent` or `--disable-interactivity` is passed, matching `winget`'s own behavior.
+- The downloaded installer is staged in `%LOCALAPPDATA%\Temp\wgx` — a real, non-WinFsp volume — before it's launched.
+
 ### Known Issues
 
 #### Certain installers may fail when TEMP is set to a RAM disk
 
-WinFsp mounts a drive letter into the **current logon session's** device namespace, so processes in another session or logon (a system service in session 0, or an elevated process running under the linked admin token) can't resolve that drive letter. There are two distinct failure modes:
+WinFsp mounts a drive letter into the **current logon session's** device namespace, so processes in another session or logon (a session-0 system service, or an elevated process under the linked admin token) can't resolve it. Two distinct failure modes result:
 
-1. **Cross-session drive-letter visibility.** A system-level process (e.g. winget's Package Manager service) launching from `Z:\Temp\...\setup.exe` can't see the drive and fails with `0x800704b3` (*The network path was not found*). Known affected: **WeChatWin_\*.exe**, **7z\*.exe**, **Git-\*.exe**. This class *can* be resolved by the optional SYSTEM helper service (below), which publishes a global (`\GLOBAL??`) symlink for the drive.
+1. **Cross-session drive-letter visibility** — a system-level process (e.g. winget's Package Manager service) launching from `Z:\Temp\...\setup.exe` fails with `0x800704b3` (*The network path was not found*). Known affected: **WeChatWin_\*.exe**, **7z\*.exe**, **Git-\*.exe**. Fixed by the optional SYSTEM helper service below, which publishes a global (`\GLOBAL??`) symlink for the drive.
+2. **MSI installers via the Windows Installer service** — `msiexec`'s SYSTEM/session-0 half does a Mount Manager volume-identity query on the source volume before reading it; WinFsp's per-session mount isn't Mount-Manager-registered, so the query fails with system error `1005` → MSI error `2755`/`1603`. The helper service's symlink doesn't fix this — the volume still isn't Mount-Manager-registered. Affects `winget` MSI installs and standalone `.msi` files sourced from the RAM disk; a proper fix would need a larger Mount-Manager-based mount rearchitecture, out of scope for the helper service.
 
-2. **MSI installers via the Windows Installer service.** `msiexec`'s server half runs as SYSTEM in session 0 and performs a *volume-identity* query (Mount Manager lookup) on the source volume before reading it. WinFsp's per-session mount is **not registered with the Windows Mount Manager**, so this query fails with system error `1005` (*The volume does not contain a recognized file system*) → MSI error `2755`/`1603`. The helper service's global drive-letter symlink does **not** fix this — the volume still isn't a Mount-Manager-registered system volume. This affects `winget` installs of MSI packages and standalone `.msi` files whose source sits on the RAM disk. **This is out of scope for the helper service** and would require mounting via the Windows Mount Manager (a larger, service-hosted mount rearchitecture).
+**Optional SYSTEM helper service** (`ManagedDriveHelper`) resolves failure mode 1 by publishing a cross-session global symlink for whichever disk is the current TEMP target; it does not address failure mode 2.
 
-**Optional SYSTEM helper service** (`ManagedDriveHelper`): when installed and running, it publishes a cross-session global symlink for whichever disk is the current TEMP target, resolving failure mode 1. It does not address failure mode 2.
-
-- **If you used the installer (`ManagedDrive-Setup-*.exe`):** the service is registered and started automatically, and removed automatically on uninstall — no action needed.
-- **If you used the portable ZIP:** the service is not installed automatically. To add it yourself, open an elevated (Administrator) terminal in the folder you extracted the ZIP to and run:
+- Installer builds (`ManagedDrive-Setup-*.exe`) register and remove the service automatically — no action needed.
+- Portable ZIP: install it yourself from an elevated (Administrator) terminal in the extracted folder:
   ```
   sc create ManagedDriveHelper binPath= "%cd%\ManagedDriveHelper.exe" start= auto
   sc start ManagedDriveHelper
   ```
-  To remove it later:
-  ```
-  sc stop ManagedDriveHelper
-  sc delete ManagedDriveHelper
-  ```
-  This step is entirely optional — ManagedDrive mounts and works normally without it; skipping it just means failure mode 1 above isn't resolved.
+  Remove later with `sc stop ManagedDriveHelper` then `sc delete ManagedDriveHelper`. Entirely optional — ManagedDrive works normally without it; skipping it just leaves failure mode 1 unresolved.
 
-**Fix / workaround for MSI installs:** reset TEMP to the Windows default (toolbar button) before installing MSI-based software, then retry — or download the installer from the vendor and run it manually.
+**Fixing MSI installs:** reset TEMP to the Windows default (toolbar button) before installing MSI-based software, then retry — or download the installer from the vendor and run it manually. Or use [`wgx`](#wgx-winget-wrapper) in place of `winget`, which works around both failure modes without touching TEMP.
 
 ManagedDrive warns once when TEMP is set to a RAM disk, and again on every startup while it stays that way.
 
@@ -395,7 +324,7 @@ This project bundles [WinFsp](https://winfsp.dev/) and [SharpCompress](https://g
 
 若使用 ZIP，解压到任意目录后直接运行 `ManagedDrive.exe` 即可。`ManagedDrive.exe` 是单文件可执行程序——ZIP 中还附带一个体积很小的 `winfsp-msil.dll`（WinFsp 托管互操作程序集，无法打包进单文件中），需与 exe 保持在同一目录下。唯一会写入注册表的操作是可选的"开机自启"设置，除此之外不会写入注册表。使用 ZIP 时仍需提前单独安装 WinFsp（见下方环境要求）；安装程序会自动处理这一步。
 
-ZIP 中还包含 `mdrive.exe`，一个配套的命令行工具（见下方[命令行用法](#命令行用法)）。将解压目录加入 `PATH` 后即可在任意终端中运行 `mdrive`。
+ZIP 中还包含 `mdrive.exe`（配套命令行工具，见下方[命令行用法](#命令行用法)）和 `wgx.exe`（`winget` 包装工具，见下方[wgx: winget 包装工具](#wgx-winget-包装工具)）。将解压目录加入 `PATH` 后即可在任意终端中运行 `mdrive`/`wgx`。安装程序会自动将两者加入系统级 `PATH`。
 
 ### 环境要求
 
@@ -430,76 +359,23 @@ dotnet run --project src/ManagedDrive.App -c Release
 ```
 ManagedDrive/
 ├── src/
-│   ├── ManagedDrive.Core/          # 内存文件系统引擎（WinFsp）；按子命名空间分文件夹组织，GlobalUsings.cs 统一 global-use 所有子命名空间
-│   │   ├── FileSystem/             #   FileNode、FileNodeMap、MemoryFileSystem（FileSystemBase，全部 WinFsp 回调）、WildcardMatcher、DirectoryEnumeration、ContentAccessInfo
-│   │   ├── Mounting/               #   DiskOptions（含 ImageCompressionLevel）、RamDisk、MountManager、MountOptionsFactory（CLI 挂载选项合并）
-│   │   ├── Persistence/            #   DiskImageSerializer（.mdr 格式）、ImageEncryptionExceptions
-│   │   ├── Snapshots/              #   SnapshotManager、SnapshotStore
-│   │   ├── Archive/                #   ArchiveNodeMapBuilder（导入）、ArchiveNodeMapWriter（导出）
-│   │   └── DiskCreation/           #   CreateDiskOptionsBuilder、ByteUnitConverter——App 层创建磁盘对话框的纯校验逻辑，已配单元测试
-│   │
-│   └── ManagedDrive.App/           # WPF 桌面应用程序
-│       ├── Localization/           #   ResourceDictionary 字符串（en-US、zh-CN）
-│       ├── Themes/                 #   AppTheme.xaml 样式 + 浅色/深色配色字典、ThemeManager
-│       ├── Helpers/                #   ByteFormatter、HintHelper（水印/占位文本）
-│       ├── Infrastructure/         #   RelayCommand, PasswordStrengthEstimator
-│       ├── Models/                 #   AppConfiguration、DiskProfile
-│       ├── Services/               #   SettingsStore、StartupManager、TempDirResetService、ShellContextMenuManager、SystemMemoryInfo、UpdateCheckService、GlobalMountCoordinator（与下方 SYSTEM 辅助服务通信），以及从 App.xaml.cs 拆出的六个服务：TrayIconController、TrayTooltipController、DiskNotificationService、TempDirCompatChecker、SessionEndingSaveHandler、WinFspPrerequisite
-│       ├── ViewModels/             #   MainViewModel、DiskViewModel
-│       ├── Views/                  #   CreateDiskDialog、CloneDiskDialog、DiskContentDialog、RestoreSnapshotDialog、SettingsDialog、SnapshotDiffDialog、ConfirmDialog、AboutDialog、UpdateAvailableDialog、TrayTooltipView、PasswordPromptDialog
-│       ├── GlobalUsings.cs         #   项目级全局 using 指令
-│       ├── MainWindow.xaml(.cs)    #   主窗口
-│       ├── App.xaml(.cs)           #   启动/关闭编排与窗口导航；托盘、通知、TEMP、前置检查等职责已拆分至上面的 Services/
-│       └── Cli/                    #   将 CLI 命令转发进运行中应用的命名管道服务端
-│
-│   ├── ManagedDrive.Cli.Core/      # 共享的 CLI 解析/协议库——不引用 ManagedDrive.Core（使仅需管道通信的 mdrive.exe 客户端无需携带 winfsp.net/SharpCompress），也不依赖 Spectre.Console（避免拖大 ManagedDrive.App 的发布体积）
-│   │   ├── CliCommandProcessor.cs  #   System.CommandLine 子命令（mount/unmount/format/save/list/exit）；返回结构化的 CliOutcome，而非渲染好的文本
-│   │   ├── ICliDiskController.cs   #   App 层实现的接口，用于执行 CLI 命令
-│   │   ├── CliPipeClient.cs        #   向运行中应用的命名管道发送命令
-│   │   ├── CliPipeProtocol.cs      #   客户端与服务端共用的线上协议格式（结构化的 CliResponse，而非预渲染文本）
-│   │   ├── CliMountOverrides.cs    #   由 CLI 参数解析出的可选挂载覆盖项
-│   │   ├── ImageCompressionLevel.cs #  Core 中同名枚举的独立副本，需手动保持同步；App 层在 CLI/应用边界做两者间的转换
-│   │   └── ByteFormatter.cs        #   人类可读的字节大小格式化（与 App 层共用）
-│   │
-│   ├── ManagedDrive.Cli/           # `mdrive` 控制台子系统入口点（唯一引用 Spectre.Console 的项目）
-│   │   ├── Program.cs              #   将参数通过管道转发，必要时自动启动 ManagedDrive.exe
-│   │   └── CliOutputRenderer.cs    #   用 Spectre.Console 把 CliResponse 渲染为终端输出（颜色、表格）
-│   │
-│   ├── ManagedDrive.HelperProtocol/ # 应用与 SYSTEM 辅助服务之间共享的、无外部依赖的命名管道协议+客户端（保持无依赖，使服务不会加载 Core 混合模式的 winfsp-msil.dll）
-│   │   ├── HelperPipeProtocol.cs   #   线上协议格式（行分隔 JSON）
-│   │   └── HelperPipeClient.cs     #   客户端发送逻辑，供 App 层的 GlobalMountCoordinator 使用
-│   │
-│   └── ManagedDrive.Service/       # `ManagedDriveHelper.exe`——可选的 LocalSystem Windows 服务，发布全局（\GLOBAL??）DOS 设备符号链接以实现跨会话 TEMP 可见性（见"已知问题"）
-│       ├── Program.cs              #   Microsoft.Extensions.Hosting.WindowsServices 入口点
-│       ├── HelperPipeService.cs    #   监听命名管道、处理发布/取消发布请求的 BackgroundService
-│       ├── GlobalMountManager.cs   #   DefineDosDevice 调用及 HKLM 注册表持久化/协调
-│       └── NativeMethods.cs        #   P/Invoke 声明
-│
+│   ├── ManagedDrive.Core/              # 内存文件系统引擎（WinFsp），不依赖任何 UI
+│   │   ├── FileSystem/                 #   FileNode、FileNodeMap、MemoryFileSystem、WildcardMatcher、DirectoryEnumeration
+│   │   ├── Mounting/                   #   DiskOptions、RamDisk、MountManager、MountOptionsFactory
+│   │   ├── Persistence/                #   DiskImageSerializer（.mdr 格式）
+│   │   ├── Snapshots/                  #   SnapshotManager、SnapshotStore
+│   │   ├── Archive/                    #   ArchiveNodeMapBuilder（导入）、ArchiveNodeMapWriter（导出）
+│   │   └── DiskCreation/               #   CreateDiskOptionsBuilder、ByteUnitConverter
+│   ├── ManagedDrive.App/               # WPF 桌面应用程序——托盘图标、各类对话框、设置、多语言/主题
+│   ├── ManagedDrive.Cli.Core/          # 共享的 CLI 解析/协议库（System.CommandLine + 命名管道协议）
+│   ├── ManagedDrive.Cli/               # `mdrive.exe` 控制台入口点
+│   ├── ManagedDrive.HelperProtocol/    # 应用与 SYSTEM 辅助服务之间共享的命名管道协议
+│   ├── ManagedDrive.Service/           # `ManagedDriveHelper.exe`——可选的 LocalSystem 服务，发布全局 DOS 设备符号链接以实现跨会话 TEMP 可见性（见"已知问题"）
+│   └── ManagedDrive.WingetExtension/   # `wgx.exe`——透明的 winget 包装工具（见"wgx: winget 包装工具"）
 ├── tests/
-│   └── ManagedDrive.Tests/         # xUnit v3 单元测试（仅纯托管代码）
-│       ├── FileNodeTests.cs
-│       ├── FileNodeMapTests.cs
-│       ├── MemoryFileSystemCloneTests.cs
-│       ├── DirectoryEnumerationTests.cs
-│       ├── WildcardMatchTests.cs
-│       ├── DiskImageSerializerTests.cs
-│       ├── RamDiskCapacityTests.cs
-│       ├── SnapshotManagerTests.cs
-│       ├── ArchiveNodeMapBuilderTests.cs
-│       ├── ArchiveNodeMapWriterTests.cs
-│       ├── MountOptionsFactoryTests.cs
-│       ├── CreateDiskOptionsBuilderTests.cs
-│       ├── ByteUnitConverterTests.cs
-│       ├── PasswordStrengthEstimatorTests.cs
-│       └── RecordingProgress.cs           #   共用的 IProgress<double> 测试替身
-│
+│   └── ManagedDrive.Tests/             # xUnit v3 单元测试（仅纯托管代码）
 └── benchmarks/
-    └── ManagedDrive.Benchmarks/    # BenchmarkDotNet 吞吐量/延迟基准测试
-        ├── Program.cs
-        ├── DriveLetterHelper.cs             #   为内存盘自动选择一个空闲盘符（D:-Z:）
-        ├── SequentialReadWriteBenchmarks.cs #  4 KB / 1 MB 顺序读写
-        ├── RandomAccessBenchmarks.cs        #  随机寻址读取 + 小文件高频写入
-        └── ConcurrentAccessBenchmarks.cs    #  多线程并发读写互不重叠的文件，测量 FileNodeMap 锁竞争
+    └── ManagedDrive.Benchmarks/        # BenchmarkDotNet 吞吐量/延迟基准测试
 ```
 
 ### 工作原理
@@ -545,51 +421,23 @@ ManagedDrive 使用 **WinFsp**（Windows 文件系统代理）将内存目录树
 
 ### 性能基准
 
-使用 [BenchmarkDotNet](https://benchmarkdotnet.org/) 测量读写、随机访问及小文件吞吐量，测试环境：
-
-| | |
-|---|---|
-| **CPU** | Intel Core i9-13980HX，24C/32T，基础频率 2.2 GHz |
-| **内存** | 64 GB |
-| **磁盘** | KIOXIA KXG8AZNV1T02 NVMe SSD（1 TB） |
-| **系统** | Windows 11 Pro（Build 26200） |
-| **运行时** | .NET 10.0.10 · BenchmarkDotNet 0.15.8 |
-
-`SequentialReadWriteBenchmarks` 通过 `FileStream` 在 4 KB 和 1 MB 大小下创建/读取单个文件（写入用 `FileOptions.WriteThrough`，读取用 `FileOptions.SequentialScan`；`无缓存` 变体用 `FILE_FLAG_NO_BUFFERING` 绕过页缓存）。
-
-| 文件大小 | 操作 | 内存盘 | NVMe SSD | 倍率 |
-|---:|---|---:|---:|---:|
-| 4 KB | 写入 | 2.2 MB/s | 0.8 MB/s | **快 2.9×** |
-| 4 KB | 读取（页缓存） | 3.0 MB/s | 3.0 MB/s | ≈ 持平 |
-| 4 KB | 读取（无缓存） | 3.0 MB/s | 3.0 MB/s | ≈ 持平 |
-| 1 MB | 写入 | 580 MB/s | 104 MB/s | **快 5.6×** |
-| 1 MB | 读取（页缓存） | 643 MB/s | 677 MB/s | 慢 0.95× |
-| 1 MB | 读取（无缓存） | 740 MB/s | 771 MB/s | 慢 0.96× |
-
-> **写入是内存盘的决定性优势** —— 4 KB 文件快 2.9×，1 MB 快 5.6×，因为它跳过了物理块分配、日志记录和实际落盘。
->
-> **读取与 OS 页缓存命中基本持平。** 用户态文件系统要经过 WinFsp 的内核–用户态桥接，因此无法稳定地**超越**内核自己的 DRAM 页缓存——只有内核态驱动才可能。在这些尺寸下,系统调用与打开/关闭开销主导了传输时间,桥接开销占比很小,所以两者接近;内存盘的读取优势体现在冷读、随机、小文件访问上（见下文），而非缓存友好的顺序读。物理 `读取（页缓存）` 数值是内核态 DRAM 命中——没有任何 I/O 落盘——且随页缓存状态逐次波动,这也是读取倍率比写入波动更大的原因。
->
-> **4 KB 说明：** 小文件结果主要受打开/关闭系统调用开销主导，不反映实际传输速率。
-
-原始延迟（均值，`[SimpleJob(warmupCount: 2, iterationCount: 3)]`）：
-
-| 文件大小 | 内存盘写入 | 内存盘读取 | NVMe 写入 | NVMe 读取（页缓存） | NVMe 读取（无缓存） |
-|---:|---:|---:|---:|---:|---:|
-| 4 KB | 1,740 μs | 1,285 μs | 5,092 μs | 1,304 μs | 1,314 μs |
-| 1 MB | 1,724 μs | 1,555 μs | 9,618 μs | 1,477 μs | 1,298 μs |
-
-得益于分块、按需精确分配的内容缓冲，写入现在的托管内存分配也大幅下降：一次 4 KB 写入约分配 5.8 KB（此前每个文件都向上取整到整块缓冲，约 65 KB），且大文件顺序写入不再随增长重分配并整块拷贝。
-
-`RandomAccessBenchmarks` 补充了顺序读写未覆盖的寻址密集与小文件密集场景：
+使用 [BenchmarkDotNet](https://benchmarkdotnet.org/) 测量（Intel Core i9-13980HX、64 GB 内存、KIOXIA KXG8AZNV1T02 NVMe SSD、Windows 11 Pro、.NET 10.0.10）：
 
 | 场景 | 内存盘 | NVMe SSD | 倍率 |
 |---|---:|---:|---:|
-| 随机 4 KB 读取，对 16 MB 文件寻址 30 次（页缓存） | 1.88 ms | 1.62 ms | 慢 1.2× |
-| 随机 4 KB 读取，对 16 MB 文件寻址 30 次（无缓存） | 2.25 ms | 1.56 ms | 慢 1.4× |
+| 顺序写入，4 KB | 2.2 MB/s | 0.8 MB/s | **快 2.9×** |
+| 顺序写入，1 MB | 580 MB/s | 104 MB/s | **快 5.6×** |
+| 顺序读取，4 KB / 1 MB | 3.0 MB/s / 643 MB/s | 3.0 MB/s / 677 MB/s | ≈ 持平 |
+| 随机 4 KB 读取，对 16 MB 文件寻址 30 次 | 1.9–2.3 ms | 1.6 ms | 慢 ~1.2–1.4× |
 | 30 次小文件（4 KB）创建+写入 | 51.6 ms（1.72 ms/文件） | 80.7 ms（2.69 ms/文件） | **快 1.6×** |
 
-随机读取略慢的原因与顺序读取相同——每次寻址都要经过 WinFsp 的内核–用户态往返；且和顺序读取一样，物理基线随页缓存状态波动（本轮 `（无缓存）` 的 SSD 读取与其页缓存那次基本持平，在测量误差范围内）。小文件创建+写入才是内存盘拉开差距的地方（**快 1.6×**）：创建文件跳过了物理块分配和日志记录。这一优势的代价是每次操作的托管内存分配更高（详见 BenchmarkDotNet 输出中的 `Alloc Ratio`）——不过在内容缓冲改为分块、按需精确分配后已比以前小得多。
+- **写入优势明显**——内存盘跳过了物理块分配、日志记录和实际落盘。
+- **顺序读取与 OS 页缓存命中基本持平**——用户态文件系统要经过 WinFsp 的内核–用户态桥接，无法稳定超越内核自身的 DRAM 页缓存，只有内核态驱动才可能做到；这组数据会随页缓存状态逐次波动。
+- **随机读取略慢**——每次寻址都要经过 WinFsp 的内核–用户态往返。
+- **小文件创建+写入是另一大优势**——文件创建跳过了物理块分配和日志记录，代价是每次操作的托管内存分配更高。
+- 得益于分块、按需精确分配的内容缓冲，写入的托管内存分配已大幅下降（一次 4 KB 写入约分配 5.8 KB，此前约 65 KB）。
+
+运行 `dotnet run --project benchmarks/ManagedDrive.Benchmarks -c Release` 可获取原始延迟数据及更多场景（见下方[运行基准测试](#运行基准测试)）。
 
 ### 运行测试
 
@@ -634,32 +482,42 @@ mdrive exit
 
 运行 `mdrive --help` 或 `mdrive <命令> --help` 可查看完整的选项列表。
 
+### wgx: winget 包装工具
+
+`wgx.exe` 是 `winget` 的透明包装工具，随 `ManagedDrive.exe`/`mdrive.exe` 一同发布。可直接把它当作 `winget` 的替代品使用：
+
+```powershell
+wgx install <包名>
+wgx upgrade <包名>
+```
+
+如果 `%TEMP%` 当前不在 ManagedDrive 内存盘上，或所调用的子命令不是 `install`/`upgrade`，`wgx` 会原样把调用转发给 `winget.exe`——因此把 `winget` 直接别名为 `wgx` 始终是安全的。
+
+当 `%TEMP%` **确实**设为 ManagedDrive 内存盘时，`wgx install`/`wgx upgrade` 会将 MSI 及 exe 类型的包改为先执行 `winget download`，再手动启动下载好的安装程序（MSI/WiX 用 `msiexec`，其余直接运行安装包本身），而不是直接执行 `winget install`。这样可以绕开下方[已知问题](#已知问题)中描述的两种失败模式：`msiexec` 的卷装载管理器（Mount Manager）源卷检查，以及影响 exe 安装包的跨会话退出码 1 问题。它无法确信处理的安装包类型（msix、appx、zip、便携版等）会自动转发给普通的 `winget install`/`upgrade`。
+
+- 除非传入 `--silent` 或 `--disable-interactivity`，安装程序界面默认保持可见（`SilentWithProgress` 开关），与 `winget` 自身行为一致。
+- 下载的安装包会先暂存到 `%LOCALAPPDATA%\Temp\wgx`（一个真实的、非 WinFsp 的卷）再启动。
+
 ### 已知问题
 
 #### 将 TEMP 设为内存盘后，某些安装包可能报错
 
-WinFsp 把盘符挂载在**当前登录会话（logon session）**的设备命名空间中，因此其他会话或其他登录令牌下的进程（session 0 的系统服务、或提权后跑在链接管理员令牌下的进程）无法解析该盘符。这里有两种不同的失败模式：
+WinFsp 把盘符挂载在**当前登录会话（logon session）**的设备命名空间中，因此其他会话或登录令牌下的进程（session 0 的系统服务、或提权后跑在链接管理员令牌下的进程）无法解析该盘符，由此产生两种失败模式：
 
-1. **跨会话盘符可见性。** 系统级进程（如 winget 的软件包管理器服务）从 `Z:\Temp\...\setup.exe` 启动时看不到该盘，报 `0x800704b3`（*网络路径未找到*）。已知受影响：**WeChatWin\_\*.exe**（微信）、**7z\*.exe**（7-Zip）、**Git-\*.exe**（Git）。这一类**可以**由下面的可选 SYSTEM 辅助服务解决——它会为该盘发布一个全局（`\GLOBAL??`）符号链接。
+1. **跨会话盘符可见性**——系统级进程（如 winget 的软件包管理器服务）从 `Z:\Temp\...\setup.exe` 启动时看不到该盘，报 `0x800704b3`（*网络路径未找到*）。已知受影响：**WeChatWin\_\*.exe**（微信）、**7z\*.exe**（7-Zip）、**Git-\*.exe**（Git）。可由下方可选的 SYSTEM 辅助服务解决——它会为该盘发布一个全局（`\GLOBAL??`）符号链接。
+2. **通过 Windows Installer 服务安装的 MSI**——`msiexec` 以 SYSTEM 身份跑在 session 0 的那一半，在读取源文件前会对源卷做一次卷身份查询（询问 Mount Manager）；WinFsp 的 per-session 挂载没有在 Mount Manager 里注册，所以该查询以系统错误 `1005` 失败 → MSI 错误 `2755`/`1603`。辅助服务的符号链接修不了这个——卷依然不是 Mount-Manager 注册的系统卷。影响 `winget` 安装 MSI 包及源文件位于内存盘上的独立 `.msi` 文件；根治需要改为通过 Windows Mount Manager 挂载（更大的服务化挂载重构），不在辅助服务的能力范围内。
 
-2. **通过 Windows Installer 服务安装的 MSI。** `msiexec` 的服务端半边以 SYSTEM 身份跑在 session 0，在读取源文件前会对源卷做一次**卷身份查询**（询问卷装载管理器 Mount Manager）。WinFsp 的 per-session 挂载**没有在 Windows Mount Manager 里注册**，所以该查询以系统错误 `1005`（*卷未包含可识别的文件系统*）失败 → MSI 错误 `2755`/`1603`。辅助服务发布的全局盘符符号链接**修不了**这个——卷依然不是 Mount-Manager 注册的系统卷。这会影响 `winget` 安装 MSI 包、以及源文件位于内存盘上的独立 `.msi` 文件。**这不在辅助服务的能力范围内**，根治需要改为通过 Windows Mount Manager 挂载（属于更大的、服务化挂载的重构）。
+**可选 SYSTEM 辅助服务**（`ManagedDriveHelper`）通过为当前 TEMP 目标盘发布跨会话全局符号链接来解决失败模式 1，对失败模式 2 无效。
 
-**可选 SYSTEM 辅助服务**（`ManagedDriveHelper`）：安装并运行后，它会为当前作为 TEMP 目标的那个盘发布跨会话全局符号链接，解决失败模式 1；对失败模式 2 无效。
-
-- **如果你用的是安装包（`ManagedDrive-Setup-*.exe`）：** 该服务会随安装自动注册并启动，卸载时也会自动移除，无需手动操作。
-- **如果你用的是便携式 ZIP：** 该服务不会自动安装。需要自己在解压目录下打开一个管理员终端，手动执行：
+- 安装包版本（`ManagedDrive-Setup-*.exe`）会自动注册/移除该服务，无需手动操作。
+- 便携式 ZIP：需自己在解压目录下打开管理员终端手动执行：
   ```
   sc create ManagedDriveHelper binPath= "%cd%\ManagedDriveHelper.exe" start= auto
   sc start ManagedDriveHelper
   ```
-  之后想移除的话：
-  ```
-  sc stop ManagedDriveHelper
-  sc delete ManagedDriveHelper
-  ```
-  这一步完全是可选的——不做这一步 ManagedDrive 本身照常挂载和使用，只是上面的失败模式 1 得不到解决。
+  之后可用 `sc stop ManagedDriveHelper` 再 `sc delete ManagedDriveHelper` 移除。完全是可选的——不做这一步 ManagedDrive 照常挂载和使用，只是失败模式 1 得不到解决。
 
-**MSI 安装的解决办法：** 安装 MSI 类软件前，先用工具栏按钮把 TEMP 恢复为 Windows 默认值再重试；或直接前往官网下载安装包手动安装。
+**MSI 安装的解决办法：** 安装 MSI 类软件前，先用工具栏按钮把 TEMP 恢复为 Windows 默认值再重试；或直接前往官网下载安装包手动安装；也可以用 [`wgx`](#wgx-winget-包装工具) 代替 `winget`——它无需重置 TEMP 即可绕开上述两种失败模式。
 
 ManagedDrive 会在 TEMP 被设为内存盘时提示一次，此后只要 TEMP 仍指向内存盘，每次启动都会再次提示——恢复默认值即可停止。
 
