@@ -29,6 +29,8 @@
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="16"/>
                         <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="6"/>
+                        <RowDefinition Height="Auto"/>
                         <RowDefinition Height="16"/>
                         <RowDefinition Height="Auto"/>
                     </Grid.RowDefinitions>
@@ -88,44 +90,39 @@
                     </Grid>
 
                     <!-- High Usage Warning -->
-                    <Grid Grid.Row="6">
+                    <CheckBox Grid.Row="6" x:Name="HighUsageWarnBox" IsChecked="True"
+                              Content="{DynamicResource CreateDisk.HighUsageWarn}"
+                              Foreground="{DynamicResource AppForeground}"
+                              ToolTip="{DynamicResource Tip.HighUsageWarn}"
+                              Checked="HighUsageWarnBox_CheckedChanged" Unchecked="HighUsageWarnBox_CheckedChanged"/>
+
+                    <Grid Grid.Row="8" x:Name="HighUsageWarnPercentPanel" IsEnabled="False"
+                          Style="{StaticResource DimWhenDisabled}">
                         <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="6"/>
+                            <ColumnDefinition Width="64"/>
+                            <ColumnDefinition Width="8"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="8"/>
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
-                        <CheckBox Grid.Column="0" x:Name="HighUsageWarnBox" IsChecked="True"
-                                  Content="{DynamicResource CreateDisk.HighUsageWarn}"
-                                  VerticalAlignment="Center"
-                                  Foreground="{DynamicResource AppForeground}"
-                                  ToolTip="{DynamicResource Tip.HighUsageWarn}"
-                                  Checked="HighUsageWarnBox_CheckedChanged" Unchecked="HighUsageWarnBox_CheckedChanged"/>
-                        <Grid Grid.Column="2" x:Name="HighUsageWarnPercentPanel" IsEnabled="False" VerticalAlignment="Center"
-                              Style="{StaticResource DimWhenDisabled}">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="120"/>
-                                <ColumnDefinition Width="8"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
-                            <Slider Grid.Column="0" x:Name="HighUsageWarnPercentSlider"
-                                     ToolTip="{DynamicResource Tip.HighUsageWarn}"
-                                     Style="{StaticResource AppSlider}"
-                                     Minimum="1" Maximum="99" Value="90"
-                                     ValueChanged="HighUsageWarnPercentSlider_ValueChanged"/>
-                            <TextBlock Grid.Column="2" x:Name="HighUsageWarnPercentValueText"
-                                       Foreground="{DynamicResource AppForeground}"
-                                       VerticalAlignment="Center"/>
-                        </Grid>
+                        <Slider Grid.Column="2" x:Name="HighUsageWarnPercentSlider"
+                                 ToolTip="{DynamicResource Tip.HighUsageWarn}"
+                                 Style="{StaticResource AppSlider}"
+                                 Minimum="50" Maximum="90" Value="90"
+                                 ValueChanged="HighUsageWarnPercentSlider_ValueChanged"/>
+                        <TextBlock Grid.Column="4" x:Name="HighUsageWarnPercentValueText"
+                                   Foreground="{DynamicResource AppForeground}"
+                                   VerticalAlignment="Center" TextAlignment="Right" MinWidth="40"/>
                     </Grid>
 
                     <!-- Auto Mount -->
-                    <CheckBox Grid.Row="8" x:Name="AutoMountBox" IsChecked="True"
+                    <CheckBox Grid.Row="10" x:Name="AutoMountBox" IsChecked="True"
                               Content="{DynamicResource CreateDisk.AutoMount}"
                               Foreground="{DynamicResource AppForeground}"
                               ToolTip="{DynamicResource Tip.AutoMount}"/>
 
                     <!-- Read Only -->
-                    <CheckBox Grid.Row="10" x:Name="ReadOnlyBox"
+                    <CheckBox Grid.Row="12" x:Name="ReadOnlyBox"
                               Content="{DynamicResource CreateDisk.ReadOnly}"
                               Foreground="{DynamicResource AppForeground}"
                               ToolTip="{DynamicResource Tip.ReadOnly}"
