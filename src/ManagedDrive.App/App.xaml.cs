@@ -57,6 +57,8 @@ public partial class App
 
     private void App_Exit(object sender, ExitEventArgs e)
     {
+        _logger.LogInformation("App_Exit invoked.");
+
         if (_sessionEndingSaveHandler != null)
         {
             SystemEvents.SessionEnding -= _sessionEndingSaveHandler.OnSessionEnding;
@@ -129,7 +131,10 @@ public partial class App
         CheckWinFspPrerequisite();
 
         _mountManager = new();
-        _sessionEndingSaveHandler = new(_mountManager, () => _mainWindowHandle);
+        _sessionEndingSaveHandler = new(
+            _mountManager,
+            () => _mainWindowHandle,
+            _serviceProvider!.GetRequiredService<ILogger<SessionEndingSaveHandler>>());
         SystemEvents.SessionEnding += _sessionEndingSaveHandler.OnSessionEnding;
         _mainViewModel = new(_mountManager, _settings, config, _serviceProvider!.GetRequiredService<ILogger<MainViewModel>>());
         _mainViewModel.ExitRequested += async (_, _) => await ShutdownAsync();
@@ -276,7 +281,7 @@ public partial class App
 
         AppLog.Configure(_serviceProvider.GetRequiredService<ILoggerFactory>());
         _logger = _serviceProvider.GetRequiredService<ILogger<App>>();
-        _logger.LogInformation("ManagedDrive started (version {Version}).", GetType().Assembly.GetName().Version);
+        _logger.LogInformation("ManagedDrive started (version {Version}).", UpdateCheckService.GetRunningVersion());
     }
 
     private async void ExitApplication()
@@ -422,6 +427,8 @@ public partial class App
 
     private async Task ShutdownAsync()
     {
+        _logger.LogInformation("ShutdownAsync starting.");
+
         if (_sessionEndingSaveHandler != null)
         {
             SystemEvents.SessionEnding -= _sessionEndingSaveHandler.OnSessionEnding;
@@ -447,6 +454,8 @@ public partial class App
         await Task.Run(() => _mountManager?.Dispose((disk, fraction) =>
             Application.Current.Dispatcher.BeginInvoke(() =>
                 _mainViewModel?.ReportExitSaveProgress(disk.Options.MountPoint, fraction))));
+
+        _logger.LogInformation("ShutdownAsync completed; shutting down application.");
         Shutdown();
     }
 }
