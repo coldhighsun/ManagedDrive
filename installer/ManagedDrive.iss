@@ -46,6 +46,9 @@ WizardStyle=modern
 CloseApplicationsFilter=ManagedDrive.exe
 CloseApplications=yes
 RestartApplications=yes
+; Setup adds {app} to the machine-wide PATH (see AddDirToPath/RemoveDirFromPath below) so this
+; must be declared for Setup's "changes will take effect after restart" messaging to be accurate.
+ChangesEnvironment=yes
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
@@ -218,6 +221,90 @@ begin
     Log('.NET 10 Desktop Runtime installed successfully.');
 end;
 
+// Adds/removes {app} on the machine-wide PATH (HKLM, not HKCU) so "wingetex" resolves from any
+// shell without a full path, matching PrivilegesRequired=admin. Best-effort, same as the helper
+// service below: only Log()s on failure rather than aborting setup/uninstall.
+const
+  EnvironmentKey = 'SYSTEM\CurrentControlSet\Control\Session Manager\Environment';
+
+function SendMessageTimeout(hWnd: Longint; Msg: Longint; wParam: Longint; lParam: string;
+  fuFlags, uTimeout: Longint; var lpdwResult: Longint): Longint;
+  external 'SendMessageTimeoutA@user32.dll stdcall';
+
+// Broadcasts WM_SETTINGCHANGE so already-running processes (e.g. Explorer) notice the PATH
+// change immediately, mirroring the same broadcast ManagedDrive.App's TempDirResetService does
+// for HKCU\Environment - already-open shells still won't see it until reopened, same as any
+// other PATH change on Windows.
+procedure BroadcastEnvironmentChange();
+var
+  BroadcastResult: Longint;
+begin
+  SendMessageTimeout($FFFF {HWND_BROADCAST}, $001A {WM_SETTINGCHANGE}, 0, 'Environment',
+    2 {SMTO_ABORTIFHUNG}, 5000, BroadcastResult);
+end;
+
+procedure AddDirToPath(const Dir: string);
+var
+  Paths: string;
+begin
+  if not RegQueryStringValue(HKLM, EnvironmentKey, 'Path', Paths) then
+    Paths := '';
+
+  if Pos(';' + Uppercase(Dir) + ';', ';' + Uppercase(Paths) + ';') > 0 then
+  begin
+    Log('"' + Dir + '" is already on PATH; skipping.');
+    exit;
+  end;
+
+  if Paths = '' then
+    Paths := Dir
+  else
+    Paths := Paths + ';' + Dir;
+
+  if RegWriteExpandStringValue(HKLM, EnvironmentKey, 'Path', Paths) then
+  begin
+    Log('Added "' + Dir + '" to PATH.');
+    BroadcastEnvironmentChange();
+  end
+  else
+    Log('Failed to add "' + Dir + '" to PATH.');
+end;
+
+// Removes exactly Dir from PATH, leaving every other entry untouched - deliberately not done via
+// [Registry]'s uninsdeletevalue, which would wipe the entire shared PATH value on uninstall.
+// Operates on a ';'-padded copy throughout (rather than deleting from the unpadded value with a
+// P-1 offset, which underflows to index 0 when Dir is the very first entry) so the leading-entry
+// case is handled the same way as every other position.
+procedure RemoveDirFromPath(const Dir: string);
+var
+  Padded: string;
+  P: Integer;
+begin
+  if not RegQueryStringValue(HKLM, EnvironmentKey, 'Path', Padded) then
+    exit;
+
+  Padded := ';' + Padded + ';';
+  P := Pos(';' + Uppercase(Dir) + ';', Uppercase(Padded));
+  if P = 0 then
+  begin
+    Log('"' + Dir + '" not found on PATH; nothing to remove.');
+    exit;
+  end;
+
+  Delete(Padded, P, Length(Dir) + 1);
+  Delete(Padded, 1, 1);
+  if Length(Padded) > 0 then
+    Delete(Padded, Length(Padded), 1);
+
+  if RegWriteExpandStringValue(HKLM, EnvironmentKey, 'Path', Padded) then
+  begin
+    Log('Removed "' + Dir + '" from PATH.');
+    BroadcastEnvironmentChange();
+  end
+  else
+    Log('Failed to remove "' + Dir + '" from PATH.');
+end;
+
 // The optional SYSTEM helper service (cross-session RAM-disk symlink visibility - see
 // CLAUDE.md). Best-effort only: ManagedDrive itself works fine without it, so every
 // step here only Log()s on failure rather than aborting setup.
@@ -315,6 +402,8 @@ begin
 
   if CurStep = ssPostInstall then
   begin
+    AddDirToPath(ExpandConstant('{app}'));
+
     if not IsDotNetDesktopRuntime10Installed() then
       InstallDotNetDesktopRuntimeSilently()
     else
@@ -575,4 +664,7 @@ begin
     else
       Log('Helper service not registered; nothing to remove.');
   end;
+
+  if CurUninstallStep = usPostUninstall then
+    RemoveDirFromPath(ExpandConstant('{app}'));
 end;
