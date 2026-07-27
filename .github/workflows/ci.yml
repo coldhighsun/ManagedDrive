@@ -96,7 +96,7 @@ jobs:
             -o publish-fx/
         shell: pwsh
 
-      - name: Publish wingetex (win-x64, framework-dependent)
+      - name: Publish wgx (win-x64, framework-dependent)
         run: |
           dotnet publish src/ManagedDrive.WingetExtension/ManagedDrive.WingetExtension.csproj `
             -c Release `
