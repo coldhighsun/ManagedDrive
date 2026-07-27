@@ -15,6 +15,7 @@ public sealed class SessionEndingSaveHandler
     private static readonly TimeSpan SessionEndingSaveTimeout = TimeSpan.FromSeconds(10);
 
     private readonly Func<IntPtr> _mainWindowHandleProvider;
+    private readonly ILogger<SessionEndingSaveHandler> _logger;
     private readonly MountManager _mountManager;
 
     /// <param name="mountManager">Source of the disks to save.</param>
@@ -24,10 +25,12 @@ public sealed class SessionEndingSaveHandler
     /// cross-thread. A provider (rather than a fixed value) tolerates construction before the
     /// handle is actually assigned.
     /// </param>
-    public SessionEndingSaveHandler(MountManager mountManager, Func<IntPtr> mainWindowHandleProvider)
+    /// <param name="logger">Logger for the save-on-session-ending flow.</param>
+    public SessionEndingSaveHandler(MountManager mountManager, Func<IntPtr> mainWindowHandleProvider, ILogger<SessionEndingSaveHandler> logger)
     {
         _mountManager = mountManager;
         _mainWindowHandleProvider = mainWindowHandleProvider;
+        _logger = logger;
     }
 
     /// <summary>
@@ -44,6 +47,9 @@ public sealed class SessionEndingSaveHandler
     /// </summary>
     public void OnSessionEnding(object sender, SessionEndingEventArgs e)
     {
+        var disks = _mountManager.GetAll();
+        _logger.LogInformation("OnSessionEnding invoked; saving {DiskCount} mounted disk(s).", disks.Count);
+
         var mainWindowHandle = _mainWindowHandleProvider();
         var hasHandle = mainWindowHandle != IntPtr.Zero;
         if (hasHandle)
@@ -56,21 +62,29 @@ public sealed class SessionEndingSaveHandler
 
         try
         {
-            var saveTasks = _mountManager.GetAll()
+            var saveTasks = disks
                 .Select(disk => Task.Run(() =>
                 {
                     try
                     {
                         disk.SaveToImageSafe();
                     }
-                    catch
+                    catch (Exception ex)
                     {
                         // Best-effort, matches RamDisk.Dispose()/TryAutoSave() swallow pattern.
+                        _logger.LogWarning(ex, "Failed to save disk {MountPoint} during session ending.", disk.Options.MountPoint);
                     }
                 }))
                 .ToArray();
 
-            Task.WaitAll(saveTasks, SessionEndingSaveTimeout);
+            if (!Task.WaitAll(saveTasks, SessionEndingSaveTimeout))
+            {
+                _logger.LogWarning("OnSessionEnding timed out after {Timeout} waiting for disk saves to complete.", SessionEndingSaveTimeout);
+            }
+            else
+            {
+                _logger.LogInformation("OnSessionEnding completed saving all mounted disks.");
+            }
         }
         finally
         {

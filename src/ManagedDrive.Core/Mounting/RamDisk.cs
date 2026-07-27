@@ -452,6 +452,7 @@ public sealed class RamDisk : IDisposable
         }
         catch (Exception ex)
         {
+            Logger.LogError(ex, "Failed to save disk image to {ImagePath}.", Options.PersistImagePath);
             SaveFailed?.Invoke(this, ex);
             throw;
         }
@@ -459,6 +460,7 @@ public sealed class RamDisk : IDisposable
         LastSaveTime = DateTimeOffset.UtcNow;
         _fs.ClearDirty();
         _lastSavedImagePath = Options.PersistImagePath;
+        Logger.LogInformation("Saved disk image to {ImagePath}.", Options.PersistImagePath);
     }
 
     /// <summary>
@@ -474,9 +476,18 @@ public sealed class RamDisk : IDisposable
     {
         lock (_autoSaveLock)
         {
-            if (NeedsExitSave())
+            if (!NeedsExitSave())
+            {
+                return;
+            }
+
+            try
             {
                 SaveToImage();
+            }
+            catch
+            {
+                // Best-effort: SaveToImage already logs the failure and raises SaveFailed.
             }
         }
     }
