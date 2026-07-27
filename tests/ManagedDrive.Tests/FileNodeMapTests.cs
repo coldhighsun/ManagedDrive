@@ -355,13 +355,18 @@ public sealed class FileNodeMapTests
             }
         }
 
+        // Guard() already exits its own loop once the token is canceled; passing the same token as
+        // Task.Run's scheduling token is redundant and actively harmful - if the thread pool is slow
+        // to start a task before the 2s deadline (e.g. a loaded CI runner), Task.Run throws
+        // TaskCanceledException before Guard ever runs, which Task.WhenAll then propagates
+        // unguarded, failing the test despite no actual corruption.
         var readers = Enumerable.Range(0, 4).Select(r => Task.Run(() => Guard(() =>
         {
             map.TryGet("\\stable50.txt", out _);
             _ = map.GetChildren("\\", null).Count();
             _ = map.GetTotalAllocated();
             _ = map.Count;
-        }), token));
+        })));
 
         var writers = Enumerable.Range(0, 4).Select(w => Task.Run(() => Guard(() =>
         {
@@ -371,7 +376,7 @@ public sealed class FileNodeMapTests
             map.Add(path, node);
             map.UpdateAllocationSize(node, 2048);
             map.Remove(path);
-        }), token));
+        })));
 
         await Task.WhenAll([.. readers, .. writers]);
 
