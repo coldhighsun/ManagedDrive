@@ -152,7 +152,7 @@ public partial class CreateDiskDialog
         if (existing.HighUsageWarnPercent is { } warnPercent)
         {
             HighUsageWarnBox.IsChecked = true;
-            HighUsageWarnPercentValue = (int)Math.Clamp(warnPercent, 1, 99);
+            HighUsageWarnPercentValue = (int)Math.Clamp(warnPercent, 50, 90);
         }
         else
         {
