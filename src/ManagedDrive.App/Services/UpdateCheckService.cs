@@ -26,9 +26,8 @@ public enum UpdateCheckResult
 public sealed class UpdateCheckService(SettingsStore settings, TrayIconController trayIconController, Func<Window?> ownerWindowProvider)
 {
     private const string ReleasesApiUrl = "https://api.github.com/repos/coldhighsun/ManagedDrive/releases/latest";
-    private static readonly TimeSpan CheckInterval = TimeSpan.FromDays(1);
 
-    private static readonly HttpClient s_httpClient = new()
+    private static readonly HttpClient _httpClient = new()
     {
         Timeout = TimeSpan.FromSeconds(10),
         DefaultRequestHeaders =
@@ -37,6 +36,8 @@ public sealed class UpdateCheckService(SettingsStore settings, TrayIconControlle
             Accept = { new("application/vnd.github+json") },
         },
     };
+
+    private static readonly TimeSpan CheckInterval = TimeSpan.FromDays(1);
 
     /// <summary>
     /// Strips the <c>+&lt;git-hash&gt;</c> suffix MinVer appends to non-tagged builds from the
@@ -124,7 +125,7 @@ public sealed class UpdateCheckService(SettingsStore settings, TrayIconControlle
         GitHubReleaseDto? release;
         try
         {
-            release = await s_httpClient.GetFromJsonAsync<GitHubReleaseDto>(ReleasesApiUrl, ct);
+            release = await _httpClient.GetFromJsonAsync<GitHubReleaseDto>(ReleasesApiUrl, ct);
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or JsonException)
         {
@@ -136,7 +137,7 @@ public sealed class UpdateCheckService(SettingsStore settings, TrayIconControlle
             LastUpdateCheckUtc = DateTimeOffset.UtcNow
         });
 
-        if (release == null || release.Prerelease || release.Draft)
+        if (release == null)
         {
             return (UpdateCheckResult.UpToDate, null);
         }
@@ -198,7 +199,5 @@ public sealed class UpdateCheckService(SettingsStore settings, TrayIconControlle
 
     private sealed record GitHubReleaseDto(
         [property: JsonPropertyName("tag_name")] string TagName,
-        [property: JsonPropertyName("html_url")] string HtmlUrl,
-        [property: JsonPropertyName("prerelease")] bool Prerelease,
-        [property: JsonPropertyName("draft")] bool Draft);
+        [property: JsonPropertyName("html_url")] string HtmlUrl);
 }
