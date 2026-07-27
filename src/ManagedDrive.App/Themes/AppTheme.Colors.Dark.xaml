@@ -9,6 +9,7 @@
     <SolidColorBrush x:Key="AppBackground" Color="#FF1E1E1E"/>
     <SolidColorBrush x:Key="AppSurface" Color="#FF2A2A2A"/>
     <SolidColorBrush x:Key="AppDivider" Color="#33FFFFFF"/>
+    <SolidColorBrush x:Key="AppProgressTrack" Color="#FF4D4D4D"/>
     <SolidColorBrush x:Key="AppToolBarBackground" Color="#FF2D2D2D"/>
     <SolidColorBrush x:Key="AppWarning" Color="#FFB74D"/>
     <SolidColorBrush x:Key="AppHover" Color="#14FFFFFF"/>

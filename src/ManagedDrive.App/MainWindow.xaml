@@ -4,6 +4,7 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:vm="clr-namespace:ManagedDrive.App.ViewModels"
+        xmlns:infra="clr-namespace:ManagedDrive.App.Infrastructure"
         mc:Ignorable="d"
         Style="{StaticResource AppWindow}"
         WindowStyle="None"
@@ -23,6 +24,7 @@
 
     <Window.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVis"/>
+        <infra:PercentToGridLengthConverter x:Key="PercentToGridLengthConverter"/>
     </Window.Resources>
 
     <WindowChrome.WindowChrome>
@@ -263,6 +265,32 @@
                                 <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
 
+                            <!-- Whole-card usage fill: the entire card acts as the progress bar.
+                                 Negative margin cancels the card Padding so the fill bleeds to the card edges. -->
+                            <Border Grid.ColumnSpan="3" Margin="-16" CornerRadius="4" ClipToBounds="True"
+                                    Visibility="{Binding IsNotReadOnly, Converter={StaticResource BoolToVis}}">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="{Binding UsedPercent, Converter={StaticResource PercentToGridLengthConverter}, ConverterParameter=Fill}"/>
+                                        <ColumnDefinition Width="{Binding UsedPercent, Converter={StaticResource PercentToGridLengthConverter}, ConverterParameter=Remainder}"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Border Grid.Column="0">
+                                        <Border.Style>
+                                            <Style TargetType="Border">
+                                                <Setter Property="Background" Value="{DynamicResource AppPrimary}"/>
+                                                <Setter Property="Opacity" Value="0.15"/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsHighUsage}" Value="True">
+                                                        <Setter Property="Background" Value="{DynamicResource AppWarning}"/>
+                                                        <Setter Property="Opacity" Value="0.22"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Border.Style>
+                                    </Border>
+                                </Grid>
+                            </Border>
+
                             <!-- Drive letter badge, with read-only/temp-dir status corner icons -->
                             <Grid Width="48" Height="48" VerticalAlignment="Center">
                                 <Border CornerRadius="8"
@@ -332,20 +360,6 @@
                                 </StackPanel>
 
                                 <StackPanel Visibility="{Binding IsNotReadOnly, Converter={StaticResource BoolToVis}}">
-                                    <Grid>
-                                        <ProgressBar Minimum="0" Maximum="100"
-                                                     Value="{Binding UsedPercent, Mode=OneWay}">
-                                            <ProgressBar.Style>
-                                                <Style TargetType="ProgressBar" BasedOn="{StaticResource SlimProgressBar}">
-                                                    <Style.Triggers>
-                                                        <DataTrigger Binding="{Binding IsHighUsage}" Value="True">
-                                                            <Setter Property="Foreground" Value="{DynamicResource AppWarning}"/>
-                                                        </DataTrigger>
-                                                    </Style.Triggers>
-                                                </Style>
-                                            </ProgressBar.Style>
-                                        </ProgressBar>
-                                    </Grid>
                                     <StackPanel Orientation="Horizontal">
                                         <TextBlock Text="{Binding UsedFormatted}" FontSize="12"
                                                    Foreground="{DynamicResource AppForegroundLight}"/>
