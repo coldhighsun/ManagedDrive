@@ -82,7 +82,7 @@ public sealed class FileNodeTests
         Assert.Equal(original.FilePath, clone.FilePath);
         Assert.Equal(original.LeafName, clone.LeafName);
         Assert.Equal(original.FileInfo.FileSize, clone.FileInfo.FileSize);
-        Assert.Equal(original.FileData!.ToArray(3), clone.FileData!.ToArray(3));
+        Assert.Equal(original.FileData.ToArray(3), clone.FileData!.ToArray(3));
         Assert.Equal(original.FileSecurity, clone.FileSecurity);
     }
 

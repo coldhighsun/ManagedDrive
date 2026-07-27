@@ -11,10 +11,9 @@ namespace ManagedDrive.HelperProtocol;
 public static class HelperPipeProtocol
 {
     /// <summary>
-    /// Named pipe the SYSTEM helper service listens on. Distinct GUID suffix from the CLI pipe so
-    /// the two channels never collide.
+    /// Liveness check; the service answers with <see cref="HelperResponse.Success"/> true.
     /// </summary>
-    public const string PipeName = "ManagedDrive-Helper-7B1E9C4A-2D5F-4A63-B8E1-6C0A9F2D3E7B";
+    public const string OpPing = "ping";
 
     /// <summary>
     /// Publishes a global DOS-device symlink for the given drive letter.
@@ -27,9 +26,10 @@ public static class HelperPipeProtocol
     public const string OpUnpublish = "unpublish";
 
     /// <summary>
-    /// Liveness check; the service answers with <see cref="HelperResponse.Success"/> true.
+    /// Named pipe the SYSTEM helper service listens on. Distinct GUID suffix from the CLI pipe so
+    /// the two channels never collide.
     /// </summary>
-    public const string OpPing = "ping";
+    public const string PipeName = "ManagedDrive-Helper-7B1E9C4A-2D5F-4A63-B8E1-6C0A9F2D3E7B";
 
     public static HelperRequest DeserializeRequest(string json) =>
         JsonSerializer.Deserialize<HelperRequest>(json) ?? new HelperRequest(string.Empty, null, null);

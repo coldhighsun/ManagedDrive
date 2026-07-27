@@ -17,24 +17,24 @@ public static class HelperPipeClient
     /// <paramref name="devicePath"/>.
     /// </summary>
     public static bool TryPublish(string letter, string devicePath, out HelperResponse response) =>
-        TrySend(new HelperRequest(HelperPipeProtocol.OpPublish, letter, devicePath), out response);
+        TrySend(new(HelperPipeProtocol.OpPublish, letter, devicePath), out response);
 
     /// <summary>
     /// Asks the service to remove the global symlink previously published for
     /// <paramref name="letter"/>.
     /// </summary>
     public static bool TryUnpublish(string letter, out HelperResponse response) =>
-        TrySend(new HelperRequest(HelperPipeProtocol.OpUnpublish, letter, null), out response);
+        TrySend(new(HelperPipeProtocol.OpUnpublish, letter, null), out response);
 
     /// <summary>
     /// Checks whether the helper service is installed and listening.
     /// </summary>
     public static bool IsServiceAvailable() =>
-        TrySend(new HelperRequest(HelperPipeProtocol.OpPing, null, null), out var response) && response.Success;
+        TrySend(new(HelperPipeProtocol.OpPing, null, null), out var response) && response.Success;
 
     private static bool TrySend(HelperRequest request, out HelperResponse response)
     {
-        response = new HelperResponse(false, string.Empty);
+        response = new(false, string.Empty);
 
         using var pipe = new NamedPipeClientStream(".", HelperPipeProtocol.PipeName, PipeDirection.InOut);
 
@@ -48,7 +48,8 @@ public static class HelperPipeClient
         }
 
         using var reader = new StreamReader(pipe, leaveOpen: true);
-        using var writer = new StreamWriter(pipe, leaveOpen: true) { AutoFlush = true };
+        using var writer = new StreamWriter(pipe, leaveOpen: true);
+        writer.AutoFlush = true;
 
         writer.WriteLine(HelperPipeProtocol.SerializeRequest(request));
 

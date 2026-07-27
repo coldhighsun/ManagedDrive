@@ -56,7 +56,7 @@ public sealed class BusyOverlayViewModel : INotifyPropertyChanged
         get;
         private set
         {
-            if (field == value)
+            if (Math.Abs(field - value) < 0.0001)
             {
                 return;
             }

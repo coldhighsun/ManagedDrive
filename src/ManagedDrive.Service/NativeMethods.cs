@@ -11,32 +11,20 @@ namespace ManagedDrive.Service;
 /// </summary>
 internal static class NativeMethods
 {
+    public const uint DDD_EXACT_MATCH_ON_REMOVE = 0x00000004;
     public const uint DDD_RAW_TARGET_PATH = 0x00000001;
     public const uint DDD_REMOVE_DEFINITION = 0x00000002;
-    public const uint DDD_EXACT_MATCH_ON_REMOVE = 0x00000004;
-
-    private const uint GENERIC_NONE = 0;
+    private const uint FILE_FLAG_BACKUP_SEMANTICS = 0x02000000;
     private const uint FILE_SHARE_READ = 0x00000001;
     private const uint FILE_SHARE_WRITE = 0x00000002;
+    private const uint GENERIC_NONE = 0;
     private const uint OPEN_EXISTING = 3;
-    private const uint FILE_FLAG_BACKUP_SEMANTICS = 0x02000000;
 
     /// <summary>
     /// Creates a global DOS-device symlink <paramref name="letter"/> → <paramref name="devicePath"/>.
     /// </summary>
     public static bool CreateGlobalSymlink(string letter, string devicePath) =>
         DefineDosDevice(DDD_RAW_TARGET_PATH, letter, devicePath);
-
-    /// <summary>
-    /// Removes the global DOS-device symlink for <paramref name="letter"/>, matching exactly
-    /// <paramref name="devicePath"/> so an unrelated definition on the same letter is never
-    /// clobbered.
-    /// </summary>
-    public static bool RemoveGlobalSymlink(string letter, string devicePath) =>
-        DefineDosDevice(
-            DDD_RAW_TARGET_PATH | DDD_REMOVE_DEFINITION | DDD_EXACT_MATCH_ON_REMOVE,
-            letter,
-            devicePath);
 
     /// <summary>
     /// Probes whether the underlying NT volume device is still present, independent of any
@@ -63,11 +51,16 @@ internal static class NativeMethods
     public static int GetClientProcessId(SafeHandle pipeHandle) =>
         GetNamedPipeClientProcessId(pipeHandle.DangerousGetHandle(), out var pid) ? (int)pid : -1;
 
-    [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Auto)]
-    private static extern bool DefineDosDevice(uint flags, string deviceName, string? targetPath);
-
-    [DllImport("kernel32.dll", SetLastError = true)]
-    private static extern bool GetNamedPipeClientProcessId(IntPtr pipe, out uint clientProcessId);
+    /// <summary>
+    /// Removes the global DOS-device symlink for <paramref name="letter"/>, matching exactly
+    /// <paramref name="devicePath"/> so an unrelated definition on the same letter is never
+    /// clobbered.
+    /// </summary>
+    public static bool RemoveGlobalSymlink(string letter, string devicePath) =>
+        DefineDosDevice(
+            DDD_RAW_TARGET_PATH | DDD_REMOVE_DEFINITION | DDD_EXACT_MATCH_ON_REMOVE,
+            letter,
+            devicePath);
 
     [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Auto)]
     private static extern SafeFileHandle CreateFile(
@@ -78,4 +71,10 @@ internal static class NativeMethods
         uint creationDisposition,
         uint flagsAndAttributes,
         IntPtr templateFile);
+
+    [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Auto)]
+    private static extern bool DefineDosDevice(uint flags, string deviceName, string? targetPath);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool GetNamedPipeClientProcessId(IntPtr pipe, out uint clientProcessId);
 }

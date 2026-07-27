@@ -1,7 +1,7 @@
-using System.Runtime.InteropServices;
-using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Win32;
+using System.Runtime.InteropServices;
+using System.Text.RegularExpressions;
 
 namespace ManagedDrive.Service;
 
@@ -17,14 +17,6 @@ public sealed partial class GlobalMountManager(ILogger<GlobalMountManager> logge
     private const string RegistryKeyPath = @"SOFTWARE\ManagedDrive\GlobalMounts";
 
     private readonly Lock _lock = new();
-
-    [GeneratedRegex(@"^[A-Za-z]:$")]
-    private static partial Regex DriveLetterRegex();
-
-    // WinFsp volumes surface as \Device\Volume{GUID}. Constrain hard: this service hands SYSTEM's
-    // ability to create arbitrary global symlinks, so only well-formed volume device paths pass.
-    [GeneratedRegex(@"^\\Device\\Volume\{[0-9A-Fa-f-]+\}$")]
-    private static partial Regex DevicePathRegex();
 
     /// <summary>
     /// Publishes a global symlink <paramref name="letter"/> → <paramref name="devicePath"/> and
@@ -59,39 +51,6 @@ public sealed partial class GlobalMountManager(ILogger<GlobalMountManager> logge
     }
 
     /// <summary>
-    /// Removes the global symlink previously published for <paramref name="letter"/>, using the
-    /// device path recorded at publish time for an exact-match removal.
-    /// </summary>
-    public (bool Success, string Message) Unpublish(string letter)
-    {
-        if (!DriveLetterRegex().IsMatch(letter))
-        {
-            return (false, $"Rejected drive letter '{letter}'.");
-        }
-
-        lock (_lock)
-        {
-            var devicePath = ReadRegistryEntry(letter);
-            if (devicePath == null)
-            {
-                // Nothing recorded — treat as already gone rather than an error.
-                return (true, $"No published symlink recorded for {letter}.");
-            }
-
-            bool removed = NativeMethods.RemoveGlobalSymlink(letter, devicePath);
-            if (!removed)
-            {
-                logger.LogWarning("DefineDosDevice remove failed for {Letter} -> {Device}. Win32Error={Error}",
-                    letter, devicePath, Marshal.GetLastWin32Error());
-            }
-
-            DeleteRegistryEntry(letter);
-            logger.LogInformation("Unpublished global symlink {Letter}", letter);
-            return (true, $"Unpublished {letter}");
-        }
-    }
-
-    /// <summary>
     /// Removes every recorded symlink whose backing device is no longer present. Called once at
     /// startup (after a reboot all WinFsp devices are gone, so every stale entry is purged) and
     /// periodically thereafter to reclaim letters leaked by an app that crashed without
@@ -116,16 +75,37 @@ public sealed partial class GlobalMountManager(ILogger<GlobalMountManager> logge
         }
     }
 
-    private static void WriteRegistryEntry(string letter, string devicePath)
+    /// <summary>
+    /// Removes the global symlink previously published for <paramref name="letter"/>, using the
+    /// device path recorded at publish time for an exact-match removal.
+    /// </summary>
+    public (bool Success, string Message) Unpublish(string letter)
     {
-        using var key = Registry.LocalMachine.CreateSubKey(RegistryKeyPath, writable: true);
-        key.SetValue(letter, devicePath, RegistryValueKind.String);
-    }
+        if (!DriveLetterRegex().IsMatch(letter))
+        {
+            return (false, $"Rejected drive letter '{letter}'.");
+        }
 
-    private static string? ReadRegistryEntry(string letter)
-    {
-        using var key = Registry.LocalMachine.OpenSubKey(RegistryKeyPath, writable: false);
-        return key?.GetValue(letter) as string;
+        lock (_lock)
+        {
+            var devicePath = ReadRegistryEntry(letter);
+            if (devicePath == null)
+            {
+                // Nothing recorded — treat as already gone rather than an error.
+                return (true, $"No published symlink recorded for {letter}.");
+            }
+
+            var removed = NativeMethods.RemoveGlobalSymlink(letter, devicePath);
+            if (!removed)
+            {
+                logger.LogWarning("DefineDosDevice remove failed for {Letter} -> {Device}. Win32Error={Error}",
+                    letter, devicePath, Marshal.GetLastWin32Error());
+            }
+
+            DeleteRegistryEntry(letter);
+            logger.LogInformation("Unpublished global symlink {Letter}", letter);
+            return (true, $"Unpublished {letter}");
+        }
     }
 
     private static void DeleteRegistryEntry(string letter)
@@ -133,6 +113,14 @@ public sealed partial class GlobalMountManager(ILogger<GlobalMountManager> logge
         using var key = Registry.LocalMachine.OpenSubKey(RegistryKeyPath, writable: true);
         key?.DeleteValue(letter, throwOnMissingValue: false);
     }
+
+    // WinFsp volumes surface as \Device\Volume{GUID}. Constrain hard: this service hands SYSTEM's
+    // ability to create arbitrary global symlinks, so only well-formed volume device paths pass.
+    [GeneratedRegex(@"^\\Device\\Volume\{[0-9A-Fa-f-]+\}$")]
+    private static partial Regex DevicePathRegex();
+
+    [GeneratedRegex(@"^[A-Za-z]:$")]
+    private static partial Regex DriveLetterRegex();
 
     private static IReadOnlyList<(string Letter, string DevicePath)> ReadAllRegistryEntries()
     {
@@ -152,5 +140,17 @@ public sealed partial class GlobalMountManager(ILogger<GlobalMountManager> logge
         }
 
         return entries;
+    }
+
+    private static string? ReadRegistryEntry(string letter)
+    {
+        using var key = Registry.LocalMachine.OpenSubKey(RegistryKeyPath, writable: false);
+        return key?.GetValue(letter) as string;
+    }
+
+    private static void WriteRegistryEntry(string letter, string devicePath)
+    {
+        using var key = Registry.LocalMachine.CreateSubKey(RegistryKeyPath, writable: true);
+        key.SetValue(letter, devicePath, RegistryValueKind.String);
     }
 }
