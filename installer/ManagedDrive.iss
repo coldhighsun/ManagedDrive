@@ -221,9 +221,9 @@ begin
     Log('.NET 10 Desktop Runtime installed successfully.');
 end;
 
-// Adds/removes {app} on the machine-wide PATH (HKLM, not HKCU) so "wingetex" resolves from any
-// shell without a full path, matching PrivilegesRequired=admin. Best-effort, same as the helper
-// service below: only Log()s on failure rather than aborting setup/uninstall.
+// Adds/removes {app} on the machine-wide PATH (HKLM, not HKCU) so "wgx" resolves from any shell
+// without a full path, matching PrivilegesRequired=admin. Best-effort, same as the helper service
+// below: only Log()s on failure rather than aborting setup/uninstall.
 const
   EnvironmentKey = 'SYSTEM\CurrentControlSet\Control\Session Manager\Environment';
 
