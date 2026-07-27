@@ -63,9 +63,6 @@ Name: "{group}\ManagedDrive"; Filename: "{app}\ManagedDrive.exe"
 Name: "{group}\Uninstall ManagedDrive"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\ManagedDrive"; Filename: "{app}\ManagedDrive.exe"; Tasks: desktopicon
 
-[Run]
-Filename: "{app}\ManagedDrive.exe"; Description: "Launch ManagedDrive"; Flags: nowait postinstall skipifsilent
-
 [Code]
 const
   WinFspRegKey32 = 'SOFTWARE\WOW6432Node\WinFsp';
@@ -276,6 +273,25 @@ begin
   StartHelperService();
 end;
 
+// Launches ManagedDrive.exe post-install as the logged-in user rather than via Setup's own
+// Exec(), which - on this elevated install path - would internally go through Inno Setup's
+// de-elevation "spawn server" (CallSpawnServer) to hand the process off to the unprivileged
+// user session. That mechanism has been observed to fail with "CallSpawnServer: Unexpected
+// status: 1" on machines where UAC's admin consent prompt is configured to elevate silently
+// (ConsentPromptBehaviorAdmin=0), because Setup never goes through its own unelevated-then-
+// elevated self-relaunch, so no unelevated companion process exists to act as that spawn
+// server. Asking the user's own already-unelevated explorer.exe to open the file sidesteps
+// the de-elevation step entirely - explorer.exe hosts the launch under the user's normal
+// token however Setup itself is running.
+procedure LaunchAppAsUser();
+var
+  ResultCode: Integer;
+begin
+  if not Exec('explorer.exe', ExpandConstant('"{app}\ManagedDrive.exe"'), '', SW_SHOWNORMAL,
+    ewNoWait, ResultCode) then
+    Log('Failed to launch ManagedDrive.exe via explorer.exe: ' + SysErrorMessage(ResultCode));
+end;
+
 procedure CurStepChanged(CurStep: TSetupStep);
 begin
   if CurStep = ssInstall then
@@ -313,6 +329,11 @@ begin
       StartHelperService();
     end;
   end;
+
+  // Mirrors the old [Run] entry's "postinstall skipifsilent" semantics: launch the app once
+  // installation is fully done, but not when running silently (winget/CI have no one to see it).
+  if (CurStep = ssDone) and not WizardSilent() then
+    LaunchAppAsUser();
 end;
 
 // Checks whether the user-level TEMP variable currently points at a drive letter that a saved
