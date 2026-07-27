@@ -10,9 +10,11 @@ internal sealed record InstallerInfo(string InstallerType, string SilentSwitches
 //
 // Deserializes into plain Dictionary<object,object>/List<object>/string rather than typed POCOs:
 // YamlDotNet's typed deserialization constructs app-defined types via reflection
-// (Activator.CreateInstance), and the trimmer removes their otherwise-unreferenced parameterless
-// constructors from a trimmed publish (PublishTrimmed=true) — this fails at runtime with
-// MissingMethodException. Dictionary/List/string are BCL types the trimmer always preserves.
+// (Activator.CreateInstance), which a trimmed publish would break by removing their otherwise-
+// unreferenced parameterless constructors (MissingMethodException at runtime). This project isn't
+// currently published trimmed (PublishTrimmed requires a self-contained publish; this ships
+// framework-dependent, like the rest of the app), but Dictionary/List/string are BCL types the
+// trimmer always preserves regardless, so this stays safe if that ever changes.
 internal static class WingetManifestReader
 {
     private static readonly string[] MsiInstallerTypes = ["msi", "wix"];
