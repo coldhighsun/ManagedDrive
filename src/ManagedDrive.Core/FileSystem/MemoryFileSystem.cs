@@ -20,6 +20,8 @@ public sealed class MemoryFileSystem : FileSystemBase
     private long _lastContentReadTicks;
     private ContentAccessInfo? _lastContentWriteAccess;
     private long _lastContentWriteTicks;
+    private long _totalBytesRead;
+    private long _totalBytesWritten;
     private ulong _maxCapacity;
     private string _volumeLabel;
 
@@ -106,6 +108,18 @@ public sealed class MemoryFileSystem : FileSystemBase
             return ticks == 0 ? null : new DateTimeOffset(ticks, TimeSpan.Zero);
         }
     }
+
+    /// <summary>
+    /// Gets the cumulative number of bytes read from file content since mount. Never resets;
+    /// consumers derive a rate by sampling the delta between two reads of this value over time.
+    /// </summary>
+    internal long TotalBytesRead => Interlocked.Read(ref _totalBytesRead);
+
+    /// <summary>
+    /// Gets the cumulative number of bytes written to file content since mount. Never resets;
+    /// consumers derive a rate by sampling the delta between two reads of this value over time.
+    /// </summary>
+    internal long TotalBytesWritten => Interlocked.Read(ref _totalBytesWritten);
 
     /// <summary>
     /// Exposes the underlying node map for serialization and capacity queries.
@@ -516,6 +530,7 @@ public sealed class MemoryFileSystem : FileSystemBase
         {
             node.FileData.ReadTo(offset, buffer, toRead);
             bytesTransferred = toRead;
+            Interlocked.Add(ref _totalBytesRead, toRead);
             var readNow = DateTimeOffset.UtcNow;
             Interlocked.Exchange(ref _lastContentReadTicks, readNow.UtcTicks);
             Interlocked.Exchange(ref _lastContentReadAccess, new(readNow, node.FilePath));
@@ -773,6 +788,7 @@ public sealed class MemoryFileSystem : FileSystemBase
         }
 
         bytesTransferred = length;
+        Interlocked.Add(ref _totalBytesWritten, length);
 
         var now = FileTimeNow();
         node.FileInfo.LastAccessTime = now;

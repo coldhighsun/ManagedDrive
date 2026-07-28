@@ -677,6 +677,28 @@
                 <DropShadowEffect ShadowDepth="1" BlurRadius="4" Opacity="0.12"/>
             </Setter.Value>
         </Setter>
+        <Style.Triggers>
+            <!-- High-usage blink: pulses opacity and switches to a thicker warning-colored
+                 border for as long as the bound disk stays over its warning threshold. Animates
+                 Opacity rather than BorderBrush.Color directly, since BorderBrush here resolves to
+                 a shared DynamicResource brush instance that other cards/elements also reference. -->
+            <DataTrigger Binding="{Binding IsHighUsage}" Value="True">
+                <Setter Property="BorderBrush" Value="{DynamicResource AppWarning}"/>
+                <Setter Property="BorderThickness" Value="2"/>
+                <DataTrigger.EnterActions>
+                    <BeginStoryboard x:Name="HighUsageBlinkStoryboard">
+                        <Storyboard>
+                            <DoubleAnimation Storyboard.TargetProperty="Opacity"
+                                             From="1.0" To="0.55" Duration="0:0:0.6"
+                                             AutoReverse="True" RepeatBehavior="Forever"/>
+                        </Storyboard>
+                    </BeginStoryboard>
+                </DataTrigger.EnterActions>
+                <DataTrigger.ExitActions>
+                    <StopStoryboard BeginStoryboardName="HighUsageBlinkStoryboard"/>
+                </DataTrigger.ExitActions>
+            </DataTrigger>
+        </Style.Triggers>
     </Style>
 
     <!-- ========== Dialog field grouping ========== -->

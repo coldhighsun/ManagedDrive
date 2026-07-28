@@ -28,4 +28,18 @@ public static class ByteFormatter
 
         return $"{bytes} B";
     }
+
+    /// <summary>
+    /// Formats a byte-per-second rate using the same unit thresholds as <see cref="Format"/>,
+    /// with an "/s" suffix (e.g. "1.2 MB/s"). Values below 1 B/s are reported as "0 B/s".
+    /// </summary>
+    public static string FormatRate(double bytesPerSecond)
+    {
+        if (bytesPerSecond < 1.0)
+        {
+            return "0 B/s";
+        }
+
+        return $"{Format((ulong)Math.Round(bytesPerSecond))}/s";
+    }
 }

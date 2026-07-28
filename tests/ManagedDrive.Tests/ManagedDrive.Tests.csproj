@@ -22,6 +22,7 @@
 
   <ItemGroup>
     <Using Include="Xunit" />
+    <Using Include="ManagedDrive.App.Controls" />
     <Using Include="ManagedDrive.App.Infrastructure" />
     <Using Include="ManagedDrive.Core.Archive" />
     <Using Include="ManagedDrive.Core.DiskCreation" />

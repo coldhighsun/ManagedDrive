@@ -1,3 +1,7 @@
+using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
+using System.Windows.Input;
+
 namespace ManagedDrive.App;
 
 /// <summary>
@@ -5,6 +9,11 @@ namespace ManagedDrive.App;
 /// </summary>
 public partial class MainWindow
 {
+    private static readonly TimeSpan SpeedPopupCloseDelay = TimeSpan.FromMilliseconds(150);
+
+    private DispatcherTimer? _speedPopupCloseTimer;
+    private Popup? _pendingCloseSpeedPopup;
+
     /// <summary>
     /// Initializes the main window and binds the supplied view model.
     /// </summary>
@@ -33,4 +42,59 @@ public partial class MainWindow
             btn.ContextMenu.IsOpen = true;
         }
     }
+
+    /// <summary>
+    /// Opens the speed-history popup when the mouse enters the speed row or the popup itself,
+    /// cancelling any pending close scheduled for a different popup.
+    /// </summary>
+    private void SpeedRow_MouseEnter(object sender, MouseEventArgs e)
+    {
+        var popup = FindSpeedPopup(sender);
+        if (popup is null)
+        {
+            return;
+        }
+
+        if (_pendingCloseSpeedPopup is not null && _pendingCloseSpeedPopup != popup)
+        {
+            CloseSpeedPopup(_pendingCloseSpeedPopup);
+        }
+
+        _speedPopupCloseTimer?.Stop();
+        _pendingCloseSpeedPopup = null;
+        popup.IsOpen = true;
+    }
+
+    /// <summary>
+    /// Schedules the speed-history popup to close shortly after the mouse leaves the speed row
+    /// or the popup itself, so briefly crossing the gap between them doesn't flicker it shut.
+    /// </summary>
+    private void SpeedRow_MouseLeave(object sender, MouseEventArgs e)
+    {
+        var popup = FindSpeedPopup(sender);
+        if (popup is null)
+        {
+            return;
+        }
+
+        _speedPopupCloseTimer?.Stop();
+        _pendingCloseSpeedPopup = popup;
+        _speedPopupCloseTimer = new DispatcherTimer { Interval = SpeedPopupCloseDelay };
+        _speedPopupCloseTimer.Tick += (_, _) =>
+        {
+            _speedPopupCloseTimer?.Stop();
+            CloseSpeedPopup(popup);
+            _pendingCloseSpeedPopup = null;
+        };
+        _speedPopupCloseTimer.Start();
+    }
+
+    private static void CloseSpeedPopup(Popup popup) => popup.IsOpen = false;
+
+    private static Popup? FindSpeedPopup(object sender) => sender switch
+    {
+        StackPanel speedRow => speedRow.Children.OfType<Popup>().FirstOrDefault(),
+        FrameworkElement { Parent: Popup popup } => popup,
+        _ => null,
+    };
 }

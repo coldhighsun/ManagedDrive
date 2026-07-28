@@ -7,6 +7,7 @@ namespace ManagedDrive.App.Services;
 /// </summary>
 public sealed class DiskNotificationService
 {
+    private readonly HashSet<DiskViewModel> _highUsageDisks = [];
     private readonly Func<bool> _isMainWindowVisible;
     private readonly MainViewModel _mainViewModel;
     private readonly TrayIconController _trayIconController;
@@ -33,11 +34,18 @@ public sealed class DiskNotificationService
                     vm.HighUsageWarning += OnDiskHighUsageWarning;
                     vm.SaveFailed += OnDiskSaveFailed;
                     vm.ActivityObserved += OnDiskActivityObserved;
+                    vm.PropertyChanged += OnDiskPropertyChanged;
                     vm.SetActivityTrackingEnabled(_isMainWindowVisible());
 
                     if (vm is { CapacityAdjustedOnLoad: true, Disk.Options.SourceArchivePath: null })
                     {
                         OnDiskCapacityAdjusted(vm);
+                    }
+
+                    if (vm.IsHighUsage)
+                    {
+                        _highUsageDisks.Add(vm);
+                        _trayIconController.SetHighUsageWarningActive(true);
                     }
                 }
             }
@@ -49,6 +57,12 @@ public sealed class DiskNotificationService
                     vm.HighUsageWarning -= OnDiskHighUsageWarning;
                     vm.SaveFailed -= OnDiskSaveFailed;
                     vm.ActivityObserved -= OnDiskActivityObserved;
+                    vm.PropertyChanged -= OnDiskPropertyChanged;
+
+                    if (_highUsageDisks.Remove(vm))
+                    {
+                        _trayIconController.SetHighUsageWarningActive(_highUsageDisks.Count > 0);
+                    }
                 }
             }
         };
@@ -74,6 +88,32 @@ public sealed class DiskNotificationService
         _trayIconController.ShowBalloonTip(title, body, System.Windows.Forms.ToolTipIcon.Warning);
 
         _mainViewModel.StatusText = Loc.Format("Status.CapacityAdjusted", vm.MountPoint, originalMb, newMb);
+    }
+
+    /// <summary>
+    /// Tracks every disk currently in the <see cref="DiskViewModel.IsHighUsage"/> state (which
+    /// fires on both the rising and falling edge, unlike the one-shot <see cref="DiskViewModel.HighUsageWarning"/>
+    /// event used for the balloon tip below) and reduces it to a single tray blink call: the tray
+    /// icon has no per-disk concept, so it only needs to know whether any disk is currently over
+    /// its threshold.
+    /// </summary>
+    private void OnDiskPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName != nameof(DiskViewModel.IsHighUsage) || sender is not DiskViewModel vm)
+        {
+            return;
+        }
+
+        if (vm.IsHighUsage)
+        {
+            _highUsageDisks.Add(vm);
+        }
+        else
+        {
+            _highUsageDisks.Remove(vm);
+        }
+
+        _trayIconController.SetHighUsageWarningActive(_highUsageDisks.Count > 0);
     }
 
     private void OnDiskHighUsageWarning(object? sender, EventArgs e)

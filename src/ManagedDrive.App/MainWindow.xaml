@@ -5,6 +5,7 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:vm="clr-namespace:ManagedDrive.App.ViewModels"
         xmlns:infra="clr-namespace:ManagedDrive.App.Infrastructure"
+        xmlns:controls="clr-namespace:ManagedDrive.App.Controls"
         mc:Ignorable="d"
         Style="{StaticResource AppWindow}"
         WindowStyle="None"
@@ -399,6 +400,36 @@
                                                FontSize="11"
                                                Foreground="{DynamicResource AppForegroundLight}"
                                                Visibility="{Binding ShowLastAutoSave, Converter={StaticResource BoolToVis}}"/>
+                                </StackPanel>
+
+                                <!-- Read/write throughput; hovering opens a history-chart popup (see below) -->
+                                <StackPanel x:Name="SpeedRow" Orientation="Horizontal" Margin="0,2,0,0"
+                                            Visibility="{Binding IsNotReadOnly, Converter={StaticResource BoolToVis}}"
+                                            MouseEnter="SpeedRow_MouseEnter" MouseLeave="SpeedRow_MouseLeave">
+                                    <TextBlock Text="&#xE898;" FontFamily="Segoe Fluent Icons" FontSize="10"
+                                               Foreground="{DynamicResource AppForegroundLight}"
+                                               VerticalAlignment="Center" Margin="0,0,4,0"
+                                               ToolTip="{DynamicResource Card.ReadSpeed}"
+                                               AutomationProperties.Name="{DynamicResource Card.ReadSpeed}"/>
+                                    <TextBlock Text="{Binding ReadSpeedFormatted}" FontSize="11"
+                                               Foreground="{DynamicResource AppForegroundLight}"/>
+                                    <TextBlock Text="&#xE896;" FontFamily="Segoe Fluent Icons" FontSize="10"
+                                               Foreground="{DynamicResource AppForegroundLight}"
+                                               VerticalAlignment="Center" Margin="10,0,4,0"
+                                               ToolTip="{DynamicResource Card.WriteSpeed}"
+                                               AutomationProperties.Name="{DynamicResource Card.WriteSpeed}"/>
+                                    <TextBlock Text="{Binding WriteSpeedFormatted}" FontSize="11"
+                                               Foreground="{DynamicResource AppForegroundLight}"/>
+                                    <Popup x:Name="SpeedPopup" PlacementTarget="{Binding ElementName=SpeedRow}" Placement="Bottom"
+                                           StaysOpen="True" AllowsTransparency="True">
+                                        <Border Background="{DynamicResource AppSurface}"
+                                                BorderBrush="{DynamicResource AppDivider}"
+                                                BorderThickness="1" CornerRadius="4" Padding="8"
+                                                MouseEnter="SpeedRow_MouseEnter" MouseLeave="SpeedRow_MouseLeave">
+                                            <controls:SpeedHistoryChart ReadHistory="{Binding ReadSpeedHistory}"
+                                                                         WriteHistory="{Binding WriteSpeedHistory}"/>
+                                        </Border>
+                                    </Popup>
                                 </StackPanel>
                             </StackPanel>
 
