@@ -50,7 +50,7 @@ Create, mount and manage in-memory volumes that appear as normal drive letters i
 
 **UI**
 - Bilingual (English / Simplified Chinese) and light/dark themes, both auto-detected with manual override, switching instantly
-- Disk cards with status badges (read-only, current-TEMP, backing image, password-protected) and a usage bar that warns past the high-usage threshold
+- Disk cards with status badges (read-only, current-TEMP, backing image, password-protected), a usage bar that warns past the high-usage threshold, and a live read/write throughput chart
 - Freely resizable window, no maximize/fullscreen
 - About dialog with version, GitHub link, and an "update available" link when a newer release exists
 - Optional daily update check against GitHub Releases; a tray balloon + dialog (View Release / Skip / Remind Later) appears on a new release
@@ -306,7 +306,7 @@ This project bundles [WinFsp](https://winfsp.dev/) and [SharpCompress](https://g
 
 **界面**
 - 双语（中/英）及浅色/深色主题，均可自动检测或手动切换，即时生效
-- 磁盘卡片带状态角标（只读、当前临时目录、绑定镜像、密码保护）及超阈值变色的使用率进度条
+- 磁盘卡片带状态角标（只读、当前临时目录、绑定镜像、密码保护）、超阈值变色的使用率进度条，以及实时读写速度曲线图
 - 窗口可自由拖拽调整大小，不支持最大化/全屏
 - 关于对话框显示版本、GitHub 链接，有新版本时显示更新链接
 - 可选每日检查更新；发现新版本时弹出托盘气泡+对话框（查看发布页/忽略/稍后提醒）
