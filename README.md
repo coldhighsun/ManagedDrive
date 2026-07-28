@@ -43,7 +43,7 @@ Create, mount and manage in-memory volumes that appear as normal drive letters i
 - Tray icon with a hover tooltip (per-disk usage + available memory), quick menu, optional start-minimized mode, and a brief read/write flash on activity
 - Available system memory shown live in the status bar (2 s refresh)
 - Status bar also shows the most recently accessed file, pushed live (throttled to 300 ms) rather than polled, paused while the window is hidden in the tray
-- Per-disk high-usage warning (default 90%, with hysteresis)
+- Per-disk high-usage warning (50–90% range, default 90%, with hysteresis)
 - Temp directory redirection to a disk's `Temp` folder, auto-reset on unmount/remount, with a startup warning if TEMP is left on a RAM disk
 - Exit confirmation with a saving overlay while pending saves finish; TEMP is reset first if it points at a mounted disk
 - Double-click to open a disk in Explorer; right-click for shortcuts or **View Disk Contents...** (a read-only, sortable Name/Size/Type tree)
@@ -120,38 +120,11 @@ ManagedDrive/
 
 ### How It Works
 
-ManagedDrive uses **WinFsp** (Windows File System Proxy) to present an in-memory directory tree as a real Windows volume, via a signed kernel driver that forwards file I/O to `MemoryFileSystem`, which stores data in .NET byte arrays.
+ManagedDrive uses **WinFsp** (Windows File System Proxy) to present an in-memory directory tree as a real Windows volume: a signed kernel driver forwards file I/O to a managed file system implementation that stores data in .NET byte arrays and enforces a configurable capacity ceiling. Mounting/unmounting, save/restore to a `.mdr` image, and snapshot history are all handled by `ManagedDrive.Core` (see `CLAUDE.md` for the class-level architecture).
 
-Key classes:
+### Disk Image & Snapshot Format
 
-- **`FileNode`** — a node's `Fsp.Interop.FileInfo` metadata, `byte[]` data buffer, cached leaf name, and security descriptor.
-- **`FileNodeMap`** — a case-insensitive `SortedDictionary<string, FileNode>` mapping full paths to nodes; supports paginated child enumeration and O(1) allocated-byte tracking. Thread-safe via the C# 13 `Lock` type.
-- **`MemoryFileSystem : FileSystemBase`** — implements all 21 WinFsp callbacks (`Create`, `Read`, `Write`, `Rename`, etc.), enforces a configurable capacity ceiling (`STATUS_DISK_FULL` when exceeded), and only allocates the bytes actually written.
-- **`RamDisk`** — combines `MemoryFileSystem` with a `FileSystemHost`. `Create()` mounts the volume, waits for the drive letter to appear (up to 2.5 s), and refreshes Explorer; `Dispose()` unmounts. An optional auto-save timer and a final save on `Dispose()` (skippable via "Save on exit") keep the backing image current, skipping saves when nothing changed. A `SaveFailed` event surfaces any save/snapshot failure, including background ones that would otherwise fail silently. Optional per-disk encryption keeps a random content-encryption key in memory only, wrapped by the user's password.
-- **`MountManager`** — thread-safe registry of active `RamDisk` instances, firing `DiskMounted`/`DiskUnmounted` events.
-- **`DiskImageSerializer`** — reads/writes `.mdr` files (metadata, ACLs, file data), optionally gzip-compressed; `Save` reports progress per node via `IProgress<double>`.
-- **`SnapshotManager` / `SnapshotStore`** — write a timestamped, read-only copy of the disk next to its `.mdr` image after each save, list/prune them, and restore one back. Content is deduplicated by SHA-256 into a shared blob store, so snapshots of a mostly-unchanged disk cost little extra space.
-
-### Disk Image Format (`.mdr`)
-
-A little-endian binary format:
-
-| Field | Type | Description |
-|---|---|---|
-| Magic | `byte[4]` | `MDRD` |
-| Version | `int32` | Currently `3` |
-| CompressionLevel | `byte` | `ImageCompressionLevel` value (0=None/1=Fastest/2=Optimal/3=SmallestSize) |
-| Capacity | `uint64` | Configured capacity in bytes (always plaintext, even when encrypted) |
-| VolumeLabel | `string` | Length-prefixed UTF-8 (always plaintext, even when encrypted) |
-| *Encryption info* | — | Present only when the image is password-protected: PBKDF2 salt and the wrapped content-encryption key |
-| NodeCount | `int32` | Number of nodes that follow |
-| *Node entries* | — | Path, metadata (10 fields), security descriptor, file data — gzip-compressed as a block when `CompressionLevel != None`, then AES-256-GCM encrypted on top when the image is password-protected |
-
-Version `1` (no `CompressionLevel` byte, always uncompressed) and version `2` (whole node region compressed, no encryption) images remain readable for backward compatibility.
-
-### Snapshot Format
-
-Snapshots use a separate format from `.mdr` images. For `disk.mdr`, snapshots are named `disk.yyyyMMdd-HHmmss.mdr` in the same folder — a small binary index file (magic `MDRS`) listing each file/directory's metadata plus, for non-empty files, a SHA-256 hash. File content lives in a shared, content-addressed blob store at `disk.snapblobs/` (sharded into 2-char hex subfolders), gzip-compressed per blob — identical content across snapshots is stored once. Encrypted disks additionally encrypt each blob with the same key via AES-256-GCM. Pruning or deleting a snapshot (via **Restore Snapshot...**) garbage-collects any now-unreferenced blobs; clearing a disk's password deletes all of its snapshots outright, since old blobs are unrecoverable without the discarded key.
+`.mdr` images are a versioned, little-endian binary format (magic `MDRD`) with optional gzip compression and optional AES-256-GCM password-based encryption; large disks stream to/from the file and encrypt in chunks rather than buffering the whole image in memory. Snapshots use a separate format (magic `MDRS`) stored next to the main image, with file content deduplicated by SHA-256 into a shared blob store so snapshots of a mostly-unchanged disk cost little extra space. Both formats stay backward-compatible with older versions produced by earlier releases. See `CLAUDE.md` for the exact binary layout.
 
 ### Settings & Persistence
 
@@ -171,13 +144,7 @@ Measured with [BenchmarkDotNet](https://benchmarkdotnet.org/) (Intel Core i9-139
 | Random 4 KB read, 30 seeks over 16 MB | 1.9–2.3 ms | 1.6 ms | ~1.2–1.4× slower |
 | 30× small-file (4 KB) create+write | 51.6 ms (1.72 ms/file) | 80.7 ms (2.69 ms/file) | **1.6× faster** |
 
-- **Writes win big** — the RAM disk skips block allocation, journaling, and the physical write.
-- **Sequential reads land near parity with an OS-cache hit** — a user-mode file system crosses WinFsp's kernel–userspace bridge, so it can't consistently beat the kernel's own DRAM page cache; only a kernel-mode driver could. These numbers vary run-to-run with page-cache state.
-- **Random reads are modestly slower** — each seek pays a kernel–userspace round-trip through WinFsp.
-- **Small-file create+write is the other big win** — file creation skips block allocation and journaling, at the cost of higher managed-memory allocation per operation.
-- Writes allocate far less managed memory now that file content is held in chunked, right-sized buffers (a 4 KB write allocates ~5.8 KB, down from ~65 KB when each file rounded up to a full buffer).
-
-Run `dotnet run --project benchmarks/ManagedDrive.Benchmarks -c Release` for raw latency numbers and further scenarios (see [Running Benchmarks](#running-benchmarks) below).
+Writes and small-file create+write win big by skipping block allocation, journaling, and the physical write; sequential reads land near parity with an OS page-cache hit (a user-mode file system can't consistently beat the kernel's own DRAM cache); random reads are modestly slower since each seek pays a kernel–userspace round-trip through WinFsp. Run `dotnet run --project benchmarks/ManagedDrive.Benchmarks -c Release` for current numbers on your own hardware (see [Running Benchmarks](#running-benchmarks) below).
 
 ### Running Tests
 
@@ -299,7 +266,7 @@ This project bundles [WinFsp](https://winfsp.dev/) and [SharpCompress](https://g
 - 托盘图标带悬浮提示（各盘用量+可用内存）、快捷菜单、可选最小化启动，读写活动时短暂闪烁指示
 - 状态栏实时显示可用系统内存（2 秒刷新）
 - 状态栏同时推送最近访问的文件（节流至 300 毫秒一次，非轮询），窗口最小化到托盘时暂停
-- 每磁盘可配置高用量警告（默认 90%，带回滞防抖）
+- 每磁盘可配置高用量警告（范围 50%–90%，默认 90%，带回滞防抖）
 - 临时目录重定向到某磁盘的 `Temp` 文件夹，卸载/重挂自动恢复，TEMP 遗留在内存盘上时启动提示
 - 退出确认并显示保存遮罩直至待处理保存完成；TEMP 指向已挂载磁盘时会先重置
 - 双击在资源管理器中打开磁盘；右键提供快捷方式或**查看磁盘内容...**（只读、可排序的名称/大小/类型树状列表）
@@ -324,7 +291,7 @@ This project bundles [WinFsp](https://winfsp.dev/) and [SharpCompress](https://g
 
 若使用 ZIP，解压到任意目录后直接运行 `ManagedDrive.exe` 即可。`ManagedDrive.exe` 是单文件可执行程序——ZIP 中还附带一个体积很小的 `winfsp-msil.dll`（WinFsp 托管互操作程序集，无法打包进单文件中），需与 exe 保持在同一目录下。唯一会写入注册表的操作是可选的"开机自启"设置，除此之外不会写入注册表。使用 ZIP 时仍需提前单独安装 WinFsp（见下方环境要求）；安装程序会自动处理这一步。
 
-ZIP 中还包含 `mdrive.exe`（配套命令行工具，见下方[命令行用法](#命令行用法)）和 `wingetx.exe`（`winget` 包装工具，见下方[wingetx: winget 包装工具](#wingetx-winget-包装工具)）。将解压目录加入 `PATH` 后即可在任意终端中运行 `mdrive`/`wingetx`。安装程序会自动将两者加入系统级 `PATH`。
+ZIP 中还包含 `mdrive.exe`（配套命令行工具，见下方[命令行用法](#cli-usage-zh)）和 `wingetx.exe`（`winget` 包装工具，见下方[wingetx: winget 包装工具](#wingetx-wrapper-zh)）。将解压目录加入 `PATH` 后即可在任意终端中运行 `mdrive`/`wingetx`。安装程序会自动将两者加入系统级 `PATH`。
 
 ### 环境要求
 
@@ -380,38 +347,11 @@ ManagedDrive/
 
 ### 工作原理
 
-ManagedDrive 使用 **WinFsp**（Windows 文件系统代理）将内存目录树呈现为真实的 Windows 卷，通过已签名内核驱动把文件 I/O 转发至 `MemoryFileSystem`，数据存储在 .NET 字节数组中。
+ManagedDrive 使用 **WinFsp**（Windows 文件系统代理）将内存目录树呈现为真实的 Windows 卷：已签名内核驱动把文件 I/O 转发至托管文件系统实现，数据存储在 .NET 字节数组中，并强制容量上限。挂载/卸载、保存/还原为 `.mdr` 镜像、快照历史等均由 `ManagedDrive.Core` 负责（类级别架构见 `CLAUDE.md`）。
 
-核心类：
+### 磁盘镜像与快照格式
 
-- **`FileNode`** — 节点的 `Fsp.Interop.FileInfo` 元数据、`byte[]` 数据缓冲区、缓存的叶子名称及安全描述符。
-- **`FileNodeMap`** — 不区分大小写的 `SortedDictionary<string, FileNode>`，支持分页子节点枚举和 O(1) 已分配字节追踪，通过 C# 13 `Lock` 保证线程安全。
-- **`MemoryFileSystem : FileSystemBase`** — 实现全部 21 个 WinFsp 回调（`Create`、`Read`、`Write`、`Rename` 等），强制容量上限（超出返回 `STATUS_DISK_FULL`），仅分配实际写入的字节。
-- **`RamDisk`** — 组合 `MemoryFileSystem` 与 `FileSystemHost`。`Create()` 挂载卷、等待盘符出现（最长 2.5 秒）并刷新资源管理器；`Dispose()` 执行卸载。可选自动保存计时器与 `Dispose()` 时的收尾保存（可通过"退出时保存"关闭）保持镜像最新，内容未变时跳过。`SaveFailed` 事件会上报任何保存/快照失败，包括原本会被静默吞掉的后台失败。可选的每盘加密仅在内存中保留一个由用户密码包裹的随机密钥。
-- **`MountManager`** — 线程安全的活动 `RamDisk` 注册表，提供 `DiskMounted`/`DiskUnmounted` 事件。
-- **`DiskImageSerializer`** — 读写 `.mdr` 文件（元数据、ACL、文件数据），可选 gzip 压缩；`Save` 通过 `IProgress<double>` 按节点上报进度。
-- **`SnapshotManager` / `SnapshotStore`** — 每次保存后在主镜像旁写入带时间戳的只读快照，支持列出、清理及还原。内容按 SHA-256 去重存储，因此对基本未变化的磁盘做快照额外占用很小。
-
-### 磁盘镜像格式（`.mdr`）
-
-小端序二进制格式：
-
-| 字段 | 类型 | 说明 |
-|---|---|---|
-| 魔数 | `byte[4]` | `MDRD` |
-| 版本 | `int32` | 当前为 `3` |
-| 压缩级别 | `byte` | `ImageCompressionLevel` 取值（0=不压缩/1=快速/2=均衡/3=最高） |
-| 容量 | `uint64` | 配置的容量（字节，即便镜像已加密也始终为明文） |
-| 卷标 | `string` | 长度前缀 UTF-8（即便镜像已加密也始终为明文） |
-| *加密信息* | — | 仅当镜像已加密时存在：PBKDF2 盐值及被包裹的内容加密密钥 |
-| 节点数 | `int32` | 后续节点数量 |
-| *节点条目* | — | 路径、元数据（10 个字段）、安全描述符、文件数据——压缩级别非 0 时整体经 gzip 压缩，镜像已加密时再整体经 AES-256-GCM 加密 |
-
-版本 `1`（不含压缩级别字段，始终不压缩）和版本 `2`（节点区整体压缩，不支持加密）的镜像仍可正常读取，保持向后兼容。
-
-### 快照格式
-
-快照采用与 `.mdr` 镜像独立的格式。对于主镜像 `disk.mdr`，快照命名为同目录下的 `disk.yyyyMMdd-HHmmss.mdr`——一个小型二进制索引文件（魔数 `MDRS`），列出文件/目录元数据，非空文件附带 SHA-256 哈希。文件内容存储在共享的内容寻址块存储 `disk.snapblobs/` 中（按哈希前 2 位分片），逐块 gzip 压缩——相同内容跨快照只保存一份。加密磁盘的每个块还会用同一密钥做 AES-256-GCM 加密。清理或删除单个快照（**还原快照...**）会垃圾回收不再被引用的块；清除密码会直接删除该磁盘的所有快照，因为旧块在密钥丢弃后已无法恢复。
+`.mdr` 镜像是带版本号的小端序二进制格式（魔数 `MDRD`），可选 gzip 压缩和基于密码的 AES-256-GCM 加密；大磁盘会流式读写文件并分块加密，而非把整个镜像缓冲到内存中。快照采用独立格式（魔数 `MDRS`），存放在主镜像旁，文件内容按 SHA-256 去重存储到共享的块存储中，因此对基本未变化的磁盘做快照额外占用很小。两种格式都会保持对旧版本发布产物的向后兼容。具体二进制布局见 `CLAUDE.md`。
 
 ### 配置与持久化
 
@@ -431,13 +371,7 @@ ManagedDrive 使用 **WinFsp**（Windows 文件系统代理）将内存目录树
 | 随机 4 KB 读取，对 16 MB 文件寻址 30 次 | 1.9–2.3 ms | 1.6 ms | 慢 ~1.2–1.4× |
 | 30 次小文件（4 KB）创建+写入 | 51.6 ms（1.72 ms/文件） | 80.7 ms（2.69 ms/文件） | **快 1.6×** |
 
-- **写入优势明显**——内存盘跳过了物理块分配、日志记录和实际落盘。
-- **顺序读取与 OS 页缓存命中基本持平**——用户态文件系统要经过 WinFsp 的内核–用户态桥接，无法稳定超越内核自身的 DRAM 页缓存，只有内核态驱动才可能做到；这组数据会随页缓存状态逐次波动。
-- **随机读取略慢**——每次寻址都要经过 WinFsp 的内核–用户态往返。
-- **小文件创建+写入是另一大优势**——文件创建跳过了物理块分配和日志记录，代价是每次操作的托管内存分配更高。
-- 得益于分块、按需精确分配的内容缓冲，写入的托管内存分配已大幅下降（一次 4 KB 写入约分配 5.8 KB，此前约 65 KB）。
-
-运行 `dotnet run --project benchmarks/ManagedDrive.Benchmarks -c Release` 可获取原始延迟数据及更多场景（见下方[运行基准测试](#运行基准测试)）。
+写入及小文件创建+写入优势明显，因为跳过了物理块分配、日志记录和实际落盘；顺序读取与 OS 页缓存命中基本持平（用户态文件系统无法稳定超越内核自身的 DRAM 缓存）；随机读取略慢，因为每次寻址都要经过 WinFsp 的内核–用户态往返。运行 `dotnet run --project benchmarks/ManagedDrive.Benchmarks -c Release` 可在你自己的硬件上获取当前数据（见下方[运行基准测试](#running-benchmarks-zh)）。
 
 ### 运行测试
 
@@ -447,6 +381,7 @@ dotnet test tests/ManagedDrive.Tests
 
 测试覆盖 `FileNode`、`FileNodeMap`（增删改查、查找、分页、重命名、容量追踪）、`MemoryFileSystem` 的磁盘克隆逻辑、目录枚举及通配符匹配、`DiskImageSerializer`（各压缩级别的保存/加载往返、旧版本镜像、并发修改）、压缩包导入/导出、`MountOptionsFactory`、`CreateDiskOptionsBuilder`/`ByteUnitConverter`（下沉到 Core 以便脱离 WPF 单测），以及 `PasswordStrengthEstimator`。挂载/卸载集成测试需要 WinFsp 驱动，须手动运行。
 
+<a id="running-benchmarks-zh"></a>
 ### 运行基准测试
 
 须已安装 WinFsp。基准测试项目会自动选择 `D:` 到 `Z:` 之间第一个空闲盘符，无需手动配置。
@@ -457,6 +392,7 @@ dotnet run --project benchmarks/ManagedDrive.Benchmarks -c Release
 
 BenchmarkDotNet 会提示你选择要运行的基准测试类（`SequentialReadWriteBenchmarks`、`RandomAccessBenchmarks`、`ConcurrentAccessBenchmarks`，或任意组合）。结果将写入工作目录下的 `BenchmarkDotNet.Artifacts/results/`。
 
+<a id="cli-usage-zh"></a>
 ### 命令行用法
 
 `mdrive.exe` 随 `ManagedDrive.exe` 一同发布，通过命名管道将命令转发给正在运行的应用，因此脚本无需打开界面即可操作 ManagedDrive。若应用尚未运行，`mdrive` 会自动启动它，并在最长 10 秒内重试。
@@ -482,6 +418,7 @@ mdrive exit
 
 运行 `mdrive --help` 或 `mdrive <命令> --help` 可查看完整的选项列表。
 
+<a id="wingetx-wrapper-zh"></a>
 ### wingetx: winget 包装工具
 
 `wingetx.exe` 是 `winget` 的透明包装工具，随 `ManagedDrive.exe`/`mdrive.exe` 一同发布。可直接把它当作 `winget` 的替代品使用：
@@ -493,11 +430,12 @@ wingetx upgrade <包名>
 
 如果 `%TEMP%` 当前不在 ManagedDrive 内存盘上，或所调用的子命令不是 `install`/`upgrade`，`wingetx` 会原样把调用转发给 `winget.exe`——因此把 `winget` 直接别名为 `wingetx` 始终是安全的。
 
-当 `%TEMP%` **确实**设为 ManagedDrive 内存盘时，`wingetx install`/`wingetx upgrade` 会将 MSI 及 exe 类型的包改为先执行 `winget download`，再手动启动下载好的安装程序（MSI/WiX 用 `msiexec`，其余直接运行安装包本身），而不是直接执行 `winget install`。这样可以绕开下方[已知问题](#已知问题)中描述的两种失败模式：`msiexec` 的卷装载管理器（Mount Manager）源卷检查，以及影响 exe 安装包的跨会话退出码 1 问题。它无法确信处理的安装包类型（msix、appx、zip、便携版等）会自动转发给普通的 `winget install`/`upgrade`。
+当 `%TEMP%` **确实**设为 ManagedDrive 内存盘时，`wingetx install`/`wingetx upgrade` 会将 MSI 及 exe 类型的包改为先执行 `winget download`，再手动启动下载好的安装程序（MSI/WiX 用 `msiexec`，其余直接运行安装包本身），而不是直接执行 `winget install`。这样可以绕开下方[已知问题](#known-issues-zh)中描述的两种失败模式：`msiexec` 的卷装载管理器（Mount Manager）源卷检查，以及影响 exe 安装包的跨会话退出码 1 问题。它无法确信处理的安装包类型（msix、appx、zip、便携版等）会自动转发给普通的 `winget install`/`upgrade`。
 
 - 除非传入 `--silent` 或 `--disable-interactivity`，安装程序界面默认保持可见（`SilentWithProgress` 开关），与 `winget` 自身行为一致。
 - 下载的安装包会先暂存到 `%LOCALAPPDATA%\Temp\wingetx`（一个真实的、非 WinFsp 的卷）再启动。
 
+<a id="known-issues-zh"></a>
 ### 已知问题
 
 #### 将 TEMP 设为内存盘后，某些安装包可能报错
@@ -517,7 +455,7 @@ WinFsp 把盘符挂载在**当前登录会话（logon session）**的设备命�
   ```
   之后可用 `sc stop ManagedDriveHelper` 再 `sc delete ManagedDriveHelper` 移除。完全是可选的——不做这一步 ManagedDrive 照常挂载和使用，只是失败模式 1 得不到解决。
 
-**MSI 安装的解决办法：** 安装 MSI 类软件前，先用工具栏按钮把 TEMP 恢复为 Windows 默认值再重试；或直接前往官网下载安装包手动安装；也可以用 [`wingetx`](#wingetx-winget-包装工具) 代替 `winget`——它无需重置 TEMP 即可绕开上述两种失败模式。
+**MSI 安装的解决办法：** 安装 MSI 类软件前，先用工具栏按钮把 TEMP 恢复为 Windows 默认值再重试；或直接前往官网下载安装包手动安装；也可以用 [`wingetx`](#wingetx-wrapper-zh) 代替 `winget`——它无需重置 TEMP 即可绕开上述两种失败模式。
 
 ManagedDrive 会在 TEMP 被设为内存盘时提示一次，此后只要 TEMP 仍指向内存盘，每次启动都会再次提示——恢复默认值即可停止。
 
