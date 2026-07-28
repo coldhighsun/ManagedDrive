@@ -91,10 +91,19 @@ public partial class MainWindow
 
     private static void CloseSpeedPopup(Popup popup) => popup.IsOpen = false;
 
+    /// <summary>
+    /// Resolves the speed-history <see cref="Popup"/> for a mouse event raised either by the
+    /// speed row itself or by the popup's own content border. The border's <c>Tag</c> is bound to
+    /// the popup by name in XAML (<c>Tag="{Binding ElementName=SpeedPopup}"</c>) rather than
+    /// resolved here via <c>FrameworkElement.Parent</c> — a <see cref="Popup"/>'s child is hosted
+    /// in a separate visual root, so relying on logical-tree parentage to hold at arbitrary
+    /// MouseEnter/MouseLeave timing is fragile; the explicit binding is resolved once when the
+    /// template loads, before any such event can fire.
+    /// </summary>
     private static Popup? FindSpeedPopup(object sender) => sender switch
     {
         StackPanel speedRow => speedRow.Children.OfType<Popup>().FirstOrDefault(),
-        FrameworkElement { Parent: Popup popup } => popup,
+        FrameworkElement { Tag: Popup popup } => popup,
         _ => null,
     };
 }

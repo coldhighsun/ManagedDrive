@@ -196,12 +196,21 @@ public sealed class TrayIconController : IDisposable
     {
         _dispatcher.BeginInvoke(() =>
         {
-            if (active == _isHighUsageActive || _trayActivityIcons[3] == null)
+            if (active == _isHighUsageActive)
             {
                 return;
             }
 
+            // Record the state change before checking icon readiness below, so a call that
+            // arrives before icon generation finishes doesn't get treated as a no-op — otherwise
+            // a later, genuine call with the same target value would be dropped by the
+            // short-circuit above, permanently losing the warning blink.
             _isHighUsageActive = active;
+
+            if (_trayActivityIcons[3] == null)
+            {
+                return;
+            }
 
             if (active)
             {
