@@ -261,7 +261,7 @@ public sealed class DiskImageSerializerTests
     {
         // Force a tiny chunk size so a handful of KB of node data spans several chunks,
         // exercising the version-4 chunked AES-GCM path without allocating a real 64 MB buffer.
-        DiskImageSerializer.TestChunkSizeOverride = 64;
+        ChunkedGcm.TestChunkSizeOverride = 64;
         var path = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid()}.mdr");
         try
         {
@@ -291,7 +291,7 @@ public sealed class DiskImageSerializerTests
         }
         finally
         {
-            DiskImageSerializer.TestChunkSizeOverride = null;
+            ChunkedGcm.TestChunkSizeOverride = null;
             File.Delete(path);
         }
     }
@@ -299,7 +299,7 @@ public sealed class DiskImageSerializerTests
     [Fact]
     public void SaveThenLoad_WithWrongPasswordAcrossMultipleChunks_ThrowsPasswordIncorrect()
     {
-        DiskImageSerializer.TestChunkSizeOverride = 64;
+        ChunkedGcm.TestChunkSizeOverride = 64;
         var path = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid()}.mdr");
         try
         {
@@ -318,7 +318,7 @@ public sealed class DiskImageSerializerTests
         }
         finally
         {
-            DiskImageSerializer.TestChunkSizeOverride = null;
+            ChunkedGcm.TestChunkSizeOverride = null;
             File.Delete(path);
         }
     }
