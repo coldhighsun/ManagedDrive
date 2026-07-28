@@ -379,9 +379,12 @@ public static class DiskImageSerializer
         var resolvedCek = UnwrapCek(wrappedCek, password, salt, iterations, wrapNonce, wrapTag);
         cek = resolvedCek;
 
-        return version == 3
-            ? LoadLegacyEncryptedBlob(stream, reader, resolvedCek, compressed)
-            : LoadChunkedEncrypted(stream, reader, resolvedCek, compressed);
+        return version switch
+        {
+            3 => LoadLegacyEncryptedBlob(stream, reader, resolvedCek, compressed),
+            4 => LoadChunkedEncrypted(stream, reader, resolvedCek, compressed),
+            _ => throw new InvalidDataException($"Unsupported image version: {version}."),
+        };
     }
 
     /// <summary>

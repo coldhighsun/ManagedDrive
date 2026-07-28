@@ -407,10 +407,11 @@ internal static class SnapshotStore
 
         var aligned = FileNode.AlignToAllocationUnit(allocationSize);
         var content = FileContent.CreateZeroed(aligned);
+        long filled;
 
         try
         {
-            content.FillFromStream(sourceStream, (long)fileSize);
+            filled = content.FillFromStream(sourceStream, (long)fileSize);
         }
         catch (CryptographicException)
         {
@@ -427,6 +428,13 @@ internal static class SnapshotStore
             {
                 CryptographicOperations.ZeroMemory(legacyPlaintext);
             }
+        }
+
+        if ((ulong)filled != fileSize)
+        {
+            throw new InvalidDataException(
+                $"Snapshot blob for '{nodePath}' (hash {Convert.ToHexStringLower(hash)}) has unexpected length " +
+                $"{filled} bytes; expected {fileSize}. The snapshot may be corrupted.");
         }
 
         return content;

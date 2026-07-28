@@ -425,6 +425,7 @@
                                         <Border Background="{DynamicResource AppSurface}"
                                                 BorderBrush="{DynamicResource AppDivider}"
                                                 BorderThickness="1" CornerRadius="4" Padding="8"
+                                                Tag="{Binding ElementName=SpeedPopup}"
                                                 MouseEnter="SpeedRow_MouseEnter" MouseLeave="SpeedRow_MouseLeave">
                                             <controls:SpeedHistoryChart ReadHistory="{Binding ReadSpeedHistory}"
                                                                          WriteHistory="{Binding WriteSpeedHistory}"/>

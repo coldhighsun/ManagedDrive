@@ -415,6 +415,22 @@ public sealed class SnapshotManagerTests : IDisposable
     }
 
     [Fact]
+    public void LoadSnapshot_TruncatedBlob_ThrowsInvalidData()
+    {
+        WriteSnapshotWithFile(new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), "\\a.txt", [1, 2, 3, 4, 5]);
+
+        var snapshot = Assert.Single(SnapshotManager.ListSnapshots(_mainImagePath));
+        var blobFile = Directory.EnumerateFiles(BlobDirectory, "*.blob", SearchOption.AllDirectories).Single();
+
+        // Truncate the (uncompressed, unencrypted) blob so its content is shorter than the file
+        // size recorded in the index, simulating a corrupted/incompletely-written blob.
+        var bytes = File.ReadAllBytes(blobFile);
+        File.WriteAllBytes(blobFile, bytes[..^2]);
+
+        Assert.Throws<InvalidDataException>(() => SnapshotManager.LoadSnapshot(snapshot.Path, out _, out _));
+    }
+
+    [Fact]
     public void LoadSnapshot_MissingBlob_ReturnsClearError()
     {
         WriteSnapshotWithFile(new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), "\\a.txt", [1, 2, 3]);

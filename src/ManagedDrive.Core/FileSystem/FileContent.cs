@@ -265,14 +265,18 @@ public sealed class FileContent
     /// Reads up to <paramref name="count"/> bytes from <paramref name="source"/> into the content
     /// starting at offset 0. The content must already be at least <paramref name="count"/> bytes.
     /// If the stream ends early, the remaining bytes keep their current (zero) value — mirroring a
-    /// bounded copy rather than throwing.
+    /// bounded copy rather than throwing. Returns the number of bytes actually read, so callers
+    /// that need to detect a truncated/corrupt source can compare it against <paramref name="count"/>
+    /// themselves.
     /// </summary>
     /// <param name="source">The stream to read from.</param>
     /// <param name="count">Maximum number of bytes to read.</param>
-    public void FillFromStream(Stream source, long count)
+    /// <returns>The number of bytes actually filled, which is less than <paramref name="count"/> if <paramref name="source"/> ended early.</returns>
+    public long FillFromStream(Stream source, long count)
     {
         var remaining = count;
         var chunkIndex = 0;
+        var totalFilled = 0L;
 
         while (remaining > 0)
         {
@@ -284,15 +288,18 @@ public sealed class FileContent
                 var read = source.Read(_chunks[chunkIndex], filled, segment - filled);
                 if (read == 0)
                 {
-                    return;
+                    return totalFilled + filled;
                 }
 
                 filled += read;
             }
 
+            totalFilled += filled;
             remaining -= segment;
             chunkIndex++;
         }
+
+        return totalFilled;
     }
 
     /// <summary>
