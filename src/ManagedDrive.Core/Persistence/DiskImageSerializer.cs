@@ -44,7 +44,7 @@ public readonly record struct ImageEncryptionInfo(string Password, byte[] Cek);
 ///     whole node region. Each chunk is [Int32 ciphertext length][16-byte tag][ciphertext
 ///     bytes], terminated by a zero-length chunk. Per-chunk nonces are derived from the base
 ///     nonce by XOR-ing its last 4 bytes with the big-endian chunk index, guaranteeing a unique
-///     nonce per chunk under the same key/base nonce (see <see cref="DeriveChunkNonce"/>).
+///     nonce per chunk under the same key/base nonce (see <see cref="ChunkedGcm.DeriveChunkNonce"/>).
 ///   </item>
 ///   <item>When not encrypted (any version): the node region follows directly, gzip-compressed whenever the level is not <see cref="ImageCompressionLevel.None"/>, streamed straight from/to the file rather than buffered.</item>
 ///   <item>Node region contents: Int32 node count, then for each node: path, metadata, security descriptor bytes, file data bytes</item>
@@ -59,22 +59,6 @@ public static class DiskImageSerializer
     private const int TagSize = 16;
     private const int Version = 4;
     private static readonly byte[] Magic = "MDRD"u8.ToArray();
-
-    /// <summary>
-    /// Size of each independently AES-GCM-encrypted chunk when writing a version-4 encrypted
-    /// node region. Kept well under 2 GB so no single chunk buffer approaches managed-array or
-    /// <see cref="AesGcm"/> single-shot limits. Overridable by tests via <see cref="TestChunkSizeOverride"/>
-    /// to exercise the multi-chunk path without allocating a real 64 MB buffer.
-    /// </summary>
-    private const int DefaultChunkSize = 64 * 1024 * 1024;
-
-    /// <summary>
-    /// Test-only override for <see cref="DefaultChunkSize"/>; <see langword="null"/> means use the
-    /// production default. Set via <c>InternalsVisibleTo("ManagedDrive.Tests")</c>.
-    /// </summary>
-    internal static int? TestChunkSizeOverride;
-
-    private static int ChunkSize => TestChunkSizeOverride ?? DefaultChunkSize;
 
     /// <summary>
     /// Generates a fresh random 256-bit content-encryption key for use when encryption is first
@@ -240,7 +224,7 @@ public static class DiskImageSerializer
 
                         // Node data streams straight into chunked AES-GCM encryption below —
                         // never buffered whole, so there is no ~2 GB ceiling on disk content.
-                        using var chunkedStream = new ChunkedGcmWriteStream(stream, enc.Cek, baseNonce, ChunkSize);
+                        using var chunkedStream = new ChunkedGcm.WriteStream(stream, enc.Cek, baseNonce, ChunkedGcm.ChunkSize);
                         WriteNodeRegion(chunkedStream, compress, level, nodeMap, progress);
                         chunkedStream.Complete();
                     }
@@ -355,7 +339,7 @@ public static class DiskImageSerializer
     /// AES-256-GCM using the content-encryption key unwrapped from the password. Version 3 wraps
     /// the whole node region as one ciphertext blob (legacy, kept only for backward compatibility);
     /// version 4 uses independently encrypted chunks so no single buffer needs to hold the entire
-    /// node region — see the class remarks and <see cref="ChunkedGcmReadStream"/>.
+    /// node region — see the class remarks and <see cref="ChunkedGcm.ReadStream"/>.
     /// </summary>
     private static FileNodeMap LoadCurrent(
         FileStream stream,
@@ -440,7 +424,7 @@ public static class DiskImageSerializer
 
     /// <summary>
     /// Version 4's chunked encrypted node region: each chunk was independently AES-256-GCM
-    /// encrypted on save, so decryption streams chunk-by-chunk via <see cref="ChunkedGcmReadStream"/>
+    /// encrypted on save, so decryption streams chunk-by-chunk via <see cref="ChunkedGcm.ReadStream"/>
     /// rather than requiring the whole region in memory at once.
     /// </summary>
     private static FileNodeMap LoadChunkedEncrypted(
@@ -453,7 +437,7 @@ public static class DiskImageSerializer
 
         try
         {
-            using var chunkedStream = new ChunkedGcmReadStream(stream, cek, baseNonce);
+            using var chunkedStream = new ChunkedGcm.ReadStream(stream, cek, baseNonce);
             return ReadNodeRegion(chunkedStream, compressed);
         }
         catch (CryptographicException)
@@ -648,229 +632,5 @@ public static class DiskImageSerializer
         {
             writer.Write(0L);
         }
-    }
-
-    /// <summary>
-    /// Derives a unique nonce for chunk <paramref name="chunkIndex"/> from a random per-save
-    /// <paramref name="baseNonce"/> by XOR-ing its last 4 bytes with the big-endian chunk index.
-    /// This is a standard segmented-AEAD nonce derivation: as long as <paramref name="baseNonce"/>
-    /// is freshly random per save and chunk indices are never reused within that save (both true
-    /// here — <see cref="ChunkedGcmWriteStream"/> increments a private counter once per chunk),
-    /// every chunk gets a distinct nonce under the same key, which is AES-GCM's only requirement.
-    /// </summary>
-    private static byte[] DeriveChunkNonce(byte[] baseNonce, int chunkIndex)
-    {
-        var nonce = (byte[])baseNonce.Clone();
-        Span<byte> indexBytes = stackalloc byte[4];
-        System.Buffers.Binary.BinaryPrimitives.WriteUInt32BigEndian(indexBytes, (uint)chunkIndex);
-
-        for (var i = 0; i < indexBytes.Length; i++)
-        {
-            nonce[NonceSize - indexBytes.Length + i] ^= indexBytes[i];
-        }
-
-        return nonce;
-    }
-
-    /// <summary>
-    /// Write-only <see cref="Stream"/> that buffers up to <see cref="DefaultChunkSize"/> (or the
-    /// test override) bytes at a time and, on each full buffer plus once more on <see cref="Complete"/>,
-    /// AES-256-GCM-encrypts that chunk with a nonce derived via <see cref="DeriveChunkNonce"/> and
-    /// writes it to the underlying stream as <c>[Int32 ciphertext length][16-byte tag][ciphertext]</c>.
-    /// This lets <see cref="Save"/> encrypt node regions of any size without ever holding the whole
-    /// region (or a single AES-GCM call's input) in one buffer.
-    /// </summary>
-    private sealed class ChunkedGcmWriteStream(Stream output, byte[] key, byte[] baseNonce, int chunkSize) : Stream
-    {
-        private readonly byte[] _buffer = new byte[chunkSize];
-        private int _bufferLength;
-        private int _chunkIndex;
-        private bool _completed;
-
-        public override bool CanRead => false;
-        public override bool CanSeek => false;
-        public override bool CanWrite => true;
-        public override long Length => throw new NotSupportedException();
-
-        public override long Position
-        {
-            get => throw new NotSupportedException();
-            set => throw new NotSupportedException();
-        }
-
-        public override void Write(byte[] buffer, int offset, int count)
-        {
-            while (count > 0)
-            {
-                var toCopy = Math.Min(count, _buffer.Length - _bufferLength);
-                Array.Copy(buffer, offset, _buffer, _bufferLength, toCopy);
-                _bufferLength += toCopy;
-                offset += toCopy;
-                count -= toCopy;
-
-                if (_bufferLength == _buffer.Length)
-                {
-                    FlushChunk();
-                }
-            }
-        }
-
-        public override void Flush()
-        {
-        }
-
-        /// <summary>
-        /// Flushes any partially filled chunk, then writes a final zero-length chunk as an
-        /// explicit end-of-stream marker so the reader knows not to expect another chunk header.
-        /// Must be called exactly once after all plaintext has been written, before disposing.
-        /// </summary>
-        public void Complete()
-        {
-            if (_completed)
-            {
-                return;
-            }
-
-            if (_bufferLength > 0)
-            {
-                FlushChunk();
-            }
-
-            WriteChunk(ReadOnlySpan<byte>.Empty);
-            _completed = true;
-        }
-
-        private void FlushChunk()
-        {
-            WriteChunk(_buffer.AsSpan(0, _bufferLength));
-            CryptographicOperations.ZeroMemory(_buffer.AsSpan(0, _bufferLength));
-            _bufferLength = 0;
-        }
-
-        private void WriteChunk(ReadOnlySpan<byte> plaintext)
-        {
-            var nonce = DeriveChunkNonce(baseNonce, _chunkIndex);
-            var ciphertext = plaintext.Length == 0 ? [] : new byte[plaintext.Length];
-            var tag = new byte[TagSize];
-
-            using (var aesGcm = new AesGcm(key, TagSize))
-            {
-                aesGcm.Encrypt(nonce, plaintext, ciphertext, tag);
-            }
-
-            Span<byte> lengthBytes = stackalloc byte[4];
-            System.Buffers.Binary.BinaryPrimitives.WriteInt32LittleEndian(lengthBytes, ciphertext.Length);
-            output.Write(lengthBytes);
-            output.Write(tag);
-            if (ciphertext.Length > 0)
-            {
-                output.Write(ciphertext);
-            }
-
-            _chunkIndex++;
-        }
-
-        public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException();
-
-        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
-
-        public override void SetLength(long value) => throw new NotSupportedException();
-    }
-
-    /// <summary>
-    /// Read-only <see cref="Stream"/> counterpart to <see cref="ChunkedGcmWriteStream"/>: reads
-    /// the <c>[length][tag][ciphertext]</c> chunk sequence from the underlying stream, decrypting
-    /// each chunk with the matching derived nonce and exposing the concatenated plaintext as a
-    /// normal readable stream (typically wrapped by a decompressing <see cref="GZipStream"/>).
-    /// Throws <see cref="CryptographicException"/> (translated by the caller into
-    /// <see cref="ImagePasswordIncorrectException"/>) if any chunk's tag fails to authenticate.
-    /// </summary>
-    private sealed class ChunkedGcmReadStream(Stream source, byte[] key, byte[] baseNonce) : Stream
-    {
-        private byte[] _currentChunk = [];
-        private int _currentChunkLength;
-        private int _positionInChunk;
-        private int _chunkIndex;
-        private bool _endOfStream;
-
-        public override bool CanRead => true;
-        public override bool CanSeek => false;
-        public override bool CanWrite => false;
-        public override long Length => throw new NotSupportedException();
-
-        public override long Position
-        {
-            get => throw new NotSupportedException();
-            set => throw new NotSupportedException();
-        }
-
-        public override int Read(byte[] buffer, int offset, int count)
-        {
-            var totalRead = 0;
-
-            while (count > 0)
-            {
-                if (_positionInChunk == _currentChunkLength)
-                {
-                    if (_endOfStream || !TryReadNextChunk())
-                    {
-                        break;
-                    }
-                }
-
-                var toCopy = Math.Min(count, _currentChunkLength - _positionInChunk);
-                Array.Copy(_currentChunk, _positionInChunk, buffer, offset, toCopy);
-                _positionInChunk += toCopy;
-                offset += toCopy;
-                count -= toCopy;
-                totalRead += toCopy;
-            }
-
-            return totalRead;
-        }
-
-        private bool TryReadNextChunk()
-        {
-            Span<byte> lengthBytes = stackalloc byte[4];
-            source.ReadExactly(lengthBytes);
-            var ciphertextLength = System.Buffers.Binary.BinaryPrimitives.ReadInt32LittleEndian(lengthBytes);
-
-            var tag = new byte[TagSize];
-            source.ReadExactly(tag);
-
-            var ciphertext = ciphertextLength == 0 ? [] : new byte[ciphertextLength];
-            if (ciphertextLength > 0)
-            {
-                source.ReadExactly(ciphertext);
-            }
-
-            var nonce = DeriveChunkNonce(baseNonce, _chunkIndex);
-            var plaintext = ciphertextLength == 0 ? [] : new byte[ciphertextLength];
-            using (var aesGcm = new AesGcm(key, TagSize))
-            {
-                aesGcm.Decrypt(nonce, ciphertext, tag, plaintext);
-            }
-
-            _chunkIndex++;
-
-            if (ciphertextLength == 0)
-            {
-                _endOfStream = true;
-                return false;
-            }
-
-            _currentChunk = plaintext;
-            _currentChunkLength = plaintext.Length;
-            _positionInChunk = 0;
-            return true;
-        }
-
-        public override void Flush() => throw new NotSupportedException();
-
-        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
-
-        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
-
-        public override void SetLength(long value) => throw new NotSupportedException();
     }
 }

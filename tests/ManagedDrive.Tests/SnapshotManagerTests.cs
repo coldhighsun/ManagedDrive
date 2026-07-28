@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+
 namespace ManagedDrive.Tests;
 
 public sealed class SnapshotManagerTests : IDisposable
@@ -313,6 +315,103 @@ public sealed class SnapshotManagerTests : IDisposable
 
         Assert.Throws<ImagePasswordIncorrectException>(() =>
             SnapshotManager.LoadSnapshot(snapshot.Path, out _, out _, wrongCek));
+    }
+
+    [Fact]
+    public void WriteSnapshot_EncryptedAcrossMultipleChunks_RoundTrips()
+    {
+        // Force a tiny chunk size so a small file's blob spans several chunks, exercising the
+        // chunked AES-GCM blob path without allocating a real 64 MB buffer.
+        ChunkedGcm.TestChunkSizeOverride = 64;
+        try
+        {
+            var cek = DiskImageSerializer.GenerateCek();
+            var content = System.Text.Encoding.UTF8.GetBytes(string.Concat(Enumerable.Range(0, 20).Select(i => $"line {i} of content;")));
+
+            var nodeMap = new FileNodeMap();
+            nodeMap.Add("\\", MakeDir());
+            nodeMap.Add("\\a.txt", MakeFile(content));
+            SnapshotManager.WriteSnapshot(nodeMap, 1024, "Label", _mainImagePath,
+                new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), ImageCompressionLevel.Fastest, cek);
+
+            var snapshot = Assert.Single(SnapshotManager.ListSnapshots(_mainImagePath));
+            var loaded = SnapshotManager.LoadSnapshot(snapshot.Path, out _, out _, cek);
+
+            Assert.True(loaded.TryGet("\\a.txt", out var node));
+            Assert.Equal(content, node!.FileData!.ToArray(content.Length));
+        }
+        finally
+        {
+            ChunkedGcm.TestChunkSizeOverride = null;
+        }
+    }
+
+    [Fact]
+    public void LoadSnapshot_EncryptedAcrossMultipleChunksWithWrongCek_ThrowsPasswordIncorrect()
+    {
+        ChunkedGcm.TestChunkSizeOverride = 64;
+        try
+        {
+            var cek = DiskImageSerializer.GenerateCek();
+            var wrongCek = DiskImageSerializer.GenerateCek();
+            var content = System.Text.Encoding.UTF8.GetBytes(string.Concat(Enumerable.Range(0, 20).Select(i => $"line {i} of content;")));
+
+            var nodeMap = new FileNodeMap();
+            nodeMap.Add("\\", MakeDir());
+            nodeMap.Add("\\a.txt", MakeFile(content));
+            SnapshotManager.WriteSnapshot(nodeMap, 1024, "Label", _mainImagePath,
+                new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), ImageCompressionLevel.Fastest, cek);
+
+            var snapshot = Assert.Single(SnapshotManager.ListSnapshots(_mainImagePath));
+
+            Assert.Throws<ImagePasswordIncorrectException>(() =>
+                SnapshotManager.LoadSnapshot(snapshot.Path, out _, out _, wrongCek));
+        }
+        finally
+        {
+            ChunkedGcm.TestChunkSizeOverride = null;
+        }
+    }
+
+    [Fact]
+    public void LoadSnapshot_LegacyWholeBlobEncryptedBlob_StillLoads()
+    {
+        var cek = DiskImageSerializer.GenerateCek();
+        var content = new byte[] { 7, 7, 7 };
+
+        // Write a normal encrypted snapshot first so the index and blob directory exist with the
+        // expected layout, then hand-overwrite the blob it produced in the pre-chunking format
+        // (flag without the chunked bit; nonce+tag+whole ciphertext) to simulate a blob written
+        // before BlobFlagChunked existed.
+        var nodeMap = new FileNodeMap();
+        nodeMap.Add("\\", MakeDir());
+        nodeMap.Add("\\a.txt", MakeFile(content));
+        SnapshotManager.WriteSnapshot(nodeMap, 1024, "Label", _mainImagePath,
+            new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), ImageCompressionLevel.None, cek);
+
+        var blobPath = Directory.EnumerateFiles(BlobDirectory, "*.blob", SearchOption.AllDirectories).Single();
+
+        var nonce = RandomNumberGenerator.GetBytes(12);
+        var ciphertext = new byte[content.Length];
+        var tag = new byte[16];
+        using (var aesGcm = new AesGcm(cek, 16))
+        {
+            aesGcm.Encrypt(nonce, content, ciphertext, tag);
+        }
+
+        using (var stream = new FileStream(blobPath, FileMode.Create, FileAccess.Write))
+        {
+            stream.WriteByte(0b010); // Encrypted, not Compressed, not Chunked
+            stream.Write(nonce);
+            stream.Write(tag);
+            stream.Write(ciphertext);
+        }
+
+        var snapshot = Assert.Single(SnapshotManager.ListSnapshots(_mainImagePath));
+        var loaded = SnapshotManager.LoadSnapshot(snapshot.Path, out _, out _, cek);
+
+        Assert.True(loaded.TryGet("\\a.txt", out var node));
+        Assert.Equal(content, node!.FileData!.ToArray(content.Length));
     }
 
     [Fact]

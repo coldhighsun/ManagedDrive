@@ -13,8 +13,17 @@ namespace ManagedDrive.Core.Snapshots;
 /// </summary>
 internal static class SnapshotStore
 {
-    private const int BlobFlagCompressed = 0b01;
-    private const int BlobFlagEncrypted = 0b10;
+    private const int BlobFlagCompressed = 0b001;
+    private const int BlobFlagEncrypted = 0b010;
+
+    /// <summary>
+    /// Marks a blob's encrypted payload as chunked AES-256-GCM (see <see cref="ChunkedGcm"/>)
+    /// rather than the legacy whole-blob single-shot layout. Only meaningful when
+    /// <see cref="BlobFlagEncrypted"/> is also set. Never set for blobs written before this
+    /// flag existed, so old blobs keep loading via the legacy branch in <see cref="ReadBlob"/>.
+    /// </summary>
+    private const int BlobFlagChunked = 0b100;
+
     private const int BlobNonceSize = 12;
     private const int BlobTagSize = 16;
     private const int Version = 1;
@@ -241,7 +250,16 @@ internal static class SnapshotStore
         }
     }
 
-    private static void EnsureBlobWritten(string blobDirectory, byte[] hash, FileContent data, int length, ImageCompressionLevel level, byte[]? cek)
+    /// <summary>
+    /// Writes the blob for <paramref name="hash"/> if it doesn't already exist. Streams
+    /// <paramref name="data"/> straight from <see cref="FileContent"/> through gzip compression
+    /// and (when <paramref name="cek"/> is set) chunked AES-256-GCM encryption directly into the
+    /// destination file — no whole-file buffer is ever materialized, so a single blob's size is
+    /// not limited by <see cref="MemoryStream"/>'s ~2 GB cap. New encrypted blobs always use the
+    /// chunked layout (<see cref="ChunkedGcm"/>, flagged via <see cref="BlobFlagChunked"/>); see
+    /// <see cref="ReadBlob"/> for the legacy whole-blob layout this format replaces.
+    /// </summary>
+    private static void EnsureBlobWritten(string blobDirectory, byte[] hash, FileContent data, long length, ImageCompressionLevel level, byte[]? cek)
     {
         var blobPath = HashToBlobPath(blobDirectory, hash);
         if (File.Exists(blobPath))
@@ -252,38 +270,7 @@ internal static class SnapshotStore
         Directory.CreateDirectory(Path.GetDirectoryName(blobPath)!);
 
         var compress = level != ImageCompressionLevel.None;
-
-        byte[] payload;
-        if (compress)
-        {
-            using var ms = new MemoryStream();
-            using (var gzip = new GZipStream(ms, ToCompressionLevel(level), leaveOpen: true))
-            {
-                data.CopyTo(gzip, length);
-            }
-
-            payload = ms.ToArray();
-        }
-        else
-        {
-            payload = data.ToArray(length);
-        }
-
-        var flag = compress ? BlobFlagCompressed : 0;
-        byte[]? nonce = null;
-        byte[]? tag = null;
-
-        if (cek is not null)
-        {
-            flag |= BlobFlagEncrypted;
-            nonce = RandomNumberGenerator.GetBytes(BlobNonceSize);
-            var ciphertext = new byte[payload.Length];
-            var localTag = new byte[BlobTagSize];
-            using var aesGcm = new AesGcm(cek, BlobTagSize);
-            aesGcm.Encrypt(nonce, payload, ciphertext, localTag);
-            tag = localTag;
-            payload = ciphertext;
-        }
+        var flag = (compress ? BlobFlagCompressed : 0) | (cek is not null ? BlobFlagEncrypted | BlobFlagChunked : 0);
 
         var tempPath = blobPath + "." + Guid.NewGuid().ToString("N") + ".tmp";
 
@@ -293,13 +280,37 @@ internal static class SnapshotStore
             {
                 stream.WriteByte((byte)flag);
 
-                if (nonce is not null && tag is not null)
+                Stream target = stream;
+                ChunkedGcm.WriteStream? chunkedStream = null;
+                if (cek is not null)
                 {
-                    stream.Write(nonce);
-                    stream.Write(tag);
+                    var baseNonce = RandomNumberGenerator.GetBytes(BlobNonceSize);
+                    stream.Write(baseNonce);
+                    chunkedStream = new ChunkedGcm.WriteStream(stream, cek, baseNonce, ChunkedGcm.ChunkSize);
+                    target = chunkedStream;
                 }
 
-                stream.Write(payload);
+                if (compress)
+                {
+                    var gzip = new GZipStream(target, ToCompressionLevel(level), leaveOpen: true);
+                    try
+                    {
+                        data.CopyTo(gzip, length);
+                    }
+                    finally
+                    {
+                        // Explicitly disposed (rather than relying on leaveOpen semantics further
+                        // up the chain) so the deflate stream's final block is flushed before the
+                        // chunked encryption below is completed.
+                        gzip.Dispose();
+                    }
+                }
+                else
+                {
+                    data.CopyTo(target, length);
+                }
+
+                chunkedStream?.Complete();
                 stream.Flush(flushToDisk: true);
             }
 
@@ -320,6 +331,12 @@ internal static class SnapshotStore
         }
     }
 
+    /// <summary>
+    /// Reads the blob for <paramref name="hash"/> straight into a <see cref="FileContent"/> via
+    /// <see cref="FileContent.FillFromStream"/>, decrypting (chunked or legacy whole-blob, see
+    /// <see cref="EnsureBlobWritten"/>) and decompressing on the fly rather than materializing the
+    /// ciphertext, plaintext, and decompressed bytes as three separate whole-file buffers.
+    /// </summary>
     private static FileContent ReadBlob(string blobDirectory, byte[] hash, string nodePath, ulong fileSize, ulong allocationSize, byte[]? cek)
     {
         var blobPath = HashToBlobPath(blobDirectory, hash);
@@ -333,67 +350,86 @@ internal static class SnapshotStore
         var flag = stream.ReadByte();
         var compressed = (flag & BlobFlagCompressed) != 0;
         var encrypted = (flag & BlobFlagEncrypted) != 0;
+        var chunked = (flag & BlobFlagChunked) != 0;
 
-        byte[] payload;
-        if (encrypted)
+        Stream plaintextStream;
+        byte[]? legacyPlaintext = null;
+
+        if (!encrypted)
+        {
+            plaintextStream = stream;
+        }
+        else
         {
             if (cek is null)
             {
                 throw new ImagePasswordRequiredException();
             }
 
-            var nonce = new byte[BlobNonceSize];
-            stream.ReadExactly(nonce);
-            var tag = new byte[BlobTagSize];
-            stream.ReadExactly(tag);
-
-            using var cipherStream = new MemoryStream();
-            stream.CopyTo(cipherStream);
-            var ciphertext = cipherStream.ToArray();
-
-            var plaintext = new byte[ciphertext.Length];
-            try
+            if (chunked)
             {
-                using var aesGcm = new AesGcm(cek, BlobTagSize);
-                aesGcm.Decrypt(nonce, ciphertext, tag, plaintext);
+                var baseNonce = new byte[BlobNonceSize];
+                stream.ReadExactly(baseNonce);
+                plaintextStream = new ChunkedGcm.ReadStream(stream, cek, baseNonce);
             }
-            catch (CryptographicException)
+            else
             {
-                throw new ImagePasswordIncorrectException();
+                // Legacy whole-blob layout: a single AES-256-GCM ciphertext covering the entire
+                // (already gzip-compressed) payload. Kept only so pre-existing blobs keep loading.
+                var nonce = new byte[BlobNonceSize];
+                stream.ReadExactly(nonce);
+                var tag = new byte[BlobTagSize];
+                stream.ReadExactly(tag);
+
+                using var cipherStream = new MemoryStream();
+                stream.CopyTo(cipherStream);
+                var ciphertext = cipherStream.ToArray();
+
+                var plaintext = new byte[ciphertext.Length];
+                try
+                {
+                    using var aesGcm = new AesGcm(cek, BlobTagSize);
+                    aesGcm.Decrypt(nonce, ciphertext, tag, plaintext);
+                }
+                catch (CryptographicException)
+                {
+                    throw new ImagePasswordIncorrectException();
+                }
+
+                legacyPlaintext = plaintext;
+                plaintextStream = new MemoryStream(plaintext, writable: false);
             }
-
-            payload = plaintext;
-        }
-        else
-        {
-            using var raw = new MemoryStream();
-            stream.CopyTo(raw);
-            payload = raw.ToArray();
         }
 
-        byte[] content;
-        if (compressed)
-        {
-            using var payloadStream = new MemoryStream(payload);
-            using var gzip = new GZipStream(payloadStream, CompressionMode.Decompress);
-            using var decompressed = new MemoryStream();
-            gzip.CopyTo(decompressed);
-            content = decompressed.ToArray();
-        }
-        else
-        {
-            content = payload;
-        }
-
-        if ((ulong)content.Length != fileSize)
-        {
-            throw new InvalidDataException(
-                $"Snapshot blob for '{nodePath}' (hash {Convert.ToHexStringLower(hash)}) has unexpected length " +
-                $"{content.Length} bytes; expected {fileSize}. The snapshot may be corrupted.");
-        }
+        var sourceStream = compressed
+            ? new GZipStream(plaintextStream, CompressionMode.Decompress)
+            : plaintextStream;
 
         var aligned = FileNode.AlignToAllocationUnit(allocationSize);
-        return FileContent.FromSpan(content, aligned);
+        var content = FileContent.CreateZeroed(aligned);
+
+        try
+        {
+            content.FillFromStream(sourceStream, (long)fileSize);
+        }
+        catch (CryptographicException)
+        {
+            throw new ImagePasswordIncorrectException();
+        }
+        finally
+        {
+            if (compressed)
+            {
+                sourceStream.Dispose();
+            }
+
+            if (legacyPlaintext is not null)
+            {
+                CryptographicOperations.ZeroMemory(legacyPlaintext);
+            }
+        }
+
+        return content;
     }
 
     private static void ReadHeader(BinaryReader reader)
@@ -499,7 +535,7 @@ internal static class SnapshotStore
             return;
         }
 
-        var fileSize = (int)Math.Min(node.FileInfo.FileSize, (ulong)node.FileData.Length);
+        var fileSize = (long)Math.Min(node.FileInfo.FileSize, (ulong)node.FileData.Length);
 
         byte[] hash;
         using (var incrementalHash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256))
