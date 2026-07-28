@@ -16,5 +16,6 @@
     <SolidColorBrush x:Key="AppPressed" Color="#14000000"/>
     <SolidColorBrush x:Key="AppBarBackground" Color="#3F51B5"/>
     <SolidColorBrush x:Key="AppBarForeground" Color="White"/>
+    <SolidColorBrush x:Key="AppChartWrite" Color="#E64A19"/>
 
 </ResourceDictionary>

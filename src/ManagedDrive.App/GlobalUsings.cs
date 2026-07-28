@@ -1,4 +1,5 @@
 global using ManagedDrive.App.Cli;
+global using ManagedDrive.App.Controls;
 global using ManagedDrive.App.Infrastructure;
 global using ManagedDrive.App.Localization;
 global using ManagedDrive.App.Models;

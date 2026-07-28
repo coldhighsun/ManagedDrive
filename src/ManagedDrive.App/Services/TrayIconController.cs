@@ -1,3 +1,4 @@
+using System.Drawing.Drawing2D;
 using System.Runtime.InteropServices;
 
 namespace ManagedDrive.App.Services;
@@ -16,21 +17,33 @@ public sealed class TrayIconController : IDisposable
     /// </summary>
     private static readonly TimeSpan ActivityFlashDuration = TimeSpan.FromMilliseconds(300);
 
+    /// <summary>
+    /// Toggle interval for the high-usage warning blink, driven by <see cref="SetHighUsageWarningActive"/>.
+    /// Deliberately slower than <see cref="ActivityFlashDuration"/> so the two remain visually distinct.
+    /// </summary>
+    private static readonly TimeSpan HighUsageBlinkInterval = TimeSpan.FromMilliseconds(800);
+
     private readonly Dispatcher _dispatcher;
     private readonly DispatcherTimer _timerActivityFlash = new()
     {
         Interval = ActivityFlashDuration
     };
-    private readonly IntPtr[] _trayActivityIconHandles = new IntPtr[3];
+    private readonly DispatcherTimer _timerHighUsageBlink = new()
+    {
+        Interval = HighUsageBlinkInterval
+    };
+    private readonly IntPtr[] _trayActivityIconHandles = new IntPtr[4];
 
     /// <summary>
-    /// [0] normal, [1] read indicator, [2] write indicator. Generated once at startup from the
-    /// base tray icon.
+    /// [0] normal, [1] read indicator, [2] write indicator, [3] high-usage warning indicator.
+    /// Generated once at startup from the base tray icon.
     /// </summary>
-    private readonly Icon?[] _trayActivityIcons = new Icon?[3];
+    private readonly Icon?[] _trayActivityIcons = new Icon?[4];
 
     private readonly System.Windows.Forms.NotifyIcon _trayIcon;
     private readonly Icon _trayIconNormal;
+    private bool _blinkOn;
+    private bool _isHighUsageActive;
 
     /// <summary>
     /// Builds the tray icon, its context menu, and the activity-flash timer.
@@ -84,8 +97,20 @@ public sealed class TrayIconController : IDisposable
 
         _timerActivityFlash.Tick += (_, _) =>
         {
-            SetTrayIcon(_trayActivityIcons[0]);
+            SetTrayIcon(_isHighUsageActive && _blinkOn ? _trayActivityIcons[3] : _trayActivityIcons[0]);
             _timerActivityFlash.Stop();
+        };
+
+        _timerHighUsageBlink.Tick += (_, _) =>
+        {
+            _blinkOn = !_blinkOn;
+
+            // Let an in-progress read/write flash keep showing; its own Tick will pick up the
+            // right idle/warning icon (see above) once it reverts.
+            if (!_timerActivityFlash.IsEnabled)
+            {
+                SetTrayIcon(_trayActivityIcons[_blinkOn ? 3 : 0]);
+            }
         };
 
         LanguageManager.Instance.LanguageChanged += (_, _) => UpdateTrayMenuHeaders();
@@ -109,13 +134,14 @@ public sealed class TrayIconController : IDisposable
     }
 
     /// <summary>
-    /// Stops the activity blink timer and releases the tray icon and all three generated
-    /// activity-indicator variants, including the HICONs backing <see cref="_trayActivityIcons"/>
-    /// which <see cref="Icon.Dispose"/> alone would leak.
+    /// Stops the activity and high-usage blink timers and releases the tray icon and all four
+    /// generated activity-indicator variants, including the HICONs backing
+    /// <see cref="_trayActivityIcons"/> which <see cref="Icon.Dispose"/> alone would leak.
     /// </summary>
     public void Dispose()
     {
         _timerActivityFlash.Stop();
+        _timerHighUsageBlink.Stop();
         _trayIcon.Dispose();
         _trayIconNormal.Dispose();
 
@@ -158,6 +184,44 @@ public sealed class TrayIconController : IDisposable
     }
 
     /// <summary>
+    /// Starts or stops the sustained high-usage warning blink: while active, the tray icon
+    /// repeatedly toggles between the idle icon and the warning indicator every
+    /// <see cref="HighUsageBlinkInterval"/> until turned off again. Unlike
+    /// <see cref="OnActivityDetected"/>'s one-shot flash, this stays on for as long as the
+    /// caller reports the condition is active (see <see cref="Services.DiskNotificationService"/>,
+    /// which aggregates every disk's <c>IsHighUsage</c> state into a single call here).
+    /// </summary>
+    /// <param name="active">Whether any disk currently exceeds its high-usage threshold.</param>
+    public void SetHighUsageWarningActive(bool active)
+    {
+        _dispatcher.BeginInvoke(() =>
+        {
+            if (active == _isHighUsageActive || _trayActivityIcons[3] == null)
+            {
+                return;
+            }
+
+            _isHighUsageActive = active;
+
+            if (active)
+            {
+                _blinkOn = true;
+                SetTrayIcon(_trayActivityIcons[3]);
+                _timerHighUsageBlink.Start();
+            }
+            else
+            {
+                _timerHighUsageBlink.Stop();
+
+                if (!_timerActivityFlash.IsEnabled)
+                {
+                    SetTrayIcon(_trayActivityIcons[0]);
+                }
+            }
+        });
+    }
+
+    /// <summary>
     /// Shows a balloon tip from the tray icon.
     /// </summary>
     public void ShowBalloonTip(string title, string body, System.Windows.Forms.ToolTipIcon icon, int timeout = 5000) =>
@@ -192,8 +256,11 @@ public sealed class TrayIconController : IDisposable
 
     /// <summary>
     /// Generates the tray icon variants indexed by <see cref="_trayActivityIcons"/> (0 = normal,
-    /// 1 = read indicator, 2 = write indicator) by overlaying a colored dot in the top-right
-    /// corner of <paramref name="baseIcon"/>: green for reads, orange for writes. Each generated
+    /// 1 = read indicator, 2 = write indicator, 3 = high-usage warning indicator) by overlaying an
+    /// indicator in the top-right corner of <paramref name="baseIcon"/>: a green dot for reads, an
+    /// orange dot for writes, and a red exclamation-mark badge (distinct shape, not just a
+    /// differently-colored dot) for the warning state — the shape difference keeps the warning
+    /// blink from being confused with a write flash at 16x16 tray size. Each generated
     /// <see cref="Icon"/>'s backing HICON is recorded in <see cref="_trayActivityIconHandles"/> so
     /// it can be released via <see cref="DestroyIcon"/> on shutdown, since <see cref="Icon.Dispose"/>
     /// alone does not release a handle obtained from <see cref="Bitmap.GetHicon"/>.
@@ -203,11 +270,14 @@ public sealed class TrayIconController : IDisposable
         var size = baseIcon.Size;
         var dotDiameter = Math.Max(4, size.Width / 3);
         var dotRect = new Rectangle(size.Width - dotDiameter, 0, dotDiameter, dotDiameter);
+        var badgeDiameter = Math.Max(dotDiameter, size.Height / 2);
+        var badgeRect = new Rectangle(size.Width - badgeDiameter, 0, badgeDiameter, badgeDiameter);
         Brush?[] overlayBrushes =
         [
             null,
             new SolidBrush(Color.FromArgb(255, 0, 230, 118)),
             new SolidBrush(Color.FromArgb(255, 255, 50, 0)),
+            null,
         ];
 
         for (var state = 0; state < _trayActivityIcons.Length; state++)
@@ -216,7 +286,11 @@ public sealed class TrayIconController : IDisposable
             using (var graphics = Graphics.FromImage(bitmap))
             {
                 graphics.DrawIcon(baseIcon, new Rectangle(0, 0, size.Width, size.Height));
-                if (overlayBrushes[state] is { } brush)
+                if (state == 3)
+                {
+                    DrawWarningBadge(graphics, badgeRect);
+                }
+                else if (overlayBrushes[state] is { } brush)
                 {
                     graphics.FillEllipse(brush, dotRect);
                 }
@@ -226,6 +300,40 @@ public sealed class TrayIconController : IDisposable
             _trayActivityIconHandles[state] = hicon;
             _trayActivityIcons[state] = Icon.FromHandle(hicon);
         }
+    }
+
+    /// <summary>
+    /// Draws a red exclamation-mark warning badge (filled triangle with a white "!" glyph built
+    /// from two primitives rather than rendered text, so it stays legible at tray-icon scale
+    /// without depending on font hinting/DPI) inside <paramref name="bounds"/>.
+    /// </summary>
+    private static void DrawWarningBadge(Graphics graphics, Rectangle bounds)
+    {
+        using var fillBrush = new SolidBrush(Color.FromArgb(255, 230, 0, 0));
+        using var outlinePen = new Pen(Color.FromArgb(255, 90, 0, 0), Math.Max(1f, bounds.Width / 8f));
+        using var glyphBrush = new SolidBrush(Color.White);
+
+        graphics.SmoothingMode = SmoothingMode.AntiAlias;
+
+        System.Drawing.Point[] triangle =
+        [
+            new(bounds.Left + bounds.Width / 2, bounds.Top),
+            new(bounds.Right, bounds.Bottom),
+            new(bounds.Left, bounds.Bottom),
+        ];
+        graphics.FillPolygon(fillBrush, triangle);
+        graphics.DrawPolygon(outlinePen, triangle);
+
+        var stemWidth = Math.Max(1f, bounds.Width / 6f);
+        var stemHeight = bounds.Height * 0.40f;
+        var stemLeft = bounds.Left + (bounds.Width - stemWidth) / 2f;
+        var stemTop = bounds.Top + bounds.Height * 0.38f;
+        graphics.FillRectangle(glyphBrush, stemLeft, stemTop, stemWidth, stemHeight);
+
+        var dotDiameter = stemWidth;
+        var dotLeft = bounds.Left + (bounds.Width - dotDiameter) / 2f;
+        var dotTop = bounds.Top + bounds.Height * 0.82f;
+        graphics.FillEllipse(glyphBrush, dotLeft, dotTop, dotDiameter, dotDiameter);
     }
 
     /// <summary>

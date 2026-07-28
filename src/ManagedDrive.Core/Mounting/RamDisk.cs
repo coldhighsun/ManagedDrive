@@ -94,6 +94,18 @@ public sealed class RamDisk : IDisposable
     public DateTimeOffset? LastContentWriteTime => _fs.LastContentWriteTimeUtc;
 
     /// <summary>
+    /// Gets the cumulative number of bytes read from file content since mount. Never resets;
+    /// consumers derive a rate by sampling the delta over time (see <see cref="ThroughputTracker"/>).
+    /// </summary>
+    public long TotalBytesRead => _fs.TotalBytesRead;
+
+    /// <summary>
+    /// Gets the cumulative number of bytes written to file content since mount. Never resets;
+    /// consumers derive a rate by sampling the delta over time (see <see cref="ThroughputTracker"/>).
+    /// </summary>
+    public long TotalBytesWritten => _fs.TotalBytesWritten;
+
+    /// <summary>
     /// Gets the UTC timestamp of the most recent successful image save (auto-save, final
     /// save on unmount, or manual save via <see cref="SaveToImage"/>). <c>null</c> if no
     /// save has occurred yet.

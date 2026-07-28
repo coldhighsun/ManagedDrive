@@ -22,14 +22,29 @@ public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
     /// </summary>
     private static readonly TimeSpan ActivityThrottleWindow = TimeSpan.FromMilliseconds(300);
 
+    /// <summary>
+    /// Number of speed samples retained for the read/write history popup: 30 minutes at the
+    /// 2-second <see cref="_refreshTimer"/> cadence. Sized generously since the buffer is only
+    /// rendered on hover — sampling itself is just two array writes per tick, independent of
+    /// whether anyone is looking at it.
+    /// </summary>
+    private const int SpeedHistoryLength = 900;
+
     private readonly DispatcherTimer _activityThrottleTimer;
     private readonly DispatcherTimer _refreshTimer;
+    private readonly double[] _readSpeedHistory = new double[SpeedHistoryLength];
+    private readonly ThroughputTracker _readThroughput = new();
+    private readonly double[] _writeSpeedHistory = new double[SpeedHistoryLength];
+    private readonly ThroughputTracker _writeThroughput = new();
 
     private bool _activityTrackingEnabled;
     private ulong _freeBytes;
     private bool _isCurrentTempDir;
     private DiskActivityEventArgs? _pendingActivity;
+    private double _readBytesPerSecond;
+    private int _speedHistoryHead;
     private ulong _usedBytes;
+    private double _writeBytesPerSecond;
 
     /// <summary>
     /// Initializes a new view model for <paramref name="disk"/>.
@@ -276,6 +291,29 @@ public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
     public string? SourcePath => Disk.Options.SourceArchivePath ?? Disk.Options.PersistImagePath;
 
     /// <summary>
+    /// Gets the most recently sampled read throughput, formatted as e.g. "1.2 MB/s".
+    /// </summary>
+    public string ReadSpeedFormatted => ByteFormatter.FormatRate(_readBytesPerSecond);
+
+    /// <summary>
+    /// Gets the last 30 minutes of sampled read-speed history (bytes/sec), oldest first, for
+    /// display in the hover-triggered history chart. Only meaningfully consumed while that
+    /// popup is open; sampling itself runs unconditionally in <see cref="Refresh"/>.
+    /// </summary>
+    public IReadOnlyList<double> ReadSpeedHistory => SnapshotHistory(_readSpeedHistory);
+
+    /// <summary>
+    /// Gets the most recently sampled write throughput, formatted as e.g. "1.2 MB/s".
+    /// </summary>
+    public string WriteSpeedFormatted => ByteFormatter.FormatRate(_writeBytesPerSecond);
+
+    /// <summary>
+    /// Gets the last 30 minutes of sampled write-speed history (bytes/sec), oldest first. See
+    /// <see cref="ReadSpeedHistory"/>.
+    /// </summary>
+    public IReadOnlyList<double> WriteSpeedHistory => SnapshotHistory(_writeSpeedHistory);
+
+    /// <summary>
     /// Gets the amount of used space formatted as a human-readable string.
     /// </summary>
     public string UsedFormatted => ByteFormatter.Format(_usedBytes);
@@ -302,6 +340,20 @@ public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
         _activityThrottleTimer.Tick -= OnActivityThrottleTick;
         SetActivityTrackingEnabled(false);
         Disk.SaveFailed -= OnDiskSaveFailed;
+        _readThroughput.Reset();
+        _writeThroughput.Reset();
+    }
+
+    /// <summary>
+    /// Reorders a fixed-length ring buffer written via <see cref="_speedHistoryHead"/> into
+    /// oldest-first order for display.
+    /// </summary>
+    private double[] SnapshotHistory(double[] buffer)
+    {
+        var result = new double[buffer.Length];
+        Array.Copy(buffer, _speedHistoryHead, result, 0, buffer.Length - _speedHistoryHead);
+        Array.Copy(buffer, 0, result, buffer.Length - _speedHistoryHead, _speedHistoryHead);
+        return result;
     }
 
     /// <summary>
@@ -316,6 +368,13 @@ public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
     {
         _usedBytes = Disk.UsedBytes;
         _freeBytes = Disk.FreeBytes;
+
+        var now = DateTimeOffset.UtcNow;
+        _readBytesPerSecond = _readThroughput.Sample(Disk.TotalBytesRead, now);
+        _writeBytesPerSecond = _writeThroughput.Sample(Disk.TotalBytesWritten, now);
+        _readSpeedHistory[_speedHistoryHead] = _readBytesPerSecond;
+        _writeSpeedHistory[_speedHistoryHead] = _writeBytesPerSecond;
+        _speedHistoryHead = (_speedHistoryHead + 1) % SpeedHistoryLength;
 
         var isUiVisible = Application.Current?.MainWindow is { IsVisible: true };
         if (isUiVisible)
@@ -333,6 +392,10 @@ public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
             OnPropertyChanged(nameof(SourcePath));
             OnPropertyChanged(nameof(HasImagePath));
             OnPropertyChanged(nameof(IsPasswordProtected));
+            OnPropertyChanged(nameof(ReadSpeedFormatted));
+            OnPropertyChanged(nameof(ReadSpeedHistory));
+            OnPropertyChanged(nameof(WriteSpeedFormatted));
+            OnPropertyChanged(nameof(WriteSpeedHistory));
 
             IsCurrentTempDir = CheckIsCurrentTempDir();
         }
