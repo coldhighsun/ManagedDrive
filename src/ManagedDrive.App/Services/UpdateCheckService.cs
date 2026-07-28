@@ -107,6 +107,62 @@ public sealed class UpdateCheckService(SettingsStore settings, TrayIconControlle
         return Version.TryParse(trimmed, out version);
     }
 
+    /// <summary>
+    /// Parses a (possibly <c>v</c>-prefixed) version string tolerantly, splitting off a SemVer
+    /// <c>-prerelease</c> suffix (and ignoring any <c>+build</c> metadata). Unlike
+    /// <see cref="TryParseVersion"/>, a prerelease string such as <c>1.9.0-alpha.1</c> parses
+    /// successfully: <paramref name="version"/> receives the numeric core and
+    /// <paramref name="isPrerelease"/> is set to <see langword="true"/>.
+    /// </summary>
+    private static bool TryParseRunningVersion(string versionText, out Version? version, out bool isPrerelease)
+    {
+        var trimmed = versionText.StartsWith('v') || versionText.StartsWith('V')
+            ? versionText[1..]
+            : versionText;
+
+        // Strip +build metadata first, then split off the -prerelease part.
+        var plusIndex = trimmed.IndexOf('+');
+        if (plusIndex >= 0)
+        {
+            trimmed = trimmed[..plusIndex];
+        }
+
+        var dashIndex = trimmed.IndexOf('-');
+        isPrerelease = dashIndex >= 0;
+        var core = isPrerelease ? trimmed[..dashIndex] : trimmed;
+
+        return Version.TryParse(core, out version);
+    }
+
+    /// <summary>
+    /// Determines whether the formal release <paramref name="latestFormalVersion"/> is a newer
+    /// version than the (possibly prerelease) <paramref name="runningVersion"/>. A prerelease
+    /// build precedes the formal release with the same numeric core (e.g. <c>1.9.0-alpha.1</c> is
+    /// older than <c>1.9.0</c>). Returns <see langword="false"/> when either version can't be parsed.
+    /// </summary>
+    public static bool IsNewerFormalRelease(string runningVersion, string latestFormalVersion)
+    {
+        if (!TryParseRunningVersion(runningVersion, out var running, out var runningIsPrerelease) ||
+            !TryParseRunningVersion(latestFormalVersion, out var latest, out _))
+        {
+            return false;
+        }
+
+        // Normalize to three fields (build defaulting to 0) so 1.9 and 1.9.0 compare equal —
+        // Version.CompareTo otherwise treats an unspecified component as -1.
+        var runningCore = new Version(running!.Major, running.Minor, Math.Max(running.Build, 0));
+        var latestCore = new Version(latest!.Major, latest.Minor, Math.Max(latest.Build, 0));
+
+        var coreComparison = latestCore.CompareTo(runningCore);
+        if (coreComparison > 0)
+        {
+            return true;
+        }
+
+        // Same numeric core: the formal release outranks its own prereleases.
+        return coreComparison == 0 && runningIsPrerelease;
+    }
+
     private async Task<(UpdateCheckResult Result, UpdateInfo? Info)> CheckCoreAsync(bool forceCheck, AppConfiguration config, CancellationToken ct)
     {
         if (!forceCheck)
@@ -149,17 +205,12 @@ public sealed class UpdateCheckService(SettingsStore settings, TrayIconControlle
             return (UpdateCheckResult.UpToDate, null);
         }
 
-        if (!TryParseVersion(GetRunningVersion(), out var running))
-        {
-            return (UpdateCheckResult.Error, null);
-        }
-
-        if (latest!.CompareTo(running) <= 0)
+        var latestVersionText = latest!.ToString();
+        if (!IsNewerFormalRelease(GetRunningVersion(), latestVersionText))
         {
             return (UpdateCheckResult.UpToDate, null);
         }
 
-        var latestVersionText = latest.ToString();
         if (!forceCheck && string.Equals(config.SkippedVersion, latestVersionText, StringComparison.Ordinal))
         {
             return (UpdateCheckResult.Skipped, null);
