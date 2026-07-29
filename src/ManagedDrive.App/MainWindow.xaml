@@ -418,14 +418,16 @@
                                                VerticalAlignment="Center" Margin="0,0,4,0"
                                                ToolTip="{DynamicResource Card.ReadSpeed}"
                                                AutomationProperties.Name="{DynamicResource Card.ReadSpeed}"/>
-                                    <TextBlock Text="{Binding ReadSpeedFormatted}" FontSize="11"
+                                    <TextBlock Text="{Binding ReadSpeedFormatted}" FontSize="11" Width="52"
+                                               TextAlignment="Left"
                                                Foreground="{DynamicResource AppForegroundLight}"/>
                                     <TextBlock Text="&#xE896;" FontFamily="Segoe Fluent Icons" FontSize="10"
                                                Foreground="{DynamicResource AppForegroundLight}"
                                                VerticalAlignment="Center" Margin="10,0,4,0"
                                                ToolTip="{DynamicResource Card.WriteSpeed}"
                                                AutomationProperties.Name="{DynamicResource Card.WriteSpeed}"/>
-                                    <TextBlock Text="{Binding WriteSpeedFormatted}" FontSize="11"
+                                    <TextBlock Text="{Binding WriteSpeedFormatted}" FontSize="11" Width="52"
+                                               TextAlignment="Left"
                                                Foreground="{DynamicResource AppForegroundLight}"/>
                                     <Popup x:Name="SpeedPopup" PlacementTarget="{Binding ElementName=SpeedRow}" Placement="Bottom"
                                            StaysOpen="True" AllowsTransparency="True">
