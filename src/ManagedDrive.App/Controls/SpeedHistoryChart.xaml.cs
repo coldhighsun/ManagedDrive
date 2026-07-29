@@ -1,4 +1,6 @@
+using System.Windows.Controls;
 using System.Windows.Media;
+using System.Windows.Shapes;
 using ManagedDrive.Cli.Core;
 
 namespace ManagedDrive.App.Controls;
@@ -96,47 +98,99 @@ public partial class SpeedHistoryChart
         return Math.Ceiling(valueInUnit / 10.0) * 10.0 * unitSize;
     }
 
+    /// <summary>
+    /// Number of seconds each point in <see cref="ReadHistory"/>/<see cref="WriteHistory"/>
+    /// represents, matching <c>DiskViewModel</c>'s speed-history sampling interval.
+    /// </summary>
+    private const double SecondsPerPoint = 2.0;
+
     private static void OnHistoryChanged(DependencyObject d, DependencyPropertyChangedEventArgs e) =>
         ((SpeedHistoryChart)d).Redraw();
 
     private void ChartArea_SizeChanged(object sender, SizeChangedEventArgs e) => Redraw();
 
+    /// <summary>
+    /// Builds the four relative-time axis labels (oldest edge, two quarter-points, "now") for a
+    /// history buffer of <paramref name="pointCount"/> samples spaced <see cref="SecondsPerPoint"/>
+    /// seconds apart, e.g. <c>["-30m", "-20m", "-10m", "0m"]</c> for a 900-point/30-minute buffer.
+    /// </summary>
+    public static string[] BuildTimeAxisLabels(int pointCount, double secondsPerPoint = SecondsPerPoint)
+    {
+        var totalMinutes = pointCount * secondsPerPoint / 60.0;
+        return
+        [
+            FormatMinutesAgo(totalMinutes),
+            FormatMinutesAgo(totalMinutes * 2 / 3),
+            FormatMinutesAgo(totalMinutes / 3),
+            "0m",
+        ];
+    }
+
+    private static string FormatMinutesAgo(double minutes) => $"-{Math.Round(minutes):0}m";
+
     private void Redraw()
     {
-        var width = ChartArea.ActualWidth;
-        var height = ChartArea.ActualHeight;
+        var read = ReadHistory ?? Array.Empty<double>();
+        var write = WriteHistory ?? Array.Empty<double>();
+
+        // Both charts share one Y-axis scale (derived from the larger of the two series) so
+        // their heights are directly comparable at a glance, rather than each auto-scaling to
+        // its own max independently.
+        var scaleMax = RoundUpToNiceMax(Math.Max(
+            read.Count > 0 ? read.Max() : 0.0,
+            write.Count > 0 ? write.Max() : 0.0));
+
+        RedrawSeries(read, scaleMax, ReadChartArea, ReadLine, ReadTopGridLine, ReadMidGridLine, ReadBottomGridLine,
+            ReadAxisMaxLabel, ReadAxisMidLabel, ReadAxisZeroLabel);
+        RedrawSeries(write, scaleMax, WriteChartArea, WriteLine, WriteTopGridLine, WriteMidGridLine, WriteBottomGridLine,
+            WriteAxisMaxLabel, WriteAxisMidLabel, WriteAxisZeroLabel);
+
+        var pointCount = read.Count > 0 ? read.Count : write.Count;
+        var timeLabels = BuildTimeAxisLabels(pointCount);
+        TimeAxisLabel0.Text = timeLabels[0];
+        TimeAxisLabel1.Text = timeLabels[1];
+        TimeAxisLabel2.Text = timeLabels[2];
+        TimeAxisLabel3.Text = timeLabels[3];
+    }
+
+    private static void RedrawSeries(
+        IReadOnlyList<double> values,
+        double scaleMax,
+        Grid chartArea,
+        Polyline line,
+        Line topGridLine,
+        Line midGridLine,
+        Line bottomGridLine,
+        TextBlock axisMaxLabel,
+        TextBlock axisMidLabel,
+        TextBlock axisZeroLabel)
+    {
+        var width = chartArea.ActualWidth;
+        var height = chartArea.ActualHeight;
         if (width <= 0 || height <= 0)
         {
             return;
         }
 
-        var read = ReadHistory ?? Array.Empty<double>();
-        var write = WriteHistory ?? Array.Empty<double>();
-        var rawMax = Math.Max(
-            read.Count > 0 ? read.Max() : 0.0,
-            write.Count > 0 ? write.Max() : 0.0);
-        var scaleMax = RoundUpToNiceMax(rawMax);
+        line.Points = NormalizePoints(values, width, height, scaleMax);
 
-        ReadLine.Points = NormalizePoints(read, width, height, scaleMax);
-        WriteLine.Points = NormalizePoints(write, width, height, scaleMax);
+        topGridLine.X1 = 0;
+        topGridLine.Y1 = 0;
+        topGridLine.X2 = width;
+        topGridLine.Y2 = 0;
 
-        TopGridLine.X1 = 0;
-        TopGridLine.Y1 = 0;
-        TopGridLine.X2 = width;
-        TopGridLine.Y2 = 0;
+        midGridLine.X1 = 0;
+        midGridLine.Y1 = height / 2;
+        midGridLine.X2 = width;
+        midGridLine.Y2 = height / 2;
 
-        MidGridLine.X1 = 0;
-        MidGridLine.Y1 = height / 2;
-        MidGridLine.X2 = width;
-        MidGridLine.Y2 = height / 2;
+        bottomGridLine.X1 = 0;
+        bottomGridLine.Y1 = height;
+        bottomGridLine.X2 = width;
+        bottomGridLine.Y2 = height;
 
-        BottomGridLine.X1 = 0;
-        BottomGridLine.Y1 = height;
-        BottomGridLine.X2 = width;
-        BottomGridLine.Y2 = height;
-
-        AxisMaxLabel.Text = scaleMax > 0 ? ByteFormatter.FormatRate(scaleMax) : string.Empty;
-        AxisMidLabel.Text = scaleMax > 0 ? ByteFormatter.FormatRate(scaleMax / 2) : string.Empty;
-        AxisZeroLabel.Text = "0 B/s";
+        axisMaxLabel.Text = scaleMax > 0 ? ByteFormatter.FormatRate(scaleMax) : string.Empty;
+        axisMidLabel.Text = scaleMax > 0 ? ByteFormatter.FormatRate(scaleMax / 2) : string.Empty;
+        axisZeroLabel.Text = "0 B/s";
     }
 }

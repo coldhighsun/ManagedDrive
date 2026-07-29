@@ -269,6 +269,8 @@
     <sys:String x:Key="Msg.MountFailed">Failed to mount disk:&#x0a;{0}</sys:String>
     <sys:String x:Key="Msg.SaveImageFailed">Failed to save image:&#x0a;{0}</sys:String>
     <sys:String x:Key="Msg.SaveImageNoPath">No image path is configured for this disk.</sys:String>
+    <sys:String x:Key="Msg.ImagePathOverwriteConfirmTitle">File Already Exists</sys:String>
+    <sys:String x:Key="Msg.ImagePathOverwriteConfirmBody">The file {0} already exists.&#x0a;&#x0a;Its current contents will NOT be loaded — the disk's own data will overwrite this file the next time it saves. Continue?</sys:String>
     <sys:String x:Key="Msg.FormatDiskConfirmTitle">Format Disk</sys:String>
     <sys:String x:Key="Msg.FormatDiskConfirmBody">Format {0} ({1})?&#x0a;&#x0a;All files and folders on this disk will be permanently deleted.</sys:String>
     <sys:String x:Key="Msg.FormatDiskReadOnly">Cannot format a read-only disk.</sys:String>
