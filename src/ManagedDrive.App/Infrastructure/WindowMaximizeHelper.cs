@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices;
 using System.Windows.Interop;
+using System.Windows.Media;
 
 namespace ManagedDrive.App.Infrastructure;
 
@@ -19,7 +20,8 @@ internal static class WindowMaximizeHelper
             var handle = new WindowInteropHelper(window).Handle;
             if (HwndSource.FromHwnd(handle) is HwndSource source)
             {
-                source.AddHook(WndProc);
+                source.AddHook((IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled) =>
+                    WndProc(hwnd, msg, wParam, lParam, ref handled, window));
             }
         };
 
@@ -63,18 +65,18 @@ internal static class WindowMaximizeHelper
             true);
     }
 
-    private static IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
+    private static IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled, Window window)
     {
         if (msg == WM_GETMINMAXINFO)
         {
-            ApplyWorkAreaBounds(hwnd, lParam);
+            ApplyWorkAreaBounds(hwnd, lParam, window);
             handled = true;
         }
 
         return IntPtr.Zero;
     }
 
-    private static void ApplyWorkAreaBounds(IntPtr hwnd, IntPtr lParam)
+    private static void ApplyWorkAreaBounds(IntPtr hwnd, IntPtr lParam, Window window)
     {
         var monitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
         if (monitor == IntPtr.Zero)
@@ -100,6 +102,12 @@ internal static class WindowMaximizeHelper
         // (layered) window can't be grown past it and slide under the taskbar when maximized.
         minMaxInfo.ptMaxTrackSize.X = workArea.Right - workArea.Left;
         minMaxInfo.ptMaxTrackSize.Y = workArea.Bottom - workArea.Top;
+        // Setting handled=true for WM_GETMINMAXINFO skips WPF's own default handling, which is
+        // what normally derives ptMinTrackSize from Window.MinWidth/MinHeight - so it must be
+        // set here too, or the window's minimum size silently stops being enforced.
+        var dpi = VisualTreeHelper.GetDpi(window);
+        minMaxInfo.ptMinTrackSize.X = (int)(window.MinWidth * dpi.DpiScaleX);
+        minMaxInfo.ptMinTrackSize.Y = (int)(window.MinHeight * dpi.DpiScaleY);
         Marshal.StructureToPtr(minMaxInfo, lParam, false);
     }
 
