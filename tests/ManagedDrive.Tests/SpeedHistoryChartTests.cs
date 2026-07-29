@@ -44,4 +44,34 @@ public sealed class SpeedHistoryChartTests
         Assert.Equal(0, points[0].X);
         Assert.Equal(90, points[3].X);
     }
+
+    [Fact]
+    public void RoundUpToNiceMax_Zero_ReturnsZero()
+    {
+        Assert.Equal(0, SpeedHistoryChart.RoundUpToNiceMax(0));
+    }
+
+    [Fact]
+    public void RoundUpToNiceMax_BelowTenInUnit_RoundsUpToTen()
+    {
+        var result = SpeedHistoryChart.RoundUpToNiceMax(3 * 1024.0 * 1024);
+
+        Assert.Equal(10 * 1024.0 * 1024, result);
+    }
+
+    [Fact]
+    public void RoundUpToNiceMax_AlreadyMultipleOfTen_StaysUnchanged()
+    {
+        var result = SpeedHistoryChart.RoundUpToNiceMax(20 * 1024.0 * 1024);
+
+        Assert.Equal(20 * 1024.0 * 1024, result);
+    }
+
+    [Fact]
+    public void RoundUpToNiceMax_NearUnitBoundary_StaysInSameUnitTier()
+    {
+        var result = SpeedHistoryChart.RoundUpToNiceMax(903 * 1024.0);
+
+        Assert.Equal(910 * 1024.0, result);
+    }
 }
