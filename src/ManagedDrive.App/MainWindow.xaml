@@ -263,7 +263,7 @@
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="56"/>
                                 <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="64"/>
                             </Grid.ColumnDefinitions>
 
                             <!-- Whole-card usage fill: the entire card acts as the progress bar.
@@ -292,9 +292,10 @@
                                 </Grid>
                             </Border>
 
-                            <!-- Drive letter badge, with read-only/temp-dir status corner icons -->
-                            <Grid Width="48" Height="48" VerticalAlignment="Center">
-                                <Border CornerRadius="8"
+                            <!-- Drive letter badge; status icons sit in a row below it rather than
+                                 overlapping the letter -->
+                            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                                <Border Width="48" Height="48" CornerRadius="8"
                                         Background="{DynamicResource AppPrimary}">
                                     <TextBlock Text="{Binding MountPoint}"
                                                FontSize="18" FontWeight="SemiBold"
@@ -303,52 +304,78 @@
                                                VerticalAlignment="Center"/>
                                 </Border>
                                 <StackPanel Orientation="Horizontal"
-                                            HorizontalAlignment="Right" VerticalAlignment="Bottom"
-                                            Margin="0,0,-4,-4">
-                                    <Border Width="18" Height="18" CornerRadius="9"
+                                            HorizontalAlignment="Center"
+                                            Margin="0,4,0,0">
+                                    <Border Width="16" Height="16" CornerRadius="8"
                                             Background="{DynamicResource AppSurface}"
                                             BorderBrush="{DynamicResource AppDivider}" BorderThickness="1"
                                             ToolTip="{DynamicResource Card.ReadOnly}"
                                             AutomationProperties.Name="{DynamicResource Card.ReadOnly}"
                                             Visibility="{Binding IsReadOnly, Converter={StaticResource BoolToVis}}">
-                                        <TextBlock Text="&#xE72E;" Style="{StaticResource IconText}" FontSize="10"
+                                        <TextBlock Text="&#xE72E;" Style="{StaticResource IconText}" FontSize="9"
                                                    Foreground="{DynamicResource AppForegroundLight}"/>
                                     </Border>
-                                    <Border Width="18" Height="18" CornerRadius="9" Margin="2,0,0,0"
+                                    <Border Width="16" Height="16" CornerRadius="8" Margin="2,0,0,0"
                                             Background="{DynamicResource AppSurface}"
                                             BorderBrush="{DynamicResource AppDivider}" BorderThickness="1"
                                             ToolTip="{DynamicResource Btn.RestoreDefaultTemp}"
                                             AutomationProperties.Name="{DynamicResource Btn.RestoreDefaultTemp}"
                                             Visibility="{Binding IsCurrentTempDir, Converter={StaticResource BoolToVis}}">
-                                        <TextBlock Text="&#xE8B7;" Style="{StaticResource IconText}" FontSize="10"
+                                        <TextBlock Text="&#xE8B7;" Style="{StaticResource IconText}" FontSize="9"
                                                    Foreground="{DynamicResource AppForeground}"/>
                                     </Border>
-                                    <Border Width="18" Height="18" CornerRadius="9" Margin="2,0,0,0"
+                                    <Border Width="16" Height="16" CornerRadius="8" Margin="2,0,0,0"
                                             Background="{DynamicResource AppSurface}"
                                             BorderBrush="{DynamicResource AppDivider}" BorderThickness="1"
                                             ToolTip="{Binding SourcePath}"
                                             AutomationProperties.Name="{Binding SourcePath}"
                                             Visibility="{Binding HasImagePath, Converter={StaticResource BoolToVis}}">
-                                        <TextBlock Text="&#xE74E;" Style="{StaticResource IconText}" FontSize="10"
+                                        <TextBlock Text="&#xE74E;" Style="{StaticResource IconText}" FontSize="9"
                                                    Foreground="{DynamicResource AppForegroundLight}"/>
                                     </Border>
-                                    <Border Width="18" Height="18" CornerRadius="9" Margin="2,0,0,0"
+                                    <Border Width="16" Height="16" CornerRadius="8" Margin="2,0,0,0"
                                             Background="{DynamicResource AppSurface}"
                                             BorderBrush="{DynamicResource AppDivider}" BorderThickness="1"
                                             ToolTip="{DynamicResource Card.Encrypted}"
                                             AutomationProperties.Name="{DynamicResource Card.Encrypted}"
                                             Visibility="{Binding IsPasswordProtected, Converter={StaticResource BoolToVis}}">
-                                        <TextBlock Text="&#xE192;" Style="{StaticResource IconText}" FontSize="10"
+                                        <TextBlock Text="&#xE192;" Style="{StaticResource IconText}" FontSize="9"
                                                    Foreground="{DynamicResource AppForegroundLight}"/>
                                     </Border>
                                 </StackPanel>
-                            </Grid>
+                            </StackPanel>
 
-                            <!-- Label + progress bar + used/capacity, or read-only summary -->
+                            <!-- Label (+ used/capacity/percent on the same row), or read-only summary -->
                             <StackPanel Grid.Column="1" Margin="12,0,16,0" VerticalAlignment="Center">
-                                <TextBlock Text="{Binding VolumeLabel}"
-                                           FontSize="14" FontWeight="Medium"
-                                           Foreground="{DynamicResource AppForeground}"/>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="{Binding VolumeLabel}"
+                                               FontSize="14" FontWeight="Medium"
+                                               Foreground="{DynamicResource AppForeground}"
+                                               TextTrimming="CharacterEllipsis"/>
+                                    <StackPanel Grid.Column="1" Orientation="Horizontal"
+                                                HorizontalAlignment="Right" Margin="8,0,0,0"
+                                                Visibility="{Binding IsNotReadOnly, Converter={StaticResource BoolToVis}}">
+                                        <TextBlock Text="{Binding UsedFormatted}" FontSize="12"
+                                                   Foreground="{DynamicResource AppForegroundLight}"/>
+                                        <TextBlock Text=" / " FontSize="12"
+                                                   Foreground="{DynamicResource AppForegroundLight}"/>
+                                        <TextBlock Text="{Binding CapacityFormatted}" FontSize="12"
+                                                   Foreground="{DynamicResource AppForegroundLight}"/>
+                                        <TextBlock Text="{Binding UsedPercent, StringFormat='  ({0:0}%)'}" FontSize="12"
+                                                   Foreground="{DynamicResource AppForegroundLight}"/>
+                                        <!-- Non-color high-usage indicator for color-blind accessibility; tooltip carries the text -->
+                                        <TextBlock Text="&#xE7BA;" Style="{StaticResource IconText}" FontSize="11"
+                                                   Foreground="{DynamicResource AppWarning}"
+                                                   VerticalAlignment="Center" Margin="6,0,0,0"
+                                                   ToolTip="{DynamicResource Card.HighUsage}"
+                                                   AutomationProperties.Name="{DynamicResource Card.HighUsage}"
+                                                   Visibility="{Binding IsHighUsage, Converter={StaticResource BoolToVis}}"/>
+                                    </StackPanel>
+                                </Grid>
 
                                 <StackPanel Visibility="{Binding IsReadOnly, Converter={StaticResource BoolToVis}}">
                                     <TextBlock FontSize="12"
@@ -360,31 +387,11 @@
                                     </TextBlock>
                                 </StackPanel>
 
-                                <StackPanel Visibility="{Binding IsNotReadOnly, Converter={StaticResource BoolToVis}}">
-                                    <StackPanel Orientation="Horizontal">
-                                        <TextBlock Text="{Binding UsedFormatted}" FontSize="12"
-                                                   Foreground="{DynamicResource AppForegroundLight}"/>
-                                        <TextBlock Text=" / " FontSize="12"
-                                                   Foreground="{DynamicResource AppForegroundLight}"/>
-                                        <TextBlock Text="{Binding CapacityFormatted}" FontSize="12"
-                                                   Foreground="{DynamicResource AppForegroundLight}"/>
-                                        <TextBlock Text="{Binding UsedPercent, StringFormat='  ({0:0}%)'}" FontSize="12"
-                                                   Foreground="{DynamicResource AppForegroundLight}"/>
-                                        <!-- Non-color high-usage indicator (icon + text) for color-blind accessibility -->
-                                        <TextBlock Text="&#xE7BA;" Style="{StaticResource IconText}" FontSize="11"
-                                                   Foreground="{DynamicResource AppWarning}"
-                                                   VerticalAlignment="Center" Margin="8,0,3,0"
-                                                   ToolTip="{DynamicResource Card.HighUsage}"
-                                                   AutomationProperties.Name="{DynamicResource Card.HighUsage}"
-                                                   Visibility="{Binding IsHighUsage, Converter={StaticResource BoolToVis}}"/>
-                                        <TextBlock Text="{DynamicResource Card.HighUsage}" FontSize="12"
-                                                   Foreground="{DynamicResource AppWarning}"
-                                                   VerticalAlignment="Center"
-                                                   Visibility="{Binding IsHighUsage, Converter={StaticResource BoolToVis}}"/>
-                                    </StackPanel>
-                                </StackPanel>
+                                <Border Height="1" Margin="0,6,0,4"
+                                        Background="{DynamicResource AppDivider}"
+                                        Visibility="{Binding IsNotReadOnly, Converter={StaticResource BoolToVis}}"/>
 
-                                <StackPanel Orientation="Horizontal" Margin="0,2,0,0"
+                                <StackPanel Orientation="Horizontal"
                                             Visibility="{Binding IsNotReadOnly, Converter={StaticResource BoolToVis}}">
                                     <TextBlock Text="&#xE823;" FontFamily="Segoe Fluent Icons" FontSize="10"
                                                Foreground="{DynamicResource AppForegroundLight}"
