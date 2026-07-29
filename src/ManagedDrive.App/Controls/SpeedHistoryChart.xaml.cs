@@ -74,6 +74,28 @@ public partial class SpeedHistoryChart
         return points;
     }
 
+    /// <summary>
+    /// Rounds <paramref name="bytesPerSecond"/> up to the nearest multiple of 10 within the same
+    /// unit tier (B/KB/MB/GB) that <see cref="ByteFormatter.Format"/> would display it in, so
+    /// axis labels read as clean numbers (e.g. 23.4 MB/s becomes 30 MB/s) without jumping to a
+    /// coarser unit (e.g. 900 KB/s stays in KB, rounding to 10 KB rather than jumping to GB).
+    /// </summary>
+    public static double RoundUpToNiceMax(double bytesPerSecond)
+    {
+        if (bytesPerSecond <= 0)
+        {
+            return 0;
+        }
+
+        var unitSize = bytesPerSecond >= 1024.0 * 1024 * 1024 ? 1024.0 * 1024 * 1024
+            : bytesPerSecond >= 1024.0 * 1024 ? 1024.0 * 1024
+            : bytesPerSecond >= 1024.0 ? 1024.0
+            : 1.0;
+
+        var valueInUnit = bytesPerSecond / unitSize;
+        return Math.Ceiling(valueInUnit / 10.0) * 10.0 * unitSize;
+    }
+
     private static void OnHistoryChanged(DependencyObject d, DependencyPropertyChangedEventArgs e) =>
         ((SpeedHistoryChart)d).Redraw();
 
@@ -90,9 +112,10 @@ public partial class SpeedHistoryChart
 
         var read = ReadHistory ?? Array.Empty<double>();
         var write = WriteHistory ?? Array.Empty<double>();
-        var scaleMax = Math.Max(
+        var rawMax = Math.Max(
             read.Count > 0 ? read.Max() : 0.0,
             write.Count > 0 ? write.Max() : 0.0);
+        var scaleMax = RoundUpToNiceMax(rawMax);
 
         ReadLine.Points = NormalizePoints(read, width, height, scaleMax);
         WriteLine.Points = NormalizePoints(write, width, height, scaleMax);
