@@ -305,6 +305,7 @@
                                 </Border>
                                 <StackPanel Orientation="Horizontal"
                                             HorizontalAlignment="Center"
+                                            Height="16"
                                             Margin="0,4,0,0">
                                     <Border Width="16" Height="16" CornerRadius="8"
                                             Background="{DynamicResource AppSurface}"
@@ -418,7 +419,7 @@
                                                VerticalAlignment="Center" Margin="0,0,4,0"
                                                ToolTip="{DynamicResource Card.ReadSpeed}"
                                                AutomationProperties.Name="{DynamicResource Card.ReadSpeed}"/>
-                                    <TextBlock Text="{Binding ReadSpeedFormatted}" FontSize="11" Width="52"
+                                    <TextBlock Text="{Binding ReadSpeedFormatted}" FontSize="11" Width="62"
                                                TextAlignment="Left"
                                                Foreground="{DynamicResource AppForegroundLight}"/>
                                     <TextBlock Text="&#xE896;" FontFamily="Segoe Fluent Icons" FontSize="10"
@@ -426,7 +427,7 @@
                                                VerticalAlignment="Center" Margin="10,0,4,0"
                                                ToolTip="{DynamicResource Card.WriteSpeed}"
                                                AutomationProperties.Name="{DynamicResource Card.WriteSpeed}"/>
-                                    <TextBlock Text="{Binding WriteSpeedFormatted}" FontSize="11" Width="52"
+                                    <TextBlock Text="{Binding WriteSpeedFormatted}" FontSize="11" Width="62"
                                                TextAlignment="Left"
                                                Foreground="{DynamicResource AppForegroundLight}"/>
                                     <Popup x:Name="SpeedPopup" PlacementTarget="{Binding ElementName=SpeedRow}" Placement="Bottom"

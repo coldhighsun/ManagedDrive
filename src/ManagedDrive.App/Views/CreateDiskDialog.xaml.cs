@@ -598,6 +598,21 @@ public partial class CreateDiskDialog
                 return;
             }
 
+            if (File.Exists(dlg.FileName))
+            {
+                var confirm = new ConfirmDialog(
+                    Loc.Get("Msg.ImagePathOverwriteConfirmTitle"),
+                    Loc.Format("Msg.ImagePathOverwriteConfirmBody", dlg.FileName))
+                {
+                    Owner = this
+                };
+
+                if (confirm.ShowDialog() != true)
+                {
+                    return;
+                }
+            }
+
             ImagePathBox.Text = dlg.FileName;
             UpdateCompressionLevelState();
             UpdateAutoSaveEnabledState();

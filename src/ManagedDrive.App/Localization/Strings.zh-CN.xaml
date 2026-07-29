@@ -269,6 +269,8 @@
     <sys:String x:Key="Msg.MountFailed">挂载磁盘失败：&#x0a;{0}</sys:String>
     <sys:String x:Key="Msg.SaveImageFailed">保存镜像失败：&#x0a;{0}</sys:String>
     <sys:String x:Key="Msg.SaveImageNoPath">该磁盘未配置镜像路径。</sys:String>
+    <sys:String x:Key="Msg.ImagePathOverwriteConfirmTitle">文件已存在</sys:String>
+    <sys:String x:Key="Msg.ImagePathOverwriteConfirmBody">文件 {0} 已存在。&#x0a;&#x0a;程序不会读取其中的内容——下次保存时，磁盘的当前数据将覆盖该文件。是否继续？</sys:String>
     <sys:String x:Key="Msg.FormatDiskConfirmTitle">格式化磁盘</sys:String>
     <sys:String x:Key="Msg.FormatDiskConfirmBody">确认格式化 {0}（{1}）？&#x0a;&#x0a;该磁盘上的所有文件和文件夹将被永久删除。</sys:String>
     <sys:String x:Key="Msg.FormatDiskReadOnly">只读磁盘无法格式化。</sys:String>
