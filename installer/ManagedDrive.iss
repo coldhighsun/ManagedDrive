@@ -80,6 +80,13 @@ const
   GracefulExitTimeoutMs = 30000;
   GracefulExitPollIntervalMs = 500;
 
+var
+  // Manually-created "Launch ManagedDrive" checkbox on the Finished page - see
+  // CurPageChanged/CurStepChanged below. Not a [Run] entry: a normal [Run] "postinstall"
+  // checkbox would go through Inno's own de-elevation path, which is exactly what
+  // LaunchAppAsUser()'s explorer.exe workaround below exists to avoid.
+  LaunchAppCheckBox: TNewCheckBox;
+
 // Mirrors ManagedDrive.App's App.xaml.cs::CheckWinFspPrerequisite() detection:
 // HKLM InstallDir -> <InstallDir>\bin\winfsp-msil.dll must exist with a 2.2.x file version.
 function IsWinFspInstalled(): Boolean;
@@ -419,9 +426,23 @@ begin
     end;
   end;
 
-  // Mirrors the old [Run] entry's "postinstall skipifsilent" semantics: launch the app once
-  // installation is fully done, but not when running silently (winget/CI have no one to see it).
-  if (CurStep = ssDone) and not WizardSilent() then
+  // Mirrors the old [Run] entry's "postinstall skipifsilent" semantics, for the silent case only:
+  // launch unconditionally when running silently (winget/CI have no one to see it, and no
+  // Finished page - hence no LaunchAppCheckBox - is ever shown to opt out with). The interactive
+  // case is handled in NextButtonClick below instead, since ssDone fires while still on the
+  // wpInstalling page, before wpFinished (and LaunchAppCheckBox) exists.
+  if (CurStep = ssDone) and WizardSilent() then
+    LaunchAppAsUser();
+end;
+
+// Handles the "Finish" click on the Finished page. Deliberately not done from CurStepChanged's
+// ssDone branch above: ssDone fires before the wizard advances to wpFinished, so
+// LaunchAppCheckBox wouldn't exist there yet.
+function NextButtonClick(CurPageID: Integer): Boolean;
+begin
+  Result := True;
+
+  if (CurPageID = wpFinished) and Assigned(LaunchAppCheckBox) and LaunchAppCheckBox.Checked then
     LaunchAppAsUser();
 end;
 
@@ -624,6 +645,20 @@ begin
       'ManagedDrive will be closed automatically; it saves the contents of every mounted RAM ' +
       'disk to its image file before exiting, so no data will be lost.'#13#10 +
       'ManagedDrive 将会被自动关闭；关闭前会先将所有已挂载内存盘的内容保存到镜像文件，不会丢失数据。';
+  end;
+
+  // There is no [Run] entry to drive Inno's usual "Launch xxx" Finished-page checkbox - see the
+  // LaunchAppCheckBox comment above for why. Create an equivalent checkbox by hand instead, so the
+  // user can opt out of the auto-launch in CurStepChanged above. Guarded so it's only created once.
+  if (CurPageID = wpFinished) and not WizardSilent() and not Assigned(LaunchAppCheckBox) then
+  begin
+    LaunchAppCheckBox := TNewCheckBox.Create(WizardForm);
+    LaunchAppCheckBox.Parent := WizardForm.FinishedPage;
+    LaunchAppCheckBox.Left := WizardForm.FinishedLabel.Left;
+    LaunchAppCheckBox.Top := WizardForm.FinishedLabel.Top + WizardForm.FinishedLabel.Height + ScaleY(12);
+    LaunchAppCheckBox.Width := WizardForm.FinishedLabel.Width;
+    LaunchAppCheckBox.Caption := 'Launch ManagedDrive / 启动 ManagedDrive';
+    LaunchAppCheckBox.Checked := True;
   end;
 end;
 
