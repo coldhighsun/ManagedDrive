@@ -11,6 +11,7 @@
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="120"/>
             <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
             <RowDefinition Height="120"/>
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
@@ -37,13 +38,16 @@
             <Polyline x:Name="ReadLine" Stroke="{DynamicResource AppPrimary}" StrokeThickness="2"/>
         </Grid>
 
-        <StackPanel Grid.Row="2" Grid.Column="1" Orientation="Horizontal" Margin="0,8,0,2">
+        <Border Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="2" Height="1"
+                Background="{DynamicResource AppDivider}" Margin="0,8,0,8"/>
+
+        <StackPanel Grid.Row="3" Grid.Column="1" Orientation="Horizontal" Margin="0,0,0,2">
             <Rectangle Width="10" Height="10" Fill="{DynamicResource AppChartWrite}" Margin="0,0,4,0"/>
             <TextBlock Text="{DynamicResource Card.WriteSpeed}" FontSize="11"
                        Foreground="{DynamicResource AppForegroundLight}"/>
         </StackPanel>
 
-        <Grid Grid.Row="3" Grid.Column="0" Margin="0,0,4,0">
+        <Grid Grid.Row="4" Grid.Column="0" Margin="0,0,4,0">
             <TextBlock x:Name="WriteAxisMaxLabel" FontSize="10" HorizontalAlignment="Right" VerticalAlignment="Top"
                        Foreground="{DynamicResource AppForegroundLight}"/>
             <TextBlock x:Name="WriteAxisMidLabel" FontSize="10" HorizontalAlignment="Right" VerticalAlignment="Center"
@@ -51,7 +55,7 @@
             <TextBlock x:Name="WriteAxisZeroLabel" FontSize="10" HorizontalAlignment="Right" VerticalAlignment="Bottom"
                        Foreground="{DynamicResource AppForegroundLight}"/>
         </Grid>
-        <Grid x:Name="WriteChartArea" Grid.Row="3" Grid.Column="1" ClipToBounds="True"
+        <Grid x:Name="WriteChartArea" Grid.Row="4" Grid.Column="1" ClipToBounds="True"
               SizeChanged="ChartArea_SizeChanged">
             <Line x:Name="WriteTopGridLine" Stroke="{DynamicResource AppDivider}" StrokeThickness="1" StrokeDashArray="2,2"/>
             <Line x:Name="WriteMidGridLine" Stroke="{DynamicResource AppDivider}" StrokeThickness="1" StrokeDashArray="2,2"/>
@@ -59,7 +63,7 @@
             <Polyline x:Name="WriteLine" Stroke="{DynamicResource AppChartWrite}" StrokeThickness="2"/>
         </Grid>
 
-        <Grid Grid.Row="4" Grid.Column="1" Margin="0,2,0,0">
+        <Grid Grid.Row="5" Grid.Column="1" Margin="0,2,0,0">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="*"/>
