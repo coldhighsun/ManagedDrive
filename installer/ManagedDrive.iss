@@ -484,8 +484,10 @@ procedure ReportAbortReason(const EnMessage, ZhMessage: string);
 begin
   if WizardSilent() then
     Log('Aborting: ' + EnMessage)
+  else if ActiveLanguage() = 'chinesesimplified' then
+    MsgBox(ZhMessage, mbError, MB_OK)
   else
-    MsgBox(EnMessage + #13#10#13#10 + ZhMessage, mbError, MB_OK);
+    MsgBox(EnMessage, mbError, MB_OK);
 end;
 
 function IsManagedDriveRunning(): Boolean;
@@ -566,6 +568,8 @@ begin
 end;
 
 function InitializeSetup(): Boolean;
+var
+  ConfirmCloseMessage: string;
 begin
   Result := True;
 
@@ -607,14 +611,18 @@ begin
   // Interactive: let the user choose, rather than closing the app out from under them
   // unannounced. Yes = Setup closes it via "mdrive.exe exit" (saves every mounted disk first);
   // No = abort Setup so the user can close it manually (tray icon menu > Exit) and re-run.
-  if MsgBox(
-    'ManagedDrive is currently running. It needs to be closed before Setup can continue.'#13#10#13#10 +
-    'Click Yes to let Setup close it automatically (it will save all mounted RAM disks first). ' +
-    'Click No to exit Setup so you can close it yourself.'#13#10#13#10 +
-    'ManagedDrive 当前正在运行，需要先关闭才能继续安装。'#13#10#13#10 +
-    '点击"是"让安装程序自动关闭它（会先保存所有已挂载的内存盘）。点击"否"退出安装程序，自行手动关闭' +
-    'ManagedDrive 后再重新运行安装程序。',
-    mbConfirmation, MB_YESNO) = IDNO then
+  if ActiveLanguage() = 'chinesesimplified' then
+    ConfirmCloseMessage :=
+      'ManagedDrive 当前正在运行，需要先关闭才能继续安装。'#13#10#13#10 +
+      '点击"是"让安装程序自动关闭它（会先保存所有已挂载的内存盘）。点击"否"退出安装程序，自行手动关闭' +
+      'ManagedDrive 后再重新运行安装程序。'
+  else
+    ConfirmCloseMessage :=
+      'ManagedDrive is currently running. It needs to be closed before Setup can continue.'#13#10#13#10 +
+      'Click Yes to let Setup close it automatically (it will save all mounted RAM disks first). ' +
+      'Click No to exit Setup so you can close it yourself.';
+
+  if MsgBox(ConfirmCloseMessage, mbConfirmation, MB_YESNO) = IDNO then
   begin
     Result := False;
     exit;
@@ -641,10 +649,13 @@ procedure CurPageChanged(CurPageID: Integer);
 begin
   if (CurPageID = wpPreparing) and IsManagedDriveRunning() then
   begin
-    WizardForm.PreparingLabel.Caption := WizardForm.PreparingLabel.Caption + #13#10#13#10 +
-      'ManagedDrive will be closed automatically; it saves the contents of every mounted RAM ' +
-      'disk to its image file before exiting, so no data will be lost.'#13#10 +
-      'ManagedDrive 将会被自动关闭；关闭前会先将所有已挂载内存盘的内容保存到镜像文件，不会丢失数据。';
+    if ActiveLanguage() = 'chinesesimplified' then
+      WizardForm.PreparingLabel.Caption := WizardForm.PreparingLabel.Caption + #13#10#13#10 +
+        'ManagedDrive 将会被自动关闭；关闭前会先将所有已挂载内存盘的内容保存到镜像文件，不会丢失数据。'
+    else
+      WizardForm.PreparingLabel.Caption := WizardForm.PreparingLabel.Caption + #13#10#13#10 +
+        'ManagedDrive will be closed automatically; it saves the contents of every mounted RAM ' +
+        'disk to its image file before exiting, so no data will be lost.';
   end;
 
   // There is no [Run] entry to drive Inno's usual "Launch xxx" Finished-page checkbox - see the
@@ -657,7 +668,10 @@ begin
     LaunchAppCheckBox.Left := WizardForm.FinishedLabel.Left;
     LaunchAppCheckBox.Top := WizardForm.FinishedLabel.Top + WizardForm.FinishedLabel.Height + ScaleY(12);
     LaunchAppCheckBox.Width := WizardForm.FinishedLabel.Width;
-    LaunchAppCheckBox.Caption := 'Launch ManagedDrive / 启动 ManagedDrive';
+    if ActiveLanguage() = 'chinesesimplified' then
+      LaunchAppCheckBox.Caption := '启动 ManagedDrive'
+    else
+      LaunchAppCheckBox.Caption := 'Launch ManagedDrive';
     LaunchAppCheckBox.Checked := True;
   end;
 end;
