@@ -13,7 +13,12 @@ var remainingArgs = args.Length > 0 ? args[1..] : [];
 
 var isInstallOrUpgrade = subcommand is "install" or "upgrade";
 
-if (isInstallOrUpgrade && WinFspVolumeDetector.IsCurrentTempOnWinFspVolume())
+// `winget download` (used by SilentInstaller) requires exactly one target package and has
+// no "all outdated packages" mode, unlike `winget upgrade`/`winget install` with no id — so
+// only take the silent-install path when a package id/name/moniker is explicitly given.
+var hasPackageSelector = remainingArgs.Any(a => !a.StartsWith('-'));
+
+if (isInstallOrUpgrade && hasPackageSelector && WinFspVolumeDetector.IsCurrentTempOnWinFspVolume())
 {
     var useFullSilent = remainingArgs.Contains("--silent") || remainingArgs.Contains("--disable-interactivity");
 
