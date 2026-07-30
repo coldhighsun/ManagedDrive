@@ -285,6 +285,14 @@ public sealed class RamDisk : IDisposable
             OriginalCapacityBytesOnLoad = originalCapacity,
         };
 
+        if (options.PersistImagePath != null && File.Exists(options.PersistImagePath))
+        {
+            // Loaded content matches what's already on disk at this path, so an unmodified
+            // disk shouldn't be considered "unsaved" just because this instance hasn't itself
+            // called SaveToImage yet.
+            disk._lastSavedImagePath = options.PersistImagePath;
+        }
+
         if (cek is not null)
         {
             // An existing encrypted image was loaded above: reuse its CEK as-is.
