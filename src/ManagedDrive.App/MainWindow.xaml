@@ -410,38 +410,42 @@
                                                Visibility="{Binding ShowLastAutoSave, Converter={StaticResource BoolToVis}}"/>
                                 </StackPanel>
 
-                                <!-- Read/write throughput; hovering opens a history-chart popup (see below) -->
-                                <StackPanel x:Name="SpeedRow" Orientation="Horizontal" Margin="0,2,0,0"
-                                            Visibility="{Binding IsNotReadOnly, Converter={StaticResource BoolToVis}}"
-                                            MouseEnter="SpeedRow_MouseEnter" MouseLeave="SpeedRow_MouseLeave">
-                                    <TextBlock Text="&#xE898;" FontFamily="Segoe Fluent Icons" FontSize="10"
-                                               Foreground="{DynamicResource AppForegroundLight}"
-                                               VerticalAlignment="Center" Margin="0,0,4,0"
-                                               ToolTip="{DynamicResource Card.ReadSpeed}"
-                                               AutomationProperties.Name="{DynamicResource Card.ReadSpeed}"/>
-                                    <TextBlock Text="{Binding ReadSpeedFormatted}" FontSize="11" Width="62"
-                                               TextAlignment="Left"
-                                               Foreground="{DynamicResource AppForegroundLight}"/>
-                                    <TextBlock Text="&#xE896;" FontFamily="Segoe Fluent Icons" FontSize="10"
-                                               Foreground="{DynamicResource AppForegroundLight}"
-                                               VerticalAlignment="Center" Margin="10,0,4,0"
-                                               ToolTip="{DynamicResource Card.WriteSpeed}"
-                                               AutomationProperties.Name="{DynamicResource Card.WriteSpeed}"/>
-                                    <TextBlock Text="{Binding WriteSpeedFormatted}" FontSize="11" Width="62"
-                                               TextAlignment="Left"
-                                               Foreground="{DynamicResource AppForegroundLight}"/>
-                                    <Popup x:Name="SpeedPopup" PlacementTarget="{Binding ElementName=SpeedRow}" Placement="Bottom"
-                                           StaysOpen="True" AllowsTransparency="True">
-                                        <Border Background="{DynamicResource AppSurface}"
-                                                BorderBrush="{DynamicResource AppDivider}"
-                                                BorderThickness="1" CornerRadius="4" Padding="8"
-                                                Tag="{Binding ElementName=SpeedPopup}"
-                                                MouseEnter="SpeedRow_MouseEnter" MouseLeave="SpeedRow_MouseLeave">
-                                            <controls:SpeedHistoryChart ReadHistory="{Binding ReadSpeedHistory}"
-                                                                         WriteHistory="{Binding WriteSpeedHistory}"/>
-                                        </Border>
-                                    </Popup>
-                                </StackPanel>
+                                <!-- Read/write throughput; hovering opens a history-chart popup (see below).
+                                     The Border enlarges the hover hit-test area beyond the tight text/icon bounds. -->
+                                <Border x:Name="SpeedHoverArea" Background="Transparent" Padding="0,4,0,4" Margin="0,-2,0,-4"
+                                        Tag="{Binding ElementName=SpeedPopup}"
+                                        Visibility="{Binding IsNotReadOnly, Converter={StaticResource BoolToVis}}"
+                                        MouseEnter="SpeedRow_MouseEnter" MouseLeave="SpeedRow_MouseLeave">
+                                    <StackPanel x:Name="SpeedRow" Orientation="Horizontal">
+                                        <TextBlock Text="&#xE898;" FontFamily="Segoe Fluent Icons" FontSize="10"
+                                                   Foreground="{DynamicResource AppForegroundLight}"
+                                                   VerticalAlignment="Center" Margin="0,0,4,0"
+                                                   ToolTip="{DynamicResource Card.ReadSpeed}"
+                                                   AutomationProperties.Name="{DynamicResource Card.ReadSpeed}"/>
+                                        <TextBlock Text="{Binding ReadSpeedFormatted}" FontSize="11" Width="62"
+                                                   TextAlignment="Left"
+                                                   Foreground="{DynamicResource AppForegroundLight}"/>
+                                        <TextBlock Text="&#xE896;" FontFamily="Segoe Fluent Icons" FontSize="10"
+                                                   Foreground="{DynamicResource AppForegroundLight}"
+                                                   VerticalAlignment="Center" Margin="10,0,4,0"
+                                                   ToolTip="{DynamicResource Card.WriteSpeed}"
+                                                   AutomationProperties.Name="{DynamicResource Card.WriteSpeed}"/>
+                                        <TextBlock Text="{Binding WriteSpeedFormatted}" FontSize="11" Width="62"
+                                                   TextAlignment="Left"
+                                                   Foreground="{DynamicResource AppForegroundLight}"/>
+                                        <Popup x:Name="SpeedPopup" PlacementTarget="{Binding ElementName=SpeedHoverArea}" Placement="Bottom"
+                                               StaysOpen="True" AllowsTransparency="True">
+                                            <Border Background="{DynamicResource AppSurface}"
+                                                    BorderBrush="{DynamicResource AppDivider}"
+                                                    BorderThickness="1" CornerRadius="4" Padding="8"
+                                                    Tag="{Binding ElementName=SpeedPopup}"
+                                                    MouseEnter="SpeedRow_MouseEnter" MouseLeave="SpeedRow_MouseLeave">
+                                                <controls:SpeedHistoryChart ReadHistory="{Binding ReadSpeedHistory}"
+                                                                             WriteHistory="{Binding WriteSpeedHistory}"/>
+                                            </Border>
+                                        </Popup>
+                                    </StackPanel>
+                                </Border>
                             </StackPanel>
 
                             <!-- Free space -->
