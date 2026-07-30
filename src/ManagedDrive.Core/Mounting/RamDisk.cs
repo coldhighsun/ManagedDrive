@@ -191,6 +191,7 @@ public sealed class RamDisk : IDisposable
         MemoryFileSystem fs;
         ulong? originalCapacity = null;
         byte[]? cek = null;
+        var loadedFromPersistImagePath = false;
 
         if (options.SourceArchivePath != null &&
             File.Exists(options.SourceArchivePath))
@@ -220,6 +221,7 @@ public sealed class RamDisk : IDisposable
         else if (options.PersistImagePath != null &&
             File.Exists(options.PersistImagePath))
         {
+            loadedFromPersistImagePath = true;
             var nodeMap = DiskImageSerializer.Load(
                 options.PersistImagePath,
                 out var savedCapacity,
@@ -285,11 +287,13 @@ public sealed class RamDisk : IDisposable
             OriginalCapacityBytesOnLoad = originalCapacity,
         };
 
-        if (options.PersistImagePath != null && File.Exists(options.PersistImagePath))
+        if (loadedFromPersistImagePath)
         {
             // Loaded content matches what's already on disk at this path, so an unmodified
             // disk shouldn't be considered "unsaved" just because this instance hasn't itself
-            // called SaveToImage yet.
+            // called SaveToImage yet. Archive-sourced disks don't qualify even if
+            // PersistImagePath happens to already exist, since their content came from the
+            // archive, not from that file.
             disk._lastSavedImagePath = options.PersistImagePath;
         }
 
