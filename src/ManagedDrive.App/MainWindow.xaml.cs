@@ -1,4 +1,3 @@
-using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 
@@ -9,8 +8,10 @@ namespace ManagedDrive.App;
 /// </summary>
 public partial class MainWindow
 {
+    private static readonly TimeSpan SpeedPopupOpenDelay = TimeSpan.FromSeconds(1);
     private static readonly TimeSpan SpeedPopupCloseDelay = TimeSpan.FromMilliseconds(150);
 
+    private DispatcherTimer? _speedPopupOpenTimer;
     private DispatcherTimer? _speedPopupCloseTimer;
     private Popup? _pendingCloseSpeedPopup;
 
@@ -44,8 +45,9 @@ public partial class MainWindow
     }
 
     /// <summary>
-    /// Opens the speed-history popup when the mouse enters the speed row or the popup itself,
-    /// cancelling any pending close scheduled for a different popup.
+    /// Schedules the speed-history popup to open after <see cref="SpeedPopupOpenDelay"/> once the
+    /// mouse enters the speed row or the popup itself, cancelling any pending close scheduled for
+    /// a different popup. Already-open popups stay open immediately, without re-running the delay.
     /// </summary>
     private void SpeedRow_MouseEnter(object sender, MouseEventArgs e)
     {
@@ -62,17 +64,38 @@ public partial class MainWindow
 
         _speedPopupCloseTimer?.Stop();
         _pendingCloseSpeedPopup = null;
-        popup.IsOpen = true;
+
+        if (popup.IsOpen)
+        {
+            return;
+        }
+
+        _speedPopupOpenTimer?.Stop();
+        _speedPopupOpenTimer = new DispatcherTimer { Interval = SpeedPopupOpenDelay };
+        _speedPopupOpenTimer.Tick += (_, _) =>
+        {
+            _speedPopupOpenTimer?.Stop();
+            popup.IsOpen = true;
+        };
+        _speedPopupOpenTimer.Start();
     }
 
     /// <summary>
-    /// Schedules the speed-history popup to close shortly after the mouse leaves the speed row
-    /// or the popup itself, so briefly crossing the gap between them doesn't flicker it shut.
+    /// Cancels a pending open, and schedules the speed-history popup to close shortly after the
+    /// mouse leaves the speed row or the popup itself, so briefly crossing the gap between them
+    /// doesn't flicker it shut.
     /// </summary>
     private void SpeedRow_MouseLeave(object sender, MouseEventArgs e)
     {
         var popup = FindSpeedPopup(sender);
         if (popup is null)
+        {
+            return;
+        }
+
+        _speedPopupOpenTimer?.Stop();
+
+        if (!popup.IsOpen)
         {
             return;
         }
@@ -102,7 +125,6 @@ public partial class MainWindow
     /// </summary>
     private static Popup? FindSpeedPopup(object sender) => sender switch
     {
-        StackPanel speedRow => speedRow.Children.OfType<Popup>().FirstOrDefault(),
         FrameworkElement { Tag: Popup popup } => popup,
         _ => null,
     };
