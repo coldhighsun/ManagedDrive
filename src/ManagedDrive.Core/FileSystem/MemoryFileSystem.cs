@@ -1,4 +1,5 @@
 using Fsp;
+using System.Buffers.Binary;
 using System.Security.AccessControl;
 using FileInfo = Fsp.Interop.FileInfo;
 using VolumeInfo = Fsp.Interop.VolumeInfo;
@@ -20,9 +21,9 @@ public sealed class MemoryFileSystem : FileSystemBase
     private long _lastContentReadTicks;
     private ContentAccessInfo? _lastContentWriteAccess;
     private long _lastContentWriteTicks;
+    private ulong _maxCapacity;
     private long _totalBytesRead;
     private long _totalBytesWritten;
-    private ulong _maxCapacity;
     private string _volumeLabel;
 
     /// <summary>
@@ -110,6 +111,14 @@ public sealed class MemoryFileSystem : FileSystemBase
     }
 
     /// <summary>
+    /// Exposes the underlying node map for serialization and capacity queries.
+    /// </summary>
+    internal FileNodeMap NodeMap
+    {
+        get;
+    }
+
+    /// <summary>
     /// Gets the cumulative number of bytes read from file content since mount. Never resets;
     /// consumers derive a rate by sampling the delta between two reads of this value over time.
     /// </summary>
@@ -120,14 +129,6 @@ public sealed class MemoryFileSystem : FileSystemBase
     /// consumers derive a rate by sampling the delta between two reads of this value over time.
     /// </summary>
     internal long TotalBytesWritten => Interlocked.Read(ref _totalBytesWritten);
-
-    /// <summary>
-    /// Exposes the underlying node map for serialization and capacity queries.
-    /// </summary>
-    internal FileNodeMap NodeMap
-    {
-        get;
-    }
 
     /// <summary>
     /// Checks whether a file or directory can be deleted.
@@ -241,7 +242,9 @@ public sealed class MemoryFileSystem : FileSystemBase
         var now = FileTimeNow();
         var node = new FileNode
         {
-            FileSecurity = securityDescriptor,
+            FileSecurity = securityDescriptor is { Length: > 0 }
+                ? securityDescriptor
+                : FileNode.DefaultSecurityDescriptorBytes,
             FileInfo =
             {
                 FileAttributes = fileAttributes,
@@ -336,7 +339,7 @@ public sealed class MemoryFileSystem : FileSystemBase
         ref byte[] securityDescriptor)
     {
         var node = (FileNode)fileNode;
-        securityDescriptor = node.FileSecurity ?? [];
+        securityDescriptor = EffectiveSecurity(node);
         return STATUS_SUCCESS;
     }
 
@@ -362,7 +365,7 @@ public sealed class MemoryFileSystem : FileSystemBase
 
         if (securityDescriptor != null)
         {
-            securityDescriptor = node.FileSecurity;
+            securityDescriptor = EffectiveSecurity(node);
         }
 
         return STATUS_SUCCESS;
@@ -689,10 +692,14 @@ public sealed class MemoryFileSystem : FileSystemBase
     }
 
     /// <summary>
-    /// Sets (replaces or merges) the security descriptor for a file or directory.
+    /// Merges the requested modifications into the node's security descriptor. WinFsp passes a
+    /// <em>modification</em> descriptor, not a complete replacement — it must be combined with the
+    /// node's existing descriptor via <see cref="ModifySecurityDescriptorEx"/>. Storing the
+    /// modification descriptor verbatim leaves the node with a descriptor the kernel rejects, so
+    /// every later open (including a delete) fails with STATUS_INVALID_SECURITY_DESCR.
     /// </summary>
     /// <returns>
-    /// STATUS_SUCCESS.
+    /// STATUS_SUCCESS or an error code from the merge.
     /// </returns>
     public override int SetSecurity(
         object fileNode,
@@ -706,7 +713,20 @@ public sealed class MemoryFileSystem : FileSystemBase
         }
 
         var node = (FileNode)fileNode;
-        node.FileSecurity = securityDescriptor;
+
+        byte[] merged = [];
+        var result = ModifySecurityDescriptorEx(
+            EffectiveSecurity(node),
+            sections,
+            securityDescriptor,
+            ref merged);
+
+        if (result != STATUS_SUCCESS)
+        {
+            return result;
+        }
+
+        node.FileSecurity = merged;
         MarkDirty();
         return STATUS_SUCCESS;
     }
@@ -873,13 +893,55 @@ public sealed class MemoryFileSystem : FileSystemBase
     /// </summary>
     internal void UpdateVolumeLabel(string label) => _volumeLabel = label;
 
+    /// <summary>
+    /// Returns the security descriptor WinFsp should see for <paramref name="node"/>. Nodes that
+    /// carry no security information (e.g. loaded from an image whose entries stored a zero-length
+    /// descriptor) must fall back to the default descriptor: handing WinFsp an empty buffer makes
+    /// its access check fail with STATUS_INVALID_SECURITY_DESCR, which surfaces as
+    /// "The security descriptor structure is invalid" on any open/delete of that node.
+    /// </summary>
+    private static byte[] EffectiveSecurity(FileNode node) =>
+        IsValidSelfRelativeSecurityDescriptor(node.FileSecurity)
+            ? node.FileSecurity!
+            : FileNode.DefaultSecurityDescriptorBytes;
+
     private static ulong FileTimeNow() => (ulong)DateTimeOffset.UtcNow.ToFileTime();
 
     /// <summary>
-    /// Returns <c>true</c> when allocating <paramref name="extra"/> more bytes on top of the
-    /// currently allocated total would exceed the volume's capacity ceiling.
+    /// Checks that a descriptor is usable for WinFsp's access check, which runs in user mode via
+    /// the Win32 <c>AccessCheck</c> API: it must be a self-relative, revision-1 descriptor that
+    /// carries both an owner and a group SID — <c>AccessCheck</c> fails an ownerless or groupless
+    /// descriptor with ERROR_INVALID_SECURITY_DESCR (1338, "the security descriptor structure is
+    /// invalid"). This also rejects the DACL-only modification descriptors that earlier builds'
+    /// <c>SetSecurity</c> stored verbatim (including any already persisted into a <c>.mdr</c>
+    /// image), so those nodes fall back to the default descriptor and become openable/deletable
+    /// again instead of failing every open.
     /// </summary>
-    private bool WouldExceedCapacity(ulong extra) => NodeMap.GetTotalAllocated() + extra > _maxCapacity;
+    private static bool IsValidSelfRelativeSecurityDescriptor(byte[]? securityDescriptor)
+    {
+        const int HeaderLength = 20;
+        const ushort SeSelfRelative = 0x8000;
+
+        if (securityDescriptor is not { Length: >= HeaderLength } sd || sd[0] != 1)
+        {
+            return false;
+        }
+
+        var control = (ushort)(sd[2] | (sd[3] << 8));
+
+        if ((control & SeSelfRelative) == 0)
+        {
+            return false;
+        }
+
+        var ownerOffset = BinaryPrimitives.ReadUInt32LittleEndian(sd.AsSpan(4));
+        var groupOffset = BinaryPrimitives.ReadUInt32LittleEndian(sd.AsSpan(8));
+
+        return ownerOffset is > 0 and < int.MaxValue
+            && groupOffset is > 0 and < int.MaxValue
+            && ownerOffset < (uint)sd.Length
+            && groupOffset < (uint)sd.Length;
+    }
 
     /// <summary>
     /// Core implementation for both file-size and allocation-size changes.
@@ -954,4 +1016,10 @@ public sealed class MemoryFileSystem : FileSystemBase
 
         return STATUS_SUCCESS;
     }
+
+    /// <summary>
+    /// Returns <c>true</c> when allocating <paramref name="extra"/> more bytes on top of the
+    /// currently allocated total would exceed the volume's capacity ceiling.
+    /// </summary>
+    private bool WouldExceedCapacity(ulong extra) => NodeMap.GetTotalAllocated() + extra > _maxCapacity;
 }
