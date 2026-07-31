@@ -216,11 +216,20 @@ public partial class App
         {
             for (var i = 0; i < profiles.Count; i++)
             {
+                var profile = profiles[i];
+
+                // Only a saved image path (not a source archive) has a byte size known up front;
+                // archive-imported profiles fall back to the indeterminate/no-detail-text case.
+                var totalBytes = profile.PersistImagePath != null && File.Exists(profile.PersistImagePath)
+                    ? (ulong)new FileInfo(profile.PersistImagePath).Length
+                    : (ulong?)null;
+
                 // StatusText's setter is private, so re-call Start() each iteration to update the
-                // text; that also resets Progress to 0, so re-report it right after.
-                _mainViewModel.BusyOverlay.Start(Loc.Format("Busy.LoadingDisks", i + 1, profiles.Count));
-                _mainViewModel.BusyOverlay.Report((double)i / profiles.Count);
-                await _mainViewModel.MountFromProfileAsync(profiles[i]);
+                // text; that also resets Progress/DetailText, which the progress callback below
+                // then re-populates as this disk's own load proceeds.
+                _mainViewModel.BusyOverlay.Start(Loc.Format("Busy.LoadingDisks", i + 1, profiles.Count), totalBytes: totalBytes);
+                var progress = new Progress<double>(_mainViewModel.BusyOverlay.Report);
+                await _mainViewModel.MountFromProfileAsync(profile, progress);
             }
         }
         finally
@@ -451,9 +460,9 @@ public partial class App
             _mountManager.ActivityDetected -= _trayIconController.OnActivityDetected;
         }
 
-        await Task.Run(() => _mountManager?.Dispose((disk, fraction) =>
+        await Task.Run(() => _mountManager?.Dispose((disk, diskFraction, overallFraction, totalBytes) =>
             Application.Current.Dispatcher.BeginInvoke(() =>
-                _mainViewModel?.ReportExitSaveProgress(disk.Options.MountPoint, fraction))));
+                _mainViewModel?.ReportExitSaveProgress(disk.Options.MountPoint, overallFraction, diskFraction, totalBytes))));
 
         _logger.LogInformation("ShutdownAsync completed; shutting down application.");
         Shutdown();

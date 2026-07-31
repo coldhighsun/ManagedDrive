@@ -177,8 +177,11 @@ public sealed class DiskImageSerializerTests
             DiskImageSerializer.Save(map, capacityBytes: 1024 * 1024, "MyLabel", path, ImageCompressionLevel.Fastest,
                 progress: new RecordingProgress(reports));
 
+            // Progress is now weighted by each node's allocation size rather than a flat
+            // per-node fraction, so the leading directory node (zero bytes) doesn't move the
+            // needle — only that overall monotonicity and the final 1.0 are guaranteed.
             Assert.NotEmpty(reports);
-            Assert.True(reports[0] > 0);
+            Assert.True(reports[0] >= 0);
             Assert.Equal(1.0, reports[^1]);
             for (var i = 1; i < reports.Count; i++)
             {

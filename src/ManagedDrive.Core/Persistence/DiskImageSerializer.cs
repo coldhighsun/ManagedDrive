@@ -94,12 +94,20 @@ public static class DiskImageSerializer
     /// <exception cref="ImagePasswordIncorrectException">
     /// Thrown when <paramref name="password"/> does not match the one the image was encrypted with.
     /// </exception>
+    /// <param name="progress">
+    /// Optional progress reporter, updated with the fraction of the image file's raw bytes read
+    /// so far (<c>stream.Position / stream.Length</c>), each time a node finishes loading. This is
+    /// a proxy for actual node-content progress (the file may be compressed/encrypted), but it is
+    /// monotonic and reflects real I/O progress. The total decompressed content size isn't known
+    /// up front (no such field in the header), so this is the best available signal.
+    /// </param>
     public static FileNodeMap Load(
         string imagePath,
         out ulong capacityBytes,
         out string volumeLabel,
         string? password,
-        out byte[]? cek)
+        out byte[]? cek,
+        IProgress<double>? progress = null)
     {
         using var stream = new FileStream(imagePath, FileMode.Open, FileAccess.Read);
         using var reader = new BinaryReader(stream, System.Text.Encoding.UTF8, leaveOpen: false);
@@ -107,9 +115,13 @@ public static class DiskImageSerializer
         ReadHeader(reader, out var version, out var level, out var isEncrypted);
         cek = null;
 
+        Action? reportTick = progress is null
+            ? null
+            : () => progress.Report(stream.Length > 0 ? (double)stream.Position / stream.Length : 1.0);
+
         return version <= 2
-            ? LoadLegacy(stream, reader, version, level, out capacityBytes, out volumeLabel)
-            : LoadCurrent(stream, reader, version, level, isEncrypted, password, out capacityBytes, out volumeLabel, out cek);
+            ? LoadLegacy(stream, reader, version, level, out capacityBytes, out volumeLabel, reportTick)
+            : LoadCurrent(stream, reader, version, level, isEncrypted, password, out capacityBytes, out volumeLabel, out cek, reportTick);
     }
 
     /// <summary>
@@ -169,7 +181,9 @@ public static class DiskImageSerializer
     /// to save unencrypted.
     /// </param>
     /// <param name="progress">
-    /// Optional progress reporter, updated with a fraction in [0, 1] as each node is written.
+    /// Optional progress reporter, updated with a fraction in [0, 1] as each node is written,
+    /// weighted by each node's allocation size against <see cref="FileNodeMap.GetTotalAllocated"/>
+    /// (falls back to an even per-node fraction when the total is zero, e.g. all-empty-directories).
     /// The subsequent gzip compression and (when encrypting) AES-256-GCM chunk encryption happen
     /// as nodes stream through and are not individually reported.
     /// </param>
@@ -283,18 +297,33 @@ public static class DiskImageSerializer
             var nodes = nodeMap.GetAllNodes();
             payloadWriter.Write(nodes.Count);
 
-            if (nodes.Count == 0)
+            var totalBytes = nodeMap.GetTotalAllocated();
+
+            if (nodes.Count == 0 || totalBytes == 0)
             {
-                progress?.Report(1.0);
-            }
-            else
-            {
+                // Nothing to weight progress by (e.g. all-empty-directories case) — fall back to
+                // a simple per-node fraction so progress still reaches 1.0 deterministically.
                 var written = 0;
                 foreach (var kvp in nodes)
                 {
                     WriteNode(payloadWriter, kvp.Key, kvp.Value);
                     written++;
-                    progress?.Report((double)written / nodes.Count);
+                    progress?.Report(nodes.Count == 0 ? 1.0 : (double)written / nodes.Count);
+                }
+
+                if (nodes.Count == 0)
+                {
+                    progress?.Report(1.0);
+                }
+            }
+            else
+            {
+                ulong writtenBytes = 0;
+                foreach (var kvp in nodes)
+                {
+                    WriteNode(payloadWriter, kvp.Key, kvp.Value);
+                    writtenBytes += kvp.Value.FileInfo.AllocationSize;
+                    progress?.Report((double)writtenBytes / totalBytes);
                 }
             }
 
@@ -319,7 +348,8 @@ public static class DiskImageSerializer
         int version,
         ImageCompressionLevel level,
         out ulong capacityBytes,
-        out string volumeLabel)
+        out string volumeLabel,
+        Action? reportTick = null)
     {
         var compressed = version == 2 && level != ImageCompressionLevel.None;
 
@@ -330,7 +360,7 @@ public static class DiskImageSerializer
         capacityBytes = payloadReader.ReadUInt64();
         volumeLabel = payloadReader.ReadString();
 
-        return ReadNodes(payloadReader);
+        return ReadNodes(payloadReader, reportTick);
     }
 
     /// <summary>
@@ -350,7 +380,8 @@ public static class DiskImageSerializer
         string? password,
         out ulong capacityBytes,
         out string volumeLabel,
-        out byte[]? cek)
+        out byte[]? cek,
+        Action? reportTick = null)
     {
         capacityBytes = reader.ReadUInt64();
         volumeLabel = reader.ReadString();
@@ -362,7 +393,7 @@ public static class DiskImageSerializer
             // The node region is the last thing in the file for an unencrypted image, so
             // decompressing straight off the file stream (rather than buffering it) is safe —
             // GZipStream simply reads until end of file.
-            return ReadNodeRegion(stream, compressed);
+            return ReadNodeRegion(stream, compressed, reportTick);
         }
 
         if (password is null)
@@ -381,8 +412,8 @@ public static class DiskImageSerializer
 
         return version switch
         {
-            3 => LoadLegacyEncryptedBlob(stream, reader, resolvedCek, compressed),
-            4 => LoadChunkedEncrypted(stream, reader, resolvedCek, compressed),
+            3 => LoadLegacyEncryptedBlob(stream, reader, resolvedCek, compressed, reportTick),
+            4 => LoadChunkedEncrypted(stream, reader, resolvedCek, compressed, reportTick),
             _ => throw new InvalidDataException($"Unsupported image version: {version}."),
         };
     }
@@ -397,7 +428,8 @@ public static class DiskImageSerializer
         FileStream stream,
         BinaryReader reader,
         byte[] cek,
-        bool compressed)
+        bool compressed,
+        Action? reportTick = null)
     {
         var dataNonce = reader.ReadBytes(NonceSize);
         var dataTag = reader.ReadBytes(TagSize);
@@ -416,8 +448,11 @@ public static class DiskImageSerializer
 
         try
         {
+            // The whole ciphertext was already read off `stream` above, so `stream.Position` is
+            // already at (or near) end-of-file here — reportTick will jump close to 1.0 on the
+            // first node and stay there for the rest of this legacy (version 3) path.
             using var nodeRegionStream = new MemoryStream(plaintext, writable: false);
-            return ReadNodeRegion(nodeRegionStream, compressed);
+            return ReadNodeRegion(nodeRegionStream, compressed, reportTick);
         }
         finally
         {
@@ -434,14 +469,15 @@ public static class DiskImageSerializer
         FileStream stream,
         BinaryReader reader,
         byte[] cek,
-        bool compressed)
+        bool compressed,
+        Action? reportTick = null)
     {
         var baseNonce = reader.ReadBytes(NonceSize);
 
         try
         {
             using var chunkedStream = new ChunkedGcm.ReadStream(stream, cek, baseNonce);
-            return ReadNodeRegion(chunkedStream, compressed);
+            return ReadNodeRegion(chunkedStream, compressed, reportTick);
         }
         catch (CryptographicException)
         {
@@ -453,7 +489,7 @@ public static class DiskImageSerializer
     /// Reads the node-count-prefixed node region from <paramref name="source"/>, transparently
     /// gzip-decompressing when <paramref name="compressed"/> is set. Mirrors <see cref="WriteNodeRegion"/>.
     /// </summary>
-    private static FileNodeMap ReadNodeRegion(Stream source, bool compressed)
+    private static FileNodeMap ReadNodeRegion(Stream source, bool compressed, Action? reportTick = null)
     {
         using var payloadReader = new BinaryReader(
             compressed
@@ -462,7 +498,7 @@ public static class DiskImageSerializer
             System.Text.Encoding.UTF8,
             leaveOpen: true);
 
-        return ReadNodes(payloadReader);
+        return ReadNodes(payloadReader, reportTick);
     }
 
     private static void ReadHeader(
@@ -529,7 +565,7 @@ public static class DiskImageSerializer
         return (path, node);
     }
 
-    private static FileNodeMap ReadNodes(BinaryReader payloadReader)
+    private static FileNodeMap ReadNodes(BinaryReader payloadReader, Action? reportTick = null)
     {
         var nodeMap = new FileNodeMap();
         var count = payloadReader.ReadInt32();
@@ -538,6 +574,7 @@ public static class DiskImageSerializer
         {
             var (path, node) = ReadNode(payloadReader);
             nodeMap.Add(path, node);
+            reportTick?.Invoke();
         }
 
         return nodeMap;

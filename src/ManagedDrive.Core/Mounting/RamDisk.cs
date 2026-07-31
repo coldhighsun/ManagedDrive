@@ -182,9 +182,11 @@ public sealed class RamDisk : IDisposable
     /// Thrown when <paramref name="password"/> does not match the one the image was encrypted with.
     /// </exception>
     /// <param name="progress">
-    /// Optional progress reporter for the archive-extraction path
-    /// (<see cref="DiskOptions.SourceArchivePath"/>), updated with a fraction in [0, 1]. Ignored
-    /// for the image-load path.
+    /// Optional progress reporter, updated with a fraction in [0, 1]. For the archive-extraction
+    /// path (<see cref="DiskOptions.SourceArchivePath"/>) this is a byte-weighted fraction of
+    /// archive content extracted; for the image-load path (<see cref="DiskOptions.PersistImagePath"/>)
+    /// it is the fraction of the image file's raw bytes read so far (see
+    /// <see cref="DiskImageSerializer.Load"/>). Ignored when neither path applies (a brand-new disk).
     /// </param>
     public static RamDisk Create(DiskOptions options, string? password = null, IProgress<double>? progress = null)
     {
@@ -227,7 +229,8 @@ public sealed class RamDisk : IDisposable
                 out var savedCapacity,
                 out var savedLabel,
                 password,
-                out cek);
+                out cek,
+                progress);
 
             var configuredCapacity = savedCapacity > 0 ? savedCapacity : options.CapacityBytes;
             var label = string.IsNullOrEmpty(savedLabel) ? options.VolumeLabel : savedLabel;

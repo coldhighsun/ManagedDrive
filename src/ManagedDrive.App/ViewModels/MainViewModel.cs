@@ -216,6 +216,20 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     } = string.Empty;
 
     /// <summary>
+    /// Gets the "bytes so far / total bytes" detail text shown below <see cref="ExitSaveStatusText"/>,
+    /// driven by <see cref="ReportExitSaveProgress"/>.
+    /// </summary>
+    public string ExitSaveDetailText
+    {
+        get;
+        private set
+        {
+            field = value;
+            OnPropertyChanged(nameof(ExitSaveDetailText));
+        }
+    } = string.Empty;
+
+    /// <summary>
     /// Gets the command that formats (clears all content from) the selected disk.
     /// </summary>
     public RelayCommand FormatDiskCommand
@@ -257,6 +271,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             {
                 ExitSaveProgress = 0;
                 ExitSaveStatusText = Loc.Get("Msg.ExitSaving");
+                ExitSaveDetailText = string.Empty;
             }
         }
     }
@@ -544,14 +559,14 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     /// <c>true</c> if the disk was mounted successfully; <c>false</c> if mounting failed
     /// (the failure reason is surfaced via <see cref="StatusText"/>).
     /// </returns>
-    public async Task<bool> MountFromProfileAsync(DiskProfile profile)
+    public async Task<bool> MountFromProfileAsync(DiskProfile profile, IProgress<double>? progress = null)
     {
         _logger.LogInformation("Auto-mounting saved profile {MountPoint}.", profile.MountPoint);
         var options = ProfileToOptions(profile);
 
         try
         {
-            var disk = await MountWithPasswordRetryAsync(options);
+            var disk = await MountWithPasswordRetryAsync(options, progress: progress);
             if (disk is null)
             {
                 _logger.LogWarning("Auto-mount failed for {MountPoint}.", profile.MountPoint);
@@ -771,16 +786,22 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     }
 
     /// <summary>
-    /// Updates <see cref="ExitSaveProgress"/> and <see cref="ExitSaveStatusText"/> during the
-    /// final on-exit save. Called from <c>App.ShutdownAsync</c> via
-    /// <see cref="ManagedDrive.Core.Mounting.MountManager.Dispose(Action{ManagedDrive.Core.Mounting.RamDisk, double})"/>.
+    /// Updates <see cref="ExitSaveProgress"/>, <see cref="ExitSaveStatusText"/>, and
+    /// <see cref="ExitSaveDetailText"/> during the final on-exit save. Called from
+    /// <c>App.ShutdownAsync</c> via
+    /// <see cref="ManagedDrive.Core.Mounting.MountManager.Dispose(Action{ManagedDrive.Core.Mounting.RamDisk, double, double, ulong})"/>.
     /// </summary>
     /// <param name="mountPoint">The mount point of the disk currently being saved.</param>
-    /// <param name="fraction">Overall progress across all disks, in [0, 1].</param>
-    internal void ReportExitSaveProgress(string mountPoint, double fraction)
+    /// <param name="overallFraction">Overall progress across all disks, in [0, 1].</param>
+    /// <param name="diskFraction">Save progress for the disk currently being saved, in [0, 1].</param>
+    /// <param name="totalBytes">The disk's total used bytes, for <see cref="ExitSaveDetailText"/>.</param>
+    internal void ReportExitSaveProgress(string mountPoint, double overallFraction, double diskFraction, ulong totalBytes)
     {
-        ExitSaveProgress = fraction;
+        ExitSaveProgress = overallFraction;
         ExitSaveStatusText = Loc.Format("Msg.ExitSavingDisk", mountPoint);
+        ExitSaveDetailText = Loc.Format("Busy.ByteProgress",
+            ByteFormatter.Format((ulong)(totalBytes * Math.Clamp(diskFraction, 0.0, 1.0))),
+            ByteFormatter.Format(totalBytes));
     }
 
     internal void SaveSettings()
@@ -981,7 +1002,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         else if (dialog.ExportPath is { } exportPath)
         {
             _logger.LogInformation("Disk export requested: {Source} -> {ExportPath}.", vm.MountPoint, exportPath);
-            BusyOverlay.Start(Loc.Get("Busy.ExportingImage"));
+            BusyOverlay.Start(Loc.Get("Busy.ExportingImage"), totalBytes: vm.Disk.UsedBytes);
             try
             {
                 var progress = new Progress<double>(BusyOverlay.Report);
@@ -1295,7 +1316,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         }
 
         _logger.LogInformation("Import archive requested: {ArchivePath} -> {MountPoint}.", openDialog.FileName, dialog.Result!.MountPoint);
-        BusyOverlay.Start(Loc.Get("Busy.ImportingArchive"), indeterminate: totalBytes == 0);
+        BusyOverlay.Start(Loc.Get("Busy.ImportingArchive"), indeterminate: totalBytes == 0, totalBytes: totalBytes > 0 ? totalBytes : null);
         try
         {
             var progress = new Progress<double>(BusyOverlay.Report);
@@ -1360,7 +1381,18 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         }
 
         _logger.LogInformation("Import disk image requested: {ImagePath} -> {MountPoint}.", openDialog.FileName, dialog.Result!.MountPoint);
-        await MountAndAddAsync(dialog.Result!);
+
+        var fileSizeBytes = (ulong)new FileInfo(openDialog.FileName).Length;
+        BusyOverlay.Start(Loc.Get("Busy.ImportingImage"), totalBytes: fileSizeBytes);
+        try
+        {
+            var progress = new Progress<double>(BusyOverlay.Report);
+            await MountAndAddAsync(dialog.Result!, progress: progress);
+        }
+        finally
+        {
+            BusyOverlay.Stop();
+        }
     }
 
     private async void ExecuteResetTempDirs()
@@ -1491,7 +1523,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 
         _logger.LogInformation("Save image requested for {MountPoint}.", vm.MountPoint);
         vm.IsSaving = true;
-        BusyOverlay.Start(Loc.Get("Busy.SavingImage"));
+        BusyOverlay.Start(Loc.Get("Busy.SavingImage"), totalBytes: vm.Disk.UsedBytes);
         try
         {
             var progress = new Progress<double>(BusyOverlay.Report);

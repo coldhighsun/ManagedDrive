@@ -103,6 +103,8 @@
     <sys:String x:Key="Busy.LoadingDisks">正在加载磁盘 {0}/{1}…</sys:String>
     <sys:String x:Key="Busy.ImportingArchive">正在导入归档…</sys:String>
     <sys:String x:Key="Busy.ExportingImage">正在导出磁盘映像…</sys:String>
+    <sys:String x:Key="Busy.ImportingImage">正在导入磁盘映像…</sys:String>
+    <sys:String x:Key="Busy.ByteProgress">{0} / {1}</sys:String>
     <sys:String x:Key="Card.ReadOnly">只读</sys:String>
     <sys:String x:Key="Card.ReadOnlyNoImage">只读 · 无镜像</sys:String>
     <sys:String x:Key="Card.Encrypted">已加密</sys:String>
