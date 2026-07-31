@@ -74,6 +74,7 @@
             <Setter Property="Foreground" Value="{DynamicResource AppForeground}"/>
             <Setter Property="Padding" Value="4,3"/>
             <EventSetter Event="MouseDoubleClick" Handler="Row_MouseDoubleClick"/>
+            <EventSetter Event="PreviewMouseRightButtonDown" Handler="Row_PreviewMouseRightButtonDown"/>
             <Setter Property="ContextMenu" Value="{StaticResource RowContextMenu}"/>
             <Setter Property="Template">
                 <Setter.Value>
@@ -125,6 +126,7 @@
                           ScrollViewer.VerticalScrollBarVisibility="Auto"
                           ScrollViewer.CanContentScroll="True"
                           VirtualizingStackPanel.IsVirtualizing="True"
+                          SelectionMode="Extended"
                           ItemContainerStyle="{StaticResource FlatListViewItem}"
                           GridViewColumnHeader.Click="ColumnHeader_Click">
                     <ListView.View>
@@ -239,6 +241,26 @@
                         </GridView>
                     </ListView.View>
                 </ListView>
+
+                <!-- Delete-in-progress overlay: a recursive directory delete can take a while,
+                     so this gives feedback instead of a frozen-looking dialog. -->
+                <Border x:Name="DeleteOverlay"
+                        Background="{DynamicResource AppSurface}"
+                        Opacity="0.85"
+                        Visibility="Collapsed">
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <TextBlock x:Name="DeleteSpinner"
+                                   Text="&#xE895;" FontFamily="Segoe Fluent Icons" FontSize="16"
+                                   Foreground="{DynamicResource AppPrimary}"
+                                   RenderTransformOrigin="0.5,0.5">
+                            <TextBlock.RenderTransform>
+                                <RotateTransform x:Name="DeleteSpinnerRotate" Angle="0"/>
+                            </TextBlock.RenderTransform>
+                        </TextBlock>
+                        <TextBlock x:Name="DeleteProgressText" FontSize="12" Margin="6,0,0,0"
+                                   Foreground="{DynamicResource AppForeground}"/>
+                    </StackPanel>
+                </Border>
             </Grid>
         </Border>
 
