@@ -20,8 +20,11 @@ namespace ManagedDrive.App.Views;
 public partial class DiskContentDialog
 {
     private readonly HashSet<DiskContentNode> _expandedNodes = [];
-    private readonly ObservableCollection<DiskContentRow> _rows = [];
+    private readonly bool _isReadOnly;
+    private readonly string _mountPoint;
     private readonly List<DiskContentNode> _rootNodes = [];
+    private readonly ObservableCollection<DiskContentRow> _rows = [];
+    private readonly DiskViewModel _target;
     private bool _sortAscending = true;
     private SortKey _sortKey = SortKey.Name;
 
@@ -32,6 +35,10 @@ public partial class DiskContentDialog
     public DiskContentDialog(DiskViewModel target)
     {
         InitializeComponent();
+
+        _target = target;
+        _isReadOnly = target.IsReadOnly;
+        _mountPoint = target.Disk.MountPoint;
 
         // Override the zero resize border DialogWindowBase's constructor set (most dialogs are
         // fixed-size), so this window alone can be resized by dragging its edges.
@@ -49,12 +56,9 @@ public partial class DiskContentDialog
 
         var nodes = target.Disk.GetAllNodes();
         var root = BuildTree(nodes);
-        _rootNodes = root.Children.Values.Select(ToNode).ToList();
+        _rootNodes = root.Children.Values.Select(child => ToNode(child, "\\" + child.Name)).ToList();
 
-        SummaryText.Text = Loc.Format(
-            "DiskContent.TotalUsage",
-            ByteFormatter.Format(target.Disk.UsedBytes),
-            ByteFormatter.Format(target.Disk.TotalBytes));
+        UpdateSummaryText();
 
         if (_rootNodes.Count == 0)
         {
@@ -151,6 +155,16 @@ public partial class DiskContentDialog
     }
 
     /// <summary>
+    /// Walks the visual tree from a context-menu <see cref="MenuItem"/> up to the
+    /// <see cref="ContextMenu"/>'s <see cref="ContextMenu.PlacementTarget"/> (the
+    /// <see cref="ListViewItem"/> that was right-clicked) and returns its bound row.
+    /// </summary>
+    private static DiskContentRow? GetRowFromMenuItem(object sender) =>
+        ((MenuItem)sender).Parent is ContextMenu { PlacementTarget: ListViewItem { DataContext: DiskContentRow row } }
+            ? row
+            : null;
+
+    /// <summary>
     /// Recursively sums each directory's own <see cref="TreeBuilder.SizeBytes"/> from its
     /// children's sizes (files contribute their own size; already-set for leaves).
     /// </summary>
@@ -171,6 +185,24 @@ public partial class DiskContentDialog
         return total;
     }
 
+    private static bool RemoveNode(List<DiskContentNode> siblings, DiskContentNode node)
+    {
+        if (siblings.Remove(node))
+        {
+            return true;
+        }
+
+        foreach (var sibling in siblings)
+        {
+            if (RemoveNode(sibling.Children, node))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     /// <summary>
     /// Sorts <paramref name="nodes"/> in place using <paramref name="comparer"/>, then recursively
     /// sorts each node's own children the same way — a per-level sort (like Explorer's column
@@ -185,8 +217,9 @@ public partial class DiskContentDialog
         }
     }
 
-    private static DiskContentNode ToNode(TreeBuilder builder) =>
-        new(builder.Name, builder.IsDirectory, builder.SizeBytes, builder.Children.Values.Select(ToNode));
+    private static DiskContentNode ToNode(TreeBuilder builder, string path) =>
+        new(builder.Name, builder.IsDirectory, builder.SizeBytes, path,
+            builder.Children.Values.Select(child => ToNode(child, path + "\\" + child.Name)));
 
     private void AddRows(IEnumerable<DiskContentNode> nodes, int depth)
     {
@@ -229,12 +262,82 @@ public partial class DiskContentDialog
         UpdateSortArrows();
     }
 
+    /// <summary>
+    /// Deletes the row's node from the mounted disk (via its real filesystem path, so the
+    /// WinFsp <c>CanDelete</c>/<c>Cleanup</c> callbacks handle dirty-tracking and capacity
+    /// accounting exactly as they would for any other client), after a confirmation prompt.
+    /// </summary>
+    private void DeleteNode_Click(object sender, RoutedEventArgs e)
+    {
+        if (_isReadOnly || GetRowFromMenuItem(sender) is not { } row)
+        {
+            return;
+        }
+
+        var confirm = new ConfirmDialog(
+            Loc.Get("Msg.DeleteNodeConfirmTitle"),
+            row.Node.IsDirectory
+                ? Loc.Format("Msg.DeleteNodeConfirmBodyFolder", row.Node.Name)
+                : Loc.Format("Msg.DeleteNodeConfirmBodyFile", row.Node.Name))
+        {
+            Owner = this,
+        };
+
+        if (confirm.ShowDialog() != true)
+        {
+            return;
+        }
+
+        var fullPath = ToRealPath(row.Node.FullPath);
+
+        try
+        {
+            if (row.Node.IsDirectory)
+            {
+                Directory.Delete(fullPath, recursive: true);
+            }
+            else
+            {
+                File.Delete(fullPath);
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            new ConfirmDialog(Loc.Get("Msg.DeleteNodeConfirmTitle"), Loc.Format("Msg.DeleteNodeFailed", row.Node.Name, ex.Message))
+            {
+                Owner = this,
+            }.ShowDialog();
+            return;
+        }
+
+        RemoveNode(row.Node);
+        _expandedNodes.Remove(row.Node);
+        RebuildRows();
+        UpdateSummaryText();
+    }
+
     private void ExpanderButton_Click(object sender, RoutedEventArgs e)
     {
         if (((Button)sender).DataContext is DiskContentRow row)
         {
             ToggleExpanded(row);
         }
+    }
+
+    /// <summary>
+    /// Opens the row's node in Explorer: directories are opened directly, files are opened with
+    /// <c>/select,</c> so Explorer highlights the file within its parent folder.
+    /// </summary>
+    private void OpenInExplorer_Click(object sender, RoutedEventArgs e)
+    {
+        if (GetRowFromMenuItem(sender) is not { } row)
+        {
+            return;
+        }
+
+        var fullPath = ToRealPath(row.Node.FullPath);
+
+        Process.Start("explorer.exe", row.Node.IsDirectory ? fullPath : $"/select,\"{fullPath}\"");
     }
 
     /// <summary>
@@ -247,6 +350,13 @@ public partial class DiskContentDialog
         _rows.Clear();
         AddRows(_rootNodes, depth: 0);
     }
+
+    /// <summary>
+    /// Removes <paramref name="node"/> from whichever list in <see cref="_rootNodes"/> (or a
+    /// descendant's <see cref="DiskContentNode.Children"/>) currently holds it, by reference.
+    /// </summary>
+    private bool RemoveNode(DiskContentNode node) =>
+        RemoveNode(_rootNodes, node);
 
     private SortKey? ResolveSortKey(object column) =>
             Equals(column, NameColumn) ? SortKey.Name :
@@ -275,6 +385,19 @@ public partial class DiskContentDialog
     }
 
     /// <summary>
+    /// Disables the context menu's "Delete" entry when the disk is read-only, since attempting
+    /// the delete would fail anyway (WinFsp returns <c>STATUS_MEDIA_WRITE_PROTECTED</c>) — this
+    /// gives the user feedback up front instead of a failed-delete message box.
+    /// </summary>
+    private void RowContextMenu_Opened(object sender, RoutedEventArgs e)
+    {
+        if (((ContextMenu)sender).Items.OfType<MenuItem>().LastOrDefault() is { } deleteItem)
+        {
+            deleteItem.IsEnabled = !_isReadOnly;
+        }
+    }
+
+    /// <summary>
     /// Toggles the given row's node between expanded and collapsed and rebuilds the flattened
     /// row list to match.
     /// </summary>
@@ -287,6 +410,13 @@ public partial class DiskContentDialog
 
         RebuildRows();
     }
+
+    /// <summary>
+    /// Converts a disk-relative virtual path (e.g. <c>\Folder\File.txt</c>) into a real
+    /// filesystem path under this disk's mount point.
+    /// </summary>
+    private string ToRealPath(string virtualPath) =>
+        Path.Combine(_mountPoint, virtualPath.TrimStart('\\').Replace('\\', Path.DirectorySeparatorChar));
 
     /// <summary>
     /// Shows a chevron next to the active sort column's header text (pointing up for ascending,
@@ -311,6 +441,12 @@ public partial class DiskContentDialog
         arrow.Text = _sortAscending ? ascendingGlyph : descendingGlyph;
         arrow.Visibility = Visibility.Visible;
     }
+
+    private void UpdateSummaryText() =>
+        SummaryText.Text = Loc.Format(
+            "DiskContent.TotalUsage",
+            ByteFormatter.Format(_target.Disk.UsedBytes),
+            ByteFormatter.Format(_target.Disk.TotalBytes));
 
     private sealed class TreeBuilder(string name, bool isDirectory)
     {
@@ -337,7 +473,7 @@ public sealed class DiskContentNode
     /// Initializes a node, deriving <see cref="TypeDisplay"/> from <paramref name="isDirectory"/>
     /// and the file extension in <paramref name="name"/>.
     /// </summary>
-    public DiskContentNode(string name, bool isDirectory, ulong sizeBytes, IEnumerable<DiskContentNode> children)
+    public DiskContentNode(string name, bool isDirectory, ulong sizeBytes, string fullPath, IEnumerable<DiskContentNode> children)
     {
         Name = name;
         IsDirectory = isDirectory;
@@ -345,6 +481,7 @@ public sealed class DiskContentNode
         TypeDisplay = BuildTypeDisplay(name, isDirectory);
         Children = [.. children];
         SizeBytes = sizeBytes;
+        FullPath = fullPath;
     }
 
     /// <summary>
@@ -352,6 +489,15 @@ public sealed class DiskContentNode
     /// <see cref="DiskContentDialog"/> when the user changes the active sort column.
     /// </summary>
     public List<DiskContentNode> Children
+    {
+        get;
+    }
+
+    /// <summary>
+    /// Gets this node's full virtual path on the disk (e.g. <c>\Folder\File.txt</c>), used to
+    /// locate the corresponding real file under the disk's mount point.
+    /// </summary>
+    public string FullPath
     {
         get;
     }

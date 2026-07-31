@@ -13,6 +13,18 @@
         <views:DepthToIndentConverter x:Key="DepthToIndentConverter"/>
         <BooleanToVisibilityConverter x:Key="BoolToVis"/>
 
+        <!-- Defined as a standalone resource (rather than inline inside FlatListViewItem's
+             ContextMenu Setter.Value) so the WPF markup compiler wires its events via the normal
+             IComponentConnector path instead of IStyleConnector — mixing an EventSetter with a
+             nested element that itself has event handlers inside the same Style has been observed
+             to make the compiler emit a wrong connectionId cast (e.g. to Grid) for the nested
+             element on some SDK versions. -->
+        <ContextMenu x:Key="RowContextMenu" Opened="RowContextMenu_Opened">
+            <MenuItem Header="{DynamicResource Btn.OpenInExplorer}" Click="OpenInExplorer_Click"/>
+            <Separator/>
+            <MenuItem Header="{DynamicResource DiskContent.Delete}" Click="DeleteNode_Click"/>
+        </ContextMenu>
+
         <!-- Flat theme for GridViewColumnHeader: the default WPF chrome is an Aero-style
              bevel/gradient that clashes with this app's flat light/dark theme. -->
         <Style x:Key="FlatGridViewColumnHeader" TargetType="GridViewColumnHeader">
@@ -62,6 +74,7 @@
             <Setter Property="Foreground" Value="{DynamicResource AppForeground}"/>
             <Setter Property="Padding" Value="4,3"/>
             <EventSetter Event="MouseDoubleClick" Handler="Row_MouseDoubleClick"/>
+            <Setter Property="ContextMenu" Value="{StaticResource RowContextMenu}"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="ListViewItem">
