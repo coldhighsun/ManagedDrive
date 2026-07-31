@@ -34,12 +34,15 @@ public sealed class MountManager : IDisposable
     public void Dispose() => Dispose(null);
 
     /// <summary>
-    /// Unmounts and disposes all active disks, as <see cref="Dispose()"/>, but reports overall
-    /// save progress across all disks via <paramref name="onOverallProgress"/> (the disk
-    /// currently being saved, and a fraction in [0, 1] across the whole disposal).
+    /// Unmounts and disposes all active disks, as <see cref="Dispose()"/>, but reports save
+    /// progress via <paramref name="onProgress"/>: the disk currently being saved, that disk's
+    /// own save fraction in [0, 1], the overall fraction across the whole disposal (also [0, 1],
+    /// accounting for disks already finished/not yet started), and that disk's total used bytes
+    /// (captured before disposal, since <c>disk.UsedBytes</c> can no longer be read afterwards —
+    /// <see cref="RamDisk.Dispose()"/> disposes the underlying node map).
     /// </summary>
-    /// <param name="onOverallProgress">Optional overall progress callback.</param>
-    public void Dispose(Action<RamDisk, double>? onOverallProgress)
+    /// <param name="onProgress">Optional progress callback.</param>
+    public void Dispose(Action<RamDisk, double, double, ulong>? onProgress)
     {
         List<RamDisk> all;
 
@@ -57,14 +60,21 @@ public sealed class MountManager : IDisposable
             var diskIndex = i;
 
             disk.ContentAccessed -= OnDiskContentAccessed;
-            onOverallProgress?.Invoke(disk, (double)diskIndex / count);
 
-            var perDiskProgress = onOverallProgress is null
+            // Captured once, before Dispose runs, since UsedBytes reads the node map that
+            // Dispose() tears down — reading it from a progress callback fired after disposal
+            // (e.g. the final 1.0 report below, or a delayed UI-thread dispatch of a mid-save
+            // tick) would throw ObjectDisposedException.
+            var totalBytes = disk.UsedBytes;
+
+            onProgress?.Invoke(disk, 0.0, (double)diskIndex / count, totalBytes);
+
+            var perDiskProgress = onProgress is null
                 ? null
-                : new Progress<double>(p => onOverallProgress(disk, (diskIndex + p) / count));
+                : new Progress<double>(p => onProgress(disk, p, (diskIndex + p) / count, totalBytes));
             disk.Dispose(perDiskProgress);
 
-            onOverallProgress?.Invoke(disk, (double)(diskIndex + 1) / count);
+            onProgress?.Invoke(disk, 1.0, (double)(diskIndex + 1) / count, totalBytes);
         }
     }
 

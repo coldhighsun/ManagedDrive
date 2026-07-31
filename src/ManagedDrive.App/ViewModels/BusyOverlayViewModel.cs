@@ -1,3 +1,5 @@
+using ManagedDrive.Cli.Core;
+
 namespace ManagedDrive.App.ViewModels;
 
 /// <summary>
@@ -85,23 +87,62 @@ public sealed class BusyOverlayViewModel : INotifyPropertyChanged
     } = string.Empty;
 
     /// <summary>
-    /// Updates the current progress fraction, clamped to [0, 1].
+    /// Gets the "bytes so far / total bytes" detail text shown below <see cref="StatusText"/>, or
+    /// an empty string when <see cref="Start"/> wasn't given a total byte count.
+    /// </summary>
+    public string DetailText
+    {
+        get;
+        private set
+        {
+            if (field == value)
+            {
+                return;
+            }
+
+            field = value;
+            OnPropertyChanged(nameof(DetailText));
+        }
+    } = string.Empty;
+
+    private ulong? _totalBytes;
+
+    /// <summary>
+    /// Updates the current progress fraction, clamped to [0, 1], and — when <see cref="Start"/>
+    /// was given a total byte count — recomputes <see cref="DetailText"/> from it.
     /// </summary>
     /// <param name="value">Progress fraction to report.</param>
-    public void Report(double value) => Progress = Math.Clamp(value, 0.0, 1.0);
+    public void Report(double value)
+    {
+        Progress = Math.Clamp(value, 0.0, 1.0);
+
+        if (_totalBytes is { } total)
+        {
+            DetailText = FormatDetail((ulong)(total * Progress), total);
+        }
+    }
 
     /// <summary>
     /// Shows the overlay with a fresh <paramref name="statusText"/> and resets progress to zero.
     /// </summary>
     /// <param name="statusText">Status text to display above the progress bar.</param>
     /// <param name="indeterminate">Whether the operation has no computable total.</param>
-    public void Start(string statusText, bool indeterminate = false)
+    /// <param name="totalBytes">
+    /// Total byte count for the operation, used to populate <see cref="DetailText"/> as progress
+    /// advances, or <see langword="null"/> to leave <see cref="DetailText"/> empty.
+    /// </param>
+    public void Start(string statusText, bool indeterminate = false, ulong? totalBytes = null)
     {
         StatusText = statusText;
         IsIndeterminate = indeterminate;
         Progress = 0;
+        _totalBytes = totalBytes;
+        DetailText = totalBytes is { } total ? FormatDetail(0, total) : string.Empty;
         IsBusy = true;
     }
+
+    private static string FormatDetail(ulong soFar, ulong total) =>
+        Loc.Format("Busy.ByteProgress", ByteFormatter.Format(soFar), ByteFormatter.Format(total));
 
     /// <summary>
     /// Hides the overlay.
