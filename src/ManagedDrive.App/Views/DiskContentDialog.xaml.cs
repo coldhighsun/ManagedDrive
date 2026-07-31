@@ -5,6 +5,7 @@ using System.Windows.Controls;
 using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
 using System.Windows.Shell;
 
 namespace ManagedDrive.App.Views;
@@ -25,6 +26,7 @@ public partial class DiskContentDialog
     private readonly List<DiskContentNode> _rootNodes = [];
     private readonly ObservableCollection<DiskContentRow> _rows = [];
     private readonly DiskViewModel _target;
+    private CancellationTokenSource? _deleteCts;
     private bool _sortAscending = true;
     private SortKey _sortKey = SortKey.Name;
 
@@ -53,6 +55,12 @@ public partial class DiskContentDialog
         // Only resizable dialog in the app, so it's the only one that can be maximized — without
         // this, the borderless + transparent window ignores the taskbar's work area and covers it.
         WindowMaximizeHelper.HookMaximizeBehavior(this);
+
+        // Cancel any in-flight delete instead of leaving it to keep deleting files after the
+        // dialog (and its close-button/context-menu-driven cancellation surface) is gone — fires
+        // for every close path (title bar X, bottom Close button, Esc), since Window.Closing is
+        // the common point they all funnel through.
+        Closing += (_, _) => _deleteCts?.Cancel();
 
         var nodes = target.Disk.GetAllNodes();
         var root = BuildTree(nodes);
@@ -136,6 +144,38 @@ public partial class DiskContentDialog
 
         PropagateSizes(root);
         return root;
+    }
+
+    /// <summary>
+    /// Counts the files under <paramref name="directoryFullPath"/> (recursively), used only to
+    /// populate the delete overlay's "x / total" progress text. Best-effort: any enumeration
+    /// failure (e.g. a file becoming inaccessible mid-scan) just falls back to an unknown total,
+    /// since the real error handling happens during the actual delete pass.
+    /// </summary>
+    private static int CountFilesSafe(string directoryFullPath)
+    {
+        try
+        {
+            return Directory.EnumerateFiles(directoryFullPath, "*", SearchOption.AllDirectories).Count();
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return 0;
+        }
+    }
+
+    /// <summary>
+    /// Drops any node whose path falls under another selected directory node, so a selection
+    /// containing both a folder and its own descendants doesn't attempt to delete the descendant
+    /// a second time after the folder's recursive delete already removed it.
+    /// </summary>
+    private static List<DiskContentNode> ExcludeDescendantsOfSelectedDirectories(List<DiskContentNode> nodes)
+    {
+        var selectedDirectoryPaths = nodes.Where(n => n.IsDirectory).Select(n => n.FullPath).ToList();
+
+        return nodes.Where(node => !selectedDirectoryPaths.Any(dirPath =>
+            !string.Equals(dirPath, node.FullPath, StringComparison.OrdinalIgnoreCase) &&
+            node.FullPath.StartsWith(dirPath + "\\", StringComparison.OrdinalIgnoreCase))).ToList();
     }
 
     /// <summary>
@@ -263,22 +303,44 @@ public partial class DiskContentDialog
     }
 
     /// <summary>
-    /// Deletes the row's node from the mounted disk (via its real filesystem path, so the
-    /// WinFsp <c>CanDelete</c>/<c>Cleanup</c> callbacks handle dirty-tracking and capacity
-    /// accounting exactly as they would for any other client), after a confirmation prompt.
+    /// Deletes every selected row's node from the mounted disk (via its real filesystem path, so
+    /// the WinFsp <c>CanDelete</c>/<c>Cleanup</c> callbacks handle dirty-tracking and capacity
+    /// accounting exactly as they would for any other client), after a single confirmation
+    /// prompt covering the whole selection. The actual delete I/O runs off the UI thread behind
+    /// <see cref="DeleteOverlay"/>, since a recursive directory delete of many files can take a
+    /// noticeable amount of time.
     /// </summary>
-    private void DeleteNode_Click(object sender, RoutedEventArgs e)
+    private async void DeleteNode_Click(object sender, RoutedEventArgs e)
     {
-        if (_isReadOnly || GetRowFromMenuItem(sender) is not { } row)
+        if (_isReadOnly)
         {
             return;
         }
 
-        var confirm = new ConfirmDialog(
-            Loc.Get("Msg.DeleteNodeConfirmTitle"),
-            row.Node.IsDirectory
-                ? Loc.Format("Msg.DeleteNodeConfirmBodyFolder", row.Node.Name)
-                : Loc.Format("Msg.DeleteNodeConfirmBodyFile", row.Node.Name))
+        var selectedNodes = ContentList.SelectedItems.Cast<DiskContentRow>().Select(r => r.Node).ToList();
+        if (selectedNodes.Count == 0)
+        {
+            if (GetRowFromMenuItem(sender) is not { } fallbackRow)
+            {
+                return;
+            }
+
+            selectedNodes = [fallbackRow.Node];
+        }
+
+        var nodesToDelete = ExcludeDescendantsOfSelectedDirectories(selectedNodes);
+        if (nodesToDelete.Count == 0)
+        {
+            return;
+        }
+
+        var confirmBody = nodesToDelete.Count == 1
+            ? (nodesToDelete[0].IsDirectory
+                ? Loc.Format("Msg.DeleteNodeConfirmBodyFolder", nodesToDelete[0].Name)
+                : Loc.Format("Msg.DeleteNodeConfirmBodyFile", nodesToDelete[0].Name))
+            : Loc.Format("Msg.DeleteNodeConfirmBodyMultiple", nodesToDelete.Count);
+
+        var confirm = new ConfirmDialog(Loc.Get("Msg.DeleteNodeConfirmTitle"), confirmBody)
         {
             Owner = this,
         };
@@ -288,32 +350,93 @@ public partial class DiskContentDialog
             return;
         }
 
-        var fullPath = ToRealPath(row.Node.FullPath);
+        IProgress<(int Completed, int Total)> progress =
+            new Progress<(int Completed, int Total)>(p => UpdateDeleteProgressText(p.Completed, p.Total));
+        ShowDeleteOverlay();
+
+        _deleteCts = new CancellationTokenSource();
+        var token = _deleteCts.Token;
+
+        var deletedNodes = new List<DiskContentNode>();
+        (string Name, string Message)? failure = null;
 
         try
         {
-            if (row.Node.IsDirectory)
+            await Task.Run(() =>
             {
-                Directory.Delete(fullPath, recursive: true);
-            }
-            else
-            {
-                File.Delete(fullPath);
-            }
+                // Counted (and later enumerated) live off the real filesystem rather than the
+                // dialog's node-tree snapshot, so the total stays accurate even if the disk's
+                // contents changed after the dialog was opened.
+                var totalFiles = nodesToDelete.Sum(node => node.IsDirectory ? CountFilesSafe(ToRealPath(node.FullPath)) : 1);
+                var completed = 0;
+                progress.Report((completed, totalFiles));
+
+                foreach (var node in nodesToDelete)
+                {
+                    token.ThrowIfCancellationRequested();
+
+                    var fullPath = ToRealPath(node.FullPath);
+
+                    try
+                    {
+                        if (node.IsDirectory)
+                        {
+                            foreach (var filePath in Directory.EnumerateFiles(fullPath, "*", SearchOption.AllDirectories))
+                            {
+                                token.ThrowIfCancellationRequested();
+                                File.Delete(filePath);
+                                completed++;
+                                progress.Report((completed, totalFiles));
+                            }
+
+                            Directory.Delete(fullPath, recursive: true);
+                        }
+                        else
+                        {
+                            File.Delete(fullPath);
+                            completed++;
+                            progress.Report((completed, totalFiles));
+                        }
+                    }
+                    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                    {
+                        failure = (node.Name, ex.Message);
+                        break;
+                    }
+
+                    deletedNodes.Add(node);
+                }
+            }, token);
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        catch (OperationCanceledException)
         {
-            new ConfirmDialog(Loc.Get("Msg.DeleteNodeConfirmTitle"), Loc.Format("Msg.DeleteNodeFailed", row.Node.Name, ex.Message))
+            // The dialog is closing (see the Closing handler in the constructor) — no point
+            // updating the now-departing UI for whatever got deleted before cancellation.
+            return;
+        }
+        finally
+        {
+            _deleteCts.Dispose();
+            _deleteCts = null;
+            HideDeleteOverlay();
+        }
+
+        foreach (var node in deletedNodes)
+        {
+            RemoveNode(node);
+            _expandedNodes.Remove(node);
+        }
+
+        RebuildRows();
+        UpdateSummaryText();
+
+        if (failure is { } f)
+        {
+            new ConfirmDialog(Loc.Get("Msg.DeleteNodeConfirmTitle"), Loc.Format("Msg.DeleteNodeFailed", f.Name, f.Message))
             {
                 Owner = this,
             }.ShowDialog();
-            return;
         }
-
-        RemoveNode(row.Node);
-        _expandedNodes.Remove(row.Node);
-        RebuildRows();
-        UpdateSummaryText();
     }
 
     private void ExpanderButton_Click(object sender, RoutedEventArgs e)
@@ -322,6 +445,16 @@ public partial class DiskContentDialog
         {
             ToggleExpanded(row);
         }
+    }
+
+    /// <summary>
+    /// Hides <see cref="DeleteOverlay"/> and stops its spinner animation.
+    /// </summary>
+    private void HideDeleteOverlay()
+    {
+        DeleteSpinnerRotate.BeginAnimation(RotateTransform.AngleProperty, null);
+        DeleteOverlay.Visibility = Visibility.Collapsed;
+        ContentList.IsEnabled = true;
     }
 
     /// <summary>
@@ -359,10 +492,10 @@ public partial class DiskContentDialog
         RemoveNode(_rootNodes, node);
 
     private SortKey? ResolveSortKey(object column) =>
-            Equals(column, NameColumn) ? SortKey.Name :
-            Equals(column, SizeColumn) ? SortKey.Size :
-            Equals(column, TypeColumn) ? SortKey.Type :
-            null;
+                Equals(column, NameColumn) ? SortKey.Name :
+                Equals(column, SizeColumn) ? SortKey.Size :
+                Equals(column, TypeColumn) ? SortKey.Type :
+                null;
 
     /// <summary>
     /// Expands or collapses a directory row when it's double-clicked anywhere except the
@@ -385,6 +518,25 @@ public partial class DiskContentDialog
     }
 
     /// <summary>
+    /// Mimics Explorer's right-click selection behavior: right-clicking a row that's already
+    /// part of the current multi-selection leaves the selection untouched (so the context menu's
+    /// "Delete" applies to the whole selection), while right-clicking outside it collapses the
+    /// selection down to just that row.
+    /// </summary>
+    private void Row_PreviewMouseRightButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (((ListViewItem)sender).Content is not DiskContentRow row)
+        {
+            return;
+        }
+
+        if (!ContentList.SelectedItems.Contains(row))
+        {
+            ContentList.SelectedItem = row;
+        }
+    }
+
+    /// <summary>
     /// Disables the context menu's "Delete" entry when the disk is read-only, since attempting
     /// the delete would fail anyway (WinFsp returns <c>STATUS_MEDIA_WRITE_PROTECTED</c>) — this
     /// gives the user feedback up front instead of a failed-delete message box.
@@ -395,6 +547,20 @@ public partial class DiskContentDialog
         {
             deleteItem.IsEnabled = !_isReadOnly;
         }
+    }
+
+    /// <summary>
+    /// Shows <see cref="DeleteOverlay"/> over the content list and starts its spinner spinning,
+    /// also disabling the list so the selection can't change mid-delete.
+    /// </summary>
+    private void ShowDeleteOverlay()
+    {
+        ContentList.IsEnabled = false;
+        DeleteProgressText.Text = Loc.Get("DiskContent.Deleting");
+        DeleteOverlay.Visibility = Visibility.Visible;
+        DeleteSpinnerRotate.BeginAnimation(
+            RotateTransform.AngleProperty,
+            new DoubleAnimation(0, 360, TimeSpan.FromSeconds(1)) { RepeatBehavior = RepeatBehavior.Forever });
     }
 
     /// <summary>
@@ -417,6 +583,16 @@ public partial class DiskContentDialog
     /// </summary>
     private string ToRealPath(string virtualPath) =>
         Path.Combine(_mountPoint, virtualPath.TrimStart('\\').Replace('\\', Path.DirectorySeparatorChar));
+
+    /// <summary>
+    /// Updates the delete overlay's status text with a "x / total" file count, or falls back to
+    /// the plain "Deleting..." text when <paramref name="total"/> is unknown/zero (e.g. the
+    /// selection is only empty directories, or the up-front file count failed).
+    /// </summary>
+    private void UpdateDeleteProgressText(int completed, int total) =>
+        DeleteProgressText.Text = total > 0
+            ? Loc.Format("DiskContent.DeletingProgress", completed, total)
+            : Loc.Get("DiskContent.Deleting");
 
     /// <summary>
     /// Shows a chevron next to the active sort column's header text (pointing up for ascending,

@@ -19,7 +19,7 @@
     <sys:String x:Key="Btn.FormatDisk">Format…</sys:String>
     <sys:String x:Key="Btn.CloneDisk">Clone / Export Disk...</sys:String>
     <sys:String x:Key="Btn.RestoreSnapshot">Restore Snapshot...</sys:String>
-    <sys:String x:Key="Btn.ViewDiskContents">View Disk Contents...</sys:String>
+    <sys:String x:Key="Btn.ViewDiskContents">Disk Contents...</sys:String>
     <sys:String x:Key="Btn.Refresh">Refresh</sys:String>
     <sys:String x:Key="Btn.Settings">Settings</sys:String>
     <sys:String x:Key="Tip.NewDisk">Create and mount a new RAM disk</sys:String>
@@ -285,6 +285,9 @@
     <sys:String x:Key="Msg.DeleteNodeConfirmTitle">Delete</sys:String>
     <sys:String x:Key="Msg.DeleteNodeConfirmBodyFile">Delete "{0}"? This cannot be undone.</sys:String>
     <sys:String x:Key="Msg.DeleteNodeConfirmBodyFolder">Delete "{0}" and everything inside it? This cannot be undone.</sys:String>
+    <sys:String x:Key="Msg.DeleteNodeConfirmBodyMultiple">Delete the {0} selected items? This cannot be undone.</sys:String>
+    <sys:String x:Key="DiskContent.Deleting">Deleting...</sys:String>
+    <sys:String x:Key="DiskContent.DeletingProgress">Deleting... ({0}/{1})</sys:String>
     <sys:String x:Key="Msg.DeleteNodeFailed">Failed to delete "{0}":&#x0a;{1}</sys:String>
     <sys:String x:Key="Msg.EditDiskConfirmTitle">Edit Disk</sys:String>
     <sys:String x:Key="Msg.EditDiskConfirmBody">Edit {0} ({1})?&#x0a;&#x0a;The disk will be unmounted and remounted with the new settings. All data currently in memory will be lost.</sys:String>
