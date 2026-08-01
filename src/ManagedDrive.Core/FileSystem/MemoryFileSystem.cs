@@ -493,6 +493,7 @@ public sealed class MemoryFileSystem : FileSystemBase
         NodeMap.UpdateAllocationSize(node, aligned);
         node.FileInfo.FileSize = 0;
         node.FileData = aligned > 0 ? FileContent.CreateZeroed(aligned) : null;
+        node.ContentVersion++;
 
         var now = FileTimeNow();
         node.FileInfo.LastAccessTime = now;
@@ -805,18 +806,20 @@ public sealed class MemoryFileSystem : FileSystemBase
         if (length > 0 && node.FileData != null)
         {
             node.FileData.WriteFrom(buffer, writeOffset, length);
+            node.ContentVersion++;
         }
 
         bytesTransferred = length;
         Interlocked.Add(ref _totalBytesWritten, length);
 
-        var now = FileTimeNow();
+        var nowOffset = DateTimeOffset.UtcNow;
+        var now = (ulong)nowOffset.ToFileTime();
         node.FileInfo.LastAccessTime = now;
         node.FileInfo.LastWriteTime = now;
         node.FileInfo.ChangeTime = now;
 
-        MarkDirty();
-        Interlocked.Exchange(ref _lastContentWriteAccess, new(DateTimeOffset.UtcNow, node.FilePath));
+        MarkDirty(nowOffset);
+        Interlocked.Exchange(ref _lastContentWriteAccess, new(nowOffset, node.FilePath));
         fileInfo = node.FileInfo;
         return STATUS_SUCCESS;
     }
@@ -829,10 +832,17 @@ public sealed class MemoryFileSystem : FileSystemBase
     /// <summary>
     /// Marks the disk's content as changed since the last save.
     /// </summary>
-    internal void MarkDirty()
+    internal void MarkDirty() => MarkDirty(DateTimeOffset.UtcNow);
+
+    /// <summary>
+    /// Marks the disk's content as changed since the last save, using a caller-supplied
+    /// timestamp to avoid redundant <see cref="DateTimeOffset.UtcNow"/> calls on hot paths
+    /// that already captured "now" for other purposes.
+    /// </summary>
+    private void MarkDirty(DateTimeOffset now)
     {
         _isDirty = true;
-        Interlocked.Exchange(ref _lastContentWriteTicks, DateTimeOffset.UtcNow.UtcTicks);
+        Interlocked.Exchange(ref _lastContentWriteTicks, now.UtcTicks);
         ContentAccessed?.Invoke(true);
     }
 
@@ -1014,6 +1024,7 @@ public sealed class MemoryFileSystem : FileSystemBase
             node.FileInfo.FileSize = newSize;
         }
 
+        node.ContentVersion++;
         return STATUS_SUCCESS;
     }
 
