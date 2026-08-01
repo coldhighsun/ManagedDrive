@@ -23,5 +23,6 @@
     <PackageVersion Include="Serilog.Sinks.Async" Version="2.1.0" />
     <PackageVersion Include="YamlDotNet" Version="18.1.0" />
     <PackageVersion Include="ThrottledLogging" Version="1.0.10" />
+    <PackageVersion Include="ZstdSharp.Port" Version="0.8.8" />
   </ItemGroup>
 </Project>
