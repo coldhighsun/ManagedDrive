@@ -138,13 +138,13 @@ Measured with [BenchmarkDotNet](https://benchmarkdotnet.org/) (Intel Core i9-139
 
 | Scenario | RAM Disk | NVMe SSD | Ratio |
 |---|---:|---:|---:|
-| Sequential write, 4 KB | 2.2 MB/s | 0.8 MB/s | **2.9× faster** |
-| Sequential write, 1 MB | 580 MB/s | 104 MB/s | **5.6× faster** |
-| Sequential read, 4 KB / 1 MB | 3.0 MB/s / 643 MB/s | 3.0 MB/s / 677 MB/s | ≈ parity |
-| Random 4 KB read, 30 seeks over 16 MB | 1.9–2.3 ms | 1.6 ms | ~1.2–1.4× slower |
-| 30× small-file (4 KB) create+write | 51.6 ms (1.72 ms/file) | 80.7 ms (2.69 ms/file) | **1.6× faster** |
+| Sequential write, 4 KB | 1.31 MB/s | 0.87 MB/s | **1.5× faster** |
+| Sequential write, 1 MB | 321.9 MB/s | 84.6 MB/s | **3.8× faster** |
+| Sequential read (OS cache), 4 KB / 1 MB | 3.4 MB/s / 531.6 MB/s | 4.5 MB/s / 955.5 MB/s | ~1.3–1.8× slower |
+| Random 4 KB read, 30 seeks over 16 MB | 1.7× slower (OS cache) – 1.6× faster (uncached) | — | mixed |
+| 30× small-file (4 KB) create+write | 84.1 ms (2.81 ms/file) | 144.8 ms (4.83 ms/file) | **1.7× faster** |
 
-Writes and small-file create+write win big by skipping block allocation, journaling, and the physical write; sequential reads land near parity with an OS page-cache hit (a user-mode file system can't consistently beat the kernel's own DRAM cache); random reads are modestly slower since each seek pays a kernel–userspace round-trip through WinFsp. Run `dotnet run --project benchmarks/ManagedDrive.Benchmarks -c Release` for current numbers on your own hardware (see [Running Benchmarks](#running-benchmarks) below).
+Writes and small-file create+write win big by skipping block allocation, journaling, and the physical write; sequential reads trail the NVMe drive even on an OS page-cache hit (a user-mode file system can't consistently beat the kernel's own DRAM cache, and every WinFsp callback pays a kernel–userspace round trip); random reads land close to parity, faster or slower depending on whether the physical disk's own cache is warm. Run `dotnet run --project benchmarks/ManagedDrive.Benchmarks -c Release` for current numbers on your own hardware (see [Running Benchmarks](#running-benchmarks) below).
 
 ### Running Tests
 
@@ -365,13 +365,13 @@ ManagedDrive 使用 **WinFsp**（Windows 文件系统代理）将内存目录树
 
 | 场景 | 内存盘 | NVMe SSD | 倍率 |
 |---|---:|---:|---:|
-| 顺序写入，4 KB | 2.2 MB/s | 0.8 MB/s | **快 2.9×** |
-| 顺序写入，1 MB | 580 MB/s | 104 MB/s | **快 5.6×** |
-| 顺序读取，4 KB / 1 MB | 3.0 MB/s / 643 MB/s | 3.0 MB/s / 677 MB/s | ≈ 持平 |
-| 随机 4 KB 读取，对 16 MB 文件寻址 30 次 | 1.9–2.3 ms | 1.6 ms | 慢 ~1.2–1.4× |
-| 30 次小文件（4 KB）创建+写入 | 51.6 ms（1.72 ms/文件） | 80.7 ms（2.69 ms/文件） | **快 1.6×** |
+| 顺序写入，4 KB | 1.31 MB/s | 0.87 MB/s | **快 1.5×** |
+| 顺序写入，1 MB | 321.9 MB/s | 84.6 MB/s | **快 3.8×** |
+| 顺序读取（OS 缓存），4 KB / 1 MB | 3.4 MB/s / 531.6 MB/s | 4.5 MB/s / 955.5 MB/s | 慢 ~1.3–1.8× |
+| 随机 4 KB 读取，对 16 MB 文件寻址 30 次 | 慢 1.7×（OS 缓存）～快 1.6×（未缓存） | — | 不一致 |
+| 30 次小文件（4 KB）创建+写入 | 84.1 ms（2.81 ms/文件） | 144.8 ms（4.83 ms/文件） | **快 1.7×** |
 
-写入及小文件创建+写入优势明显，因为跳过了物理块分配、日志记录和实际落盘；顺序读取与 OS 页缓存命中基本持平（用户态文件系统无法稳定超越内核自身的 DRAM 缓存）；随机读取略慢，因为每次寻址都要经过 WinFsp 的内核–用户态往返。运行 `dotnet run --project benchmarks/ManagedDrive.Benchmarks -c Release` 可在你自己的硬件上获取当前数据（见下方[运行基准测试](#running-benchmarks-zh)）。
+写入及小文件创建+写入优势明显，因为跳过了物理块分配、日志记录和实际落盘；顺序读取即便命中 OS 页缓存也不及 NVMe 硬盘（用户态文件系统无法稳定超越内核自身的 DRAM 缓存，且每次 WinFsp 回调都要经过一次内核–用户态往返）；随机读取基本持平，具体快慢取决于物理磁盘自身缓存是否命中。运行 `dotnet run --project benchmarks/ManagedDrive.Benchmarks -c Release` 可在你自己的硬件上获取当前数据（见下方[运行基准测试](#running-benchmarks-zh)）。
 
 ### 运行测试
 
