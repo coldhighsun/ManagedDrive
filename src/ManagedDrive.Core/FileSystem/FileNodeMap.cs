@@ -7,7 +7,13 @@ namespace ManagedDrive.Core.FileSystem;
 /// </summary>
 public sealed class FileNodeMap : IDisposable
 {
-    private readonly SortedDictionary<string, FileNode> _map = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, FileNode> _map = new(StringComparer.OrdinalIgnoreCase);
+
+    // Parallel key index so directory enumeration (GetChildren) can seek directly to a path
+    // prefix's range in O(log n) via GetViewBetween, instead of scanning the whole namespace
+    // from the start looking for where the prefix run begins. _map itself is a plain Dictionary
+    // (O(1) lookup/insert/remove) precisely because it no longer needs to maintain order.
+    private readonly SortedSet<string> _sortedKeys = new(StringComparer.OrdinalIgnoreCase);
 
     // Read/write lock instead of a mutual-exclusion lock: lookups and directory enumerations
     // (the read-heavy majority) can proceed concurrently, and a full-scan enumeration no longer
@@ -50,6 +56,10 @@ public sealed class FileNodeMap : IDisposable
             {
                 _totalAllocated -= existing.FileInfo.AllocationSize;
             }
+            else
+            {
+                _sortedKeys.Add(filePath);
+            }
 
             node.FilePath = filePath;
             node.LeafName = ComputeLeafName(filePath);
@@ -72,11 +82,13 @@ public sealed class FileNodeMap : IDisposable
         {
             var hasRoot = _map.TryGetValue("\\", out var root);
             _map.Clear();
+            _sortedKeys.Clear();
             _totalAllocated = 0;
 
             if (hasRoot)
             {
                 _map["\\"] = root!;
+                _sortedKeys.Add("\\");
                 _totalAllocated = root!.FileInfo.AllocationSize;
             }
         }
@@ -97,7 +109,13 @@ public sealed class FileNodeMap : IDisposable
         _syncRoot.EnterReadLock();
         try
         {
-            return [.. _map];
+            var result = new List<KeyValuePair<string, FileNode>>(_map.Count);
+            foreach (var key in _sortedKeys)
+            {
+                result.Add(new(key, _map[key]));
+            }
+
+            return result;
         }
         finally
         {
@@ -122,26 +140,19 @@ public sealed class FileNodeMap : IDisposable
         // For root "\" (length 1) the prefix equals dirPath itself; for others append "\"
         var prefix = dirPath.Length == 1 ? dirPath : (dirPath + "\\");
 
+        // All keys sharing this prefix form a contiguous run in _sortedKeys (OrdinalIgnoreCase
+        // order). GetViewBetween seeks directly to that range in O(log n) instead of scanning
+        // the whole namespace from the start looking for where the run begins — the upper bound
+        // uses '￿', a value greater than any character used in a real path, so the view
+        // covers exactly "prefix" plus everything that starts with it.
+        var upperBound = prefix + '￿';
+
         List<KeyValuePair<string, FileNode>> matches = [];
         _syncRoot.EnterReadLock();
         try
         {
-            // _map is sorted (OrdinalIgnoreCase), so all keys sharing this prefix form a
-            // contiguous run. Skip until it starts, collect while it holds, then stop.
-            foreach (var kvp in _map)
+            foreach (var path in _sortedKeys.GetViewBetween(prefix, upperBound))
             {
-                var path = kvp.Key;
-
-                if (!path.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
-                {
-                    if (matches.Count > 0)
-                    {
-                        break;
-                    }
-
-                    continue;
-                }
-
                 if (string.Equals(path, dirPath, StringComparison.OrdinalIgnoreCase))
                 {
                     continue;
@@ -160,7 +171,7 @@ public sealed class FileNodeMap : IDisposable
                     continue;
                 }
 
-                matches.Add(kvp);
+                matches.Add(new(path, _map[path]));
             }
         }
         finally
@@ -201,6 +212,7 @@ public sealed class FileNodeMap : IDisposable
         {
             if (_map.Remove(filePath, out var removed))
             {
+                _sortedKeys.Remove(filePath);
                 _totalAllocated -= removed.FileInfo.AllocationSize;
             }
         }
@@ -222,23 +234,19 @@ public sealed class FileNodeMap : IDisposable
         try
         {
             var prefix = oldPath + "\\";
-            var keys = new List<string>();
-            foreach (var key in _map.Keys)
-            {
-                if (key.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
-                {
-                    keys.Add(key);
-                }
-            }
+            var upperBound = prefix + '￿';
+            var keys = new List<string>(_sortedKeys.GetViewBetween(prefix, upperBound));
 
             foreach (var key in keys)
             {
                 var descendant = _map[key];
                 _map.Remove(key);
+                _sortedKeys.Remove(key);
                 var newKey = string.Concat(newPath, key.AsSpan(oldPath.Length));
                 descendant.FilePath = newKey;
                 descendant.LeafName = ComputeLeafName(newKey);
                 _map[newKey] = descendant;
+                _sortedKeys.Add(newKey);
             }
         }
         finally
