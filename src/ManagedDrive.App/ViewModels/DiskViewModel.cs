@@ -16,13 +16,6 @@ public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
     private const double HighUsageResetGap = 5.0;
 
     /// <summary>
-    /// Throttle window for <see cref="ActivityObserved"/>: the first access in a burst is
-    /// reported immediately, subsequent accesses within this window are coalesced into a single
-    /// trailing report when it elapses.
-    /// </summary>
-    private static readonly TimeSpan ActivityThrottleWindow = TimeSpan.FromMilliseconds(300);
-
-    /// <summary>
     /// Number of speed samples retained for the read/write history popup: 30 minutes at the
     /// 2-second <see cref="_refreshTimer"/> cadence. Sized generously since the buffer is only
     /// rendered on hover — sampling itself is just two array writes per tick, independent of
@@ -30,10 +23,17 @@ public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
     /// </summary>
     private const int SpeedHistoryLength = 900;
 
+    /// <summary>
+    /// Throttle window for <see cref="ActivityObserved"/>: the first access in a burst is
+    /// reported immediately, subsequent accesses within this window are coalesced into a single
+    /// trailing report when it elapses.
+    /// </summary>
+    private static readonly TimeSpan ActivityThrottleWindow = TimeSpan.FromMilliseconds(300);
+
     private readonly DispatcherTimer _activityThrottleTimer;
-    private readonly DispatcherTimer _refreshTimer;
     private readonly double[] _readSpeedHistory = new double[SpeedHistoryLength];
     private readonly ThroughputTracker _readThroughput = new();
+    private readonly DispatcherTimer _refreshTimer;
     private readonly double[] _writeSpeedHistory = new double[SpeedHistoryLength];
     private readonly ThroughputTracker _writeThroughput = new();
 
@@ -272,6 +272,18 @@ public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
     public string? PersistImagePath => Disk.Options.PersistImagePath;
 
     /// <summary>
+    /// Gets the most recently sampled read throughput, formatted as e.g. "1.2 MB/s".
+    /// </summary>
+    public string ReadSpeedFormatted => ByteFormatter.FormatRate(_readBytesPerSecond);
+
+    /// <summary>
+    /// Gets the last 30 minutes of sampled read-speed history (bytes/sec), oldest first, for
+    /// display in the hover-triggered history chart. Only meaningfully consumed while that
+    /// popup is open; sampling itself runs unconditionally in <see cref="Refresh"/>.
+    /// </summary>
+    public IReadOnlyList<double> ReadSpeedHistory => SnapshotHistory(_readSpeedHistory);
+
+    /// <summary>
     /// Gets whether this disk has auto-save enabled, controlling visibility of the
     /// last-image-save timestamp on the disk card.
     /// </summary>
@@ -291,29 +303,6 @@ public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
     public string? SourcePath => Disk.Options.SourceArchivePath ?? Disk.Options.PersistImagePath;
 
     /// <summary>
-    /// Gets the most recently sampled read throughput, formatted as e.g. "1.2 MB/s".
-    /// </summary>
-    public string ReadSpeedFormatted => ByteFormatter.FormatRate(_readBytesPerSecond);
-
-    /// <summary>
-    /// Gets the last 30 minutes of sampled read-speed history (bytes/sec), oldest first, for
-    /// display in the hover-triggered history chart. Only meaningfully consumed while that
-    /// popup is open; sampling itself runs unconditionally in <see cref="Refresh"/>.
-    /// </summary>
-    public IReadOnlyList<double> ReadSpeedHistory => SnapshotHistory(_readSpeedHistory);
-
-    /// <summary>
-    /// Gets the most recently sampled write throughput, formatted as e.g. "1.2 MB/s".
-    /// </summary>
-    public string WriteSpeedFormatted => ByteFormatter.FormatRate(_writeBytesPerSecond);
-
-    /// <summary>
-    /// Gets the last 30 minutes of sampled write-speed history (bytes/sec), oldest first. See
-    /// <see cref="ReadSpeedHistory"/>.
-    /// </summary>
-    public IReadOnlyList<double> WriteSpeedHistory => SnapshotHistory(_writeSpeedHistory);
-
-    /// <summary>
     /// Gets the amount of used space formatted as a human-readable string.
     /// </summary>
     public string UsedFormatted => ByteFormatter.Format(_usedBytes);
@@ -331,6 +320,17 @@ public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
     /// </summary>
     public string VolumeLabel => Disk.Options.VolumeLabel;
 
+    /// <summary>
+    /// Gets the most recently sampled write throughput, formatted as e.g. "1.2 MB/s".
+    /// </summary>
+    public string WriteSpeedFormatted => ByteFormatter.FormatRate(_writeBytesPerSecond);
+
+    /// <summary>
+    /// Gets the last 30 minutes of sampled write-speed history (bytes/sec), oldest first. See
+    /// <see cref="ReadSpeedHistory"/>.
+    /// </summary>
+    public IReadOnlyList<double> WriteSpeedHistory => SnapshotHistory(_writeSpeedHistory);
+
     /// <inheritdoc />
     public void Dispose()
     {
@@ -342,18 +342,6 @@ public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
         Disk.SaveFailed -= OnDiskSaveFailed;
         _readThroughput.Reset();
         _writeThroughput.Reset();
-    }
-
-    /// <summary>
-    /// Reorders a fixed-length ring buffer written via <see cref="_speedHistoryHead"/> into
-    /// oldest-first order for display.
-    /// </summary>
-    private double[] SnapshotHistory(double[] buffer)
-    {
-        var result = new double[buffer.Length];
-        Array.Copy(buffer, _speedHistoryHead, result, 0, buffer.Length - _speedHistoryHead);
-        Array.Copy(buffer, 0, result, buffer.Length - _speedHistoryHead, _speedHistoryHead);
-        return result;
     }
 
     /// <summary>
@@ -537,6 +525,18 @@ public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
         {
             _pendingActivity = args;
         }
+    }
+
+    /// <summary>
+    /// Reorders a fixed-length ring buffer written via <see cref="_speedHistoryHead"/> into
+    /// oldest-first order for display.
+    /// </summary>
+    private double[] SnapshotHistory(double[] buffer)
+    {
+        var result = new double[buffer.Length];
+        Array.Copy(buffer, _speedHistoryHead, result, 0, buffer.Length - _speedHistoryHead);
+        Array.Copy(buffer, 0, result, buffer.Length - _speedHistoryHead, _speedHistoryHead);
+        return result;
     }
 
     /// <summary>

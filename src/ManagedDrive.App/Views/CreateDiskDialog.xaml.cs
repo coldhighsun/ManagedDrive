@@ -256,6 +256,7 @@ public partial class CreateDiskDialog
     /// Options of all other currently active disks, used to validate that the archive file path
     /// does not collide with another disk's mount point.
     /// </param>
+    /// <param name="archiveImportOverloadTag">Unused parameter to differentiate the constructor signature.</param>
     private CreateDiskDialog(string importArchivePath, ulong importTotalBytes, string importVolumeLabel,
         IReadOnlyList<DiskOptions> otherDisks, bool archiveImportOverloadTag) : this(otherDisks)
     {

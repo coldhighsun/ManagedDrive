@@ -18,10 +18,10 @@ internal static class WindowMaximizeHelper
         window.SourceInitialized += (_, _) =>
         {
             var handle = new WindowInteropHelper(window).Handle;
-            if (HwndSource.FromHwnd(handle) is HwndSource source)
+            if (HwndSource.FromHwnd(handle) is { } source)
             {
-                source.AddHook((IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled) =>
-                    WndProc(hwnd, msg, wParam, lParam, ref handled, window));
+                source.AddHook((hwnd, msg, _, lParam, ref handled) =>
+                    WndProc(hwnd, msg, lParam, ref handled, window));
             }
         };
 
@@ -65,7 +65,7 @@ internal static class WindowMaximizeHelper
             true);
     }
 
-    private static IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled, Window window)
+    private static IntPtr WndProc(IntPtr hwnd, int msg, IntPtr lParam, ref bool handled, Window window)
     {
         if (msg == WM_GETMINMAXINFO)
         {
