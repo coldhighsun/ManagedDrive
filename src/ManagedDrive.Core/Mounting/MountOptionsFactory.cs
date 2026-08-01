@@ -20,6 +20,9 @@ public sealed record MountOverrides
     /// <summary>Overrides the compression level when non-null.</summary>
     public ImageCompressionLevel? CompressionLevel { get; init; }
 
+    /// <summary>Overrides the custom Zstd compression level (1-22) when non-null.</summary>
+    public int? CustomZstdLevel { get; init; }
+
     /// <summary>Overrides the maximum snapshot count when non-null.</summary>
     public uint? MaxSnapshotCount { get; init; }
 
@@ -83,6 +86,7 @@ public static class MountOptionsFactory
             AutoMount = overrides.AutoMount ?? baseOptions.AutoMount,
             AutoSaveIntervalMinutes = overrides.AutoSaveIntervalMinutes ?? baseOptions.AutoSaveIntervalMinutes,
             CompressionLevel = overrides.CompressionLevel ?? baseOptions.CompressionLevel,
+            CustomZstdLevel = overrides.CustomZstdLevel ?? baseOptions.CustomZstdLevel,
             MaxSnapshotCount = overrides.MaxSnapshotCount ?? baseOptions.MaxSnapshotCount,
             MaxSnapshotSizeBytes = overrides.MaxSnapshotSizeBytes ?? baseOptions.MaxSnapshotSizeBytes,
             HighUsageWarnPercent = overrides.HighUsageWarnPercent ?? baseOptions.HighUsageWarnPercent,
