@@ -402,7 +402,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     {
         _logger.LogInformation("Exit requested via CLI.");
 
-        if (IsTempOnAnyRamDisk())
+        if (TempDirCompatChecker.IsTempOnAnyDisk(Disks))
         {
             TempDirResetService.Reset();
         }
@@ -447,25 +447,31 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     /// <returns>
     /// A sequence of <see cref="DiskProfile"/> representing all mounted disks.
     /// </returns>
-    public IEnumerable<DiskProfile> GetProfiles()
+    public IEnumerable<DiskProfile> GetProfiles() => Disks.Select(vm => ToProfile(vm.Disk.Options));
+
+    /// <summary>
+    /// Maps a live disk's <see cref="DiskOptions"/> to its persistable <see cref="DiskProfile"/>
+    /// counterpart. Inverse of <see cref="ProfileToOptions"/>; kept as a standalone pure function
+    /// (rather than inlined in <see cref="GetProfiles"/>) so both directions of this hand-written
+    /// field mapping can be round-trip tested independently of any live <see cref="MainViewModel"/>
+    /// or mounted disk.
+    /// </summary>
+    internal static DiskProfile ToProfile(DiskOptions options) => new()
     {
-        return Disks.Select(vm => new DiskProfile
-        {
-            MountPoint = vm.Disk.Options.MountPoint,
-            VolumeLabel = vm.Disk.Options.VolumeLabel,
-            CapacityBytes = vm.Disk.Options.CapacityBytes,
-            ReadOnly = vm.Disk.Options.ReadOnly,
-            AutoMount = vm.Disk.Options.AutoMount,
-            PersistImagePath = vm.Disk.Options.PersistImagePath,
-            SourceArchivePath = vm.Disk.Options.SourceArchivePath,
-            AutoSaveIntervalMinutes = vm.Disk.Options.AutoSaveIntervalMinutes,
-            CompressionLevel = vm.Disk.Options.CompressionLevel,
-            MaxSnapshotCount = vm.Disk.Options.MaxSnapshotCount,
-            MaxSnapshotSizeBytes = vm.Disk.Options.MaxSnapshotSizeBytes,
-            HighUsageWarnPercent = vm.Disk.Options.HighUsageWarnPercent,
-            SaveImageOnExit = vm.Disk.Options.SaveImageOnExit,
-        });
-    }
+        MountPoint = options.MountPoint,
+        VolumeLabel = options.VolumeLabel,
+        CapacityBytes = options.CapacityBytes,
+        ReadOnly = options.ReadOnly,
+        AutoMount = options.AutoMount,
+        PersistImagePath = options.PersistImagePath,
+        SourceArchivePath = options.SourceArchivePath,
+        AutoSaveIntervalMinutes = options.AutoSaveIntervalMinutes,
+        CompressionLevel = options.CompressionLevel,
+        MaxSnapshotCount = options.MaxSnapshotCount,
+        MaxSnapshotSizeBytes = options.MaxSnapshotSizeBytes,
+        HighUsageWarnPercent = options.HighUsageWarnPercent,
+        SaveImageOnExit = options.SaveImageOnExit,
+    };
 
     /// <summary>
     /// Mounts the contents of an archive file as a new read-only disk, for use by the CLI
@@ -508,8 +514,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         }
 
         var otherDisks = GetOtherDiskOptions(excluding: null);
-        if (otherDisks.Any(d => d.SourceArchivePath != null &&
-            string.Equals(d.SourceArchivePath, archivePath, StringComparison.OrdinalIgnoreCase)))
+        if (IsPathInUse(otherDisks, archivePath, d => d.SourceArchivePath))
         {
             return (false, Loc.Get("Val.ArchivePathInUse"));
         }
@@ -621,8 +626,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         }
 
         var otherDisks = GetOtherDiskOptions(excluding: null);
-        if (otherDisks.Any(d => d.PersistImagePath != null &&
-            string.Equals(d.PersistImagePath, imagePath, StringComparison.OrdinalIgnoreCase)))
+        if (IsPathInUse(otherDisks, imagePath, d => d.PersistImagePath))
         {
             return (false, Loc.Get("Val.ImagePathInUse"));
         }
@@ -861,7 +865,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         return null;
     }
 
-    private static DiskOptions ProfileToOptions(DiskProfile p) => new()
+    internal static DiskOptions ProfileToOptions(DiskProfile p) => new()
     {
         MountPoint = p.MountPoint,
         VolumeLabel = p.VolumeLabel,
@@ -987,11 +991,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             if (!target.Disk.TryCloneFrom(vm.Disk, out var error))
             {
                 _logger.LogWarning("Clone disk failed: {Source} -> {Target}: {Error}", vm.MountPoint, target.MountPoint, error);
-                MessageBox.Show(
-                    error,
-                    "ManagedDrive",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Warning);
+                ShowWarning(error);
                 return;
             }
 
@@ -1020,11 +1020,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Disk export failed: {Source} -> {ExportPath}.", vm.MountPoint, exportPath);
-                MessageBox.Show(
-                    Loc.Format("Msg.SaveImageFailed", ex.Message),
-                    "ManagedDrive",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Error);
+                ShowError(Loc.Format("Msg.SaveImageFailed", ex.Message));
             }
             finally
             {
@@ -1125,11 +1121,15 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 
             try
             {
-                var disk = await Task.Run(() => _mountManager.Mount(newOptions, currentPassword));
-                if (dialog.PasswordChanged)
+                var disk = await Task.Run(() =>
                 {
-                    disk.SetPassword(dialog.Password);
-                }
+                    var mounted = _mountManager.Mount(newOptions, currentPassword);
+                    if (dialog.PasswordChanged)
+                    {
+                        mounted.SetPassword(dialog.Password);
+                    }
+                    return mounted;
+                });
 
                 vm.Dispose();
                 Disks.Remove(vm);
@@ -1143,11 +1143,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
                 _logger.LogError(ex, "Edit disk remount failed: {OldMountPoint} -> {NewMountPoint}.", oldMountPoint, newOptions.MountPoint);
                 vm.Dispose();
                 Disks.Remove(vm);
-                MessageBox.Show(
-                    Loc.Format("Msg.MountFailed", ex.Message),
-                    "ManagedDrive",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Error);
+                ShowError(Loc.Format("Msg.MountFailed", ex.Message));
                 StatusText = Loc.Get("Status.MountFailed");
             }
         }
@@ -1196,7 +1192,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             return;
         }
 
-        var tempOnRamDisk = IsTempOnAnyRamDisk();
+        var tempOnRamDisk = TempDirCompatChecker.IsTempOnAnyDisk(Disks);
 
         var body = Loc.Get("Msg.ExitConfirmBody");
         if (tempOnRamDisk)
@@ -1245,22 +1241,14 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         if (!vm.Disk.Format())
         {
             _logger.LogWarning("Format disk failed for {MountPoint}: disk is read-only.", vm.MountPoint);
-            MessageBox.Show(
-                Loc.Get("Msg.FormatDiskReadOnly"),
-                "ManagedDrive",
-                MessageBoxButton.OK,
-                MessageBoxImage.Warning);
+            ShowWarning(Loc.Get("Msg.FormatDiskReadOnly"));
             return;
         }
 
         vm.Refresh();
         StatusText = Loc.Format("Status.FormatDisk", vm.MountPoint);
         _logger.LogInformation("Format disk completed for {MountPoint}.", vm.MountPoint);
-        MessageBox.Show(
-            Loc.Format("Msg.FormatDiskSuccess", vm.MountPoint),
-            "ManagedDrive",
-            MessageBoxButton.OK,
-            MessageBoxImage.Information);
+        ShowInfo(Loc.Format("Msg.FormatDiskSuccess", vm.MountPoint));
     }
 
     private async void ExecuteImportArchive()
@@ -1278,14 +1266,9 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         }
 
         var otherDisks = GetOtherDiskOptions(excluding: null);
-        if (otherDisks.Any(d => d.SourceArchivePath != null &&
-            string.Equals(d.SourceArchivePath, openDialog.FileName, StringComparison.OrdinalIgnoreCase)))
+        if (IsPathInUse(otherDisks, openDialog.FileName, d => d.SourceArchivePath))
         {
-            MessageBox.Show(
-                Loc.Get("Val.ArchivePathInUse"),
-                "ManagedDrive",
-                MessageBoxButton.OK,
-                MessageBoxImage.Warning);
+            ShowWarning(Loc.Get("Val.ArchivePathInUse"));
             return;
         }
 
@@ -1297,18 +1280,12 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         }
         catch (InvalidDataException)
         {
-            MessageBox.Show(
-                Loc.Get("Val.ImportInvalidArchive"),
-                "ManagedDrive",
-                MessageBoxButton.OK,
-                MessageBoxImage.Warning);
+            ShowWarning(Loc.Get("Val.ImportInvalidArchive"));
             return;
         }
 
-        var dialog = new CreateDiskDialog(openDialog.FileName, totalBytes, suggestedLabel, otherDisks, isArchiveImport: true)
-        {
-            Owner = Application.Current.MainWindow
-        };
+        var dialog = CreateDiskDialog.ForArchiveImport(openDialog.FileName, totalBytes, suggestedLabel, otherDisks);
+        dialog.Owner = Application.Current.MainWindow;
 
         if (dialog.ShowDialog() != true)
         {
@@ -1343,14 +1320,9 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         }
 
         var otherDisks = GetOtherDiskOptions(excluding: null);
-        if (otherDisks.Any(d => d.PersistImagePath != null &&
-            string.Equals(d.PersistImagePath, openDialog.FileName, StringComparison.OrdinalIgnoreCase)))
+        if (IsPathInUse(otherDisks, openDialog.FileName, d => d.PersistImagePath))
         {
-            MessageBox.Show(
-                Loc.Get("Val.ImagePathInUse"),
-                "ManagedDrive",
-                MessageBoxButton.OK,
-                MessageBoxImage.Warning);
+            ShowWarning(Loc.Get("Val.ImagePathInUse"));
             return;
         }
 
@@ -1362,11 +1334,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         }
         catch (InvalidDataException)
         {
-            MessageBox.Show(
-                Loc.Get("Val.ImportInvalidImage"),
-                "ManagedDrive",
-                MessageBoxButton.OK,
-                MessageBoxImage.Warning);
+            ShowWarning(Loc.Get("Val.ImportInvalidImage"));
             return;
         }
 
@@ -1415,20 +1383,12 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         if (success)
         {
             _logger.LogInformation("Reset TEMP dirs succeeded.");
-            MessageBox.Show(
-                Loc.Get("Msg.ResetTempSuccess"),
-                "ManagedDrive",
-                MessageBoxButton.OK,
-                MessageBoxImage.Information);
+            ShowInfo(Loc.Get("Msg.ResetTempSuccess"));
         }
         else
         {
             _logger.LogWarning("Reset TEMP dirs failed.");
-            MessageBox.Show(
-                Loc.Get("Msg.ResetTempFailed"),
-                "ManagedDrive",
-                MessageBoxButton.OK,
-                MessageBoxImage.Error);
+            ShowError(Loc.Get("Msg.ResetTempFailed"));
         }
     }
 
@@ -1442,11 +1402,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         var snapshots = await Task.Run(() => SnapshotManager.ListSnapshots(imagePath));
         if (snapshots.Count == 0)
         {
-            MessageBox.Show(
-                Loc.Get("Msg.NoSnapshotsAvailable"),
-                "ManagedDrive",
-                MessageBoxButton.OK,
-                MessageBoxImage.Information);
+            ShowInfo(Loc.Get("Msg.NoSnapshotsAvailable"));
             return;
         }
 
@@ -1479,11 +1435,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         if (!success)
         {
             _logger.LogWarning("Restore snapshot failed for {MountPoint}: {Error}", vm.MountPoint, error);
-            MessageBox.Show(
-                error,
-                "ManagedDrive",
-                MessageBoxButton.OK,
-                MessageBoxImage.Warning);
+            ShowWarning(error);
             return;
         }
 
@@ -1534,11 +1486,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         catch (Exception ex)
         {
             _logger.LogError(ex, "Save image failed for {MountPoint}.", vm.MountPoint);
-            MessageBox.Show(
-                Loc.Format("Msg.SaveImageFailed", ex.Message),
-                "ManagedDrive",
-                MessageBoxButton.OK,
-                MessageBoxImage.Error);
+            ShowError(Loc.Format("Msg.SaveImageFailed", ex.Message));
         }
         finally
         {
@@ -1575,21 +1523,13 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 
             if (success)
             {
-                MessageBox.Show(
-                    Loc.Get("Msg.ResetTempSuccess"),
-                    "ManagedDrive",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Information);
+                ShowInfo(Loc.Get("Msg.ResetTempSuccess"));
                 vm.Refresh();
             }
             else
             {
                 _logger.LogWarning("TEMP dir reset failed.");
-                MessageBox.Show(
-                    Loc.Get("Msg.ResetTempFailed"),
-                    "ManagedDrive",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Error);
+                ShowError(Loc.Get("Msg.ResetTempFailed"));
             }
         }
         else
@@ -1617,22 +1557,14 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 
             if (success)
             {
-                MessageBox.Show(
-                    Loc.Format("Msg.SetTempDirSuccess", tempPath),
-                    "ManagedDrive",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Information);
+                ShowInfo(Loc.Format("Msg.SetTempDirSuccess", tempPath));
                 StatusText = Loc.Format("Status.TempDirSet", tempPath);
                 vm.Refresh();
             }
             else
             {
                 _logger.LogWarning("Set TEMP dir failed: {TempPath}.", tempPath);
-                MessageBox.Show(
-                    Loc.Get("Msg.SetTempDirFailed"),
-                    "ManagedDrive",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Error);
+                ShowError(Loc.Get("Msg.SetTempDirFailed"));
             }
         }
     }
@@ -1710,13 +1642,35 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     private IReadOnlyList<DiskOptions> GetOtherDiskOptions(DiskViewModel? excluding) =>
         Disks.Where(d => d != excluding).Select(d => d.Disk.Options).ToList();
 
-    private bool IsTempOnAnyRamDisk()
-    {
-        var userTemp = Environment.GetEnvironmentVariable("TEMP", EnvironmentVariableTarget.User);
-        var expandedTemp = string.IsNullOrEmpty(userTemp) ? null : Environment.ExpandEnvironmentVariables(userTemp);
-        return expandedTemp != null &&
-            Disks.Any(d => expandedTemp.StartsWith(d.MountPoint, StringComparison.OrdinalIgnoreCase));
-    }
+    /// <summary>
+    /// Returns whether any disk in <paramref name="otherDisks"/> already has <paramref name="path"/>
+    /// set on the field selected by <paramref name="selector"/> (e.g. <see cref="DiskOptions.PersistImagePath"/>
+    /// or <see cref="DiskOptions.SourceArchivePath"/>). Shared by every image/archive path
+    /// collision check (create, edit, import, CLI mount).
+    /// </summary>
+    private static bool IsPathInUse(IReadOnlyList<DiskOptions> otherDisks, string path, Func<DiskOptions, string?> selector) =>
+        otherDisks.Any(d => selector(d) is { } p && string.Equals(p, path, StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>
+    /// Shows a modal <see cref="MessageBox"/> with the "ManagedDrive" title and an error icon.
+    /// Shared boilerplate for the many failure paths across this view model that don't need a
+    /// custom title (contrast <c>ExecuteEditDisk</c>'s inline apply-failure message, which reuses
+    /// <c>Msg.EditDiskConfirmTitle</c> as its title instead).
+    /// </summary>
+    private static void ShowError(string message) =>
+        MessageBox.Show(message, "ManagedDrive", MessageBoxButton.OK, MessageBoxImage.Error);
+
+    /// <summary>
+    /// Shows a modal <see cref="MessageBox"/> with the "ManagedDrive" title and an info icon.
+    /// </summary>
+    private static void ShowInfo(string message) =>
+        MessageBox.Show(message, "ManagedDrive", MessageBoxButton.OK, MessageBoxImage.Information);
+
+    /// <summary>
+    /// Shows a modal <see cref="MessageBox"/> with the "ManagedDrive" title and a warning icon.
+    /// </summary>
+    private static void ShowWarning(string? message) =>
+        MessageBox.Show(message, "ManagedDrive", MessageBoxButton.OK, MessageBoxImage.Warning);
 
     private async Task MountAndAddAsync(DiskOptions options, string? password = null, IProgress<double>? progress = null)
     {
@@ -1737,11 +1691,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         catch (Exception ex)
         {
             _logger.LogError(ex, "Mount failed for {MountPoint}.", options.MountPoint);
-            MessageBox.Show(
-                Loc.Format("Msg.MountFailed", ex.Message),
-                "ManagedDrive",
-                MessageBoxButton.OK,
-                MessageBoxImage.Error);
+            ShowError(Loc.Format("Msg.MountFailed", ex.Message));
             StatusText = Loc.Get("Status.MountFailed");
         }
     }

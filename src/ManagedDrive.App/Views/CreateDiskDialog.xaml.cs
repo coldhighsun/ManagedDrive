@@ -215,14 +215,7 @@ public partial class CreateDiskDialog
         ClearImagePathButton.IsEnabled = false;
         ImportNoteText.Visibility = Visibility.Visible;
 
-        var (importCapValue, importCapIsGb) = ByteUnitConverter.SplitToUnit(importCapacityBytes);
-        CapacityUnitBox.SelectedItem = importCapIsGb ? "GB" : "MB";
-        _capacityValue = importCapValue;
-
-        _capacityMaximum = Math.Max(_capacityValue, GetMaxCapacityValue());
-        CapacitySlider.Maximum = _capacityMaximum;
-        UpdateCapacityDisplay();
-        VolumeLabelBox.Text = importVolumeLabel;
+        ApplyLockedCapacityAndLabel(importCapacityBytes, importVolumeLabel);
 
         CapacitySlider.IsEnabled = false;
         CapacityUnitBox.IsEnabled = false;
@@ -242,7 +235,10 @@ public partial class CreateDiskDialog
     /// Initializes the dialog in archive-import mode: capacity and volume label are pre-filled
     /// from the archive's contents and locked, the disk is forced read-only (archive formats
     /// don't support writing changes back), and the entire Persistence tab is disabled since an
-    /// archive-sourced disk has no backing image file to save to.
+    /// archive-sourced disk has no backing image file to save to. Private: use
+    /// <see cref="ForArchiveImport"/> to construct one of these — an unused trailing parameter is
+    /// still needed to give this constructor a distinct signature from the image-import one
+    /// above, but it is now a private implementation detail instead of a public API wart.
     /// </summary>
     /// <param name="importArchivePath">Path of the archive file to import.</param>
     /// <param name="importTotalBytes">Total uncompressed size of the archive's contents, used to pre-fill and lock the capacity fields.</param>
@@ -251,11 +247,9 @@ public partial class CreateDiskDialog
     /// Options of all other currently active disks, used to validate that the archive file path
     /// does not collide with another disk's mount point.
     /// </param>
-    /// <param name="isArchiveImport">Always <c>true</c>; disambiguate this overload from the image-import constructor.</param>
-    public CreateDiskDialog(string importArchivePath, ulong importTotalBytes, string importVolumeLabel,
-        IReadOnlyList<DiskOptions> otherDisks, bool isArchiveImport) : this(otherDisks)
+    private CreateDiskDialog(string importArchivePath, ulong importTotalBytes, string importVolumeLabel,
+        IReadOnlyList<DiskOptions> otherDisks, bool archiveImportOverloadTag) : this(otherDisks)
     {
-        _ = isArchiveImport;
         _isImportMode = true;
         _isArchiveImportMode = true;
         _importArchivePath = importArchivePath;
@@ -269,14 +263,7 @@ public partial class CreateDiskDialog
         ClearImagePathButton.IsEnabled = false;
         ArchiveImportNoteText.Visibility = Visibility.Visible;
 
-        var (archiveCapValue, archiveCapIsGb) = ByteUnitConverter.SplitToUnit(importTotalBytes);
-        CapacityUnitBox.SelectedItem = archiveCapIsGb ? "GB" : "MB";
-        _capacityValue = archiveCapValue;
-
-        _capacityMaximum = Math.Max(_capacityValue, GetMaxCapacityValue());
-        CapacitySlider.Maximum = _capacityMaximum;
-        UpdateCapacityDisplay();
-        VolumeLabelBox.Text = importVolumeLabel;
+        ApplyLockedCapacityAndLabel(importTotalBytes, importVolumeLabel);
 
         CapacityRow.IsEnabled = false;
         VolumeLabelBox.IsEnabled = false;
@@ -292,6 +279,21 @@ public partial class CreateDiskDialog
         UpdateCompressionLevelState();
         UpdateAutoSaveEnabledState();
     }
+
+    /// <summary>
+    /// Creates a <see cref="CreateDiskDialog"/> in archive-import mode (see the private
+    /// constructor above for details).
+    /// </summary>
+    /// <param name="importArchivePath">Path of the archive file to import.</param>
+    /// <param name="importTotalBytes">Total uncompressed size of the archive's contents, used to pre-fill and lock the capacity fields.</param>
+    /// <param name="importVolumeLabel">Suggested volume label (derived from the archive's file name), used to pre-fill and lock the label field.</param>
+    /// <param name="otherDisks">
+    /// Options of all other currently active disks, used to validate that the archive file path
+    /// does not collide with another disk's mount point.
+    /// </param>
+    public static CreateDiskDialog ForArchiveImport(string importArchivePath, ulong importTotalBytes, string importVolumeLabel,
+        IReadOnlyList<DiskOptions> otherDisks) =>
+        new(importArchivePath, importTotalBytes, importVolumeLabel, otherDisks, archiveImportOverloadTag: true);
 
     /// <summary>
     /// The plaintext password entered by the user, when <see cref="PasswordChanged"/> is
@@ -476,6 +478,25 @@ public partial class CreateDiskDialog
     private void CompressionLevelBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         UpdateCompressionWarning();
+    }
+
+    /// <summary>
+    /// Pre-fills the capacity slider/unit and volume label from a size/label pair that's locked
+    /// against user edits (an imported image's or archive's own capacity and label). Shared by
+    /// the image-import and archive-import constructors; each still sets its own combination of
+    /// <c>IsEnabled = false</c> afterward, since which specific controls get locked differs
+    /// between the two modes.
+    /// </summary>
+    private void ApplyLockedCapacityAndLabel(ulong capacityBytes, string label)
+    {
+        var (value, isGb) = ByteUnitConverter.SplitToUnit(capacityBytes);
+        CapacityUnitBox.SelectedItem = isGb ? "GB" : "MB";
+        _capacityValue = value;
+
+        _capacityMaximum = Math.Max(_capacityValue, GetMaxCapacityValue());
+        CapacitySlider.Maximum = _capacityMaximum;
+        UpdateCapacityDisplay();
+        VolumeLabelBox.Text = label;
     }
 
     private int ComputeMaxValueForUnit(bool isGb) => ByteUnitConverter.MaxValueForUnit(_maxCapacityBytes, isGb);

@@ -202,24 +202,11 @@ public sealed class RamDisk : IDisposable
             ArchiveNodeMapBuilder.PeekArchive(options.SourceArchivePath, out var totalBytes, out _);
             var nodeMap = ArchiveNodeMapBuilder.BuildNodeMap(options.SourceArchivePath, (long)totalBytes, progress);
 
-            var actualUsed = nodeMap.GetTotalAllocated();
-            var capacity = ResolveEffectiveCapacity(options.CapacityBytes, actualUsed);
-            if (capacity != options.CapacityBytes)
-            {
-                originalCapacity = options.CapacityBytes;
-            }
+            var capacity = ResolveAndApplyCapacity(nodeMap, options.CapacityBytes, ref options, out originalCapacity);
 
             // Archive-sourced disks are always read-only: none of the supported archive
             // formats support writing changes back, regardless of what options.ReadOnly says.
             fs = new(capacity, options.VolumeLabel, nodeMap, readOnly: true);
-
-            if (originalCapacity.HasValue)
-            {
-                options = options with
-                {
-                    CapacityBytes = capacity
-                };
-            }
         }
         else if (options.PersistImagePath != null &&
             File.Exists(options.PersistImagePath))
@@ -236,22 +223,9 @@ public sealed class RamDisk : IDisposable
             var configuredCapacity = savedCapacity > 0 ? savedCapacity : options.CapacityBytes;
             var label = string.IsNullOrEmpty(savedLabel) ? options.VolumeLabel : savedLabel;
 
-            var actualUsed = nodeMap.GetTotalAllocated();
-            var capacity = ResolveEffectiveCapacity(configuredCapacity, actualUsed);
-            if (capacity != configuredCapacity)
-            {
-                originalCapacity = configuredCapacity;
-            }
+            var capacity = ResolveAndApplyCapacity(nodeMap, configuredCapacity, ref options, out originalCapacity);
 
             fs = new(capacity, label, nodeMap, options.ReadOnly);
-
-            if (originalCapacity.HasValue)
-            {
-                options = options with
-                {
-                    CapacityBytes = capacity
-                };
-            }
         }
         else
         {
@@ -667,6 +641,31 @@ public sealed class RamDisk : IDisposable
     internal static ulong ResolveEffectiveCapacity(ulong configuredCapacity, ulong actualUsed) =>
         Math.Max(configuredCapacity, actualUsed);
 
+    /// <summary>
+    /// Resolves the effective capacity for a just-loaded <paramref name="nodeMap"/> against
+    /// <paramref name="configuredCapacity"/> via <see cref="ResolveEffectiveCapacity"/>, and — if
+    /// that raised the capacity — updates <paramref name="options"/> in place to the new value and
+    /// reports the original in <paramref name="originalCapacity"/>. Shared by <see cref="Create"/>'s
+    /// archive-import and image-load branches.
+    /// </summary>
+    private static ulong ResolveAndApplyCapacity(
+        FileNodeMap nodeMap, ulong configuredCapacity, ref DiskOptions options, out ulong? originalCapacity)
+    {
+        var actualUsed = nodeMap.GetTotalAllocated();
+        var capacity = ResolveEffectiveCapacity(configuredCapacity, actualUsed);
+        originalCapacity = capacity != configuredCapacity ? configuredCapacity : null;
+
+        if (originalCapacity.HasValue)
+        {
+            options = options with
+            {
+                CapacityBytes = capacity
+            };
+        }
+
+        return capacity;
+    }
+
     private static void ConfigureHost(FileSystemHost host)
     {
         host.SectorSize = (ushort)FileNode.AllocationUnit;
@@ -683,7 +682,7 @@ public sealed class RamDisk : IDisposable
         // entirely, shrinking WinFsp's per-handle overhead. Matches the official WinFsp memfs sample.
         host.PostCleanupWhenModifiedOnly = true;
         host.VolumeCreationTime = (ulong)DateTimeOffset.UtcNow.ToFileTime();
-        host.VolumeSerialNumber = (uint)new Random().Next(int.MaxValue / 2);
+        host.VolumeSerialNumber = (uint)Random.Shared.Next(int.MaxValue / 2);
     }
 
     /// <summary>
