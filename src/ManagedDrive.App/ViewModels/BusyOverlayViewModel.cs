@@ -58,7 +58,11 @@ public sealed class BusyOverlayViewModel : INotifyPropertyChanged
         get;
         private set
         {
-            if (Math.Abs(field - value) < 0.0001)
+            // The epsilon check below only suppresses redundant PropertyChanged notifications for
+            // near-identical intermediate ticks; it must never suppress storing the terminal value
+            // itself, or a final Report(1.0) that lands within epsilon of the last-stored value
+            // would leave `field` stuck just short of 1.0 forever (the bar visibly stops early).
+            if (value < 1.0 && Math.Abs(field - value) < 0.0001)
             {
                 return;
             }
