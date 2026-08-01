@@ -26,6 +26,7 @@ public partial class CreateDiskDialog
     private readonly bool _wasEncrypted;
     private int _capacityMaximum = 99999999;
     private int _capacityValue = 2;
+    private int _customZstdLevelValue = 3;
     private int _highUsageWarnPercentValue = 90;
     private int _intervalValue = 10;
     private int _snapshotCountValue = 10;
@@ -69,6 +70,7 @@ public partial class CreateDiskDialog
         }
 
         CompressionLevelBox.SelectedIndex = CompressionLevels.IndexOf(ImageCompressionLevel.Fastest);
+        CustomZstdLevelValue = _customZstdLevelValue;
         UpdateCompressionLevelState();
         UpdateAutoSaveEnabledState();
         UpdateHighUsageWarnPercentState();
@@ -121,6 +123,13 @@ public partial class CreateDiskDialog
         ImagePathBox.Text = existing.PersistImagePath ?? string.Empty;
         CompressionLevelBox.SelectedIndex = CompressionLevels.IndexOf(existing.CompressionLevel);
         SaveOnExitBox.IsChecked = existing.SaveImageOnExit;
+
+        if (existing.CustomZstdLevel is { } customZstdLevel)
+        {
+            CustomZstdLevelBox.IsChecked = true;
+            CustomZstdLevelValue = customZstdLevel;
+        }
+
         UpdateCompressionLevelState();
         UpdateAutoSaveEnabledState();
 
@@ -336,6 +345,17 @@ public partial class CreateDiskDialog
         }
     }
 
+    private int CustomZstdLevelValue
+    {
+        get => _customZstdLevelValue;
+        set
+        {
+            _customZstdLevelValue = Math.Clamp(value, 1, 22);
+            CustomZstdLevelSlider.Value = _customZstdLevelValue;
+            CustomZstdLevelValueText?.Text = _customZstdLevelValue.ToString();
+        }
+    }
+
     private int HighUsageWarnPercentValue
     {
         get => _highUsageWarnPercentValue;
@@ -438,6 +458,8 @@ public partial class CreateDiskDialog
             HighUsageWarnPercentValue = _highUsageWarnPercentValue,
             CompressionLevel = (CompressionLevelBox.SelectedItem as CompressionLevelItem)?.Level
                 ?? ImageCompressionLevel.Fastest,
+            CustomZstdLevelEnabled = CustomZstdLevelRow.IsEnabled && CustomZstdLevelBox.IsChecked == true,
+            CustomZstdLevelValue = _customZstdLevelValue,
             SaveImageOnExit = SaveOnExitBox.IsChecked == true,
             EncryptChecked = EncryptImageBox.IsChecked == true,
             Password1 = PasswordBox1.Password,
@@ -477,7 +499,17 @@ public partial class CreateDiskDialog
 
     private void CompressionLevelBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        UpdateCompressionWarning();
+        UpdateCustomZstdLevelRowState();
+    }
+
+    private void CustomZstdLevelBox_CheckedChanged(object sender, RoutedEventArgs e)
+    {
+        UpdateCustomZstdLevelRowState();
+    }
+
+    private void CustomZstdLevelSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+    {
+        CustomZstdLevelValue = (int)e.NewValue;
     }
 
     /// <summary>
@@ -578,6 +610,7 @@ public partial class CreateDiskDialog
         CreateDiskValidationError.BadSnapshotCount => Loc.Get("Val.BadSnapshotCount"),
         CreateDiskValidationError.BadSnapshotSize => Loc.Get("Val.BadSnapshotSize"),
         CreateDiskValidationError.BadHighUsagePercent => Loc.Get("Val.BadHighUsagePercent"),
+        CreateDiskValidationError.BadCustomZstdLevel => Loc.Get("Val.BadCustomZstdLevel"),
         CreateDiskValidationError.PasswordRequired => Loc.Get("Val.PasswordRequired"),
         CreateDiskValidationError.PasswordMismatch => Loc.Get("Val.PasswordMismatch"),
         CreateDiskValidationError.PasswordTooShort =>
@@ -750,17 +783,29 @@ public partial class CreateDiskDialog
         // Toggle the whole row (label + combo) so the label greys out with the control when a
         // read-only disk has nothing to compress.
         CompressionLevelRow.IsEnabled = !string.IsNullOrEmpty(ImagePathBox.Text) && ReadOnlyBox.IsChecked != true;
-        UpdateCompressionWarning();
+        UpdateCustomZstdLevelRowState();
     }
 
-    private void UpdateCompressionWarning()
+    /// <summary>
+    /// The custom-Zstd-level override only makes sense when compression is actually happening —
+    /// disabled whenever the main compression row is disabled (read-only/no image), or when
+    /// <see cref="ImageCompressionLevel.None"/> is selected (nothing to compress at all).
+    /// </summary>
+    private void UpdateCustomZstdLevelRowState()
     {
-        if (CompressionWarningText is null)
-            return;
         var level = (CompressionLevelBox.SelectedItem as CompressionLevelItem)?.Level;
-        var show = CompressionLevelRow.IsEnabled
-                   && level is ImageCompressionLevel.Optimal or ImageCompressionLevel.SmallestSize;
-        CompressionWarningText.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
+        CustomZstdLevelRow.IsEnabled = CompressionLevelRow.IsEnabled && level != ImageCompressionLevel.None;
+        if (!CustomZstdLevelRow.IsEnabled)
+        {
+            CustomZstdLevelBox.IsChecked = false;
+        }
+
+        var customEnabled = CustomZstdLevelBox.IsChecked == true;
+        CustomZstdLevelPanel.IsEnabled = customEnabled;
+
+        // A custom Zstd level overrides the preset entirely, so grey out the preset dropdown
+        // while it's active rather than leaving it selectable but silently ignored.
+        CompressionLevelBox.IsEnabled = CompressionLevelRow.IsEnabled && !customEnabled;
     }
 
     private void UpdateHighUsageWarnPercentState()

@@ -336,10 +336,11 @@ public static partial class SnapshotManager
         DateTimeOffset timestampUtc,
         ImageCompressionLevel level,
         byte[]? cek = null,
-        IProgress<double>? progress = null)
+        IProgress<double>? progress = null,
+        int? customZstdLevel = null)
     {
         var indexPath = BuildSnapshotPath(mainImagePath, timestampUtc);
-        SnapshotStore.Write(nodeMap, capacityBytes, volumeLabel, indexPath, BlobDirectory(mainImagePath), level, cek, progress);
+        SnapshotStore.Write(nodeMap, capacityBytes, volumeLabel, indexPath, BlobDirectory(mainImagePath), level, cek, progress, customZstdLevel);
     }
 
     private static string BlobDirectory(string mainImagePath) => SnapshotStore.ComputeBlobDirectory(mainImagePath);

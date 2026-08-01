@@ -73,7 +73,9 @@
     <sys:String x:Key="CompressionLevel.Fastest">Fast</sys:String>
     <sys:String x:Key="CompressionLevel.Optimal">Balanced</sys:String>
     <sys:String x:Key="CompressionLevel.SmallestSize">Max</sys:String>
-    <sys:String x:Key="CreateDisk.CompressionWarning">Balanced/Max compression may significantly increase save times. Choose carefully.</sys:String>
+    <sys:String x:Key="CreateDisk.CustomZstdLevel">Custom Zstd level:</sys:String>
+    <sys:String x:Key="Tip.CustomZstdLevel">Advanced: override the compression preset above with an exact Zstd level (1 = fastest, 22 = smallest). Leave unchecked to use the preset's level.</sys:String>
+    <sys:String x:Key="Val.BadCustomZstdLevel">Enter a custom Zstd level between 1 and 22.</sys:String>
     <sys:String x:Key="CreateDisk.SaveOnExit">Save image on exit</sys:String>
     <sys:String x:Key="CreateDisk.AutoSave">Auto-save the image, interval (minutes):</sys:String>
     <sys:String x:Key="CreateDisk.AutoSaveInterval">Interval (min)</sys:String>
