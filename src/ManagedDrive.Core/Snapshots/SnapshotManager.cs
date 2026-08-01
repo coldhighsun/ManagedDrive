@@ -357,12 +357,27 @@ public static partial class SnapshotManager
         return Path.Combine(directory, baseName + ".snapblobs");
     }
 
+    /// <summary>
+    /// Computes (or reuses) the SHA-256 hash of <paramref name="node"/>'s current content.
+    /// Cached on the node against <see cref="FileNode.ContentVersion"/>, which is bumped only
+    /// when content actually changes — this avoids rehashing every file on every dirty
+    /// auto-save tick when only a subset of files changed since the last snapshot.
+    /// </summary>
     private static byte[] ComputeHash(FileNode node)
     {
+        if (node.CachedContentHash is { } cached && node.CachedContentHashVersion == node.ContentVersion)
+        {
+            return cached;
+        }
+
         var fileSize = (int)Math.Min(node.FileInfo.FileSize, (ulong)node.FileData!.Length);
         using var incrementalHash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
         node.FileData.HashInto(incrementalHash, fileSize);
-        return incrementalHash.GetHashAndReset();
+        var hash = incrementalHash.GetHashAndReset();
+
+        node.CachedContentHash = hash;
+        node.CachedContentHashVersion = node.ContentVersion;
+        return hash;
     }
 
     /// <summary>

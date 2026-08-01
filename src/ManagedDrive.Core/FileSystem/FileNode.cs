@@ -25,6 +25,27 @@ public sealed class FileNode
     public byte[]? FileSecurity;
 
     /// <summary>
+    /// Bumped by <see cref="ManagedDrive.Core.FileSystem.MemoryFileSystem"/> every time
+    /// <see cref="FileData"/>'s bytes or logical length actually change (write, truncate,
+    /// overwrite). Lets callers such as <c>SnapshotManager.ComputeHash</c> cache a content
+    /// hash and cheaply detect whether it is still valid, without relying on wall-clock
+    /// timestamps (which callers other than the WinFsp write path aren't guaranteed to advance
+    /// in lockstep with content).
+    /// </summary>
+    internal ulong ContentVersion;
+
+    /// <summary>
+    /// The content hash last computed for this node, cached against <see cref="ContentVersion"/>
+    /// at the time it was computed. <c>null</c> when no hash has been computed yet.
+    /// </summary>
+    internal byte[]? CachedContentHash;
+
+    /// <summary>
+    /// The <see cref="ContentVersion"/> value <see cref="CachedContentHash"/> was computed for.
+    /// </summary>
+    internal ulong CachedContentHashVersion;
+
+    /// <summary>
     /// The allocation granularity in bytes. All allocation sizes are rounded up to this boundary.
     /// </summary>
     internal const ulong AllocationUnit = 512;
