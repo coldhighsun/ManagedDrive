@@ -24,6 +24,14 @@ internal static class SnapshotStore
     /// </summary>
     private const int BlobFlagChunked = 0b100;
 
+    /// <summary>
+    /// Marks a blob's compressed payload as Zstd rather than gzip. Only meaningful when
+    /// <see cref="BlobFlagCompressed"/> is also set. Never set for blobs written before Zstd
+    /// support existed (they stay gzip forever, since content-addressed blobs are never rewritten
+    /// once they exist), so old blobs keep loading via the gzip branch in <see cref="ReadBlob"/>.
+    /// </summary>
+    private const int BlobFlagZstd = 0b1000;
+
     private const int BlobNonceSize = 12;
     private const int BlobTagSize = 16;
     private const int Version = 1;
@@ -190,7 +198,8 @@ internal static class SnapshotStore
         string blobDirectory,
         ImageCompressionLevel level,
         byte[]? cek,
-        IProgress<double>? progress = null)
+        IProgress<double>? progress = null,
+        int? customZstdLevel = null)
     {
         Directory.CreateDirectory(blobDirectory);
 
@@ -221,7 +230,7 @@ internal static class SnapshotStore
                         var written = 0;
                         foreach (var kvp in nodes)
                         {
-                            WriteNode(writer, kvp.Key, kvp.Value, blobDirectory, level, cek);
+                            WriteNode(writer, kvp.Key, kvp.Value, blobDirectory, level, cek, customZstdLevel);
                             written++;
                             progress?.Report((double)written / nodes.Count);
                         }
@@ -252,14 +261,17 @@ internal static class SnapshotStore
 
     /// <summary>
     /// Writes the blob for <paramref name="hash"/> if it doesn't already exist. Streams
-    /// <paramref name="data"/> straight from <see cref="FileContent"/> through gzip compression
+    /// <paramref name="data"/> straight from <see cref="FileContent"/> through Zstd compression
     /// and (when <paramref name="cek"/> is set) chunked AES-256-GCM encryption directly into the
     /// destination file — no whole-file buffer is ever materialized, so a single blob's size is
     /// not limited by <see cref="MemoryStream"/>'s ~2 GB cap. New encrypted blobs always use the
     /// chunked layout (<see cref="ChunkedGcm"/>, flagged via <see cref="BlobFlagChunked"/>); see
-    /// <see cref="ReadBlob"/> for the legacy whole-blob layout this format replaces.
+    /// <see cref="ReadBlob"/> for the legacy whole-blob layout this format replaces. New compressed
+    /// blobs are always flagged <see cref="BlobFlagZstd"/> — nothing writes gzip anymore, but blobs
+    /// written before this flag existed stay gzip forever since content-addressed blobs already on
+    /// disk are never rewritten.
     /// </summary>
-    private static void EnsureBlobWritten(string blobDirectory, byte[] hash, FileContent data, long length, ImageCompressionLevel level, byte[]? cek)
+    private static void EnsureBlobWritten(string blobDirectory, byte[] hash, FileContent data, long length, ImageCompressionLevel level, byte[]? cek, int? customZstdLevel)
     {
         var blobPath = HashToBlobPath(blobDirectory, hash);
         if (File.Exists(blobPath))
@@ -270,7 +282,7 @@ internal static class SnapshotStore
         Directory.CreateDirectory(Path.GetDirectoryName(blobPath)!);
 
         var compress = level != ImageCompressionLevel.None;
-        var flag = (compress ? BlobFlagCompressed : 0) | (cek is not null ? BlobFlagEncrypted | BlobFlagChunked : 0);
+        var flag = (compress ? BlobFlagCompressed | BlobFlagZstd : 0) | (cek is not null ? BlobFlagEncrypted | BlobFlagChunked : 0);
 
         var tempPath = blobPath + "." + Guid.NewGuid().ToString("N") + ".tmp";
 
@@ -292,17 +304,17 @@ internal static class SnapshotStore
 
                 if (compress)
                 {
-                    var gzip = new GZipStream(target, level.ToDotNetCompressionLevel(), leaveOpen: true);
+                    var zstd = new ParallelZstd.WriteStream(target, level.ToZstdLevel(customZstdLevel));
                     try
                     {
-                        data.CopyTo(gzip, length);
+                        data.CopyTo(zstd, length);
                     }
                     finally
                     {
                         // Explicitly disposed (rather than relying on leaveOpen semantics further
-                        // up the chain) so the deflate stream's final block is flushed before the
-                        // chunked encryption below is completed.
-                        gzip.Dispose();
+                        // up the chain) so every outstanding chunk is compressed and flushed before
+                        // the chunked encryption below is completed.
+                        zstd.Dispose();
                     }
                 }
                 else
@@ -351,6 +363,7 @@ internal static class SnapshotStore
         var compressed = (flag & BlobFlagCompressed) != 0;
         var encrypted = (flag & BlobFlagEncrypted) != 0;
         var chunked = (flag & BlobFlagChunked) != 0;
+        var useZstd = (flag & BlobFlagZstd) != 0;
 
         Stream plaintextStream;
         byte[]? legacyPlaintext = null;
@@ -402,7 +415,9 @@ internal static class SnapshotStore
         }
 
         var sourceStream = compressed
-            ? new GZipStream(plaintextStream, CompressionMode.Decompress)
+            ? useZstd
+                ? new ParallelZstd.ReadStream(plaintextStream)
+                : new GZipStream(plaintextStream, CompressionMode.Decompress)
             : plaintextStream;
 
         var aligned = FileNode.AlignToAllocationUnit(allocationSize);
@@ -503,7 +518,7 @@ internal static class SnapshotStore
         return (metadata.Path, header);
     }
 
-    private static void WriteNode(BinaryWriter writer, string path, FileNode node, string blobDirectory, ImageCompressionLevel level, byte[]? cek)
+    private static void WriteNode(BinaryWriter writer, string path, FileNode node, string blobDirectory, ImageCompressionLevel level, byte[]? cek, int? customZstdLevel)
     {
         NodeMetadataIO.WriteMetadata(writer, path, node);
 
@@ -527,7 +542,7 @@ internal static class SnapshotStore
             hash = incrementalHash.GetHashAndReset();
         }
 
-        EnsureBlobWritten(blobDirectory, hash, node.FileData, fileSize, level, cek);
+        EnsureBlobWritten(blobDirectory, hash, node.FileData, fileSize, level, cek, customZstdLevel);
 
         writer.Write((byte)1); // HasBlob marker
         writer.Write(hash);

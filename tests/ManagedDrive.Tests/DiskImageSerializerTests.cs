@@ -398,6 +398,169 @@ public sealed class DiskImageSerializerTests
         }
     }
 
+    [Fact]
+    public void Save_WritesVersion5Header()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid()}.mdr");
+        try
+        {
+            var map = new FileNodeMap();
+            map.Add("\\", MakeDir());
+            DiskImageSerializer.Save(map, capacityBytes: 1024 * 1024, "MyLabel", path, ImageCompressionLevel.Fastest);
+
+            using var stream = new FileStream(path, FileMode.Open, FileAccess.Read);
+            using var reader = new BinaryReader(stream);
+            reader.ReadBytes(4); // magic
+            Assert.Equal(5, reader.ReadInt32());
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Theory]
+    [InlineData(ImageCompressionLevel.Fastest)]
+    [InlineData(ImageCompressionLevel.Optimal)]
+    [InlineData(ImageCompressionLevel.SmallestSize)]
+    public void Save_Compressed_DoesNotUseGzip(ImageCompressionLevel level)
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid()}.mdr");
+        try
+        {
+            var map = new FileNodeMap();
+            map.Add("\\", MakeDir());
+            map.Add("\\File.txt", MakeFile("hello world, this is compressible content"u8.ToArray()));
+            DiskImageSerializer.Save(map, capacityBytes: 1024 * 1024, "MyLabel", path, level);
+
+            var bytes = File.ReadAllBytes(path);
+
+            // The gzip magic (0x1F 0x8B) should not appear right at the start of the node
+            // region — a weak but simple signal that the payload was Zstd- rather than
+            // gzip-compressed. (The node region starts right after the plaintext header.)
+            var headerLength = 4 + 4 + 1 + 1 + 8 + (4 + "MyLabel".Length);
+            Assert.False(bytes[headerLength] == 0x1F && bytes[headerLength + 1] == 0x8B);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void Load_LegacyVersion4GzipCompressedImage_StillLoads()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid()}.mdr");
+        try
+        {
+            byte[] nodeRegion;
+            using (var nodeRegionStream = new MemoryStream())
+            {
+                using (var gzip = new GZipStream(nodeRegionStream, CompressionLevel.Fastest, leaveOpen: true))
+                using (var payloadWriter = new BinaryWriter(gzip, System.Text.Encoding.UTF8, leaveOpen: true))
+                {
+                    payloadWriter.Write(0); // node count
+                }
+
+                nodeRegion = nodeRegionStream.ToArray();
+            }
+
+            using (var stream = new FileStream(path, FileMode.Create, FileAccess.Write))
+            using (var writer = new BinaryWriter(stream, System.Text.Encoding.UTF8))
+            {
+                writer.Write("MDRD"u8.ToArray());
+                writer.Write(4); // legacy gzip-compressed version, unencrypted
+                writer.Write((byte)ImageCompressionLevel.Fastest);
+                writer.Write((byte)0); // isEncrypted
+                writer.Write(2048UL);
+                writer.Write("LegacyGzipLabel");
+                writer.Write(nodeRegion);
+            }
+
+            var loaded = DiskImageSerializer.Load(path, out var capacityBytes, out var volumeLabel, password: null, out var cek);
+
+            Assert.Equal(2048UL, capacityBytes);
+            Assert.Equal("LegacyGzipLabel", volumeLabel);
+            Assert.Equal(0, loaded.Count);
+            Assert.Null(cek);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void SaveThenLoad_WithParallelZstdAcrossMultipleChunks_RoundTrips()
+    {
+        // Force a tiny chunk size so a handful of KB of node data spans several independently
+        // compressed chunks, exercising the parallel Zstd compression path without allocating a
+        // real multi-megabyte buffer.
+        ParallelZstd.TestChunkSizeOverride = 64;
+        var path = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid()}.mdr");
+        try
+        {
+            var map = new FileNodeMap();
+            map.Add("\\", MakeDir());
+            for (var i = 0; i < 50; i++)
+            {
+                map.Add($"\\File{i}.txt", MakeFile(System.Text.Encoding.UTF8.GetBytes($"content for file number {i}")));
+            }
+
+            DiskImageSerializer.Save(map, capacityBytes: 1024 * 1024, "ChunkedLabel", path, ImageCompressionLevel.Fastest);
+
+            var loaded = DiskImageSerializer.Load(path, out var capacityBytes, out var volumeLabel, password: null, out var cek);
+
+            Assert.Equal(1024UL * 1024, capacityBytes);
+            Assert.Equal("ChunkedLabel", volumeLabel);
+            Assert.Equal(51, loaded.Count);
+            for (var i = 0; i < 50; i++)
+            {
+                Assert.True(loaded.TryGet($"\\File{i}.txt", out var node));
+                var expected = System.Text.Encoding.UTF8.GetBytes($"content for file number {i}");
+                Assert.Equal(expected, node!.FileData!.ToArray(expected.Length));
+            }
+
+            Assert.Null(cek);
+        }
+        finally
+        {
+            ParallelZstd.TestChunkSizeOverride = null;
+            File.Delete(path);
+        }
+    }
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(19)]
+    [InlineData(22)]
+    public void SaveThenLoad_WithCustomZstdLevel_RoundTrips(int customZstdLevel)
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid()}.mdr");
+        try
+        {
+            var map = new FileNodeMap();
+            map.Add("\\", MakeDir());
+            map.Add("\\File.txt", MakeFile("hello world"u8.ToArray()));
+
+            DiskImageSerializer.Save(map, capacityBytes: 1024 * 1024, "MyLabel", path, ImageCompressionLevel.Fastest,
+                customZstdLevel: customZstdLevel);
+
+            var loaded = DiskImageSerializer.Load(path, out var capacityBytes, out var volumeLabel, password: null, out var cek);
+
+            Assert.Equal(1024UL * 1024, capacityBytes);
+            Assert.Equal("MyLabel", volumeLabel);
+            Assert.Equal(2, loaded.Count);
+            Assert.True(loaded.TryGet("\\File.txt", out var node));
+            Assert.Equal("hello world"u8.ToArray(), node!.FileData!.ToArray("hello world"u8.Length));
+            Assert.Null(cek);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
     private static FileNode MakeDir() => new()
     {
         FileInfo = { FileAttributes = (uint)FileAttributes.Directory },

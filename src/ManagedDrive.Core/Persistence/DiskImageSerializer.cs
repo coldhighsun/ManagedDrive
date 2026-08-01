@@ -20,7 +20,7 @@ public readonly record struct ImageEncryptionInfo(string Password, byte[] Cek);
 /// Image format (little-endian binary):
 /// <list type="bullet">
 ///   <item>4-byte magic "MDRD"</item>
-///   <item>Int32 version (currently 4)</item>
+///   <item>Int32 version (currently 5)</item>
 ///   <item>Byte holding an <see cref="ImageCompressionLevel"/> value (version 2+ only; absent in version 1, which is always uncompressed)</item>
 ///   <item>Byte IsEncrypted (version 3+ only; absent/false in earlier versions)</item>
 ///   <item>UInt64 capacity in bytes (always plaintext, so callers can preview it without a password)</item>
@@ -39,14 +39,33 @@ public readonly record struct ImageEncryptionInfo(string Password, byte[] Cek);
 ///     managed-array limits at roughly 2 GB — kept only so old images keep loading.
 ///   </item>
 ///   <item>
-///     Version 4 (current) when encrypted: a random 12-byte base nonce, then a sequence of
+///     Version 4+ when encrypted: a random 12-byte base nonce, then a sequence of
 ///     chunks, each independently AES-256-GCM encrypted so no single buffer needs to hold the
 ///     whole node region. Each chunk is [Int32 ciphertext length][16-byte tag][ciphertext
 ///     bytes], terminated by a zero-length chunk. Per-chunk nonces are derived from the base
 ///     nonce by XOR-ing its last 4 bytes with the big-endian chunk index, guaranteeing a unique
 ///     nonce per chunk under the same key/base nonce (see <see cref="ChunkedGcm.DeriveChunkNonce"/>).
+///     Identical layout for both version 4 and 5 — only the compression algorithm wrapped inside
+///     differs.
 ///   </item>
-///   <item>When not encrypted (any version): the node region follows directly, gzip-compressed whenever the level is not <see cref="ImageCompressionLevel.None"/>, streamed straight from/to the file rather than buffered.</item>
+///   <item>When not encrypted (any version): the node region follows directly, compressed whenever the level is not <see cref="ImageCompressionLevel.None"/>, streamed straight from/to the file rather than buffered.</item>
+///   <item>
+///     Compression algorithm is determined entirely by the file's version, not by any separate
+///     field: versions 1-4 use gzip/deflate (<see cref="GZipStream"/>), read-only — nothing writes
+///     gzip anymore. Version 5 (current) uses Zstd (<see cref="ZstdSharp"/>) for both writing and
+///     reading, which compresses substantially faster than gzip at a comparable ratio.
+///   </item>
+///   <item>
+///     Version 5's Zstd-compressed node region (whether encrypted or not) is itself a sequence of
+///     independently compressed chunks framed as [Int32 compressed length][compressed bytes],
+///     terminated by a zero-length chunk — mirroring <see cref="ChunkedGcm"/>'s chunk framing. This
+///     lets both <see cref="ParallelZstd.WriteStream"/> and <see cref="ParallelZstd.ReadStream"/>
+///     compress/decompress chunks concurrently across a worker pool while still writing/reading
+///     them in original order, since chunk boundaries are known up front rather than requiring a
+///     full decompress pass to discover. Encrypted images wrap this chunk sequence in
+///     <see cref="ChunkedGcm"/>'s own (independently sized) chunking, so the two chunk boundaries
+///     do not line up — that's fine, since Zstd's chunk framing is entirely self-describing.
+///   </item>
 ///   <item>Node region contents: Int32 node count, then for each node: path, metadata, security descriptor bytes, file data bytes</item>
 /// </list>
 /// </remarks>
@@ -67,7 +86,7 @@ public static class DiskImageSerializer
     private const int Pbkdf2Iterations = 210_000;
     private const int SaltSize = 16;
     private const int TagSize = 16;
-    private const int Version = 4;
+    private const int Version = 5;
     private static readonly byte[] Magic = "MDRD"u8.ToArray();
 
     /// <summary>
@@ -205,6 +224,13 @@ public static class DiskImageSerializer
     /// The subsequent gzip compression and (when encrypting) AES-256-GCM chunk encryption happen
     /// as nodes stream through and are not individually reported.
     /// </param>
+    /// <param name="customZstdLevel">
+    /// Optional advanced override (1-22) of the exact Zstd level used instead of the one mapped
+    /// from <paramref name="level"/> (see <see cref="ImageCompressionLevelExtensions.ToZstdLevel"/>).
+    /// Purely an encoder-side speed/ratio choice — not persisted in the image itself, since Zstd
+    /// decompression needs no level parameter, so <see cref="Load"/> works identically regardless
+    /// of what level a given image was originally written with.
+    /// </param>
     public static void Save(
         FileNodeMap nodeMap,
         ulong capacityBytes,
@@ -212,7 +238,8 @@ public static class DiskImageSerializer
         string imagePath,
         ImageCompressionLevel level,
         ImageEncryptionInfo? encryption = null,
-        IProgress<double>? progress = null)
+        IProgress<double>? progress = null,
+        int? customZstdLevel = null)
     {
         var compress = level != ImageCompressionLevel.None;
         var directory = Path.GetDirectoryName(imagePath);
@@ -263,13 +290,13 @@ public static class DiskImageSerializer
                         // Node data streams straight into chunked AES-GCM encryption below —
                         // never buffered whole, so there is no ~2 GB ceiling on disk content.
                         using var chunkedStream = new ChunkedGcm.WriteStream(stream, enc.Cek, baseNonce, ChunkedGcm.ChunkSize);
-                        WriteNodeRegion(chunkedStream, compress, level, nodeMap, progress);
+                        WriteNodeRegion(chunkedStream, compress, level, customZstdLevel, nodeMap, progress);
                         chunkedStream.Complete();
                     }
                     else
                     {
                         writer.Flush();
-                        WriteNodeRegion(stream, compress, level, nodeMap, progress);
+                        WriteNodeRegion(stream, compress, level, customZstdLevel, nodeMap, progress);
                     }
                 }
 
@@ -295,23 +322,25 @@ public static class DiskImageSerializer
 
     /// <summary>
     /// Writes the node-count-prefixed node region for <paramref name="nodeMap"/> directly into
-    /// <paramref name="target"/>, gzip-compressing on the fly when <paramref name="compress"/> is
-    /// set. Never materializes the whole region as a single in-memory buffer, so disk content of
-    /// any size can be saved regardless of the ~2 GB limit on <see cref="MemoryStream"/>/managed
-    /// arrays. The <see cref="GZipStream"/> (when used) is explicitly disposed here — rather than
+    /// <paramref name="target"/>, Zstd-compressing on the fly (in parallel across chunks, see
+    /// <see cref="ParallelZstd"/>) when <paramref name="compress"/> is set. Never materializes the
+    /// whole region as a single in-memory buffer, so disk content of any size can be saved
+    /// regardless of the ~2 GB limit on <see cref="MemoryStream"/>/managed arrays. The
+    /// <see cref="ParallelZstd.WriteStream"/> (when used) is explicitly disposed here — rather than
     /// relying on <see cref="BinaryWriter"/>'s own disposal with <c>leaveOpen: true</c>, which
-    /// would skip it — so the deflate stream's final block/trailer is always flushed before
+    /// would skip it — so every outstanding chunk is compressed and flushed before
     /// <paramref name="target"/> is used for anything else.
     /// </summary>
     private static void WriteNodeRegion(
         Stream target,
         bool compress,
         ImageCompressionLevel level,
+        int? customZstdLevel,
         FileNodeMap nodeMap,
         IProgress<double>? progress)
     {
         var payloadStream = compress
-            ? new GZipStream(target, level.ToDotNetCompressionLevel(), leaveOpen: true)
+            ? new ParallelZstd.WriteStream(target, level.ToZstdLevel(customZstdLevel))
             : target;
 
         try
@@ -421,12 +450,14 @@ public static class DiskImageSerializer
         cek = null;
         var compressed = level != ImageCompressionLevel.None;
 
+        var useZstd = version >= 5;
+
         if (!isEncrypted)
         {
             // The node region is the last thing in the file for an unencrypted image, so
             // decompressing straight off the file stream (rather than buffering it) is safe —
-            // GZipStream simply reads until end of file.
-            return ReadNodeRegion(stream, compressed, reportTick);
+            // the decompression stream simply reads until end of file.
+            return ReadNodeRegion(stream, compressed, useZstd, reportTick);
         }
 
         if (password is null)
@@ -446,7 +477,7 @@ public static class DiskImageSerializer
         return version switch
         {
             3 => LoadLegacyEncryptedBlob(stream, reader, resolvedCek, compressed, reportTick),
-            4 => LoadChunkedEncrypted(stream, reader, resolvedCek, compressed, reportTick),
+            4 or 5 => LoadChunkedEncrypted(stream, reader, resolvedCek, compressed, useZstd, reportTick),
             _ => throw new InvalidDataException($"Unsupported image version: {version}."),
         };
     }
@@ -485,7 +516,7 @@ public static class DiskImageSerializer
             // already at (or near) end-of-file here — reportTick will jump close to 1.0 on the
             // first node and stay there for the rest of this legacy (version 3) path.
             using var nodeRegionStream = new MemoryStream(plaintext, writable: false);
-            return ReadNodeRegion(nodeRegionStream, compressed, reportTick);
+            return ReadNodeRegion(nodeRegionStream, compressed, useZstd: false, reportTick);
         }
         finally
         {
@@ -494,15 +525,17 @@ public static class DiskImageSerializer
     }
 
     /// <summary>
-    /// Version 4's chunked encrypted node region: each chunk was independently AES-256-GCM
+    /// Version 4/5's chunked encrypted node region: each chunk was independently AES-256-GCM
     /// encrypted on save, so decryption streams chunk-by-chunk via <see cref="ChunkedGcm.ReadStream"/>
-    /// rather than requiring the whole region in memory at once.
+    /// rather than requiring the whole region in memory at once. <paramref name="useZstd"/>
+    /// distinguishes the compression algorithm wrapped inside (version 4 = gzip, version 5 = Zstd).
     /// </summary>
     private static FileNodeMap LoadChunkedEncrypted(
         FileStream stream,
         BinaryReader reader,
         byte[] cek,
         bool compressed,
+        bool useZstd,
         Action? reportTick = null)
     {
         var baseNonce = reader.ReadBytes(NonceSize);
@@ -510,7 +543,7 @@ public static class DiskImageSerializer
         try
         {
             using var chunkedStream = new ChunkedGcm.ReadStream(stream, cek, baseNonce);
-            return ReadNodeRegion(chunkedStream, compressed, reportTick);
+            return ReadNodeRegion(chunkedStream, compressed, useZstd, reportTick);
         }
         catch (CryptographicException)
         {
@@ -520,13 +553,17 @@ public static class DiskImageSerializer
 
     /// <summary>
     /// Reads the node-count-prefixed node region from <paramref name="source"/>, transparently
-    /// gzip-decompressing when <paramref name="compressed"/> is set. Mirrors <see cref="WriteNodeRegion"/>.
+    /// decompressing when <paramref name="compressed"/> is set — via Zstd when
+    /// <paramref name="useZstd"/> is set (version 5, current), otherwise via gzip (versions 1-4,
+    /// read-only). Mirrors <see cref="WriteNodeRegion"/>.
     /// </summary>
-    private static FileNodeMap ReadNodeRegion(Stream source, bool compressed, Action? reportTick = null)
+    private static FileNodeMap ReadNodeRegion(Stream source, bool compressed, bool useZstd, Action? reportTick = null)
     {
         using var payloadReader = new BinaryReader(
             compressed
-                ? new GZipStream(source, CompressionMode.Decompress, leaveOpen: true)
+                ? useZstd
+                    ? new ParallelZstd.ReadStream(source)
+                    : new GZipStream(source, CompressionMode.Decompress, leaveOpen: true)
                 : source,
             System.Text.Encoding.UTF8,
             leaveOpen: true);
@@ -547,7 +584,7 @@ public static class DiskImageSerializer
         }
 
         version = reader.ReadInt32();
-        if (version is not (1 or 2 or 3 or 4))
+        if (version is not (1 or 2 or 3 or 4 or 5))
         {
             throw new InvalidDataException($"Unsupported image version: {version}.");
         }

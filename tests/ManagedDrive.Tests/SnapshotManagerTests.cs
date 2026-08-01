@@ -1,3 +1,4 @@
+using System.IO.Compression;
 using System.Security.Cryptography;
 
 namespace ManagedDrive.Tests;
@@ -415,6 +416,87 @@ public sealed class SnapshotManagerTests : IDisposable
     }
 
     [Fact]
+    public void WriteSnapshot_CompressedBlob_FlagsZstd()
+    {
+        WriteSnapshotWithFile(new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), "\\a.txt",
+            "hello world, this is compressible content"u8.ToArray(), ImageCompressionLevel.Fastest);
+
+        var blobPath = Directory.EnumerateFiles(BlobDirectory, "*.blob", SearchOption.AllDirectories).Single();
+        var flag = File.ReadAllBytes(blobPath)[0];
+
+        Assert.Equal(0b1001, flag); // Compressed | Zstd
+    }
+
+    [Fact]
+    public void LoadSnapshot_LegacyGzipCompressedBlob_StillLoads()
+    {
+        var content = "hello world, this is compressible content"u8.ToArray();
+
+        // Write a normal snapshot first so the index/blob directory exist with the expected
+        // layout, then hand-overwrite the blob it produced in the pre-Zstd gzip format (flag
+        // without the Zstd bit) to simulate a blob written before BlobFlagZstd existed.
+        var nodeMap = new FileNodeMap();
+        nodeMap.Add("\\", MakeDir());
+        nodeMap.Add("\\a.txt", MakeFile(content));
+        SnapshotManager.WriteSnapshot(nodeMap, 1024, "Label", _mainImagePath,
+            new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), ImageCompressionLevel.Fastest);
+
+        var blobPath = Directory.EnumerateFiles(BlobDirectory, "*.blob", SearchOption.AllDirectories).Single();
+
+        using (var stream = new FileStream(blobPath, FileMode.Create, FileAccess.Write))
+        {
+            stream.WriteByte(0b001); // Compressed, not Zstd (legacy gzip), not Encrypted
+            using var gzip = new GZipStream(stream, CompressionLevel.Fastest, leaveOpen: true);
+            gzip.Write(content);
+        }
+
+        var snapshot = Assert.Single(SnapshotManager.ListSnapshots(_mainImagePath));
+        var loaded = SnapshotManager.LoadSnapshot(snapshot.Path, out _, out _);
+
+        Assert.True(loaded.TryGet("\\a.txt", out var node));
+        Assert.Equal(content, node!.FileData!.ToArray(content.Length));
+    }
+
+    [Fact]
+    public void LoadSnapshot_MixedGzipAndZstdBlobsInSameIndex_BothLoad()
+    {
+        var legacyContent = "hello world, this is compressible content"u8.ToArray();
+        var freshContent = "a completely different piece of content"u8.ToArray();
+
+        var nodeMap = new FileNodeMap();
+        nodeMap.Add("\\", MakeDir());
+        nodeMap.Add("\\legacy.txt", MakeFile(legacyContent));
+        SnapshotManager.WriteSnapshot(nodeMap, 1024, "Label", _mainImagePath,
+            new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), ImageCompressionLevel.Fastest);
+
+        // Hand-overwrite the first snapshot's blob in the pre-Zstd gzip format, simulating
+        // content written before Zstd support existed.
+        var legacyBlobPath = Directory.EnumerateFiles(BlobDirectory, "*.blob", SearchOption.AllDirectories).Single();
+        using (var stream = new FileStream(legacyBlobPath, FileMode.Create, FileAccess.Write))
+        {
+            stream.WriteByte(0b001); // Compressed, not Zstd
+            using var gzip = new GZipStream(stream, CompressionLevel.Fastest, leaveOpen: true);
+            gzip.Write(legacyContent);
+        }
+
+        // A second snapshot adds a new file, which is written fresh (Zstd), while still
+        // referencing the untouched legacy gzip blob for the unchanged file.
+        nodeMap.Add("\\fresh.txt", MakeFile(freshContent));
+        SnapshotManager.WriteSnapshot(nodeMap, 1024, "Label", _mainImagePath,
+            new(2026, 1, 2, 0, 0, 0, TimeSpan.Zero), ImageCompressionLevel.Fastest);
+
+        Assert.Equal(2, BlobCount);
+
+        var latest = SnapshotManager.ListSnapshots(_mainImagePath).OrderBy(s => s.TimestampUtc).Last();
+        var loaded = SnapshotManager.LoadSnapshot(latest.Path, out _, out _);
+
+        Assert.True(loaded.TryGet("\\legacy.txt", out var legacyNode));
+        Assert.Equal(legacyContent, legacyNode!.FileData!.ToArray(legacyContent.Length));
+        Assert.True(loaded.TryGet("\\fresh.txt", out var freshNode));
+        Assert.Equal(freshContent, freshNode!.FileData!.ToArray(freshContent.Length));
+    }
+
+    [Fact]
     public void LoadSnapshot_TruncatedBlob_ThrowsInvalidData()
     {
         WriteSnapshotWithFile(new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), "\\a.txt", [1, 2, 3, 4, 5]);
@@ -709,11 +791,12 @@ public sealed class SnapshotManagerTests : IDisposable
         };
     }
 
-    private void WriteSnapshotWithFile(DateTimeOffset timestampUtc, string path, byte[] content)
+    private void WriteSnapshotWithFile(DateTimeOffset timestampUtc, string path, byte[] content,
+        ImageCompressionLevel level = ImageCompressionLevel.None)
     {
         var nodeMap = new FileNodeMap();
         nodeMap.Add("\\", MakeDir());
         nodeMap.Add(path, MakeFile(content));
-        SnapshotManager.WriteSnapshot(nodeMap, 1024, "Label", _mainImagePath, timestampUtc, ImageCompressionLevel.None);
+        SnapshotManager.WriteSnapshot(nodeMap, 1024, "Label", _mainImagePath, timestampUtc, level);
     }
 }
