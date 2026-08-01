@@ -7,6 +7,14 @@ namespace ManagedDrive.App.Cli;
 /// <c>ManagedDrive.Cli.Core</c> project (which cannot reference the WPF app layer without creating
 /// a circular project reference) can drive disk mount/unmount/list operations.
 /// </summary>
+/// <remarks>
+/// This class is the entire contract surface between the CLI pipe server and <see cref="MainViewModel"/>:
+/// <see cref="MainViewModel.ExitWithoutConfirmation"/>, <see cref="MainViewModel.FormatByMountPointAsync"/>,
+/// <see cref="MainViewModel.MountArchiveAsync"/>, <see cref="MainViewModel.MountImageAsync"/>,
+/// <see cref="MainViewModel.SaveByMountPointAsync"/>, and <see cref="MainViewModel.UnmountByMountPointAsync"/>
+/// (plus the read-only <see cref="MainViewModel.Disks"/> collection for <see cref="ListDisks"/>). Changing
+/// any of their signatures requires updating this adapter in lockstep.
+/// </remarks>
 internal sealed class MainViewModelCliDiskController(MainViewModel mainViewModel) : ICliDiskController
 {
     /// <summary>

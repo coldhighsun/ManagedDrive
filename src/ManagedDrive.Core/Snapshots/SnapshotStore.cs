@@ -485,45 +485,27 @@ internal static class SnapshotStore
 
     private static (string Path, NodeHeader Header) ReadNodeHeader(BinaryReader reader)
     {
-        var path = reader.ReadString();
+        var metadata = NodeMetadataIO.ReadMetadata(reader);
+        var fileInfo = metadata.FileInfo;
 
         var header = new NodeHeader(
-            FileAttributes: reader.ReadUInt32(),
-            AllocationSize: reader.ReadUInt64(),
-            FileSize: reader.ReadUInt64(),
-            CreationTime: reader.ReadUInt64(),
-            LastAccessTime: reader.ReadUInt64(),
-            LastWriteTime: reader.ReadUInt64(),
-            ChangeTime: reader.ReadUInt64(),
-            IndexNumber: reader.ReadUInt64(),
-            HardLinks: reader.ReadUInt32(),
-            Security: null);
+            FileAttributes: fileInfo.FileAttributes,
+            AllocationSize: fileInfo.AllocationSize,
+            FileSize: fileInfo.FileSize,
+            CreationTime: fileInfo.CreationTime,
+            LastAccessTime: fileInfo.LastAccessTime,
+            LastWriteTime: fileInfo.LastWriteTime,
+            ChangeTime: fileInfo.ChangeTime,
+            IndexNumber: fileInfo.IndexNumber,
+            HardLinks: fileInfo.HardLinks,
+            Security: metadata.Security);
 
-        var secLen = reader.ReadInt32();
-        var security = secLen > 0 ? reader.ReadBytes(secLen) : null;
-
-        return (path, header with
-        {
-            Security = security
-        });
+        return (metadata.Path, header);
     }
 
     private static void WriteNode(BinaryWriter writer, string path, FileNode node, string blobDirectory, ImageCompressionLevel level, byte[]? cek)
     {
-        writer.Write(path);
-        writer.Write(node.FileInfo.FileAttributes);
-        writer.Write(node.FileInfo.AllocationSize);
-        writer.Write(node.FileInfo.FileSize);
-        writer.Write(node.FileInfo.CreationTime);
-        writer.Write(node.FileInfo.LastAccessTime);
-        writer.Write(node.FileInfo.LastWriteTime);
-        writer.Write(node.FileInfo.ChangeTime);
-        writer.Write(node.FileInfo.IndexNumber);
-        writer.Write(node.FileInfo.HardLinks);
-
-        var security = node.FileSecurity ?? [];
-        writer.Write(security.Length);
-        writer.Write(security);
+        NodeMetadataIO.WriteMetadata(writer, path, node);
 
         if (node.IsDirectory)
         {
