@@ -53,6 +53,16 @@ public readonly record struct ImageEncryptionInfo(string Password, byte[] Cek);
 public static class DiskImageSerializer
 {
     private const int CekSize = 32;
+
+    /// <summary>
+    /// Buffer size for the image file's <see cref="FileStream"/>. Save/Load are purely sequential,
+    /// large-volume I/O, so a larger-than-default (4 KB) buffer cuts the number of read/write
+    /// syscalls substantially — this matters most for uncompressed images, where node metadata is
+    /// written directly to this stream in many small <see cref="BinaryWriter"/> calls rather than
+    /// through a buffering <see cref="System.IO.Compression.GZipStream"/>.
+    /// </summary>
+    private const int FileStreamBufferSize = 1024 * 1024;
+
     private const int NonceSize = 12;
     private const int Pbkdf2Iterations = 210_000;
     private const int SaltSize = 16;
@@ -109,7 +119,13 @@ public static class DiskImageSerializer
         out byte[]? cek,
         IProgress<double>? progress = null)
     {
-        using var stream = new FileStream(imagePath, FileMode.Open, FileAccess.Read);
+        using var stream = new FileStream(imagePath, new FileStreamOptions
+        {
+            Mode = FileMode.Open,
+            Access = FileAccess.Read,
+            BufferSize = FileStreamBufferSize,
+            Options = FileOptions.SequentialScan,
+        });
         using var reader = new BinaryReader(stream, System.Text.Encoding.UTF8, leaveOpen: false);
 
         ReadHeader(reader, out var version, out var level, out var isEncrypted);
@@ -143,7 +159,13 @@ public static class DiskImageSerializer
         out string volumeLabel,
         out bool isEncrypted)
     {
-        using var stream = new FileStream(imagePath, FileMode.Open, FileAccess.Read);
+        using var stream = new FileStream(imagePath, new FileStreamOptions
+        {
+            Mode = FileMode.Open,
+            Access = FileAccess.Read,
+            BufferSize = FileStreamBufferSize,
+            Options = FileOptions.SequentialScan,
+        });
         using var reader = new BinaryReader(stream, System.Text.Encoding.UTF8, leaveOpen: false);
 
         ReadHeader(reader, out var version, out var level, out isEncrypted);
@@ -206,7 +228,13 @@ public static class DiskImageSerializer
 
         try
         {
-            using (var stream = new FileStream(tempPath, FileMode.Create, FileAccess.Write))
+            using (var stream = new FileStream(tempPath, new FileStreamOptions
+            {
+                Mode = FileMode.Create,
+                Access = FileAccess.Write,
+                BufferSize = FileStreamBufferSize,
+                Options = FileOptions.SequentialScan,
+            }))
             {
                 using (var writer = new BinaryWriter(stream, System.Text.Encoding.UTF8, leaveOpen: true))
                 {
