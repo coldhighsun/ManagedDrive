@@ -343,6 +343,54 @@ public sealed class CreateDiskOptionsBuilderTests
         };
     }
 
+    [Fact]
+    public void Build_CustomZstdLevelDisabled_LeavesCustomZstdLevelNull()
+    {
+        var result = CreateDiskOptionsBuilder.Build(ValidCreateInput());
+
+        Assert.True(result.Success);
+        Assert.Null(result.Options!.CustomZstdLevel);
+    }
+
+    [Fact]
+    public void Build_CustomZstdLevelEnabled_SetsCustomZstdLevel()
+    {
+        var input = ValidCreateInput() with { CustomZstdLevelEnabled = true, CustomZstdLevelValue = 12 };
+
+        var result = CreateDiskOptionsBuilder.Build(input);
+
+        Assert.True(result.Success);
+        Assert.Equal(12, result.Options!.CustomZstdLevel);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(23)]
+    public void Build_CustomZstdLevelOutOfRange_ReturnsBadCustomZstdLevel(int value)
+    {
+        var input = ValidCreateInput() with { CustomZstdLevelEnabled = true, CustomZstdLevelValue = value };
+
+        var result = CreateDiskOptionsBuilder.Build(input);
+
+        Assert.Equal(CreateDiskValidationError.BadCustomZstdLevel, result.Error);
+    }
+
+    [Fact]
+    public void Build_CustomZstdLevelEnabledButCompressionNone_IgnoresCustomZstdLevel()
+    {
+        var input = ValidCreateInput() with
+        {
+            CompressionLevel = ImageCompressionLevel.None,
+            CustomZstdLevelEnabled = true,
+            CustomZstdLevelValue = 12,
+        };
+
+        var result = CreateDiskOptionsBuilder.Build(input);
+
+        Assert.True(result.Success);
+        Assert.Null(result.Options!.CustomZstdLevel);
+    }
+
     private static CreateDiskInput ValidCreateInput() => new()
     {
         MountPoint = "Z:",

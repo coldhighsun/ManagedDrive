@@ -19,6 +19,7 @@ public sealed class DiskProfileMappingTests
             SourceArchivePath = @"C:\archives\disk.zip",
             AutoSaveIntervalMinutes = 15,
             CompressionLevel = ImageCompressionLevel.SmallestSize,
+            CustomZstdLevel = 19,
             MaxSnapshotCount = 7,
             MaxSnapshotSizeBytes = 999_000_000UL,
             HighUsageWarnPercent = 85.5,

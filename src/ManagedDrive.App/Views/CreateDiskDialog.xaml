@@ -14,7 +14,7 @@
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <TabControl Grid.Row="0" x:Name="MainTabControl" Style="{StaticResource AppTabControl}" MinHeight="390">
+        <TabControl Grid.Row="0" x:Name="MainTabControl" Style="{StaticResource AppTabControl}" MinHeight="405">
 
             <!-- Basic Info -->
             <TabItem Header="{DynamicResource CreateDisk.Section.Basic}">
@@ -140,6 +140,8 @@
                         <RowDefinition Height="12"/>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="6"/>
+                        <RowDefinition Height="Auto"/>
                         <RowDefinition Height="12"/>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="20"/>
@@ -205,30 +207,54 @@
                                   SelectionChanged="CompressionLevelBox_SelectionChanged"/>
                     </Grid>
 
-                    <!-- Compression Warning -->
-                    <TextBlock Grid.Row="5" x:Name="CompressionWarningText"
-                               Text="{DynamicResource CreateDisk.CompressionWarning}"
-                               Foreground="{DynamicResource AppWarning}"
-                               FontSize="11" TextWrapping="Wrap" Margin="92,0,0,0"
-                               Visibility="Collapsed"/>
+                    <!-- Custom Zstd Level -->
+                    <Grid Grid.Row="7" x:Name="CustomZstdLevelRow" IsEnabled="False" Margin="16,0,0,0"
+                          Style="{StaticResource DimWhenDisabled}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="8"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <CheckBox Grid.Column="0" x:Name="CustomZstdLevelBox" VerticalAlignment="Center"
+                                  Content="{DynamicResource CreateDisk.CustomZstdLevel}"
+                                  Foreground="{DynamicResource AppForeground}"
+                                  ToolTip="{DynamicResource Tip.CustomZstdLevel}"
+                                  Checked="CustomZstdLevelBox_CheckedChanged" Unchecked="CustomZstdLevelBox_CheckedChanged"/>
+                        <Grid Grid.Column="2" x:Name="CustomZstdLevelPanel" IsEnabled="False" VerticalAlignment="Center"
+                              Style="{StaticResource DimWhenDisabled}">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="8"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <Slider Grid.Column="0" x:Name="CustomZstdLevelSlider"
+                                     ToolTip="{DynamicResource Tip.CustomZstdLevel}"
+                                     Style="{StaticResource AppSlider}"
+                                     Minimum="1" Maximum="22" Value="3"
+                                     ValueChanged="CustomZstdLevelSlider_ValueChanged"/>
+                            <TextBlock Grid.Column="2" x:Name="CustomZstdLevelValueText"
+                                       Foreground="{DynamicResource AppForeground}"
+                                       VerticalAlignment="Center" MinWidth="20" TextAlignment="Right"/>
+                        </Grid>
+                    </Grid>
 
                     <!-- Save On Exit -->
-                    <CheckBox Grid.Row="7" x:Name="SaveOnExitBox" VerticalAlignment="Center" IsChecked="True"
+                    <CheckBox Grid.Row="9" x:Name="SaveOnExitBox" VerticalAlignment="Center" IsChecked="True"
                               Content="{DynamicResource CreateDisk.SaveOnExit}"
                               Foreground="{DynamicResource AppForeground}"
                               ToolTip="{DynamicResource Tip.SaveOnExit}"/>
 
-                    <Border Grid.Row="8" BorderBrush="{DynamicResource AppDivider}" BorderThickness="0,1,0,0"
+                    <Border Grid.Row="10" BorderBrush="{DynamicResource AppDivider}" BorderThickness="0,1,0,0"
                             VerticalAlignment="Center"/>
 
                     <!-- Encryption -->
-                    <CheckBox Grid.Row="9" x:Name="EncryptImageBox" VerticalAlignment="Center"
+                    <CheckBox Grid.Row="11" x:Name="EncryptImageBox" VerticalAlignment="Center"
                               Content="{DynamicResource CreateDisk.EncryptImage}"
                               Foreground="{DynamicResource AppForeground}"
                               ToolTip="{DynamicResource Tip.EncryptImage}"
                               Checked="EncryptImageBox_CheckedChanged" Unchecked="EncryptImageBox_CheckedChanged"/>
 
-                    <Grid Grid.Row="11" x:Name="PasswordPanel" IsEnabled="False" Style="{StaticResource DimWhenDisabled}">
+                    <Grid Grid.Row="13" x:Name="PasswordPanel" IsEnabled="False" Style="{StaticResource DimWhenDisabled}">
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto"/>
                             <RowDefinition Height="6"/>
@@ -253,11 +279,11 @@
                     </Grid>
 
                     <!-- Section divider: image/compression/encryption above, auto-save/snapshots below -->
-                    <Border Grid.Row="12" BorderBrush="{DynamicResource AppDivider}" BorderThickness="0,1,0,0"
+                    <Border Grid.Row="14" BorderBrush="{DynamicResource AppDivider}" BorderThickness="0,1,0,0"
                             VerticalAlignment="Center"/>
 
                     <!-- Auto Save -->
-                    <Grid Grid.Row="13">
+                    <Grid Grid.Row="15">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="8"/>
@@ -287,7 +313,7 @@
                     </Grid>
 
                     <!-- Snapshot Max Count -->
-                    <Grid Grid.Row="15" Margin="16,0,0,0">
+                    <Grid Grid.Row="17" Margin="16,0,0,0">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="8"/>
@@ -316,7 +342,7 @@
                     </Grid>
 
                     <!-- Snapshot Max Size -->
-                    <Grid Grid.Row="16" Margin="16,0,0,0">
+                    <Grid Grid.Row="18" Margin="16,0,0,0">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="8"/>

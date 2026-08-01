@@ -450,7 +450,8 @@ public sealed class RamDisk : IDisposable
                 Options.PersistImagePath,
                 Options.CompressionLevel,
                 _password is not null && _cek is not null ? new ImageEncryptionInfo(_password, _cek) : null,
-                progress);
+                progress,
+                Options.CustomZstdLevel);
         }
         catch (Exception ex)
         {
@@ -934,7 +935,8 @@ public sealed class RamDisk : IDisposable
                 DateTimeOffset.UtcNow,
                 Options.CompressionLevel,
                 _cek,
-                progress);
+                progress,
+                Options.CustomZstdLevel);
 
             SnapshotManager.Prune(path, Options.MaxSnapshotCount, Options.MaxSnapshotSizeBytes);
         }

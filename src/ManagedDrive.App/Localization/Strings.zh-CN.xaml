@@ -73,7 +73,9 @@
     <sys:String x:Key="CompressionLevel.Fastest">快速</sys:String>
     <sys:String x:Key="CompressionLevel.Optimal">均衡</sys:String>
     <sys:String x:Key="CompressionLevel.SmallestSize">最高</sys:String>
-    <sys:String x:Key="CreateDisk.CompressionWarning">均衡/最高压缩可能会显著增加保存时间，请谨慎选择。</sys:String>
+    <sys:String x:Key="CreateDisk.CustomZstdLevel">自定义 Zstd 级别：</sys:String>
+    <sys:String x:Key="Tip.CustomZstdLevel">高级选项：用精确的 Zstd 级别覆盖上方的预设档位（1=最快，22=最小）。不勾选则使用预设档位对应的级别。</sys:String>
+    <sys:String x:Key="Val.BadCustomZstdLevel">请输入 1 到 22 之间的自定义 Zstd 级别。</sys:String>
     <sys:String x:Key="CreateDisk.SaveOnExit">退出时保存镜像</sys:String>
     <sys:String x:Key="CreateDisk.AutoSave">自动保存镜像，间隔（分钟）：</sys:String>
     <sys:String x:Key="CreateDisk.AutoSaveInterval">间隔（分钟）</sys:String>

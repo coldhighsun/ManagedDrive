@@ -76,6 +76,9 @@ public enum CreateDiskValidationError
     /// <summary>The high-usage warning percentage was out of range.</summary>
     BadHighUsagePercent,
 
+    /// <summary>The custom Zstd compression level was out of range.</summary>
+    BadCustomZstdLevel,
+
     /// <summary>Encryption was enabled but no password was entered.</summary>
     PasswordRequired,
 
@@ -161,6 +164,12 @@ public sealed record CreateDiskInput
 
     /// <summary>The selected compression level.</summary>
     public ImageCompressionLevel CompressionLevel { get; init; } = ImageCompressionLevel.Fastest;
+
+    /// <summary>Whether the advanced custom-Zstd-level override is enabled.</summary>
+    public bool CustomZstdLevelEnabled { get; init; }
+
+    /// <summary>The custom Zstd level (1-22), used only when <see cref="CustomZstdLevelEnabled"/> is set.</summary>
+    public int CustomZstdLevelValue { get; init; }
 
     /// <summary>Whether to save the image on exit.</summary>
     public bool SaveImageOnExit { get; init; }
@@ -349,6 +358,17 @@ public static class CreateDiskOptionsBuilder
             return Fail(CreateDiskValidationError.BadHighUsagePercent);
         }
 
+        int? customZstdLevel = null;
+        if (input.CompressionLevel != ImageCompressionLevel.None && input.CustomZstdLevelEnabled)
+        {
+            if (input.CustomZstdLevelValue < 1 || input.CustomZstdLevelValue > 22)
+            {
+                return Fail(CreateDiskValidationError.BadCustomZstdLevel);
+            }
+
+            customZstdLevel = input.CustomZstdLevelValue;
+        }
+
         var passwordResult = ResolvePassword(input);
         if (!passwordResult.Success)
         {
@@ -365,6 +385,7 @@ public static class CreateDiskOptionsBuilder
             PersistImagePath = imagePath,
             AutoSaveIntervalMinutes = autoSaveIntervalMinutes,
             CompressionLevel = input.CompressionLevel,
+            CustomZstdLevel = customZstdLevel,
             MaxSnapshotCount = maxSnapshotCount,
             MaxSnapshotSizeBytes = maxSnapshotSizeBytes,
             HighUsageWarnPercent = highUsageWarnPercent,

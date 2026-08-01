@@ -71,6 +71,15 @@ public sealed record DiskProfile
     public ImageCompressionLevel CompressionLevel { get; init; } = ImageCompressionLevel.Fastest;
 
     /// <summary>
+    /// Gets or sets the optional advanced override (1-22) of the exact Zstd level used instead of
+    /// the preset mapped from <see cref="CompressionLevel"/>. <c>null</c> means use the preset.
+    /// </summary>
+    public int? CustomZstdLevel
+    {
+        get; init;
+    }
+
+    /// <summary>
     /// Gets or sets the optional maximum number of retained snapshot images. <c>null</c>
     /// disables count-based snapshot pruning.
     /// </summary>
