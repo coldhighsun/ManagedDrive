@@ -530,29 +530,14 @@ public static class DiskImageSerializer
 
     private static (string Path, FileNode Node) ReadNode(BinaryReader reader)
     {
-        var path = reader.ReadString();
+        var metadata = NodeMetadataIO.ReadMetadata(reader);
+        var path = metadata.Path;
 
         var node = new FileNode
         {
-            FileInfo =
-            {
-                FileAttributes = reader.ReadUInt32(),
-                AllocationSize = reader.ReadUInt64(),
-                FileSize       = reader.ReadUInt64(),
-                CreationTime   = reader.ReadUInt64(),
-                LastAccessTime = reader.ReadUInt64(),
-                LastWriteTime  = reader.ReadUInt64(),
-                ChangeTime     = reader.ReadUInt64(),
-                IndexNumber    = reader.ReadUInt64(),
-                HardLinks      = reader.ReadUInt32(),
-            },
+            FileInfo = metadata.FileInfo,
+            FileSecurity = metadata.Security,
         };
-
-        var secLen = reader.ReadInt32();
-        if (secLen > 0)
-        {
-            node.FileSecurity = reader.ReadBytes(secLen);
-        }
 
         var dataLen = reader.ReadInt64();
         if (dataLen > 0 && !node.IsDirectory)
@@ -645,20 +630,7 @@ public static class DiskImageSerializer
 
     private static void WriteNode(BinaryWriter writer, string path, FileNode node)
     {
-        writer.Write(path);
-        writer.Write(node.FileInfo.FileAttributes);
-        writer.Write(node.FileInfo.AllocationSize);
-        writer.Write(node.FileInfo.FileSize);
-        writer.Write(node.FileInfo.CreationTime);
-        writer.Write(node.FileInfo.LastAccessTime);
-        writer.Write(node.FileInfo.LastWriteTime);
-        writer.Write(node.FileInfo.ChangeTime);
-        writer.Write(node.FileInfo.IndexNumber);
-        writer.Write(node.FileInfo.HardLinks);
-
-        var security = node.FileSecurity ?? [];
-        writer.Write(security.Length);
-        writer.Write(security);
+        NodeMetadataIO.WriteMetadata(writer, path, node);
 
         if (node is { IsDirectory: false, FileData: not null, FileInfo.FileSize: > 0 })
         {
