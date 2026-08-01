@@ -169,7 +169,7 @@ BenchmarkDotNet will prompt you to pick which benchmark class(es) to run (`Seque
 `mdrive.exe` ships alongside `ManagedDrive.exe` and forwards commands to the running app over a named pipe, so scripts can drive ManagedDrive without opening the UI. If the app isn't already running, `mdrive` launches it and retries for up to 10 seconds before giving up.
 
 ```powershell
-mdrive mount C:\disks\scratch.mdr R: --auto-mount --compression Optimal
+mdrive mount C:\disks\scratch.mdr R: --auto-mount --compression Optimal --custom-zstd-level 19
 mdrive list
 mdrive save R:
 mdrive format R: --yes
@@ -179,7 +179,7 @@ mdrive exit
 
 | Command | Description |
 |---|---|
-| `mount <image-path> <drive-letter> [options]` | Mounts an existing `.mdr` image at a drive letter. Options: `--read-only`, `--auto-mount`, `--auto-save-minutes`, `--compression <None\|Fastest\|Optimal\|SmallestSize>`, `--max-snapshot-count`, `--max-snapshot-size-mb`, `--high-usage-warn-percent`, `--password`, `--password-file` (mutually exclusive; needed only if the image is encrypted — `--password-file` reads the first line of a file and is recommended over `--password` to avoid exposing it in shell history or the process list). Any option left unset keeps the image's saved profile value (or its default). |
+| `mount <image-path> <drive-letter> [options]` | Mounts an existing `.mdr` image at a drive letter. Options: `--read-only`, `--auto-mount`, `--auto-save-minutes`, `--compression <None\|Fastest\|Optimal\|SmallestSize>`, `--custom-zstd-level <1-22>` (overrides the preset Zstd level mapped from `--compression`; only takes effect when the compression level is not `None`), `--max-snapshot-count`, `--max-snapshot-size-mb`, `--high-usage-warn-percent`, `--password`, `--password-file` (mutually exclusive; needed only if the image is encrypted — `--password-file` reads the first line of a file and is recommended over `--password` to avoid exposing it in shell history or the process list). Any option left unset keeps the image's saved profile value (or its default). |
 | `mount-archive <archive-path> [drive-letter]` | Imports an archive (zip/7z/rar/tar/...) as a read-only disk and opens it in Explorer once mounted. `drive-letter` is optional — if omitted, the first free letter from `Z:` down to `D:` is used. Used internally by the Explorer right-click menu entry. |
 | `unmount <drive-letter>` | Unmounts a mounted disk. |
 | `format <drive-letter> --yes` | Deletes all files on a mounted disk. Requires `--yes`/`-y` to confirm. |
@@ -398,7 +398,7 @@ BenchmarkDotNet 会提示你选择要运行的基准测试类（`SequentialReadW
 `mdrive.exe` 随 `ManagedDrive.exe` 一同发布，通过命名管道将命令转发给正在运行的应用，因此脚本无需打开界面即可操作 ManagedDrive。若应用尚未运行，`mdrive` 会自动启动它，并在最长 10 秒内重试。
 
 ```powershell
-mdrive mount C:\disks\scratch.mdr R: --auto-mount --compression Optimal
+mdrive mount C:\disks\scratch.mdr R: --auto-mount --compression Optimal --custom-zstd-level 19
 mdrive list
 mdrive save R:
 mdrive format R: --yes

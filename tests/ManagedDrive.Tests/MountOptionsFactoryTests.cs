@@ -81,6 +81,46 @@ public sealed class MountOptionsFactoryTests
     }
 
     [Fact]
+    public void BuildImageOptions_CustomZstdLevelOverrideWinsOverProfile()
+    {
+        var profile = new DiskOptions
+        {
+            MountPoint = "OLD:",
+            CapacityBytes = 1,
+            VolumeLabel = "L",
+            PersistImagePath = Image,
+            CompressionLevel = ImageCompressionLevel.Optimal,
+            CustomZstdLevel = 5,
+        };
+
+        var overrides = new MountOverrides { CustomZstdLevel = 19 };
+
+        var options = MountOptionsFactory.BuildImageOptions(
+            profile, "R:", Image, 4UL * 1024 * 1024, "L", overrides);
+
+        Assert.Equal(19, options.CustomZstdLevel);
+    }
+
+    [Fact]
+    public void BuildImageOptions_NoCustomZstdLevelOverride_ReusesProfileValue()
+    {
+        var profile = new DiskOptions
+        {
+            MountPoint = "OLD:",
+            CapacityBytes = 1,
+            VolumeLabel = "L",
+            PersistImagePath = Image,
+            CompressionLevel = ImageCompressionLevel.Optimal,
+            CustomZstdLevel = 5,
+        };
+
+        var options = MountOptionsFactory.BuildImageOptions(
+            profile, "R:", Image, 4UL * 1024 * 1024, "L", overrides: new());
+
+        Assert.Equal(5, options.CustomZstdLevel);
+    }
+
+    [Fact]
     public void BuildArchiveOptions_ForcesReadOnlyAndSetsSourcePath()
     {
         var options = MountOptionsFactory.BuildArchiveOptions(

@@ -665,6 +665,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
                 CompressionLevel = overrides.CompressionLevel is { } compressionLevel
                     ? (Core.Mounting.ImageCompressionLevel)compressionLevel
                     : null,
+                CustomZstdLevel = overrides.CustomZstdLevel,
                 MaxSnapshotCount = overrides.MaxSnapshotCount,
                 MaxSnapshotSizeBytes = overrides.MaxSnapshotSizeBytes,
                 HighUsageWarnPercent = overrides.HighUsageWarnPercent,

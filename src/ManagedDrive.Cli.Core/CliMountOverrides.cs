@@ -38,6 +38,16 @@ public sealed record CliMountOverrides
     }
 
     /// <summary>
+    /// Gets the custom Zstd compression level (1-22) to use instead of the preset mapping for
+    /// <see cref="CompressionLevel"/>. Only takes effect when the compression level is not
+    /// <see cref="ImageCompressionLevel.None"/>.
+    /// </summary>
+    public int? CustomZstdLevel
+    {
+        get; init;
+    }
+
+    /// <summary>
     /// Gets the maximum number of snapshots to retain.
     /// </summary>
     public uint? MaxSnapshotCount

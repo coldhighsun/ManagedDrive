@@ -43,6 +43,10 @@ public static class CliCommandProcessor
         {
             Description = "Image compression level: None, Fastest, Optimal, or SmallestSize. If omitted, keeps the saved profile's value (or the default: Fastest).",
         };
+        var mountCustomZstdLevelOption = new Option<int?>("--custom-zstd-level")
+        {
+            Description = "Custom Zstd compression level (1-22), overriding the preset mapping for --compression. Only takes effect when the compression level is not None.",
+        };
         var mountMaxSnapshotCountOption = new Option<uint?>("--max-snapshot-count")
         {
             Description = "Maximum number of retained snapshots. If omitted, keeps the saved profile's value (or the default: unlimited).",
@@ -71,6 +75,7 @@ public static class CliCommandProcessor
         mountCommand.Options.Add(mountAutoMountOption);
         mountCommand.Options.Add(mountAutoSaveMinutesOption);
         mountCommand.Options.Add(mountCompressionOption);
+        mountCommand.Options.Add(mountCustomZstdLevelOption);
         mountCommand.Options.Add(mountMaxSnapshotCountOption);
         mountCommand.Options.Add(mountMaxSnapshotSizeMbOption);
         mountCommand.Options.Add(mountHighUsageWarnPercentOption);
@@ -79,8 +84,15 @@ public static class CliCommandProcessor
         mountCommand.SetAction(async (parseResult, _) =>
         {
             var maxSnapshotSizeMb = parseResult.GetValue(mountMaxSnapshotSizeMbOption);
+            var customZstdLevel = parseResult.GetValue(mountCustomZstdLevelOption);
             var password = parseResult.GetValue(mountPasswordOption);
             var passwordFile = parseResult.GetValue(mountPasswordFileOption);
+
+            if (customZstdLevel is < 1 or > 22)
+            {
+                outcome = new CliOutcome(false, "--custom-zstd-level must be between 1 and 22.", null, 1);
+                return 1;
+            }
 
             if (password is not null && passwordFile is not null)
             {
@@ -107,6 +119,7 @@ public static class CliCommandProcessor
                 AutoMount = parseResult.GetValue(mountAutoMountOption),
                 AutoSaveIntervalMinutes = parseResult.GetValue(mountAutoSaveMinutesOption),
                 CompressionLevel = parseResult.GetValue(mountCompressionOption),
+                CustomZstdLevel = customZstdLevel,
                 MaxSnapshotCount = parseResult.GetValue(mountMaxSnapshotCountOption),
                 MaxSnapshotSizeBytes = maxSnapshotSizeMb * 1024UL * 1024UL,
                 HighUsageWarnPercent = parseResult.GetValue(mountHighUsageWarnPercentOption),
