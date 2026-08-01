@@ -40,7 +40,7 @@ public sealed class RamDisk : IDisposable
     public event Action<bool>? ContentAccessed;
 
     /// <summary>
-    /// Occurs whenever an image save or snapshot write fails, whether triggered manually,
+    /// Raised whenever an image save or snapshot write fails, whether triggered manually,
     /// by the periodic auto-save timer, or by the final save on unmount/dispose. The
     /// exception is also rethrown to the caller for saves that are awaited synchronously
     /// (e.g. a manual save); this event exists so background failures that would otherwise

@@ -19,6 +19,12 @@ namespace ManagedDrive.Core.Persistence;
 internal static class ParallelZstd
 {
     /// <summary>
+    /// Test-only override for <see cref="DefaultChunkSize"/>; <see langword="null"/> means use the
+    /// production default. Set via <c>InternalsVisibleTo("ManagedDrive.Tests")</c>.
+    /// </summary>
+    internal static int? TestChunkSizeOverride;
+
+    /// <summary>
     /// Size of each independently compressed chunk. Large enough that per-chunk compression
     /// overhead (frame header/epilogue, a fresh <see cref="ZstdSharp.Compressor"/> context) stays
     /// negligible relative to the data compressed, but small enough to get real parallelism on
@@ -27,146 +33,7 @@ internal static class ParallelZstd
     /// </summary>
     private const int DefaultChunkSize = 4 * 1024 * 1024;
 
-    /// <summary>
-    /// Test-only override for <see cref="DefaultChunkSize"/>; <see langword="null"/> means use the
-    /// production default. Set via <c>InternalsVisibleTo("ManagedDrive.Tests")</c>.
-    /// </summary>
-    internal static int? TestChunkSizeOverride;
-
     internal static int ChunkSize => TestChunkSizeOverride ?? DefaultChunkSize;
-
-    /// <summary>
-    /// Write-only <see cref="Stream"/> that buffers up to <see cref="ChunkSize"/> bytes at a time
-    /// and, on each full buffer plus once more on <see cref="Complete"/>, hands that chunk to a
-    /// background <see cref="Task"/> that Zstd-compresses it independently. Compression runs
-    /// concurrently (bounded by <paramref name="maxDegreeOfParallelism"/>), but chunks are always
-    /// written to <paramref name="target"/> in the order they were queued, blocking on the oldest
-    /// outstanding task if the queue is full — so output ordering matches input ordering
-    /// regardless of which task happens to finish first.
-    /// </summary>
-    internal sealed class WriteStream(Stream target, int level, int? maxDegreeOfParallelism = null) : Stream
-    {
-        private readonly Queue<Task<byte[]>> _pending = new();
-        private readonly int _maxDegreeOfParallelism = Math.Max(1, maxDegreeOfParallelism ?? Environment.ProcessorCount);
-        private byte[] _buffer = new byte[ChunkSize];
-        private int _bufferLength;
-        private bool _completed;
-
-        public override bool CanRead => false;
-        public override bool CanSeek => false;
-        public override bool CanWrite => true;
-        public override long Length => throw new NotSupportedException();
-
-        public override long Position
-        {
-            get => throw new NotSupportedException();
-            set => throw new NotSupportedException();
-        }
-
-        public override void Write(byte[] buffer, int offset, int count)
-        {
-            while (count > 0)
-            {
-                var toCopy = Math.Min(count, _buffer.Length - _bufferLength);
-                Array.Copy(buffer, offset, _buffer, _bufferLength, toCopy);
-                _bufferLength += toCopy;
-                offset += toCopy;
-                count -= toCopy;
-
-                if (_bufferLength == _buffer.Length)
-                {
-                    FlushChunk();
-                }
-            }
-        }
-
-        public override void Flush()
-        {
-        }
-
-        /// <summary>
-        /// Flushes any partially filled chunk, then drains every outstanding compression task in
-        /// queued order, writing each result to <paramref name="target"/>. Must be called exactly
-        /// once after all plaintext has been written, before disposing — mirrors
-        /// <see cref="ChunkedGcm.WriteStream.Complete"/>'s explicit-completion pattern.
-        /// </summary>
-        public void Complete()
-        {
-            if (_completed)
-            {
-                return;
-            }
-
-            if (_bufferLength > 0)
-            {
-                QueueChunk();
-            }
-
-            while (_pending.Count > 0)
-            {
-                DrainOne();
-            }
-
-            WriteChunkHeader(0);
-            _completed = true;
-        }
-
-        private void FlushChunk()
-        {
-            if (_pending.Count >= _maxDegreeOfParallelism)
-            {
-                DrainOne();
-            }
-
-            QueueChunk();
-        }
-
-        private void QueueChunk()
-        {
-            var chunk = _buffer;
-            var length = _bufferLength;
-            _buffer = new byte[ChunkSize];
-            _bufferLength = 0;
-
-            _pending.Enqueue(Task.Run(() => Compress(chunk, length, level)));
-        }
-
-        private void DrainOne()
-        {
-            var compressed = _pending.Dequeue().GetAwaiter().GetResult();
-            WriteChunkHeader(compressed.Length);
-            target.Write(compressed, 0, compressed.Length);
-        }
-
-        private void WriteChunkHeader(int length)
-        {
-            Span<byte> lengthBytes = stackalloc byte[4];
-            BinaryPrimitives.WriteInt32LittleEndian(lengthBytes, length);
-            target.Write(lengthBytes);
-        }
-
-        private static byte[] Compress(byte[] data, int length, int level)
-        {
-            using var compressor = new ZstdSharp.Compressor(level);
-            return compressor.Wrap(data.AsSpan(0, length)).ToArray();
-        }
-
-        protected override void Dispose(bool disposing)
-        {
-            if (disposing && !_completed)
-            {
-                Complete();
-            }
-
-            base.Dispose(disposing);
-        }
-
-        public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException();
-
-        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
-
-        public override void SetLength(long value) => throw new NotSupportedException();
-    }
 
     /// <summary>
     /// Read-only counterpart to <see cref="WriteStream"/>: reads the
@@ -179,12 +46,11 @@ internal static class ParallelZstd
     /// </summary>
     internal sealed class ReadStream(Stream source, int? maxDegreeOfParallelism = null) : Stream
     {
-        private readonly Queue<Task<byte[]>> _pending = new();
         private readonly int _maxDegreeOfParallelism = Math.Max(1, maxDegreeOfParallelism ?? Environment.ProcessorCount);
+        private readonly Queue<Task<byte[]>> _pending = new();
         private byte[] _currentChunk = [];
-        private int _positionInChunk;
         private bool _endOfStream;
-
+        private int _positionInChunk;
         public override bool CanRead => true;
         public override bool CanSeek => false;
         public override bool CanWrite => false;
@@ -195,6 +61,8 @@ internal static class ParallelZstd
             get => throw new NotSupportedException();
             set => throw new NotSupportedException();
         }
+
+        public override void Flush() => throw new NotSupportedException();
 
         public override int Read(byte[] buffer, int offset, int count)
         {
@@ -224,6 +92,29 @@ internal static class ParallelZstd
             return totalRead;
         }
 
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+
+        public override void SetLength(long value) => throw new NotSupportedException();
+
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+
+        private static byte[] Decompress(byte[] compressed)
+        {
+            using var decompressor = new ZstdSharp.Decompressor();
+            return decompressor.Unwrap(compressed).ToArray();
+        }
+
+        private void FillPending()
+        {
+            while (!_endOfStream && _pending.Count < _maxDegreeOfParallelism)
+            {
+                if (!TryQueueNextChunk())
+                {
+                    break;
+                }
+            }
+        }
+
         private bool TryAdvanceChunk()
         {
             FillPending();
@@ -242,17 +133,6 @@ internal static class ParallelZstd
             FillPending();
 
             return _currentChunk.Length > 0 || TryAdvanceChunk();
-        }
-
-        private void FillPending()
-        {
-            while (!_endOfStream && _pending.Count < _maxDegreeOfParallelism)
-            {
-                if (!TryQueueNextChunk())
-                {
-                    break;
-                }
-            }
         }
 
         private bool TryQueueNextChunk()
@@ -278,19 +158,135 @@ internal static class ParallelZstd
             _pending.Enqueue(Task.Run(() => Decompress(chunk)));
             return true;
         }
+    }
 
-        private static byte[] Decompress(byte[] compressed)
+    /// <summary>
+    /// Write-only <see cref="Stream"/> that buffers up to <see cref="ChunkSize"/> bytes at a time
+    /// and, on each full buffer plus once more on <see cref="Complete"/>, hands that chunk to a
+    /// background <see cref="Task"/> that Zstd-compresses it independently. Compression runs
+    /// concurrently (bounded by <paramref name="maxDegreeOfParallelism"/>), but chunks are always
+    /// written to <paramref name="target"/> in the order they were queued, blocking on the oldest
+    /// outstanding task if the queue is full — so output ordering matches input ordering
+    /// regardless of which task happens to finish first.
+    /// </summary>
+    internal sealed class WriteStream(Stream target, int level, int? maxDegreeOfParallelism = null) : Stream
+    {
+        private readonly int _maxDegreeOfParallelism = Math.Max(1, maxDegreeOfParallelism ?? Environment.ProcessorCount);
+        private readonly Queue<Task<byte[]>> _pending = new();
+        private byte[] _buffer = new byte[ChunkSize];
+        private int _bufferLength;
+        private bool _completed;
+
+        public override bool CanRead => false;
+        public override bool CanSeek => false;
+        public override bool CanWrite => true;
+        public override long Length => throw new NotSupportedException();
+
+        public override long Position
         {
-            using var decompressor = new ZstdSharp.Decompressor();
-            return decompressor.Unwrap(compressed).ToArray();
+            get => throw new NotSupportedException();
+            set => throw new NotSupportedException();
         }
 
-        public override void Flush() => throw new NotSupportedException();
+        /// <summary>
+        /// Flushes any remaining buffered bytes as a final chunk, then waits for all pending
+        /// </summary>
+        public void Complete()
+        {
+            if (_completed)
+            {
+                return;
+            }
 
-        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+            if (_bufferLength > 0)
+            {
+                QueueChunk();
+            }
+
+            while (_pending.Count > 0)
+            {
+                DrainOne();
+            }
+
+            WriteChunkHeader(0);
+            _completed = true;
+        }
+
+        public override void Flush()
+        {
+        }
+
+        public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException();
 
         public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
 
         public override void SetLength(long value) => throw new NotSupportedException();
+
+        public override void Write(byte[] buffer, int offset, int count)
+        {
+            while (count > 0)
+            {
+                var toCopy = Math.Min(count, _buffer.Length - _bufferLength);
+                Array.Copy(buffer, offset, _buffer, _bufferLength, toCopy);
+                _bufferLength += toCopy;
+                offset += toCopy;
+                count -= toCopy;
+
+                if (_bufferLength == _buffer.Length)
+                {
+                    FlushChunk();
+                }
+            }
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing && !_completed)
+            {
+                Complete();
+            }
+
+            base.Dispose(disposing);
+        }
+
+        private static byte[] Compress(byte[] data, int length, int level)
+        {
+            using var compressor = new ZstdSharp.Compressor(level);
+            return compressor.Wrap(data.AsSpan(0, length)).ToArray();
+        }
+
+        private void DrainOne()
+        {
+            var compressed = _pending.Dequeue().GetAwaiter().GetResult();
+            WriteChunkHeader(compressed.Length);
+            target.Write(compressed, 0, compressed.Length);
+        }
+
+        private void FlushChunk()
+        {
+            if (_pending.Count >= _maxDegreeOfParallelism)
+            {
+                DrainOne();
+            }
+
+            QueueChunk();
+        }
+
+        private void QueueChunk()
+        {
+            var chunk = _buffer;
+            var length = _bufferLength;
+            _buffer = new byte[ChunkSize];
+            _bufferLength = 0;
+
+            _pending.Enqueue(Task.Run(() => Compress(chunk, length, level)));
+        }
+
+        private void WriteChunkHeader(int length)
+        {
+            Span<byte> lengthBytes = stackalloc byte[4];
+            BinaryPrimitives.WriteInt32LittleEndian(lengthBytes, length);
+            target.Write(lengthBytes);
+        }
     }
 }

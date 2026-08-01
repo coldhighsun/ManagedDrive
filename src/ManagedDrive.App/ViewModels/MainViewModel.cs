@@ -562,6 +562,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     /// Errors are surfaced via <see cref="StatusText"/>.
     /// </summary>
     /// <param name="profile">The profile to mount.</param>
+    /// <param name="progress">An optional progress reporter.</param>
     /// <returns>
     /// <c>true</c> if the disk was mounted successfully; <c>false</c> if mounting failed
     /// (the failure reason is surfaced via <see cref="StatusText"/>).
