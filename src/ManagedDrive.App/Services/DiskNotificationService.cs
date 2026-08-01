@@ -1,3 +1,5 @@
+using ThrottledLogging;
+
 namespace ManagedDrive.App.Services;
 
 /// <summary>
@@ -9,6 +11,7 @@ public sealed class DiskNotificationService
 {
     private readonly HashSet<DiskViewModel> _highUsageDisks = [];
     private readonly Func<bool> _isMainWindowVisible;
+    private readonly ILogger<DiskNotificationService> _logger;
     private readonly MainViewModel _mainViewModel;
     private readonly TrayIconController _trayIconController;
 
@@ -19,11 +22,17 @@ public sealed class DiskNotificationService
     /// <param name="mainViewModel">The view model owning the disk collection.</param>
     /// <param name="trayIconController">Used to show balloon tips for warnings/failures.</param>
     /// <param name="isMainWindowVisible">Queried to set initial activity tracking on newly added disks.</param>
-    public DiskNotificationService(MainViewModel mainViewModel, TrayIconController trayIconController, Func<bool> isMainWindowVisible)
+    /// <param name="logger">Used to record throttled high-usage warnings.</param>
+    public DiskNotificationService(
+        MainViewModel mainViewModel,
+        TrayIconController trayIconController,
+        Func<bool> isMainWindowVisible,
+        ILogger<DiskNotificationService> logger)
     {
         _mainViewModel = mainViewModel;
         _trayIconController = trayIconController;
         _isMainWindowVisible = isMainWindowVisible;
+        _logger = logger;
 
         _mainViewModel.Disks.CollectionChanged += (_, e) =>
         {
@@ -90,6 +99,23 @@ public sealed class DiskNotificationService
         _mainViewModel.StatusText = Loc.Format("Status.CapacityAdjusted", vm.MountPoint, originalMb, newMb);
     }
 
+    private void OnDiskHighUsageWarning(object? sender, EventArgs e)
+    {
+        if (sender is not DiskViewModel vm)
+        {
+            return;
+        }
+
+        var title = Loc.Get("Tray.HighUsageTitle");
+        var body = Loc.Format("Tray.HighUsageBody", vm.VolumeLabel, vm.MountPoint, vm.UsedPercent);
+        _trayIconController.ShowBalloonTip(title, body, System.Windows.Forms.ToolTipIcon.Warning);
+
+        _logger.LogWarningThrottled(
+            $"high-usage:{vm.MountPoint}", TimeSpan.FromMinutes(10),
+            "Disk {MountPoint} ({VolumeLabel}) usage reached {UsedPercent:F1}%.",
+            vm.MountPoint, vm.VolumeLabel, vm.UsedPercent);
+    }
+
     /// <summary>
     /// Tracks every disk currently in the <see cref="DiskViewModel.IsHighUsage"/> state (which
     /// fires on both the rising and falling edge, unlike the one-shot <see cref="DiskViewModel.HighUsageWarning"/>
@@ -114,18 +140,6 @@ public sealed class DiskNotificationService
         }
 
         _trayIconController.SetHighUsageWarningActive(_highUsageDisks.Count > 0);
-    }
-
-    private void OnDiskHighUsageWarning(object? sender, EventArgs e)
-    {
-        if (sender is not DiskViewModel vm)
-        {
-            return;
-        }
-
-        var title = Loc.Get("Tray.HighUsageTitle");
-        var body = Loc.Format("Tray.HighUsageBody", vm.VolumeLabel, vm.MountPoint, vm.UsedPercent);
-        _trayIconController.ShowBalloonTip(title, body, System.Windows.Forms.ToolTipIcon.Warning);
     }
 
     private void OnDiskSaveFailed(object? sender, Exception ex)

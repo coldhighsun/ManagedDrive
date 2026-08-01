@@ -1,5 +1,6 @@
 using Fsp;
 using System.Runtime.InteropServices;
+using ThrottledLogging;
 
 namespace ManagedDrive.Core.Mounting;
 
@@ -479,7 +480,9 @@ public sealed class RamDisk : IDisposable
         }
         catch (Exception ex)
         {
-            Logger.LogError(ex, "Failed to save disk image to {ImagePath}.", Options.PersistImagePath);
+            Logger.LogErrorThrottled(
+                $"save-failed:{Options.PersistImagePath}", TimeSpan.FromMinutes(10),
+                "Failed to save disk image to {ImagePath}: {Error}", Options.PersistImagePath, ex.Message);
             SaveFailed?.Invoke(this, ex);
             throw;
         }

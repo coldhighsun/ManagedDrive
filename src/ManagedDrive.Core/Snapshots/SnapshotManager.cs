@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text.RegularExpressions;
+using ThrottledLogging;
 
 namespace ManagedDrive.Core.Snapshots;
 
@@ -305,11 +306,15 @@ public static partial class SnapshotManager
             catch (IOException ex)
             {
                 // Best-effort pruning; leave this file for the next attempt.
-                Logger.LogWarning(ex, "Failed to prune snapshot '{Path}'", snapshot.Path);
+                Logger.LogWarningThrottled(
+                    $"prune-failed:{snapshot.Path}", TimeSpan.FromMinutes(10),
+                    "Failed to prune snapshot '{Path}': {Error}", snapshot.Path, ex.Message);
             }
             catch (UnauthorizedAccessException ex)
             {
-                Logger.LogWarning(ex, "Failed to prune snapshot '{Path}'", snapshot.Path);
+                Logger.LogWarningThrottled(
+                    $"prune-failed:{snapshot.Path}", TimeSpan.FromMinutes(10),
+                    "Failed to prune snapshot '{Path}': {Error}", snapshot.Path, ex.Message);
             }
 
             index++;
@@ -395,11 +400,15 @@ public static partial class SnapshotManager
             }
             catch (IOException ex)
             {
-                Logger.LogWarning(ex, "Failed to delete unreferenced blob '{Path}'", blobPath);
+                Logger.LogWarningThrottled(
+                    $"blob-gc-failed:{blobPath}", TimeSpan.FromMinutes(10),
+                    "Failed to delete unreferenced blob '{Path}': {Error}", blobPath, ex.Message);
             }
             catch (UnauthorizedAccessException ex)
             {
-                Logger.LogWarning(ex, "Failed to delete unreferenced blob '{Path}'", blobPath);
+                Logger.LogWarningThrottled(
+                    $"blob-gc-failed:{blobPath}", TimeSpan.FromMinutes(10),
+                    "Failed to delete unreferenced blob '{Path}': {Error}", blobPath, ex.Message);
             }
         }
     }

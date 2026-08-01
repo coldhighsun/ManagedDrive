@@ -4,6 +4,7 @@
     <PackageReference Include="winfsp.net" />
     <PackageReference Include="SharpCompress" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+    <PackageReference Include="ThrottledLogging" />
   </ItemGroup>
 
   <ItemGroup>
