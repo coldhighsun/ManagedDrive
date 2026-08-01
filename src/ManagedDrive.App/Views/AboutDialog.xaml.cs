@@ -8,8 +8,7 @@ namespace ManagedDrive.App.Views;
 public partial class AboutDialog
 {
     private const string GitHubUrl = "https://github.com/coldhighsun/ManagedDrive";
-    private const string SharpCompressUrl = "https://github.com/adamhathcock/sharpcompress";
-    private const string WinFspUrl = "https://winfsp.dev/";
+    private const string ThirdPartyNoticesUrl = "https://github.com/coldhighsun/ManagedDrive/blob/main/THIRD-PARTY-NOTICES.md";
     private readonly UpdateCheckService? _updateCheckService;
 
     public AboutDialog(UpdateCheckService? updateCheckService = null)
@@ -19,8 +18,7 @@ public partial class AboutDialog
 
         VersionText.Text = UpdateCheckService.GetRunningVersion();
         GitHubLink.NavigateUri = new(GitHubUrl);
-        WinFspLink.NavigateUri = new(WinFspUrl);
-        SharpCompressLink.NavigateUri = new(SharpCompressUrl);
+        ThirdPartyNoticesLink.NavigateUri = new(ThirdPartyNoticesUrl);
 
         _ = CheckForUpdateAsync();
     }
