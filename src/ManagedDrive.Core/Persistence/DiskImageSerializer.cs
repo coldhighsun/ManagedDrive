@@ -151,11 +151,7 @@ public static class DiskImageSerializer
         if (version <= 2)
         {
             // Legacy layout: capacity/label are inside the optionally compressed payload.
-            var compressed = version == 2 && level != ImageCompressionLevel.None;
-            using var payloadReader = compressed
-                ? new BinaryReader(new GZipStream(stream, CompressionMode.Decompress, leaveOpen: true), System.Text.Encoding.UTF8)
-                : reader;
-
+            using var payloadReader = OpenLegacyPayloadReader(stream, reader, version, level);
             capacityBytes = payloadReader.ReadUInt64();
             volumeLabel = payloadReader.ReadString();
         }
@@ -287,7 +283,7 @@ public static class DiskImageSerializer
         IProgress<double>? progress)
     {
         var payloadStream = compress
-            ? new GZipStream(target, ToCompressionLevel(level), leaveOpen: true)
+            ? new GZipStream(target, level.ToDotNetCompressionLevel(), leaveOpen: true)
             : target;
 
         try
@@ -351,16 +347,25 @@ public static class DiskImageSerializer
         out string volumeLabel,
         Action? reportTick = null)
     {
-        var compressed = version == 2 && level != ImageCompressionLevel.None;
-
-        using var payloadReader = compressed
-            ? new BinaryReader(new GZipStream(stream, CompressionMode.Decompress, leaveOpen: true), System.Text.Encoding.UTF8)
-            : reader;
-
+        using var payloadReader = OpenLegacyPayloadReader(stream, reader, version, level);
         capacityBytes = payloadReader.ReadUInt64();
         volumeLabel = payloadReader.ReadString();
 
         return ReadNodes(payloadReader, reportTick);
+    }
+
+    /// <summary>
+    /// Opens the reader over a version 1/2 image's single payload region — gzip-decompressing it
+    /// first when the image is a compressed version 2 (version 1 is never compressed). Shared by
+    /// <see cref="PeekHeader"/> (reads capacity/label only) and <see cref="LoadLegacy"/> (reads
+    /// capacity/label, then the full node region) so both stay in sync on this legacy layout rule.
+    /// </summary>
+    private static BinaryReader OpenLegacyPayloadReader(FileStream stream, BinaryReader reader, int version, ImageCompressionLevel level)
+    {
+        var compressed = version == 2 && level != ImageCompressionLevel.None;
+        return compressed
+            ? new BinaryReader(new GZipStream(stream, CompressionMode.Decompress, leaveOpen: true), System.Text.Encoding.UTF8)
+            : reader;
     }
 
     /// <summary>
@@ -579,13 +584,6 @@ public static class DiskImageSerializer
 
         return nodeMap;
     }
-
-    private static CompressionLevel ToCompressionLevel(ImageCompressionLevel level) => level switch
-    {
-        ImageCompressionLevel.Fastest => CompressionLevel.Fastest,
-        ImageCompressionLevel.SmallestSize => CompressionLevel.SmallestSize,
-        _ => CompressionLevel.Optimal,
-    };
 
     private static byte[] UnwrapCek(
         byte[] wrappedCek,

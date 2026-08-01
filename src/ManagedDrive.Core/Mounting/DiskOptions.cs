@@ -27,6 +27,26 @@ public enum ImageCompressionLevel
 }
 
 /// <summary>
+/// Conversion helpers for <see cref="ImageCompressionLevel"/>, shared by every writer that hands
+/// it off to a <see cref="System.IO.Compression.GZipStream"/> (<c>DiskImageSerializer</c> for
+/// image saves, <c>SnapshotStore</c> for snapshot blobs).
+/// </summary>
+internal static class ImageCompressionLevelExtensions
+{
+    /// <summary>
+    /// Maps to the corresponding <see cref="System.IO.Compression.CompressionLevel"/>. Callers are
+    /// expected to have already checked <see cref="ImageCompressionLevel.None"/> and skipped
+    /// compression entirely in that case; it otherwise falls back to <see cref="System.IO.Compression.CompressionLevel.Optimal"/>.
+    /// </summary>
+    public static System.IO.Compression.CompressionLevel ToDotNetCompressionLevel(this ImageCompressionLevel level) => level switch
+    {
+        ImageCompressionLevel.Fastest => System.IO.Compression.CompressionLevel.Fastest,
+        ImageCompressionLevel.SmallestSize => System.IO.Compression.CompressionLevel.SmallestSize,
+        _ => System.IO.Compression.CompressionLevel.Optimal,
+    };
+}
+
+/// <summary>
 /// Immutable configuration record used to create and mount a RAM disk.
 /// </summary>
 public sealed record DiskOptions

@@ -34,6 +34,12 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Lets ManagedDrive.Tests unit-test internal pure-mapping helpers (e.g. MainViewModel's
+         DiskOptions <-> DiskProfile conversion) without making them public API. -->
+    <InternalsVisibleTo Include="ManagedDrive.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\ManagedDrive.Core\ManagedDrive.Core.csproj" />
     <ProjectReference Include="..\ManagedDrive.Cli.Core\ManagedDrive.Cli.Core.csproj" />
     <ProjectReference Include="..\ManagedDrive.HelperProtocol\ManagedDrive.HelperProtocol.csproj" />

@@ -70,19 +70,14 @@ public sealed class FileNodeMap : IDisposable
         _syncRoot.EnterWriteLock();
         try
         {
-            var toRemove = new List<string>();
-            foreach (var key in _map.Keys)
-            {
-                if (key != "\\")
-                {
-                    toRemove.Add(key);
-                }
-            }
+            var hasRoot = _map.TryGetValue("\\", out var root);
+            _map.Clear();
+            _totalAllocated = 0;
 
-            foreach (var key in toRemove)
+            if (hasRoot)
             {
-                _totalAllocated -= _map[key].FileInfo.AllocationSize;
-                _map.Remove(key);
+                _map["\\"] = root!;
+                _totalAllocated = root!.FileInfo.AllocationSize;
             }
         }
         finally

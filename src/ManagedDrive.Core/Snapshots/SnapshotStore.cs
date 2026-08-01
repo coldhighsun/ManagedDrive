@@ -292,7 +292,7 @@ internal static class SnapshotStore
 
                 if (compress)
                 {
-                    var gzip = new GZipStream(target, ToCompressionLevel(level), leaveOpen: true);
+                    var gzip = new GZipStream(target, level.ToDotNetCompressionLevel(), leaveOpen: true);
                     try
                     {
                         data.CopyTo(gzip, length);
@@ -507,13 +507,6 @@ internal static class SnapshotStore
             Security = security
         });
     }
-
-    private static CompressionLevel ToCompressionLevel(ImageCompressionLevel level) => level switch
-    {
-        ImageCompressionLevel.Fastest => CompressionLevel.Fastest,
-        ImageCompressionLevel.SmallestSize => CompressionLevel.SmallestSize,
-        _ => CompressionLevel.Optimal,
-    };
 
     private static void WriteNode(BinaryWriter writer, string path, FileNode node, string blobDirectory, ImageCompressionLevel level, byte[]? cek)
     {

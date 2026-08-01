@@ -59,19 +59,7 @@ public partial class App
     {
         _logger.LogInformation("App_Exit invoked.");
 
-        if (_sessionEndingSaveHandler != null)
-        {
-            SystemEvents.SessionEnding -= _sessionEndingSaveHandler.OnSessionEnding;
-        }
-        if (_mountManager != null && _trayIconController != null)
-        {
-            _mountManager.ActivityDetected -= _trayIconController.OnActivityDetected;
-        }
-        _mainViewModel?.SaveSettings();
-        _trayIconController?.Dispose();
-        _mainViewModel?.Dispose();
-
-        _cliPipeServer?.Dispose();
+        TeardownBeforeMountManagerDispose();
 
         // Safety net: if ShutdownAsync already disposed the mount manager, this is a no-op.
         // Bounded so a stuck final save can't hang process exit indefinitely.
@@ -440,10 +428,6 @@ public partial class App
     {
         _logger.LogInformation("ShutdownAsync starting.");
 
-        if (_sessionEndingSaveHandler != null)
-        {
-            SystemEvents.SessionEnding -= _sessionEndingSaveHandler.OnSessionEnding;
-        }
         _isExiting = true;
 
         if (_mainViewModel != null)
@@ -452,15 +436,7 @@ public partial class App
             ShowMainWindow();
         }
 
-        _cliPipeServer?.Dispose();
-        _mainViewModel?.SaveSettings();
-        _trayIconController?.Dispose();
-        _mainViewModel?.Dispose();
-
-        if (_mountManager != null && _trayIconController != null)
-        {
-            _mountManager.ActivityDetected -= _trayIconController.OnActivityDetected;
-        }
+        TeardownBeforeMountManagerDispose();
 
         await Task.Run(() => _mountManager?.Dispose((disk, diskFraction, overallFraction, totalBytes) =>
             Application.Current.Dispatcher.BeginInvoke(() =>
@@ -468,5 +444,26 @@ public partial class App
 
         _logger.LogInformation("ShutdownAsync completed; shutting down application.");
         Shutdown();
+    }
+
+    /// <summary>
+    /// Common teardown shared by <see cref="App_Exit"/> and <see cref="ShutdownAsync"/>, run
+    /// before either one disposes <see cref="_mountManager"/> (which they do differently: a
+    /// bounded-wait safety net vs. an awaited call with exit-save progress reporting).
+    /// </summary>
+    private void TeardownBeforeMountManagerDispose()
+    {
+        if (_sessionEndingSaveHandler != null)
+        {
+            SystemEvents.SessionEnding -= _sessionEndingSaveHandler.OnSessionEnding;
+        }
+        if (_mountManager != null && _trayIconController != null)
+        {
+            _mountManager.ActivityDetected -= _trayIconController.OnActivityDetected;
+        }
+        _cliPipeServer?.Dispose();
+        _mainViewModel?.SaveSettings();
+        _trayIconController?.Dispose();
+        _mainViewModel?.Dispose();
     }
 }
