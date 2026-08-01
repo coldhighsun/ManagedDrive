@@ -4,6 +4,7 @@ using System.Security.Principal;
 using ManagedDrive.HelperProtocol;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using ThrottledLogging;
 
 namespace ManagedDrive.Service;
 
@@ -39,7 +40,9 @@ public sealed class HelperPipeService(GlobalMountManager mountManager, ILogger<H
             catch (Exception ex)
             {
                 // Best-effort — a malformed or interrupted request must not take down the loop.
-                logger.LogWarning(ex, "Pipe connection handling failed.");
+                logger.LogWarningThrottled(
+                    "pipe-connection-failed", TimeSpan.FromMinutes(5),
+                    "Pipe connection handling failed: {Error}", ex.Message);
             }
         }
     }

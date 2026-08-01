@@ -2,6 +2,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Win32;
 using System.Runtime.InteropServices;
 using System.Text.RegularExpressions;
+using ThrottledLogging;
 
 namespace ManagedDrive.Service;
 
@@ -69,8 +70,9 @@ public sealed partial class GlobalMountManager(ILogger<GlobalMountManager> logge
 
                 NativeMethods.RemoveGlobalSymlink(letter, devicePath);
                 DeleteRegistryEntry(letter);
-                logger.LogInformation("Reconciled stale symlink {Letter} -> {Device} (device gone)",
-                    letter, devicePath);
+                logger.LogInformationThrottled(
+                    $"reconciled-stale:{letter}", TimeSpan.FromMinutes(10),
+                    "Reconciled stale symlink {Letter} -> {Device} (device gone)", letter, devicePath);
             }
         }
     }

@@ -153,7 +153,9 @@ public partial class App
         _trayTooltipController = new(_mainViewModel, _trayIconController);
         _tempDirCompatChecker = new(_settings, _trayIconController, () => _mainWindow is { IsLoaded: true } ? _mainWindow : null);
         _mountManager.ActivityDetected += _trayIconController.OnActivityDetected;
-        _diskNotificationService = new(_mainViewModel, _trayIconController, () => _mainWindow!.IsVisible);
+        _diskNotificationService = new(
+            _mainViewModel, _trayIconController, () => _mainWindow!.IsVisible,
+            _serviceProvider!.GetRequiredService<ILogger<DiskNotificationService>>());
 
         // Constructed before AutoMountDisksAsync so that an auto-mounted disk which is already the
         // TEMP target gets its global symlink published at startup. Rooted as a field only to keep
