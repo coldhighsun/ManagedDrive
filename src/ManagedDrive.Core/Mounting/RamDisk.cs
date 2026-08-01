@@ -502,17 +502,42 @@ public sealed class RamDisk : IDisposable
     /// so a manual save and a periodic auto-save never write/prune snapshots concurrently.
     /// </summary>
     /// <param name="progress">
-    /// Optional progress reporter, updated with a fraction in [0, 1] across both the image save
-    /// (the first half of the range) and the snapshot write (the second half).
+    /// Optional progress reporter, updated with a fraction in [0, 1]. When snapshot retention is
+    /// configured (see <see cref="DiskOptions.MaxSnapshotCount"/>/<see cref="DiskOptions.MaxSnapshotSizeBytes"/>)
+    /// and a snapshot write may actually happen, this range is split across both the image save
+    /// (the first half) and the snapshot write (the second half); otherwise the full range is
+    /// given to the image save alone, so the bar doesn't stall at 50% when no snapshot work
+    /// follows it.
     /// </param>
     public void SaveToImageWithSnapshot(IProgress<double>? progress = null)
     {
         lock (_autoSaveLock)
         {
-            SaveToImage(progress is null ? null : new Progress<double>(p => progress.Report(p * 0.5)));
-            TryWriteSnapshot(progress is null ? null : new Progress<double>(p => progress.Report(0.5 + p * 0.5)));
+            // MappedProgress forwards straight into the caller's IProgress<double> instead of
+            // wrapping it in a new Progress<double> constructed on this background thread — that
+            // would capture a non-UI SynchronizationContext and route every tick through an extra,
+            // unordered ThreadPool hop before it ever reached the UI-bound progress object.
+            var mayWriteSnapshot = Options.PersistImagePath is not null
+                && (Options.MaxSnapshotCount is not null || Options.MaxSnapshotSizeBytes is not null);
+
+            if (mayWriteSnapshot)
+            {
+                SaveToImage(progress is null ? null : new MappedProgress(progress, 0.5, 0.0));
+                TryWriteSnapshot(progress is null ? null : new MappedProgress(progress, 0.5, 0.5));
+            }
+            else
+            {
+                SaveToImage(progress);
+                TryWriteSnapshot();
+            }
+
             progress?.Report(1.0);
         }
+    }
+
+    private sealed class MappedProgress(IProgress<double> inner, double scale, double offset) : IProgress<double>
+    {
+        public void Report(double value) => inner.Report(offset + (value * scale));
     }
 
     /// <summary>
