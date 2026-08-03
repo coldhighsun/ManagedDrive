@@ -124,13 +124,14 @@ public partial class CreateDiskDialog
         CompressionLevelBox.SelectedIndex = CompressionLevels.IndexOf(existing.CompressionLevel);
         SaveOnExitBox.IsChecked = existing.SaveImageOnExit;
 
+        UpdateCompressionLevelState();
+
         if (existing.CustomZstdLevel is { } customZstdLevel)
         {
             CustomZstdLevelBox.IsChecked = true;
             CustomZstdLevelValue = customZstdLevel;
         }
 
-        UpdateCompressionLevelState();
         UpdateAutoSaveEnabledState();
 
         if (existing is { AutoSaveIntervalMinutes: { } minutes, ReadOnly: false })
