@@ -71,15 +71,15 @@ The ZIP also includes `mdrive.exe`, a companion CLI (see [CLI Usage](#cli-usage)
 | Requirement | Notes |
 |---|---|
 | **Windows 10 / 11 (64-bit)** | ARM64 is not currently tested |
-| **[WinFsp 2.2.26194 (2026 Beta3)](https://github.com/winfsp/winfsp/releases/tag/v2.2B3)** | Must be installed before running ManagedDrive. Download the installer directly: [winfsp-2.2.26194.msi](https://github.com/winfsp/winfsp/releases/download/v2.2B3/winfsp-2.2.26194.msi) — do not use `winget install WinFsp.WinFsp`, as the winget package lags behind the latest release. The managed assembly `winfsp-msil.dll` is installed to `C:\Program Files (x86)\WinFsp\bin\` and is referenced by the project automatically. |
+| **[WinFsp 2.2.26215 (2026 Beta4)](https://github.com/winfsp/winfsp/releases/tag/v2.2B4)** | Must be installed before running ManagedDrive. Download the installer directly: [winfsp-2.2.26215.msi](https://github.com/winfsp/winfsp/releases/download/v2.2B4/winfsp-2.2.26215.msi) — do not use `winget install WinFsp.WinFsp`, as the winget package lags behind the latest release. The managed assembly `winfsp-msil.dll` is installed to `C:\Program Files (x86)\WinFsp\bin\` and is referenced by the project automatically. |
 | **[.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0)** | Required for the `-portable` ZIP (framework-dependent). |
 | **.NET 10 SDK** | Required to build. |
 
 ### Getting Started
 
 ```powershell
-# 1. Download and install WinFsp 2.2.26194 (2026 Beta3)
-# https://github.com/winfsp/winfsp/releases/download/v2.2B3/winfsp-2.2.26194.msi
+# 1. Download and install WinFsp 2.2.26215 (2026 Beta4)
+# https://github.com/winfsp/winfsp/releases/download/v2.2B4/winfsp-2.2.26215.msi
 
 # 2. Clone the repository
 git clone https://github.com/coldhighsun/ManagedDrive
@@ -138,13 +138,15 @@ Measured with [BenchmarkDotNet](https://benchmarkdotnet.org/) (Intel Core i9-139
 
 | Scenario | RAM Disk | NVMe SSD | Ratio |
 |---|---:|---:|---:|
-| Sequential write, 4 KB | 1.31 MB/s | 0.87 MB/s | **1.5× faster** |
-| Sequential write, 1 MB | 321.9 MB/s | 84.6 MB/s | **3.8× faster** |
-| Sequential read (OS cache), 4 KB / 1 MB | 3.4 MB/s / 531.6 MB/s | 4.5 MB/s / 955.5 MB/s | ~1.3–1.8× slower |
-| Random 4 KB read, 30 seeks over 16 MB | 1.7× slower (OS cache) – 1.6× faster (uncached) | — | mixed |
-| 30× small-file (4 KB) create+write | 84.1 ms (2.81 ms/file) | 144.8 ms (4.83 ms/file) | **1.7× faster** |
+| Sequential write, 4 KB | 2.4 MB/s | 1.3 MB/s | **RAM 1.9× faster** |
+| Sequential write, 1 MB | 561.8 MB/s | 137.4 MB/s | **RAM 4.1× faster** |
+| Sequential read (OS cache), 4 KB | 6.0 MB/s | 8.7 MB/s | NVMe 1.4× faster |
+| Sequential read (OS cache), 1 MB | 938.5 MB/s | 2,143.3 MB/s | NVMe 2.3× faster |
+| Random 4 KB read (uncached), 30 seeks | 1.36 ms | 2.18 ms | **RAM 1.6× faster** |
+| Random 4 KB read (OS cache), 30 seeks | 1.36 ms | 0.52 ms | NVMe 2.6× faster |
+| 30× small-file (4 KB) create+write | 47.4 ms (1.58 ms/file) | 79.9 ms (2.66 ms/file) | **RAM 1.7× faster** |
 
-Writes and small-file create+write win big by skipping block allocation, journaling, and the physical write; sequential reads trail the NVMe drive even on an OS page-cache hit (a user-mode file system can't consistently beat the kernel's own DRAM cache, and every WinFsp callback pays a kernel–userspace round trip); random reads land close to parity, faster or slower depending on whether the physical disk's own cache is warm. Run `dotnet run --project benchmarks/ManagedDrive.Benchmarks -c Release` for current numbers on your own hardware (see [Running Benchmarks](#running-benchmarks) below).
+Writes win big (up to 4.1×) by skipping block allocation, journaling, and the physical write. Uncached random reads benefit from zero seek latency (1.6× faster). Small-file creates are also faster (1.7×) because metadata operations stay in memory. Cached reads, however, favor the NVMe path — NTFS reads from the OS page cache stay entirely in-kernel, while the RAM disk incurs an extra kernel–userspace round trip through WinFsp. Run `dotnet run --project benchmarks/ManagedDrive.Benchmarks -c Release` for current numbers on your own hardware (see [Running Benchmarks](#running-benchmarks) below).
 
 ### Running Tests
 
@@ -298,15 +300,15 @@ ZIP 中还包含 `mdrive.exe`（配套命令行工具，见下方[命令行用�
 | 要求 | 说明 |
 |---|---|
 | **Windows 10 / 11（64 位）** | 暂未测试 ARM64 |
-| **[WinFsp 2.2.26194（2026 Beta3）](https://github.com/winfsp/winfsp/releases/tag/v2.2B3)** | 必须安装此版本才能运行 ManagedDrive。请直接下载安装包：[winfsp-2.2.26194.msi](https://github.com/winfsp/winfsp/releases/download/v2.2B3/winfsp-2.2.26194.msi)——不要使用 `winget install WinFsp.WinFsp` 安装，因为该 winget 包更新不及时，落后于最新发布版本。托管程序集 `winfsp-msil.dll` 将安装至 `C:\Program Files (x86)\WinFsp\bin\`，项目会自动引用。 |
+| **[WinFsp 2.2.26215（2026 Beta4）](https://github.com/winfsp/winfsp/releases/tag/v2.2B4)** | 必须安装此版本才能运行 ManagedDrive。请直接下载安装包：[winfsp-2.2.26215.msi](https://github.com/winfsp/winfsp/releases/download/v2.2B4/winfsp-2.2.26215.msi)——不要使用 `winget install WinFsp.WinFsp` 安装，因为该 winget 包更新不及时，落后于最新发布版本。托管程序集 `winfsp-msil.dll` 将安装至 `C:\Program Files (x86)\WinFsp\bin\`，项目会自动引用。 |
 | **[.NET 10 桌面运行时](https://dotnet.microsoft.com/download/dotnet/10.0)** | "绿色版"（框架依赖型）ZIP 需要。 |
 | **.NET 10 SDK** | 编译所需。 |
 
 ### 快速开始
 
 ```powershell
-# 1. 下载并安装 WinFsp 2.2.26194（2026 Beta3）
-# https://github.com/winfsp/winfsp/releases/download/v2.2B3/winfsp-2.2.26194.msi
+# 1. 下载并安装 WinFsp 2.2.26215（2026 Beta4）
+# https://github.com/winfsp/winfsp/releases/download/v2.2B4/winfsp-2.2.26215.msi
 
 # 2. 克隆仓库
 git clone https://github.com/coldhighsun/ManagedDrive
@@ -365,13 +367,15 @@ ManagedDrive 使用 **WinFsp**（Windows 文件系统代理）将内存目录树
 
 | 场景 | 内存盘 | NVMe SSD | 倍率 |
 |---|---:|---:|---:|
-| 顺序写入，4 KB | 1.31 MB/s | 0.87 MB/s | **快 1.5×** |
-| 顺序写入，1 MB | 321.9 MB/s | 84.6 MB/s | **快 3.8×** |
-| 顺序读取（OS 缓存），4 KB / 1 MB | 3.4 MB/s / 531.6 MB/s | 4.5 MB/s / 955.5 MB/s | 慢 ~1.3–1.8× |
-| 随机 4 KB 读取，对 16 MB 文件寻址 30 次 | 慢 1.7×（OS 缓存）～快 1.6×（未缓存） | — | 不一致 |
-| 30 次小文件（4 KB）创建+写入 | 84.1 ms（2.81 ms/文件） | 144.8 ms（4.83 ms/文件） | **快 1.7×** |
+| 顺序写入，4 KB | 2.4 MB/s | 1.3 MB/s | **内存盘快 1.9×** |
+| 顺序写入，1 MB | 561.8 MB/s | 137.4 MB/s | **内存盘快 4.1×** |
+| 顺序读取（OS 缓存），4 KB | 6.0 MB/s | 8.7 MB/s | NVMe 快 1.4× |
+| 顺序读取（OS 缓存），1 MB | 938.5 MB/s | 2,143.3 MB/s | NVMe 快 2.3× |
+| 随机 4 KB 读取（未缓存），30 次寻址 | 1.36 ms | 2.18 ms | **内存盘快 1.6×** |
+| 随机 4 KB 读取（OS 缓存），30 次寻址 | 1.36 ms | 0.52 ms | NVMe 快 2.6× |
+| 30 次小文件（4 KB）创建+写入 | 47.4 ms（1.58 ms/文件） | 79.9 ms（2.66 ms/文件） | **内存盘快 1.7×** |
 
-写入及小文件创建+写入优势明显，因为跳过了物理块分配、日志记录和实际落盘；顺序读取即便命中 OS 页缓存也不及 NVMe 硬盘（用户态文件系统无法稳定超越内核自身的 DRAM 缓存，且每次 WinFsp 回调都要经过一次内核–用户态往返）；随机读取基本持平，具体快慢取决于物理磁盘自身缓存是否命中。运行 `dotnet run --project benchmarks/ManagedDrive.Benchmarks -c Release` 可在你自己的硬件上获取当前数据（见下方[运行基准测试](#running-benchmarks-zh)）。
+写入优势显著（最高 4.1×），因为跳过了物理块分配、日志记录和实际落盘。未缓存的随机读取受益于零寻址延迟（快 1.6×）。小文件创建也更快（1.7×），因为元数据操作全在内存中完成。但缓存读取方面 NVMe 更优——NTFS 从 OS 页缓存读取时全程在内核态完成，而内存盘需要经过 WinFsp 的内核–用户态往返，增加了额外开销。运行 `dotnet run --project benchmarks/ManagedDrive.Benchmarks -c Release` 可在你自己的硬件上获取当前数据（见下方[运行基准测试](#running-benchmarks-zh)）。
 
 ### 运行测试
 

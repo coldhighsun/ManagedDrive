@@ -8,7 +8,7 @@ namespace ManagedDrive.Benchmarks;
 /// for evaluating whether swapping to a <see cref="System.Threading.ReaderWriterLockSlim"/> is
 /// worth the added complexity — see the performance optimization plan.
 /// </summary>
-[SimpleJob(warmupCount: 2, iterationCount: 3)]
+[SimpleJob(warmupCount: 3, iterationCount: 10)]
 [MemoryDiagnoser]
 [MinColumn, MaxColumn]
 public class ConcurrentAccessBenchmarks

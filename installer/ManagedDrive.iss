@@ -10,7 +10,7 @@
   #define AppVersion "0.0.0"
 #endif
 
-#define WinFspMsiName "winfsp-2.2.26194.msi"
+#define WinFspMsiName "winfsp-2.2.26215.msi"
 #define HelperServiceName "ManagedDriveHelper"
 #define HelperServiceExeName "ManagedDriveHelper.exe"
 ; Must match App.xaml.cs::SingleInstanceMutexName exactly - this is how Setup detects a running

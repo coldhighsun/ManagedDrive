@@ -2,7 +2,7 @@ using BenchmarkDotNet.Attributes;
 
 namespace ManagedDrive.Benchmarks;
 
-[SimpleJob(warmupCount: 2, iterationCount: 3)]
+[SimpleJob(warmupCount: 3, iterationCount: 10)]
 [MemoryDiagnoser]
 [MinColumn, MaxColumn]
 public class RandomAccessBenchmarks
