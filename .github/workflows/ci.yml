@@ -129,8 +129,8 @@ jobs:
         run: |
           Copy-Item -Path publish-fx -Destination installer\publish-fx -Recurse
           Invoke-WebRequest `
-            -Uri "https://github.com/winfsp/winfsp/releases/download/v2.2B3/winfsp-2.2.26194.msi" `
-            -OutFile "installer\winfsp-2.2.26194.msi"
+            -Uri "https://github.com/winfsp/winfsp/releases/download/v2.2B4/winfsp-2.2.26215.msi" `
+            -OutFile "installer\winfsp-2.2.26215.msi"
         shell: pwsh
 
       - name: Install Inno Setup
