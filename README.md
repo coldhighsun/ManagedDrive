@@ -57,7 +57,11 @@ Create, mount and manage in-memory volumes that appear as normal drive letters i
 
 ### Installation
 
-Two artifacts are published on the [Releases](https://github.com/coldhighsun/ManagedDrive/releases) page for each version — pick one:
+```powershell
+winget install coldhighsun.ManagedDrive
+```
+
+Or download an artifact directly from the [Releases](https://github.com/coldhighsun/ManagedDrive/releases) page — pick one:
 
 - `ManagedDrive-Setup-X.Y.Z.exe` — a guided installer. It detects whether WinFsp and the .NET 10 Desktop Runtime are already installed, silently installs the bundled WinFsp MSI if missing, prompts you to install the .NET Desktop Runtime if missing, and installs ManagedDrive into Program Files with Start Menu/desktop shortcuts. Recommended for most users.
 - `ManagedDrive-vX.Y.Z-win-x64-portable.zip` — small download; requires WinFsp and the [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0) to be installed separately.
@@ -74,97 +78,6 @@ The ZIP also includes `mdrive.exe`, a companion CLI (see [CLI Usage](#cli-usage)
 | **[WinFsp 2.2.26215 (2026 Beta4)](https://github.com/winfsp/winfsp/releases/tag/v2.2B4)** | Must be installed before running ManagedDrive. Download the installer directly: [winfsp-2.2.26215.msi](https://github.com/winfsp/winfsp/releases/download/v2.2B4/winfsp-2.2.26215.msi) — do not use `winget install WinFsp.WinFsp`, as the winget package lags behind the latest release. The managed assembly `winfsp-msil.dll` is installed to `C:\Program Files (x86)\WinFsp\bin\` and is referenced by the project automatically. |
 | **[.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0)** | Required for the `-portable` ZIP (framework-dependent). |
 | **.NET 10 SDK** | Required to build. |
-
-### Getting Started
-
-```powershell
-# 1. Download and install WinFsp 2.2.26215 (2026 Beta4)
-# https://github.com/winfsp/winfsp/releases/download/v2.2B4/winfsp-2.2.26215.msi
-
-# 2. Clone the repository
-git clone https://github.com/coldhighsun/ManagedDrive
-cd ManagedDrive
-
-# 3. Build
-dotnet build
-
-# 4. Run
-dotnet run --project src/ManagedDrive.App -c Release
-```
-
-Alternatively open `ManagedDrive.slnx` in Visual Studio 2022+ and press **F5**.
-
-### Solution Structure
-
-```
-ManagedDrive/
-├── src/
-│   ├── ManagedDrive.Core/              # In-memory file system engine (WinFsp), no UI dependency
-│   │   ├── FileSystem/                 #   FileNode, FileNodeMap, MemoryFileSystem, WildcardMatcher, DirectoryEnumeration
-│   │   ├── Mounting/                   #   DiskOptions, RamDisk, MountManager, MountOptionsFactory
-│   │   ├── Persistence/                #   DiskImageSerializer (.mdr format)
-│   │   ├── Snapshots/                  #   SnapshotManager, SnapshotStore
-│   │   ├── Archive/                    #   ArchiveNodeMapBuilder (import), ArchiveNodeMapWriter (export)
-│   │   └── DiskCreation/               #   CreateDiskOptionsBuilder, ByteUnitConverter
-│   ├── ManagedDrive.App/               # WPF desktop application — tray icon, dialogs, settings, localization/theming
-│   ├── ManagedDrive.Cli.Core/          # Shared CLI parsing/protocol library (System.CommandLine + named-pipe wire format)
-│   ├── ManagedDrive.Cli/               # `mdrive.exe`, the console entry point
-│   ├── ManagedDrive.HelperProtocol/    # Named-pipe protocol shared between the app and the SYSTEM helper service
-│   ├── ManagedDrive.Service/           # `ManagedDriveHelper.exe`, optional LocalSystem service publishing global DOS-device symlinks for cross-session TEMP visibility (see Known Issues)
-│   └── ManagedDrive.WingetExtension/   # `wingetx.exe`, a transparent winget wrapper (see wingetx: winget wrapper)
-├── tests/
-│   └── ManagedDrive.Tests/             # xUnit v3 unit tests (pure-managed code only)
-└── benchmarks/
-    └── ManagedDrive.Benchmarks/        # BenchmarkDotNet throughput/latency benchmarks
-```
-
-### How It Works
-
-ManagedDrive uses **WinFsp** (Windows File System Proxy) to present an in-memory directory tree as a real Windows volume: a signed kernel driver forwards file I/O to a managed file system implementation that stores data in .NET byte arrays and enforces a configurable capacity ceiling. Mounting/unmounting, save/restore to a `.mdr` image, and snapshot history are all handled by `ManagedDrive.Core` (see `CLAUDE.md` for the class-level architecture).
-
-### Disk Image & Snapshot Format
-
-`.mdr` images are a versioned, little-endian binary format (magic `MDRD`) with optional gzip compression and optional AES-256-GCM password-based encryption; large disks stream to/from the file and encrypt in chunks rather than buffering the whole image in memory. Snapshots use a separate format (magic `MDRS`) stored next to the main image, with file content deduplicated by SHA-256 into a shared blob store so snapshots of a mostly-unchanged disk cost little extra space. Both formats stay backward-compatible with older versions produced by earlier releases. See `CLAUDE.md` for the exact binary layout.
-
-### Settings & Persistence
-
-- Settings are stored as JSON at `%APPDATA%\ManagedDrive\settings.json`, including each disk's own high-usage warning threshold (or its disabled state).
-- Windows startup registration uses `HKCU\SOFTWARE\Microsoft\Windows\CurrentVersion\Run` (no elevation required).
-- Version is derived from git tags (`v`-prefixed, e.g. `v0.1.0`) via MinVer.
-
-### Performance
-
-Measured with [BenchmarkDotNet](https://benchmarkdotnet.org/) (Intel Core i9-13980HX, 64 GB RAM, KIOXIA KXG8AZNV1T02 NVMe SSD, Windows 11 Pro, .NET 10.0.10):
-
-| Scenario | RAM Disk | NVMe SSD | Ratio |
-|---|---:|---:|---:|
-| Sequential write, 4 KB | 2.4 MB/s | 1.3 MB/s | **RAM 1.9× faster** |
-| Sequential write, 1 MB | 561.8 MB/s | 137.4 MB/s | **RAM 4.1× faster** |
-| Sequential read (OS cache), 4 KB | 6.0 MB/s | 8.7 MB/s | NVMe 1.4× faster |
-| Sequential read (OS cache), 1 MB | 938.5 MB/s | 2,143.3 MB/s | NVMe 2.3× faster |
-| Random 4 KB read (uncached), 30 seeks | 1.36 ms | 2.18 ms | **RAM 1.6× faster** |
-| Random 4 KB read (OS cache), 30 seeks | 1.36 ms | 0.52 ms | NVMe 2.6× faster |
-| 30× small-file (4 KB) create+write | 47.4 ms (1.58 ms/file) | 79.9 ms (2.66 ms/file) | **RAM 1.7× faster** |
-
-Writes win big (up to 4.1×) by skipping block allocation, journaling, and the physical write. Uncached random reads benefit from zero seek latency (1.6× faster). Small-file creates are also faster (1.7×) because metadata operations stay in memory. Cached reads, however, favor the NVMe path — NTFS reads from the OS page cache stay entirely in-kernel, while the RAM disk incurs an extra kernel–userspace round trip through WinFsp. Run `dotnet run --project benchmarks/ManagedDrive.Benchmarks -c Release` for current numbers on your own hardware (see [Running Benchmarks](#running-benchmarks) below).
-
-### Running Tests
-
-```powershell
-dotnet test tests/ManagedDrive.Tests
-```
-
-Tests cover `FileNode`, `FileNodeMap` (CRUD, lookup, pagination, rename, capacity tracking), `MemoryFileSystem` disk-cloning, directory enumeration and the wildcard matcher, `DiskImageSerializer` (round-trips across compression levels, legacy images, concurrent mutation during save), archive import/export, `MountOptionsFactory`, `CreateDiskOptionsBuilder`/`ByteUnitConverter` (create-disk dialog validation, kept WPF-free for testability), and `PasswordStrengthEstimator`. Mount/unmount integration tests need the WinFsp driver and must be run manually.
-
-### Running Benchmarks
-
-WinFsp must be installed. The benchmark project auto-selects the first free drive letter between `D:` and `Z:` — no manual configuration needed.
-
-```powershell
-dotnet run --project benchmarks/ManagedDrive.Benchmarks -c Release
-```
-
-BenchmarkDotNet will prompt you to pick which benchmark class(es) to run (`SequentialReadWriteBenchmarks`, `RandomAccessBenchmarks`, `ConcurrentAccessBenchmarks`, or any combination). Results are written to `BenchmarkDotNet.Artifacts/results/` in the working directory.
 
 ### CLI Usage
 
@@ -230,6 +143,99 @@ WinFsp mounts a drive letter into the **current logon session's** device namespa
 
 ManagedDrive warns once when TEMP is set to a RAM disk, and again on every startup while it stays that way.
 
+### Settings & Persistence
+
+- Settings are stored as JSON at `%APPDATA%\ManagedDrive\settings.json`, including each disk's own high-usage warning threshold (or its disabled state).
+- Windows startup registration uses `HKCU\SOFTWARE\Microsoft\Windows\CurrentVersion\Run` (no elevation required).
+- Version is derived from git tags (`v`-prefixed, e.g. `v0.1.0`) via MinVer.
+
+## For Developers
+
+### Getting Started
+
+```powershell
+# 1. Download and install WinFsp 2.2.26215 (2026 Beta4)
+# https://github.com/winfsp/winfsp/releases/download/v2.2B4/winfsp-2.2.26215.msi
+
+# 2. Clone the repository
+git clone https://github.com/coldhighsun/ManagedDrive
+cd ManagedDrive
+
+# 3. Build
+dotnet build
+
+# 4. Run
+dotnet run --project src/ManagedDrive.App -c Release
+```
+
+Alternatively open `ManagedDrive.slnx` in Visual Studio 2022+ and press **F5**.
+
+### Solution Structure
+
+```
+ManagedDrive/
+├── src/
+│   ├── ManagedDrive.Core/              # In-memory file system engine (WinFsp), no UI dependency
+│   │   ├── FileSystem/                 #   FileNode, FileNodeMap, MemoryFileSystem, WildcardMatcher, DirectoryEnumeration
+│   │   ├── Mounting/                   #   DiskOptions, RamDisk, MountManager, MountOptionsFactory
+│   │   ├── Persistence/                #   DiskImageSerializer (.mdr format)
+│   │   ├── Snapshots/                  #   SnapshotManager, SnapshotStore
+│   │   ├── Archive/                    #   ArchiveNodeMapBuilder (import), ArchiveNodeMapWriter (export)
+│   │   └── DiskCreation/               #   CreateDiskOptionsBuilder, ByteUnitConverter
+│   ├── ManagedDrive.App/               # WPF desktop application — tray icon, dialogs, settings, localization/theming
+│   ├── ManagedDrive.Cli.Core/          # Shared CLI parsing/protocol library (System.CommandLine + named-pipe wire format)
+│   ├── ManagedDrive.Cli/               # `mdrive.exe`, the console entry point
+│   ├── ManagedDrive.HelperProtocol/    # Named-pipe protocol shared between the app and the SYSTEM helper service
+│   ├── ManagedDrive.Service/           # `ManagedDriveHelper.exe`, optional LocalSystem service publishing global DOS-device symlinks for cross-session TEMP visibility (see Known Issues)
+│   └── ManagedDrive.WingetExtension/   # `wingetx.exe`, a transparent winget wrapper (see wingetx: winget wrapper)
+├── tests/
+│   └── ManagedDrive.Tests/             # xUnit v3 unit tests (pure-managed code only)
+└── benchmarks/
+    └── ManagedDrive.Benchmarks/        # BenchmarkDotNet throughput/latency benchmarks
+```
+
+### How It Works
+
+ManagedDrive uses **WinFsp** (Windows File System Proxy) to present an in-memory directory tree as a real Windows volume: a signed kernel driver forwards file I/O to a managed file system implementation that stores data in .NET byte arrays and enforces a configurable capacity ceiling. Mounting/unmounting, save/restore to a `.mdr` image, and snapshot history are all handled by `ManagedDrive.Core` (see `CLAUDE.md` for the class-level architecture).
+
+### Disk Image & Snapshot Format
+
+`.mdr` images are a versioned, little-endian binary format (magic `MDRD`) with optional gzip compression and optional AES-256-GCM password-based encryption; large disks stream to/from the file and encrypt in chunks rather than buffering the whole image in memory. Snapshots use a separate format (magic `MDRS`) stored next to the main image, with file content deduplicated by SHA-256 into a shared blob store so snapshots of a mostly-unchanged disk cost little extra space. Both formats stay backward-compatible with older versions produced by earlier releases. See `CLAUDE.md` for the exact binary layout.
+
+### Performance
+
+Measured with [BenchmarkDotNet](https://benchmarkdotnet.org/) (Intel Core i9-13980HX, 64 GB RAM, KIOXIA KXG8AZNV1T02 NVMe SSD, Windows 11 Pro, .NET 10.0.10):
+
+| Scenario | RAM Disk | NVMe SSD | Ratio |
+|---|---:|---:|---:|
+| Sequential write, 4 KB | 2.4 MB/s | 1.3 MB/s | **RAM 1.9× faster** |
+| Sequential write, 1 MB | 561.8 MB/s | 137.4 MB/s | **RAM 4.1× faster** |
+| Sequential read (OS cache), 4 KB | 6.0 MB/s | 8.7 MB/s | NVMe 1.4× faster |
+| Sequential read (OS cache), 1 MB | 938.5 MB/s | 2,143.3 MB/s | NVMe 2.3× faster |
+| Random 4 KB read (uncached), 30 seeks | 1.36 ms | 2.18 ms | **RAM 1.6× faster** |
+| Random 4 KB read (OS cache), 30 seeks | 1.36 ms | 0.52 ms | NVMe 2.6× faster |
+| 30× small-file (4 KB) create+write | 47.4 ms (1.58 ms/file) | 79.9 ms (2.66 ms/file) | **RAM 1.7× faster** |
+
+Writes win big (up to 4.1×) by skipping block allocation, journaling, and the physical write. Uncached random reads benefit from zero seek latency (1.6× faster). Small-file creates are also faster (1.7×) because metadata operations stay in memory. Cached reads, however, favor the NVMe path — NTFS reads from the OS page cache stay entirely in-kernel, while the RAM disk incurs an extra kernel–userspace round trip through WinFsp. Run `dotnet run --project benchmarks/ManagedDrive.Benchmarks -c Release` for current numbers on your own hardware (see [Running Benchmarks](#running-benchmarks) below).
+
+### Running Tests
+
+```powershell
+dotnet test tests/ManagedDrive.Tests
+```
+
+Tests cover `FileNode`, `FileNodeMap` (CRUD, lookup, pagination, rename, capacity tracking), `MemoryFileSystem` disk-cloning, directory enumeration and the wildcard matcher, `DiskImageSerializer` (round-trips across compression levels, legacy images, concurrent mutation during save), archive import/export, `MountOptionsFactory`, `CreateDiskOptionsBuilder`/`ByteUnitConverter` (create-disk dialog validation, kept WPF-free for testability), and `PasswordStrengthEstimator`. Mount/unmount integration tests need the WinFsp driver and must be run manually.
+
+### Running Benchmarks
+
+WinFsp must be installed. The benchmark project auto-selects the first free drive letter between `D:` and `Z:` — no manual configuration needed.
+
+```powershell
+dotnet run --project benchmarks/ManagedDrive.Benchmarks -c Release
+```
+
+BenchmarkDotNet will prompt you to pick which benchmark class(es) to run (`SequentialReadWriteBenchmarks`, `RandomAccessBenchmarks`, `ConcurrentAccessBenchmarks`, or any combination). Results are written to `BenchmarkDotNet.Artifacts/results/` in the working directory.
+
 ### License
 
 MIT
@@ -286,7 +292,11 @@ This project bundles [WinFsp](https://winfsp.dev/) and [SharpCompress](https://g
 
 ### 安装
 
-[Releases](https://github.com/coldhighsun/ManagedDrive/releases) 页面为每个版本发布了两种安装方式，任选其一：
+```powershell
+winget install coldhighsun.ManagedDrive
+```
+
+或前往 [Releases](https://github.com/coldhighsun/ManagedDrive/releases) 页面手动下载，每个版本发布了两种安装方式，任选其一：
 
 - `ManagedDrive-Setup-X.Y.Z.exe` —— 引导式安装程序。会自动检测 WinFsp 和 .NET 10 桌面运行时是否已安装，若缺少 WinFsp 会静默安装内置的 WinFsp 安装包，若缺少 .NET 桌面运行时会提示安装，并将 ManagedDrive 安装到 Program Files，创建开始菜单/桌面快捷方式。推荐大多数用户使用。
 - `ManagedDrive-vX.Y.Z-win-x64-portable.zip` —— 体积较小；需要单独安装 WinFsp 和 [.NET 10 桌面运行时](https://dotnet.microsoft.com/download/dotnet/10.0)。
@@ -303,98 +313,6 @@ ZIP 中还包含 `mdrive.exe`（配套命令行工具，见下方[命令行用�
 | **[WinFsp 2.2.26215（2026 Beta4）](https://github.com/winfsp/winfsp/releases/tag/v2.2B4)** | 必须安装此版本才能运行 ManagedDrive。请直接下载安装包：[winfsp-2.2.26215.msi](https://github.com/winfsp/winfsp/releases/download/v2.2B4/winfsp-2.2.26215.msi)——不要使用 `winget install WinFsp.WinFsp` 安装，因为该 winget 包更新不及时，落后于最新发布版本。托管程序集 `winfsp-msil.dll` 将安装至 `C:\Program Files (x86)\WinFsp\bin\`，项目会自动引用。 |
 | **[.NET 10 桌面运行时](https://dotnet.microsoft.com/download/dotnet/10.0)** | "绿色版"（框架依赖型）ZIP 需要。 |
 | **.NET 10 SDK** | 编译所需。 |
-
-### 快速开始
-
-```powershell
-# 1. 下载并安装 WinFsp 2.2.26215（2026 Beta4）
-# https://github.com/winfsp/winfsp/releases/download/v2.2B4/winfsp-2.2.26215.msi
-
-# 2. 克隆仓库
-git clone https://github.com/coldhighsun/ManagedDrive
-cd ManagedDrive
-
-# 3. 编译
-dotnet build
-
-# 4. 运行
-dotnet run --project src/ManagedDrive.App -c Release
-```
-
-或者在 Visual Studio 2022+ 中打开 `ManagedDrive.slnx` 并按 **F5**。
-
-### 解决方案结构
-
-```
-ManagedDrive/
-├── src/
-│   ├── ManagedDrive.Core/              # 内存文件系统引擎（WinFsp），不依赖任何 UI
-│   │   ├── FileSystem/                 #   FileNode、FileNodeMap、MemoryFileSystem、WildcardMatcher、DirectoryEnumeration
-│   │   ├── Mounting/                   #   DiskOptions、RamDisk、MountManager、MountOptionsFactory
-│   │   ├── Persistence/                #   DiskImageSerializer（.mdr 格式）
-│   │   ├── Snapshots/                  #   SnapshotManager、SnapshotStore
-│   │   ├── Archive/                    #   ArchiveNodeMapBuilder（导入）、ArchiveNodeMapWriter（导出）
-│   │   └── DiskCreation/               #   CreateDiskOptionsBuilder、ByteUnitConverter
-│   ├── ManagedDrive.App/               # WPF 桌面应用程序——托盘图标、各类对话框、设置、多语言/主题
-│   ├── ManagedDrive.Cli.Core/          # 共享的 CLI 解析/协议库（System.CommandLine + 命名管道协议）
-│   ├── ManagedDrive.Cli/               # `mdrive.exe` 控制台入口点
-│   ├── ManagedDrive.HelperProtocol/    # 应用与 SYSTEM 辅助服务之间共享的命名管道协议
-│   ├── ManagedDrive.Service/           # `ManagedDriveHelper.exe`——可选的 LocalSystem 服务，发布全局 DOS 设备符号链接以实现跨会话 TEMP 可见性（见"已知问题"）
-│   └── ManagedDrive.WingetExtension/   # `wingetx.exe`——透明的 winget 包装工具（见"wingetx: winget 包装工具"）
-├── tests/
-│   └── ManagedDrive.Tests/             # xUnit v3 单元测试（仅纯托管代码）
-└── benchmarks/
-    └── ManagedDrive.Benchmarks/        # BenchmarkDotNet 吞吐量/延迟基准测试
-```
-
-### 工作原理
-
-ManagedDrive 使用 **WinFsp**（Windows 文件系统代理）将内存目录树呈现为真实的 Windows 卷：已签名内核驱动把文件 I/O 转发至托管文件系统实现，数据存储在 .NET 字节数组中，并强制容量上限。挂载/卸载、保存/还原为 `.mdr` 镜像、快照历史等均由 `ManagedDrive.Core` 负责（类级别架构见 `CLAUDE.md`）。
-
-### 磁盘镜像与快照格式
-
-`.mdr` 镜像是带版本号的小端序二进制格式（魔数 `MDRD`），可选 gzip 压缩和基于密码的 AES-256-GCM 加密；大磁盘会流式读写文件并分块加密，而非把整个镜像缓冲到内存中。快照采用独立格式（魔数 `MDRS`），存放在主镜像旁，文件内容按 SHA-256 去重存储到共享的块存储中，因此对基本未变化的磁盘做快照额外占用很小。两种格式都会保持对旧版本发布产物的向后兼容。具体二进制布局见 `CLAUDE.md`。
-
-### 配置与持久化
-
-- 配置以 JSON 格式存储于 `%APPDATA%\ManagedDrive\settings.json`，包括每个磁盘各自的高用量告警阈值（或已禁用状态）。
-- 开机自启通过 `HKCU\SOFTWARE\Microsoft\Windows\CurrentVersion\Run` 注册表项实现（无需提升权限）。
-- 版本号由 MinVer 从 git 标签派生（`v` 前缀，例如 `v0.1.0`）。
-
-### 性能基准
-
-使用 [BenchmarkDotNet](https://benchmarkdotnet.org/) 测量（Intel Core i9-13980HX、64 GB 内存、KIOXIA KXG8AZNV1T02 NVMe SSD、Windows 11 Pro、.NET 10.0.10）：
-
-| 场景 | 内存盘 | NVMe SSD | 倍率 |
-|---|---:|---:|---:|
-| 顺序写入，4 KB | 2.4 MB/s | 1.3 MB/s | **内存盘快 1.9×** |
-| 顺序写入，1 MB | 561.8 MB/s | 137.4 MB/s | **内存盘快 4.1×** |
-| 顺序读取（OS 缓存），4 KB | 6.0 MB/s | 8.7 MB/s | NVMe 快 1.4× |
-| 顺序读取（OS 缓存），1 MB | 938.5 MB/s | 2,143.3 MB/s | NVMe 快 2.3× |
-| 随机 4 KB 读取（未缓存），30 次寻址 | 1.36 ms | 2.18 ms | **内存盘快 1.6×** |
-| 随机 4 KB 读取（OS 缓存），30 次寻址 | 1.36 ms | 0.52 ms | NVMe 快 2.6× |
-| 30 次小文件（4 KB）创建+写入 | 47.4 ms（1.58 ms/文件） | 79.9 ms（2.66 ms/文件） | **内存盘快 1.7×** |
-
-写入优势显著（最高 4.1×），因为跳过了物理块分配、日志记录和实际落盘。未缓存的随机读取受益于零寻址延迟（快 1.6×）。小文件创建也更快（1.7×），因为元数据操作全在内存中完成。但缓存读取方面 NVMe 更优——NTFS 从 OS 页缓存读取时全程在内核态完成，而内存盘需要经过 WinFsp 的内核–用户态往返，增加了额外开销。运行 `dotnet run --project benchmarks/ManagedDrive.Benchmarks -c Release` 可在你自己的硬件上获取当前数据（见下方[运行基准测试](#running-benchmarks-zh)）。
-
-### 运行测试
-
-```powershell
-dotnet test tests/ManagedDrive.Tests
-```
-
-测试覆盖 `FileNode`、`FileNodeMap`（增删改查、查找、分页、重命名、容量追踪）、`MemoryFileSystem` 的磁盘克隆逻辑、目录枚举及通配符匹配、`DiskImageSerializer`（各压缩级别的保存/加载往返、旧版本镜像、并发修改）、压缩包导入/导出、`MountOptionsFactory`、`CreateDiskOptionsBuilder`/`ByteUnitConverter`（下沉到 Core 以便脱离 WPF 单测），以及 `PasswordStrengthEstimator`。挂载/卸载集成测试需要 WinFsp 驱动，须手动运行。
-
-<a id="running-benchmarks-zh"></a>
-### 运行基准测试
-
-须已安装 WinFsp。基准测试项目会自动选择 `D:` 到 `Z:` 之间第一个空闲盘符，无需手动配置。
-
-```powershell
-dotnet run --project benchmarks/ManagedDrive.Benchmarks -c Release
-```
-
-BenchmarkDotNet 会提示你选择要运行的基准测试类（`SequentialReadWriteBenchmarks`、`RandomAccessBenchmarks`、`ConcurrentAccessBenchmarks`，或任意组合）。结果将写入工作目录下的 `BenchmarkDotNet.Artifacts/results/`。
 
 <a id="cli-usage-zh"></a>
 ### 命令行用法
@@ -462,6 +380,100 @@ WinFsp 把盘符挂载在**当前登录会话（logon session）**的设备命�
 **MSI 安装的解决办法：** 安装 MSI 类软件前，先用工具栏按钮把 TEMP 恢复为 Windows 默认值再重试；或直接前往官网下载安装包手动安装；也可以用 [`wingetx`](#wingetx-wrapper-zh) 代替 `winget`——它无需重置 TEMP 即可绕开上述两种失败模式。
 
 ManagedDrive 会在 TEMP 被设为内存盘时提示一次，此后只要 TEMP 仍指向内存盘，每次启动都会再次提示——恢复默认值即可停止。
+
+### 配置与持久化
+
+- 配置以 JSON 格式存储于 `%APPDATA%\ManagedDrive\settings.json`，包括每个磁盘各自的高用量告警阈值（或已禁用状态）。
+- 开机自启通过 `HKCU\SOFTWARE\Microsoft\Windows\CurrentVersion\Run` 注册表项实现（无需提升权限）。
+- 版本号由 MinVer 从 git 标签派生（`v` 前缀，例如 `v0.1.0`）。
+
+## 开发者内容
+
+### 快速开始
+
+```powershell
+# 1. 下载并安装 WinFsp 2.2.26215（2026 Beta4）
+# https://github.com/winfsp/winfsp/releases/download/v2.2B4/winfsp-2.2.26215.msi
+
+# 2. 克隆仓库
+git clone https://github.com/coldhighsun/ManagedDrive
+cd ManagedDrive
+
+# 3. 编译
+dotnet build
+
+# 4. 运行
+dotnet run --project src/ManagedDrive.App -c Release
+```
+
+或者在 Visual Studio 2022+ 中打开 `ManagedDrive.slnx` 并按 **F5**。
+
+### 解决方案结构
+
+```
+ManagedDrive/
+├── src/
+│   ├── ManagedDrive.Core/              # 内存文件系统引擎（WinFsp），不依赖任何 UI
+│   │   ├── FileSystem/                 #   FileNode、FileNodeMap、MemoryFileSystem、WildcardMatcher、DirectoryEnumeration
+│   │   ├── Mounting/                   #   DiskOptions、RamDisk、MountManager、MountOptionsFactory
+│   │   ├── Persistence/                #   DiskImageSerializer（.mdr 格式）
+│   │   ├── Snapshots/                  #   SnapshotManager、SnapshotStore
+│   │   ├── Archive/                    #   ArchiveNodeMapBuilder（导入）、ArchiveNodeMapWriter（导出）
+│   │   └── DiskCreation/               #   CreateDiskOptionsBuilder、ByteUnitConverter
+│   ├── ManagedDrive.App/               # WPF 桌面应用程序——托盘图标、各类对话框、设置、多语言/主题
+│   ├── ManagedDrive.Cli.Core/          # 共享的 CLI 解析/协议库（System.CommandLine + 命名管道协议）
+│   ├── ManagedDrive.Cli/               # `mdrive.exe` 控制台入口点
+│   ├── ManagedDrive.HelperProtocol/    # 应用与 SYSTEM 辅助服务之间共享的命名管道协议
+│   ├── ManagedDrive.Service/           # `ManagedDriveHelper.exe`——可选的 LocalSystem 服务，发布全局 DOS 设备符号链接以实现跨会话 TEMP 可见性（见"已知问题"）
+│   └── ManagedDrive.WingetExtension/   # `wingetx.exe`——透明的 winget 包装工具（见"wingetx: winget 包装工具"）
+├── tests/
+│   └── ManagedDrive.Tests/             # xUnit v3 单元测试（仅纯托管代码）
+└── benchmarks/
+    └── ManagedDrive.Benchmarks/        # BenchmarkDotNet 吞吐量/延迟基准测试
+```
+
+### 工作原理
+
+ManagedDrive 使用 **WinFsp**（Windows 文件系统代理）将内存目录树呈现为真实的 Windows 卷：已签名内核驱动把文件 I/O 转发至托管文件系统实现，数据存储在 .NET 字节数组中，并强制容量上限。挂载/卸载、保存/还原为 `.mdr` 镜像、快照历史等均由 `ManagedDrive.Core` 负责（类级别架构见 `CLAUDE.md`）。
+
+### 磁盘镜像与快照格式
+
+`.mdr` 镜像是带版本号的小端序二进制格式（魔数 `MDRD`），可选 gzip 压缩和基于密码的 AES-256-GCM 加密；大磁盘会流式读写文件并分块加密，而非把整个镜像缓冲到内存中。快照采用独立格式（魔数 `MDRS`），存放在主镜像旁，文件内容按 SHA-256 去重存储到共享的块存储中，因此对基本未变化的磁盘做快照额外占用很小。两种格式都会保持对旧版本发布产物的向后兼容。具体二进制布局见 `CLAUDE.md`。
+
+### 性能基准
+
+使用 [BenchmarkDotNet](https://benchmarkdotnet.org/) 测量（Intel Core i9-13980HX、64 GB 内存、KIOXIA KXG8AZNV1T02 NVMe SSD、Windows 11 Pro、.NET 10.0.10）：
+
+| 场景 | 内存盘 | NVMe SSD | 倍率 |
+|---|---:|---:|---:|
+| 顺序写入，4 KB | 2.4 MB/s | 1.3 MB/s | **内存盘快 1.9×** |
+| 顺序写入，1 MB | 561.8 MB/s | 137.4 MB/s | **内存盘快 4.1×** |
+| 顺序读取（OS 缓存），4 KB | 6.0 MB/s | 8.7 MB/s | NVMe 快 1.4× |
+| 顺序读取（OS 缓存），1 MB | 938.5 MB/s | 2,143.3 MB/s | NVMe 快 2.3× |
+| 随机 4 KB 读取（未缓存），30 次寻址 | 1.36 ms | 2.18 ms | **内存盘快 1.6×** |
+| 随机 4 KB 读取（OS 缓存），30 次寻址 | 1.36 ms | 0.52 ms | NVMe 快 2.6× |
+| 30 次小文件（4 KB）创建+写入 | 47.4 ms（1.58 ms/文件） | 79.9 ms（2.66 ms/文件） | **内存盘快 1.7×** |
+
+写入优势显著（最高 4.1×），因为跳过了物理块分配、日志记录和实际落盘。未缓存的随机读取受益于零寻址延迟（快 1.6×）。小文件创建也更快（1.7×），因为元数据操作全在内存中完成。但缓存读取方面 NVMe 更优——NTFS 从 OS 页缓存读取时全程在内核态完成，而内存盘需要经过 WinFsp 的内核–用户态往返，增加了额外开销。运行 `dotnet run --project benchmarks/ManagedDrive.Benchmarks -c Release` 可在你自己的硬件上获取当前数据（见下方[运行基准测试](#running-benchmarks-zh)）。
+
+### 运行测试
+
+```powershell
+dotnet test tests/ManagedDrive.Tests
+```
+
+测试覆盖 `FileNode`、`FileNodeMap`（增删改查、查找、分页、重命名、容量追踪）、`MemoryFileSystem` 的磁盘克隆逻辑、目录枚举及通配符匹配、`DiskImageSerializer`（各压缩级别的保存/加载往返、旧版本镜像、并发修改）、压缩包导入/导出、`MountOptionsFactory`、`CreateDiskOptionsBuilder`/`ByteUnitConverter`（下沉到 Core 以便脱离 WPF 单测），以及 `PasswordStrengthEstimator`。挂载/卸载集成测试需要 WinFsp 驱动，须手动运行。
+
+<a id="running-benchmarks-zh"></a>
+### 运行基准测试
+
+须已安装 WinFsp。基准测试项目会自动选择 `D:` 到 `Z:` 之间第一个空闲盘符，无需手动配置。
+
+```powershell
+dotnet run --project benchmarks/ManagedDrive.Benchmarks -c Release
+```
+
+BenchmarkDotNet 会提示你选择要运行的基准测试类（`SequentialReadWriteBenchmarks`、`RandomAccessBenchmarks`、`ConcurrentAccessBenchmarks`，或任意组合）。结果将写入工作目录下的 `BenchmarkDotNet.Artifacts/results/`。
 
 ### 许可证
 
