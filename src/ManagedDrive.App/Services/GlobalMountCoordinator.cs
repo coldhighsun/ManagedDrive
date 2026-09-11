@@ -16,8 +16,12 @@ namespace ManagedDrive.App.Services;
 /// </summary>
 public sealed class GlobalMountCoordinator
 {
-    public GlobalMountCoordinator(MainViewModel mainViewModel)
+    private readonly ILogger<GlobalMountCoordinator> _logger;
+
+    public GlobalMountCoordinator(MainViewModel mainViewModel, ILogger<GlobalMountCoordinator> logger)
     {
+        _logger = logger;
+
         mainViewModel.Disks.CollectionChanged += (_, e) =>
         {
             if (e.NewItems != null)
@@ -62,7 +66,7 @@ public sealed class GlobalMountCoordinator
         }
     }
 
-    private static void PublishAsync(DiskViewModel vm)
+    private void PublishAsync(DiskViewModel vm)
     {
         if (!vm.Disk.TryGetVolumeDevicePath(out var devicePath) || devicePath == null)
         {
@@ -76,22 +80,22 @@ public sealed class GlobalMountCoordinator
         {
             if (HelperPipeClient.TryPublish(letter, devicePath, out var response))
             {
-                Debug.WriteLine($"[GlobalMount] publish {letter}: {response.Success} — {response.Message}");
+                _logger.LogInformation("[GlobalMount] publish {Letter}: {Success} — {Message}", letter, response.Success, response.Message);
             }
             else
             {
-                Debug.WriteLine($"[GlobalMount] publish {letter}: helper service unavailable (degraded).");
+                _logger.LogWarning("[GlobalMount] publish {Letter}: helper service unavailable (degraded).", letter);
             }
         });
     }
 
-    private static void UnpublishAsync(string letter)
+    private void UnpublishAsync(string letter)
     {
         Task.Run(() =>
         {
             if (HelperPipeClient.TryUnpublish(letter, out var response))
             {
-                Debug.WriteLine($"[GlobalMount] unpublish {letter}: {response.Success} — {response.Message}");
+                _logger.LogInformation("[GlobalMount] unpublish {Letter}: {Success} — {Message}", letter, response.Success, response.Message);
             }
         });
     }
