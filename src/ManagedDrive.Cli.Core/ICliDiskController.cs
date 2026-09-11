@@ -60,6 +60,49 @@ public interface ICliDiskController
     Task<(bool Success, string Message)> MountImageAsync(string imagePath, string mountPoint, CliMountOverrides overrides);
 
     /// <summary>
+    /// Deletes a single snapshot of the disk currently mounted at <paramref name="mountPoint"/>.
+    /// </summary>
+    /// <param name="mountPoint">The mount point whose snapshot should be deleted, e.g. <c>"R:"</c>.</param>
+    /// <param name="index">
+    /// 1-based snapshot index as returned by <see cref="ListSnapshotsAsync"/> (1 = newest).
+    /// </param>
+    /// <returns>
+    /// <c>(true, message)</c> on success; <c>(false, message)</c> with a human-readable reason
+    /// otherwise — including an out-of-range <paramref name="index"/>.
+    /// <paramref name="mountPoint"/> not being mounted is reported as <c>(false, string.Empty)</c>
+    /// so the CLI layer can render its own not-mounted message.
+    /// </returns>
+    Task<(bool Success, string Message)> DeleteSnapshotAsync(string mountPoint, int index);
+
+    /// <summary>
+    /// Lists the available snapshots of the disk currently mounted at <paramref name="mountPoint"/>,
+    /// newest first (<see cref="CliSnapshotInfo.Index"/> 1 = newest).
+    /// </summary>
+    /// <returns>
+    /// <c>(true, message, snapshots)</c> on success (an empty list when none exist yet);
+    /// <c>(false, message, null)</c> with a human-readable reason otherwise.
+    /// <paramref name="mountPoint"/> not being mounted is reported as <c>(false, string.Empty, null)</c>
+    /// so the CLI layer can render its own not-mounted message.
+    /// </returns>
+    Task<(bool Success, string Message, IReadOnlyList<CliSnapshotInfo>? Snapshots)> ListSnapshotsAsync(string mountPoint);
+
+    /// <summary>
+    /// Restores the disk currently mounted at <paramref name="mountPoint"/> from a previously
+    /// saved snapshot, replacing its current contents.
+    /// </summary>
+    /// <param name="mountPoint">The mount point to restore, e.g. <c>"R:"</c>.</param>
+    /// <param name="index">
+    /// 1-based snapshot index as returned by <see cref="ListSnapshotsAsync"/> (1 = newest).
+    /// </param>
+    /// <returns>
+    /// <c>(true, message)</c> on success; <c>(false, message)</c> with a human-readable reason
+    /// otherwise — including a read-only disk, a capacity mismatch, or an out-of-range
+    /// <paramref name="index"/>. <paramref name="mountPoint"/> not being mounted is reported as
+    /// <c>(false, string.Empty)</c> so the CLI layer can render its own not-mounted message.
+    /// </returns>
+    Task<(bool Success, string Message)> RestoreSnapshotAsync(string mountPoint, int index);
+
+    /// <summary>
     /// Requests that the running ManagedDrive application exit. Must not block until the process
     /// has actually shut down — the actual exit should happen after this call returns (e.g. on a
     /// short delay), so the CLI response reporting success can still be written back over the
@@ -97,3 +140,10 @@ public interface ICliDiskController
 /// Read-only snapshot of a mounted disk, as needed to render the CLI <c>list</c> table.
 /// </summary>
 public sealed record CliDiskInfo(string MountPoint, string VolumeLabel, ulong UsedBytes, ulong TotalBytes);
+
+/// <summary>
+/// One entry of a disk's snapshot history, as needed to render the CLI <c>snapshot list</c>
+/// table and to address a specific snapshot in <c>snapshot restore</c>/<c>snapshot delete</c>.
+/// </summary>
+/// <param name="Index">1-based index, newest first (1 = newest).</param>
+public sealed record CliSnapshotInfo(int Index, DateTimeOffset TimestampUtc, ulong SizeBytes);

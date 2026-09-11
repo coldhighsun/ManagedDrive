@@ -4,7 +4,7 @@ namespace ManagedDrive.Cli.Core;
 
 /// <summary>
 /// Parses and dispatches ManagedDrive's CLI subcommands (<c>mount</c>, <c>unmount</c>,
-/// <c>list</c>, <c>exit</c>) using <c>System.CommandLine</c>. Returns a structured
+/// <c>list</c>, <c>snapshot</c>, <c>exit</c>) using <c>System.CommandLine</c>. Returns a structured
 /// <see cref="CliOutcome"/> rather than rendered text — terminal rendering is the caller's
 /// concern (see <c>ManagedDrive.Cli</c>'s renderer).
 /// </summary>
@@ -214,6 +214,56 @@ public static class CliCommandProcessor
         saveCommand.SetAction(async (parseResult, _) =>
             await SaveAsync(parseResult.GetValue(saveDriveArgument)!, diskController, o => outcome = o));
 
+        var snapshotListDriveArgument = new Argument<string>("drive-letter")
+        {
+            Description = "Drive letter of a currently mounted disk, e.g. R:",
+        };
+        var snapshotListCommand = new Command("list", "Lists available snapshots of a mounted disk, newest first.");
+        snapshotListCommand.Arguments.Add(snapshotListDriveArgument);
+        snapshotListCommand.SetAction(async (parseResult, _) =>
+            await SnapshotListAsync(parseResult.GetValue(snapshotListDriveArgument)!, diskController, o => outcome = o));
+
+        var snapshotRestoreDriveArgument = new Argument<string>("drive-letter")
+        {
+            Description = "Drive letter of a currently mounted disk, e.g. R:",
+        };
+        var snapshotRestoreIndexArgument = new Argument<int>("index")
+        {
+            Description = "1-based snapshot index from 'snapshot list' (1 = newest).",
+        };
+        var snapshotRestoreCommand = new Command("restore", "Restores a mounted disk's contents from a snapshot, replacing its current contents.");
+        snapshotRestoreCommand.Arguments.Add(snapshotRestoreDriveArgument);
+        snapshotRestoreCommand.Arguments.Add(snapshotRestoreIndexArgument);
+        snapshotRestoreCommand.SetAction(async (parseResult, _) =>
+            await SnapshotRestoreAsync(
+                parseResult.GetValue(snapshotRestoreDriveArgument)!,
+                parseResult.GetValue(snapshotRestoreIndexArgument),
+                diskController,
+                o => outcome = o));
+
+        var snapshotDeleteDriveArgument = new Argument<string>("drive-letter")
+        {
+            Description = "Drive letter of a currently mounted disk, e.g. R:",
+        };
+        var snapshotDeleteIndexArgument = new Argument<int>("index")
+        {
+            Description = "1-based snapshot index from 'snapshot list' (1 = newest).",
+        };
+        var snapshotDeleteCommand = new Command("delete", "Deletes a single snapshot of a mounted disk.");
+        snapshotDeleteCommand.Arguments.Add(snapshotDeleteDriveArgument);
+        snapshotDeleteCommand.Arguments.Add(snapshotDeleteIndexArgument);
+        snapshotDeleteCommand.SetAction(async (parseResult, _) =>
+            await SnapshotDeleteAsync(
+                parseResult.GetValue(snapshotDeleteDriveArgument)!,
+                parseResult.GetValue(snapshotDeleteIndexArgument),
+                diskController,
+                o => outcome = o));
+
+        var snapshotCommand = new Command("snapshot", "Manages timestamped snapshots of a mounted disk's backing image.");
+        snapshotCommand.Subcommands.Add(snapshotListCommand);
+        snapshotCommand.Subcommands.Add(snapshotRestoreCommand);
+        snapshotCommand.Subcommands.Add(snapshotDeleteCommand);
+
         var listCommand = new Command("list", "Lists currently mounted disks.");
         listCommand.SetAction((_, _) =>
         {
@@ -237,6 +287,7 @@ public static class CliCommandProcessor
         rootCommand.Subcommands.Add(formatCommand);
         rootCommand.Subcommands.Add(saveCommand);
         rootCommand.Subcommands.Add(listCommand);
+        rootCommand.Subcommands.Add(snapshotCommand);
         rootCommand.Subcommands.Add(exitCommand);
 
         var invocationConfiguration = new InvocationConfiguration
@@ -347,6 +398,51 @@ public static class CliCommandProcessor
         return 1;
     }
 
+    private static async Task<int> SnapshotDeleteAsync(string driveLetter, int index, ICliDiskController diskController, Action<CliOutcome> setOutcome)
+    {
+        driveLetter = NormalizeDriveLetter(driveLetter);
+
+        var (success, message) = await diskController.DeleteSnapshotAsync(driveLetter, index);
+        setOutcome(new(
+            success,
+            string.IsNullOrEmpty(message) ? $"No disk is currently mounted at {driveLetter}." : message,
+            null,
+            success ? 0 : 1));
+        return success ? 0 : 1;
+    }
+
+    private static async Task<int> SnapshotListAsync(string driveLetter, ICliDiskController diskController, Action<CliOutcome> setOutcome)
+    {
+        driveLetter = NormalizeDriveLetter(driveLetter);
+
+        var (success, message, snapshots) = await diskController.ListSnapshotsAsync(driveLetter);
+        if (!success)
+        {
+            setOutcome(new(
+                false,
+                string.IsNullOrEmpty(message) ? $"No disk is currently mounted at {driveLetter}." : message,
+                null,
+                1));
+            return 1;
+        }
+
+        setOutcome(new(true, message, null, 0, snapshots));
+        return 0;
+    }
+
+    private static async Task<int> SnapshotRestoreAsync(string driveLetter, int index, ICliDiskController diskController, Action<CliOutcome> setOutcome)
+    {
+        driveLetter = NormalizeDriveLetter(driveLetter);
+
+        var (success, message) = await diskController.RestoreSnapshotAsync(driveLetter, index);
+        setOutcome(new(
+            success,
+            string.IsNullOrEmpty(message) ? $"No disk is currently mounted at {driveLetter}." : message,
+            null,
+            success ? 0 : 1));
+        return success ? 0 : 1;
+    }
+
     private static async Task<int> UnmountAsync(string driveLetter, bool deleteImage, ICliDiskController diskController, Action<CliOutcome> setOutcome)
     {
         driveLetter = NormalizeDriveLetter(driveLetter);
@@ -372,4 +468,9 @@ public static class CliCommandProcessor
 /// an optional disk list (populated only by <c>list</c>), and the process exit code. Rendering
 /// this into terminal output (colors, tables) is the caller's responsibility.
 /// </summary>
-public sealed record CliOutcome(bool Success, string Message, IReadOnlyList<CliDiskInfo>? Disks, int ExitCode);
+public sealed record CliOutcome(
+    bool Success,
+    string Message,
+    IReadOnlyList<CliDiskInfo>? Disks,
+    int ExitCode,
+    IReadOnlyList<CliSnapshotInfo>? Snapshots = null);

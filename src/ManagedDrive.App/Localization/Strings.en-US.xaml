@@ -181,6 +181,9 @@
     <sys:String x:Key="Msg.RestoreSnapshotConfirmTitle">Restore Snapshot</sys:String>
     <sys:String x:Key="Msg.DeleteSnapshotConfirmTitle">Delete Snapshot</sys:String>
     <sys:String x:Key="Msg.DeleteSnapshotConfirmBody">Delete snapshot {0}? This cannot be undone.</sys:String>
+    <sys:String x:Key="Msg.SnapshotIndexOutOfRange">Invalid snapshot index. This disk has {0} snapshot(s).</sys:String>
+    <sys:String x:Key="Msg.RestoreSnapshotFailedUnknown">Failed to restore the snapshot for an unknown reason.</sys:String>
+    <sys:String x:Key="Status.SnapshotDeleted">Deleted a snapshot of {0}</sys:String>
 
     <!-- SnapshotDiffDialog -->
     <sys:String x:Key="SnapshotDiff.Title">Snapshot Changes</sys:String>
