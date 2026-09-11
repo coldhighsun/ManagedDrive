@@ -181,6 +181,7 @@ public sealed class MemoryFileSystem : FileSystemBase
         {
             node.FileInfo.LastWriteTime = now;
             node.FileInfo.ChangeTime = now;
+            node.MetadataVersion++;
             MarkDirty();
         }
 
@@ -607,6 +608,7 @@ public sealed class MemoryFileSystem : FileSystemBase
 
         NodeMap.Remove(fileName);
         NodeMap.Add(newFileName, node);
+        node.MetadataVersion++;
         MarkDirty();
         return STATUS_SUCCESS;
     }
@@ -658,6 +660,7 @@ public sealed class MemoryFileSystem : FileSystemBase
             node.FileInfo.ChangeTime = changeTime;
         }
 
+        node.MetadataVersion++;
         MarkDirty();
         fileInfo = node.FileInfo;
         return STATUS_SUCCESS;
@@ -728,6 +731,7 @@ public sealed class MemoryFileSystem : FileSystemBase
         }
 
         node.FileSecurity = merged;
+        node.MetadataVersion++;
         MarkDirty();
         return STATUS_SUCCESS;
     }
@@ -835,18 +839,6 @@ public sealed class MemoryFileSystem : FileSystemBase
     internal void MarkDirty() => MarkDirty(DateTimeOffset.UtcNow);
 
     /// <summary>
-    /// Marks the disk's content as changed since the last save, using a caller-supplied
-    /// timestamp to avoid redundant <see cref="DateTimeOffset.UtcNow"/> calls on hot paths
-    /// that already captured "now" for other purposes.
-    /// </summary>
-    private void MarkDirty(DateTimeOffset now)
-    {
-        _isDirty = true;
-        Interlocked.Exchange(ref _lastContentWriteTicks, now.UtcTicks);
-        ContentAccessed?.Invoke(true);
-    }
-
-    /// <summary>
     /// Replaces this file system's entire contents with a deep copy of <paramref name="sourceMap"/>.
     /// Used to clone one mounted disk's contents onto another. Fails without modifying this
     /// file system when it is read-only or when the source's allocated bytes exceed this
@@ -951,6 +943,18 @@ public sealed class MemoryFileSystem : FileSystemBase
             && groupOffset is > 0 and < int.MaxValue
             && ownerOffset < (uint)sd.Length
             && groupOffset < (uint)sd.Length;
+    }
+
+    /// <summary>
+    /// Marks the disk's content as changed since the last save, using a caller-supplied
+    /// timestamp to avoid redundant <see cref="DateTimeOffset.UtcNow"/> calls on hot paths
+    /// that already captured "now" for other purposes.
+    /// </summary>
+    private void MarkDirty(DateTimeOffset now)
+    {
+        _isDirty = true;
+        Interlocked.Exchange(ref _lastContentWriteTicks, now.UtcTicks);
+        ContentAccessed?.Invoke(true);
     }
 
     /// <summary>

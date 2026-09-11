@@ -51,11 +51,11 @@ Data flow: `MountManager` → `RamDisk.Create()` → `MemoryFileSystem` + WinFsp
 
 ### Disk image format (`.mdr`) and compression
 
-Binary format: magic `MDRD`, version `3` (current). Capacity and volume label are always plaintext header fields; only the node region is compressed and optionally encrypted.
+Binary format: magic `MDRD`. Capacity and volume label are always plaintext header fields; only the node region is compressed and optionally encrypted. Versions 1-5 (gzip, then Zstd) store the node region as one continuous compressed/encrypted stream and are read-only now — `RamDisk.SaveToImage` always writes version 6 via `DiskImageSerializer.SaveIncremental(...)`, which splits the node region into independently compressed/encrypted *segments* and reuses the on-disk bytes of any segment whose member nodes are all unchanged since the last save (tracked per-node via `FileNode.SavedContentVersion`/`SavedMetadataVersion`/`SavedSegmentIndex`) instead of recompressing/re-encrypting the whole disk every save, falling back to a full rewrite when there's no compatible existing image to reuse (first save, or the existing image predates version 6). `DiskImageSerializer.Save(...)` (plain, non-incremental) always writes version 5 — `ExportToImage` (standalone `.mdr` export, independent of a mounted disk's own persistence) uses this, since that path has no notion of incremental reuse across calls and there's no reason to pay the segmentation overhead.
 
 **Compression uses Zstd** (via `ZstdSharp.Port`) with parallel chunked encoding (`ParallelZstd`). `ImageCompressionLevel` enum (`None=0`/`Fastest=1`/`Optimal=2`/`SmallestSize=3`) has stable explicit values persisted to disk/JSON — do not renumber. `DiskOptions.CustomZstdLevel` (`int?`) overrides the preset's Zstd level (1-22) when set. Legacy gzip-compressed v1/v2 images are still readable — do not remove those `Load()` branches.
 
-Encryption: AES-256-GCM envelope encryption (random CEK wrapped by user password via PBKDF2). The wrapped-CEK material is plaintext header; node region is encrypted under the CEK.
+Encryption: AES-256-GCM envelope encryption (random CEK wrapped by user password via PBKDF2). The wrapped-CEK material is plaintext header; node region (v1-5) or each segment independently (v6) is encrypted under the CEK. Reusing a v6 segment verbatim never touches its ciphertext or nonce/tag — only rewritten segments get a fresh nonce.
 
 Snapshots use a separate format (magic `MDRS`) with content-addressed blob store — don't conflate with `DiskImageSerializer`.
 

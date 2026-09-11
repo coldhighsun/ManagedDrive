@@ -95,18 +95,6 @@ public sealed class RamDisk : IDisposable
     public DateTimeOffset? LastContentWriteTime => _fs.LastContentWriteTimeUtc;
 
     /// <summary>
-    /// Gets the cumulative number of bytes read from file content since mount. Never resets;
-    /// consumers derive a rate by sampling the delta over time (see <see cref="ThroughputTracker"/>).
-    /// </summary>
-    public long TotalBytesRead => _fs.TotalBytesRead;
-
-    /// <summary>
-    /// Gets the cumulative number of bytes written to file content since mount. Never resets;
-    /// consumers derive a rate by sampling the delta over time (see <see cref="ThroughputTracker"/>).
-    /// </summary>
-    public long TotalBytesWritten => _fs.TotalBytesWritten;
-
-    /// <summary>
     /// Gets the UTC timestamp of the most recent successful image save (auto-save, final
     /// save on unmount, or manual save via <see cref="SaveToImage"/>). <c>null</c> if no
     /// save has occurred yet.
@@ -148,6 +136,18 @@ public sealed class RamDisk : IDisposable
     /// Gets the total configured capacity of this RAM disk in bytes.
     /// </summary>
     public ulong TotalBytes => Options.CapacityBytes;
+
+    /// <summary>
+    /// Gets the cumulative number of bytes read from file content since mount. Never resets;
+    /// consumers derive a rate by sampling the delta over time (see <see cref="ThroughputTracker"/>).
+    /// </summary>
+    public long TotalBytesRead => _fs.TotalBytesRead;
+
+    /// <summary>
+    /// Gets the cumulative number of bytes written to file content since mount. Never resets;
+    /// consumers derive a rate by sampling the delta over time (see <see cref="ThroughputTracker"/>).
+    /// </summary>
+    public long TotalBytesWritten => _fs.TotalBytesWritten;
 
     /// <summary>
     /// Gets the number of bytes currently allocated by files on this RAM disk.
@@ -443,7 +443,7 @@ public sealed class RamDisk : IDisposable
 
         try
         {
-            DiskImageSerializer.Save(
+            DiskImageSerializer.SaveIncremental(
                 _fs.NodeMap,
                 Options.CapacityBytes,
                 Options.VolumeLabel,
@@ -536,11 +536,6 @@ public sealed class RamDisk : IDisposable
         }
     }
 
-    private sealed class MappedProgress(IProgress<double> inner, double scale, double offset) : IProgress<double>
-    {
-        public void Report(double value) => inner.Report(offset + (value * scale));
-    }
-
     /// <summary>
     /// Sets, changes, or removes this disk's password. Passing a non-null value when the disk is
     /// not yet encrypted generates a fresh content-encryption key (CEK); passing a non-null value
@@ -631,6 +626,43 @@ public sealed class RamDisk : IDisposable
         _fs.TryReplaceContents(source._fs.NodeMap, out error);
 
     /// <summary>
+    /// Resolves the underlying NT device path (e.g. <c>\Device\Volume{GUID}</c>) that this disk's
+    /// drive-letter mount point currently maps to, via <c>QueryDosDevice</c>. Read-only and
+    /// non-privileged, but it must be called from the user's own session — the drive-letter
+    /// symlink WinFsp created lives in that session's DOS-device namespace, so a SYSTEM process
+    /// could not resolve it. The result is handed to the helper service to publish a global
+    /// symlink.
+    /// </summary>
+    /// <param name="devicePath">
+    /// On success, the resolved NT device path; otherwise <c>null</c>.
+    /// </param>
+    /// <returns>
+    /// <c>true</c> if the mount point is a drive letter that resolved to a device path;
+    /// <c>false</c> otherwise.
+    /// </returns>
+    public bool TryGetVolumeDevicePath(out string? devicePath)
+    {
+        devicePath = null;
+
+        var mountPoint = MountPoint;
+        if (!IsDriveLetter(mountPoint))
+        {
+            return false;
+        }
+
+        var buffer = new char[1024];
+        var length = QueryDosDevice(mountPoint, buffer, (uint)buffer.Length);
+        if (length == 0)
+        {
+            return false;
+        }
+
+        // QueryDosDevice returns a double-null-terminated list; the first entry is the target.
+        devicePath = new string(buffer, 0, (int)length).Split('\0', 2)[0];
+        return devicePath.Length > 0;
+    }
+
+    /// <summary>
     /// Replaces this disk's live contents with those stored in the snapshot at
     /// <paramref name="snapshotPath"/>. The replacement is marked dirty and will be persisted
     /// on the next save/auto-save tick; it is not written to
@@ -666,31 +698,6 @@ public sealed class RamDisk : IDisposable
     /// </summary>
     internal static ulong ResolveEffectiveCapacity(ulong configuredCapacity, ulong actualUsed) =>
         Math.Max(configuredCapacity, actualUsed);
-
-    /// <summary>
-    /// Resolves the effective capacity for a just-loaded <paramref name="nodeMap"/> against
-    /// <paramref name="configuredCapacity"/> via <see cref="ResolveEffectiveCapacity"/>, and — if
-    /// that raised the capacity — updates <paramref name="options"/> in place to the new value and
-    /// reports the original in <paramref name="originalCapacity"/>. Shared by <see cref="Create"/>'s
-    /// archive-import and image-load branches.
-    /// </summary>
-    private static ulong ResolveAndApplyCapacity(
-        FileNodeMap nodeMap, ulong configuredCapacity, ref DiskOptions options, out ulong? originalCapacity)
-    {
-        var actualUsed = nodeMap.GetTotalAllocated();
-        var capacity = ResolveEffectiveCapacity(configuredCapacity, actualUsed);
-        originalCapacity = capacity != configuredCapacity ? configuredCapacity : null;
-
-        if (originalCapacity.HasValue)
-        {
-            options = options with
-            {
-                CapacityBytes = capacity
-            };
-        }
-
-        return capacity;
-    }
 
     private static void ConfigureHost(FileSystemHost host)
     {
@@ -730,48 +737,36 @@ public sealed class RamDisk : IDisposable
         SHChangeNotify(EventDriveAdd, FlagPath | FlagFlush, path, null);
     }
 
-    [DllImport("shell32.dll", CharSet = CharSet.Auto)]
-    private static extern void SHChangeNotify(uint wEventId, uint uFlags, string? dwItem1, string? dwItem2);
-
-    /// <summary>
-    /// Resolves the underlying NT device path (e.g. <c>\Device\Volume{GUID}</c>) that this disk's
-    /// drive-letter mount point currently maps to, via <c>QueryDosDevice</c>. Read-only and
-    /// non-privileged, but it must be called from the user's own session — the drive-letter
-    /// symlink WinFsp created lives in that session's DOS-device namespace, so a SYSTEM process
-    /// could not resolve it. The result is handed to the helper service to publish a global
-    /// symlink.
-    /// </summary>
-    /// <param name="devicePath">
-    /// On success, the resolved NT device path; otherwise <c>null</c>.
-    /// </param>
-    /// <returns>
-    /// <c>true</c> if the mount point is a drive letter that resolved to a device path;
-    /// <c>false</c> otherwise.
-    /// </returns>
-    public bool TryGetVolumeDevicePath(out string? devicePath)
-    {
-        devicePath = null;
-
-        var mountPoint = MountPoint;
-        if (!IsDriveLetter(mountPoint))
-        {
-            return false;
-        }
-
-        var buffer = new char[1024];
-        var length = QueryDosDevice(mountPoint, buffer, (uint)buffer.Length);
-        if (length == 0)
-        {
-            return false;
-        }
-
-        // QueryDosDevice returns a double-null-terminated list; the first entry is the target.
-        devicePath = new string(buffer, 0, (int)length).Split('\0', 2)[0];
-        return devicePath.Length > 0;
-    }
-
     [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Auto)]
     private static extern uint QueryDosDevice(string deviceName, char[] targetPath, uint max);
+
+    /// <summary>
+    /// Resolves the effective capacity for a just-loaded <paramref name="nodeMap"/> against
+    /// <paramref name="configuredCapacity"/> via <see cref="ResolveEffectiveCapacity"/>, and — if
+    /// that raised the capacity — updates <paramref name="options"/> in place to the new value and
+    /// reports the original in <paramref name="originalCapacity"/>. Shared by <see cref="Create"/>'s
+    /// archive-import and image-load branches.
+    /// </summary>
+    private static ulong ResolveAndApplyCapacity(
+        FileNodeMap nodeMap, ulong configuredCapacity, ref DiskOptions options, out ulong? originalCapacity)
+    {
+        var actualUsed = nodeMap.GetTotalAllocated();
+        var capacity = ResolveEffectiveCapacity(configuredCapacity, actualUsed);
+        originalCapacity = capacity != configuredCapacity ? configuredCapacity : null;
+
+        if (originalCapacity.HasValue)
+        {
+            options = options with
+            {
+                CapacityBytes = capacity
+            };
+        }
+
+        return capacity;
+    }
+
+    [DllImport("shell32.dll", CharSet = CharSet.Auto)]
+    private static extern void SHChangeNotify(uint wEventId, uint uFlags, string? dwItem1, string? dwItem2);
 
     /// <summary>
     /// Polls <see cref="System.IO.DriveInfo.GetDrives"/> until the drive letter described by
@@ -945,5 +940,10 @@ public sealed class RamDisk : IDisposable
             SaveFailed?.Invoke(this, ex);
             throw;
         }
+    }
+
+    private sealed class MappedProgress(IProgress<double> inner, double scale, double offset) : IProgress<double>
+    {
+        public void Report(double value) => inner.Report(offset + (value * scale));
     }
 }

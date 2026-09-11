@@ -27,7 +27,7 @@ Create, mount and manage in-memory volumes that appear as normal drive letters i
 **Persistence, snapshots & cloning**
 - Save to a `.mdr` image and restore it on next mount, or import an existing image directly (**Import Disk...**)
 - Import an archive (zip, 7z, rar, tar, or anything [SharpCompress](https://github.com/adamhathcock/sharpcompress) reads) as a read-only disk (**Import Archive...**), with capacity/label derived automatically
-- Optional auto-save (1–60 min interval) plus a final save before unmount/exit (disableable per disk via **Save on exit**); skipped when nothing changed, failures raise a tray/status-bar notification
+- Optional auto-save (1–60 min interval) plus a final save before unmount/exit (disableable per disk via **Save on exit**); skipped when nothing changed, failures raise a tray/status-bar notification. Saves are incremental — only files changed since the last save are recompressed/re-encrypted, so periodic auto-save on a large, mostly-unchanged disk stays fast
 - Selectable image compression (Off / Fast / Balanced / Max, default Fast)
 - Snapshot / version history capped by count and/or size, deduplicated by content hash; restore via **Restore Snapshot...**, which also lets you delete individual snapshots
 - Clone a disk onto another mounted disk or export it to a new `.mdr` file (**Clone Disk...**)
@@ -200,7 +200,7 @@ ManagedDrive uses **WinFsp** (Windows File System Proxy) to present an in-memory
 
 ### Disk Image & Snapshot Format
 
-`.mdr` images are a versioned, little-endian binary format (magic `MDRD`) with optional gzip compression and optional AES-256-GCM password-based encryption; large disks stream to/from the file and encrypt in chunks rather than buffering the whole image in memory. Snapshots use a separate format (magic `MDRS`) stored next to the main image, with file content deduplicated by SHA-256 into a shared blob store so snapshots of a mostly-unchanged disk cost little extra space. Both formats stay backward-compatible with older versions produced by earlier releases. See `CLAUDE.md` for the exact binary layout.
+`.mdr` images are a versioned, little-endian binary format (magic `MDRD`) with optional Zstd compression and optional AES-256-GCM password-based encryption; large disks stream to/from the file and encrypt in chunks rather than buffering the whole image in memory. Saves split the image into independent segments and reuse the on-disk bytes of any segment whose files haven't changed since the last save, so periodic auto-save on a large, mostly-unchanged disk only recompresses/re-encrypts the small part that actually changed. Snapshots use a separate format (magic `MDRS`) stored next to the main image, with file content deduplicated by SHA-256 into a shared blob store so snapshots of a mostly-unchanged disk cost little extra space. Both formats stay backward-compatible with older versions produced by earlier releases. See `CLAUDE.md` for the exact binary layout.
 
 ### Performance
 
@@ -224,7 +224,7 @@ Writes win big (up to 4.1×) by skipping block allocation, journaling, and the p
 dotnet test tests/ManagedDrive.Tests
 ```
 
-Tests cover `FileNode`, `FileNodeMap` (CRUD, lookup, pagination, rename, capacity tracking), `MemoryFileSystem` disk-cloning, directory enumeration and the wildcard matcher, `DiskImageSerializer` (round-trips across compression levels, legacy images, concurrent mutation during save), archive import/export, `MountOptionsFactory`, `CreateDiskOptionsBuilder`/`ByteUnitConverter` (create-disk dialog validation, kept WPF-free for testability), and `PasswordStrengthEstimator`. Mount/unmount integration tests need the WinFsp driver and must be run manually.
+Tests cover `FileNode`, `FileNodeMap` (CRUD, lookup, pagination, rename, capacity tracking), `MemoryFileSystem` disk-cloning, directory enumeration and the wildcard matcher, `DiskImageSerializer` (round-trips across compression levels, legacy images, concurrent mutation during save, the segmented incremental format's segment-reuse/rewrite decisions across successive saves), archive import/export, `MountOptionsFactory`, `CreateDiskOptionsBuilder`/`ByteUnitConverter` (create-disk dialog validation, kept WPF-free for testability), and `PasswordStrengthEstimator`. Mount/unmount integration tests need the WinFsp driver and must be run manually.
 
 ### Running Benchmarks
 
@@ -262,7 +262,7 @@ This project bundles [WinFsp](https://winfsp.dev/) and [SharpCompress](https://g
 **持久化、快照与克隆**
 - 保存为 `.mdr` 镜像并在下次挂载时还原，或直接导入已有镜像（**导入磁盘...**）
 - 导入压缩包（zip/7z/rar/tar 等 [SharpCompress](https://github.com/adamhathcock/sharpcompress) 支持的格式）为只读磁盘（**导入压缩包...**），容量/卷标自动推算
-- 可选自动保存（1-60 分钟）及卸载/退出前的收尾保存（可按磁盘通过**退出时保存**关闭）；内容未变时跳过，失败会有托盘/状态栏提示
+- 可选自动保存（1-60 分钟）及卸载/退出前的收尾保存（可按磁盘通过**退出时保存**关闭）；内容未变时跳过，失败会有托盘/状态栏提示。保存采用增量方式——只有自上次保存以来变化过的文件才会重新压缩/加密，大容量、内容基本未变的磁盘做周期性自动保存依然很快
 - 可选镜像压缩级别（不压缩／快速／均衡／最高，默认快速）
 - 按数量/大小上限保留的快照版本历史，内容去重存储；通过**还原快照...**还原或删除单个快照
 - 克隆磁盘到另一已挂载磁盘，或导出为新 `.mdr` 文件（**克隆磁盘...**）
@@ -438,7 +438,7 @@ ManagedDrive 使用 **WinFsp**（Windows 文件系统代理）将内存目录树
 
 ### 磁盘镜像与快照格式
 
-`.mdr` 镜像是带版本号的小端序二进制格式（魔数 `MDRD`），可选 gzip 压缩和基于密码的 AES-256-GCM 加密；大磁盘会流式读写文件并分块加密，而非把整个镜像缓冲到内存中。快照采用独立格式（魔数 `MDRS`），存放在主镜像旁，文件内容按 SHA-256 去重存储到共享的块存储中，因此对基本未变化的磁盘做快照额外占用很小。两种格式都会保持对旧版本发布产物的向后兼容。具体二进制布局见 `CLAUDE.md`。
+`.mdr` 镜像是带版本号的小端序二进制格式（魔数 `MDRD`），可选 Zstd 压缩和基于密码的 AES-256-GCM 加密；大磁盘会流式读写文件并分块加密，而非把整个镜像缓冲到内存中。保存时镜像会被拆分为多个独立分段，自上次保存以来未变化的文件所在分段会直接复用磁盘上的原始字节，因此大容量、内容基本未变的磁盘做周期性自动保存时只需重新压缩/加密真正改动的那一小部分。快照采用独立格式（魔数 `MDRS`），存放在主镜像旁，文件内容按 SHA-256 去重存储到共享的块存储中，因此对基本未变化的磁盘做快照额外占用很小。两种格式都会保持对旧版本发布产物的向后兼容。具体二进制布局见 `CLAUDE.md`。
 
 ### 性能基准
 
@@ -462,7 +462,7 @@ ManagedDrive 使用 **WinFsp**（Windows 文件系统代理）将内存目录树
 dotnet test tests/ManagedDrive.Tests
 ```
 
-测试覆盖 `FileNode`、`FileNodeMap`（增删改查、查找、分页、重命名、容量追踪）、`MemoryFileSystem` 的磁盘克隆逻辑、目录枚举及通配符匹配、`DiskImageSerializer`（各压缩级别的保存/加载往返、旧版本镜像、并发修改）、压缩包导入/导出、`MountOptionsFactory`、`CreateDiskOptionsBuilder`/`ByteUnitConverter`（下沉到 Core 以便脱离 WPF 单测），以及 `PasswordStrengthEstimator`。挂载/卸载集成测试需要 WinFsp 驱动，须手动运行。
+测试覆盖 `FileNode`、`FileNodeMap`（增删改查、查找、分页、重命名、容量追踪）、`MemoryFileSystem` 的磁盘克隆逻辑、目录枚举及通配符匹配、`DiskImageSerializer`（各压缩级别的保存/加载往返、旧版本镜像、并发修改、分段增量格式在连续多次保存中的分段复用/重写决策）、压缩包导入/导出、`MountOptionsFactory`、`CreateDiskOptionsBuilder`/`ByteUnitConverter`（下沉到 Core 以便脱离 WPF 单测），以及 `PasswordStrengthEstimator`。挂载/卸载集成测试需要 WinFsp 驱动，须手动运行。
 
 <a id="running-benchmarks-zh"></a>
 ### 运行基准测试
