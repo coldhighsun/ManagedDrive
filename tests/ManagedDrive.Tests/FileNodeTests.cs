@@ -100,4 +100,18 @@ public sealed class FileNodeTests
         clone.FileSecurity![0] = 77;
         Assert.Equal(9, original.FileSecurity![0]);
     }
+
+    [Fact]
+    public void SavedContentVersion_Default_NeverEqualsFreshContentVersion()
+    {
+        var node = new FileNode();
+        Assert.NotEqual(node.ContentVersion, node.SavedContentVersion);
+    }
+
+    [Fact]
+    public void SavedMetadataVersion_Default_NeverEqualsFreshMetadataVersion()
+    {
+        var node = new FileNode();
+        Assert.NotEqual(node.MetadataVersion, node.SavedMetadataVersion);
+    }
 }

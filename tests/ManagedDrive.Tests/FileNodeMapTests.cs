@@ -387,6 +387,80 @@ public sealed class FileNodeMapTests
         Assert.Equal(100UL * 512, map.GetTotalAllocated());
     }
 
+    [Fact]
+    public void DrainRemovedSincePersist_AfterRemove_ContainsRemovedPath()
+    {
+        var map = new FileNodeMap();
+        map.Add("\\file.txt", new FileNode());
+        map.Remove("\\file.txt");
+
+        var removed = map.DrainRemovedSincePersist();
+
+        Assert.Contains("\\file.txt", removed);
+    }
+
+    [Fact]
+    public void DrainRemovedSincePersist_ClearsAfterDrain()
+    {
+        var map = new FileNodeMap();
+        map.Add("\\file.txt", new FileNode());
+        map.Remove("\\file.txt");
+        map.DrainRemovedSincePersist();
+
+        var second = map.DrainRemovedSincePersist();
+
+        Assert.Empty(second);
+    }
+
+    [Fact]
+    public void DrainRemovedSincePersist_PathReaddedAfterRemove_NotReportedAsRemoved()
+    {
+        var map = new FileNodeMap();
+        map.Add("\\file.txt", new FileNode());
+        map.Remove("\\file.txt");
+        map.Add("\\file.txt", new FileNode());
+
+        var removed = map.DrainRemovedSincePersist();
+
+        Assert.DoesNotContain("\\file.txt", removed);
+    }
+
+    [Fact]
+    public void DrainRemovedSincePersist_NoRemovals_ReturnsEmpty()
+    {
+        var map = new FileNodeMap();
+        map.Add("\\file.txt", new FileNode());
+
+        var removed = map.DrainRemovedSincePersist();
+
+        Assert.Empty(removed);
+    }
+
+    [Fact]
+    public void RenameDescendants_BumpsMetadataVersionOfDescendants()
+    {
+        var map = new FileNodeMap();
+        var file = MakeFile();
+        map.Add("\\Old\\file.txt", file);
+
+        map.RenameDescendants("\\Old", "\\New");
+
+        Assert.Equal(1UL, file.MetadataVersion);
+    }
+
+    [Fact]
+    public void RenameDescendants_ReportsOldPathAsRemoved()
+    {
+        var map = new FileNodeMap();
+        map.Add("\\Old\\file.txt", MakeFile());
+
+        map.RenameDescendants("\\Old", "\\New");
+        var removed = map.DrainRemovedSincePersist();
+
+        Assert.Contains("\\Old\\file.txt", removed);
+        Assert.DoesNotContain("\\New\\file.txt", removed);
+    }
+
     private static FileNode MakeDir() => new()
     {
         FileInfo = { FileAttributes = (uint)FileAttributes.Directory },

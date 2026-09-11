@@ -67,6 +67,32 @@ public readonly record struct ImageEncryptionInfo(string Password, byte[] Cek);
 ///     do not line up — that's fine, since Zstd's chunk framing is entirely self-describing.
 ///   </item>
 ///   <item>Node region contents: Int32 node count, then for each node: path, metadata, security descriptor bytes, file data bytes</item>
+///   <item>
+///     Version 6 (segmented node region, read-only so far — nothing writes it outside of tests):
+///     replaces the single continuous node region with a sequence of independently compressed and
+///     (when encrypted) independently encrypted <em>segments</em>, each covering a contiguous run
+///     of nodes. This exists so a future incremental save can copy the bytes of unchanged segments
+///     verbatim instead of recompressing/re-encrypting the whole node region on every save. Layout
+///     after the plaintext capacity/label (and, when encrypted, the same key-wrap fields as version
+///     3+ — but no single file-level base nonce, since each segment carries its own nonce):
+///     <list type="bullet">
+///       <item>Int32 segment count</item>
+///       <item>
+///         Per segment: Int32 node count, Int64 payload length, 32-byte SHA-256 hash of the
+///         segment's uncompressed plaintext (for future incremental-save change detection and
+///         integrity checking), and — only when encrypted — a 12-byte nonce and 16-byte GCM tag
+///         for that segment.
+///       </item>
+///       <item>
+///         Segment payloads follow back to back, each exactly its indexed payload length: when
+///         encrypted, one AES-256-GCM ciphertext per segment (bounded by the target segment size,
+///         so unlike version 3's whole-image blob this never approaches the single-shot API's ~2 GB
+///         ceiling); the plaintext of each (post-decryption, if encrypted) is itself Zstd-compressed
+///         using the same <see cref="ParallelZstd"/> chunk framing as version 5 when compression is
+///         enabled, or the raw node bytes when it is not.
+///       </item>
+///     </list>
+///   </item>
 /// </list>
 /// </remarks>
 public static class DiskImageSerializer
@@ -85,6 +111,20 @@ public static class DiskImageSerializer
     private const int NonceSize = 12;
     private const int Pbkdf2Iterations = 210_000;
     private const int SaltSize = 16;
+    private const int SegmentedVersion = 6;
+
+    /// <summary>
+    /// Target uncompressed byte size per segment in a version 6 image, based on summed
+    /// <see cref="Fsp.Interop.FileInfo.AllocationSize"/> of the nodes placed into it. A segment
+    /// always gets at least one node even if that single node's allocation size alone exceeds this
+    /// target, so segment size has no hard upper bound. Chosen as a middle ground: small enough
+    /// that a typical save touching a handful of files only has to rewrite a handful of segments,
+    /// large enough that Zstd compression ratio and the fixed per-segment overhead (GCM tag, hash,
+    /// index entry) don't dominate.
+    /// </summary>
+    private const long SegmentTargetBytes = 4L * 1024 * 1024;
+
+    private const int Sha256Size = 32;
     private const int TagSize = 16;
     private const int Version = 5;
     private static readonly byte[] Magic = "MDRD"u8.ToArray();
@@ -145,6 +185,7 @@ public static class DiskImageSerializer
             BufferSize = FileStreamBufferSize,
             Options = FileOptions.SequentialScan,
         });
+
         using var reader = new BinaryReader(stream, System.Text.Encoding.UTF8, leaveOpen: false);
 
         ReadHeader(reader, out var version, out var level, out var isEncrypted);
@@ -321,6 +362,1145 @@ public static class DiskImageSerializer
     }
 
     /// <summary>
+    /// Writes the version 6 segmented image format (see the class remarks) to
+    /// <paramref name="imagePath"/>, reusing the segments of any existing image already there that
+    /// are still fully clean instead of recompressing/re-encrypting the whole disk. When
+    /// <paramref name="imagePath"/> already holds a version 6 image written with the same
+    /// compression level and encryption state, segments whose member nodes are all unchanged since
+    /// that save (see <see cref="FileNode.SavedContentVersion"/>/<see cref="FileNode.SavedMetadataVersion"/>)
+    /// are copied verbatim — no recompression, no re-encryption — and only segments containing new,
+    /// modified, or removed nodes are rewritten. Otherwise (first save, prior image missing or not
+    /// version 6, or its compression/encryption settings differ) this falls back to a full
+    /// segmented rewrite, which then becomes the base a later call can build on.
+    /// </summary>
+    /// <param name="nodeMap">Node map to serialize.</param>
+    /// <param name="capacityBytes">Configured capacity of the disk in bytes.</param>
+    /// <param name="volumeLabel">Volume label string.</param>
+    /// <param name="imagePath">Destination file path.</param>
+    /// <param name="level">Compression level applied to the payload; <see cref="ImageCompressionLevel.None"/> disables compression.</param>
+    /// <param name="encryption">
+    /// Password/content-encryption-key pair to protect the image, or <see langword="null"/>
+    /// to save unencrypted.
+    /// </param>
+    /// <param name="progress">Optional progress reporter, updated with a fraction in [0, 1].</param>
+    /// <param name="customZstdLevel">
+    /// Optional advanced override (1-22) of the exact Zstd level used instead of the one mapped
+    /// from <paramref name="level"/> (see <see cref="ImageCompressionLevelExtensions.ToZstdLevel"/>).
+    /// </param>
+    public static void SaveIncremental(
+        FileNodeMap nodeMap,
+        ulong capacityBytes,
+        string volumeLabel,
+        string imagePath,
+        ImageCompressionLevel level,
+        ImageEncryptionInfo? encryption = null,
+        IProgress<double>? progress = null,
+        int? customZstdLevel = null)
+    {
+        SaveSegmentedIncremental(nodeMap, capacityBytes, volumeLabel, imagePath, level, encryption, progress,
+            customZstdLevel, SegmentTargetBytes);
+    }
+
+    /// <summary>
+    /// Test-only entry point into <see cref="SaveSegmented"/> that exposes
+    /// <paramref name="segmentTargetBytes"/> directly, so tests can force small test fixtures to
+    /// split across multiple segments without needing megabytes of node content. Production
+    /// callers always go through <see cref="SaveIncremental"/>, which uses the fixed
+    /// <see cref="SegmentTargetBytes"/>.
+    /// </summary>
+    internal static void SaveSegmentedForTest(
+        FileNodeMap nodeMap,
+        ulong capacityBytes,
+        string volumeLabel,
+        string imagePath,
+        ImageCompressionLevel level,
+        ImageEncryptionInfo? encryption,
+        long segmentTargetBytes)
+    {
+        SaveSegmented(nodeMap, capacityBytes, volumeLabel, imagePath, level, encryption, progress: null,
+            customZstdLevel: null, segmentTargetBytes);
+    }
+
+    /// <summary>
+    /// Test-only entry point into <see cref="SaveSegmentedIncremental"/> that exposes
+    /// <paramref name="segmentTargetBytes"/> directly, mirroring <see cref="SaveSegmentedForTest"/>.
+    /// </summary>
+    internal static void SaveSegmentedIncrementalForTest(
+        FileNodeMap nodeMap,
+        ulong capacityBytes,
+        string volumeLabel,
+        string imagePath,
+        ImageCompressionLevel level,
+        ImageEncryptionInfo? encryption,
+        long segmentTargetBytes)
+    {
+        SaveSegmentedIncremental(nodeMap, capacityBytes, volumeLabel, imagePath, level, encryption, progress: null,
+            customZstdLevel: null, segmentTargetBytes);
+    }
+
+    /// <summary>
+    /// Serializes <paramref name="chunkNodes"/> into a single version 6 segment payload: writes
+    /// each node, hashes the resulting plaintext, Zstd-compresses it (unless
+    /// <paramref name="level"/> is <see cref="ImageCompressionLevel.None"/>), and — when
+    /// <paramref name="encryption"/> is supplied — AES-256-GCM encrypts it under a freshly
+    /// generated nonce. Shared by <see cref="SaveSegmented"/>'s per-segment loop and
+    /// <see cref="SaveSegmentedIncremental"/>'s rewrite-pool loop so the two write paths can't
+    /// silently drift apart. <paramref name="onNodeWritten"/>, if given, is invoked once per node
+    /// right after it's written, for callers that track written-byte progress.
+    /// </summary>
+    private static (byte[] Payload, byte[] ContentHash, byte[]? Nonce, byte[]? Tag) BuildSegmentPayload(
+        IEnumerable<KeyValuePair<string, FileNode>> chunkNodes,
+        ImageCompressionLevel level,
+        int? customZstdLevel,
+        ImageEncryptionInfo? encryption,
+        Action<FileNode>? onNodeWritten = null)
+    {
+        using var plainStream = new MemoryStream();
+        using (var plainWriter = new BinaryWriter(plainStream, System.Text.Encoding.UTF8, leaveOpen: true))
+        {
+            foreach (var kvp in chunkNodes)
+            {
+                WriteNode(plainWriter, kvp.Key, kvp.Value);
+                onNodeWritten?.Invoke(kvp.Value);
+            }
+
+            plainWriter.Flush();
+        }
+
+        var plainBytes = plainStream.ToArray();
+        var contentHash = SHA256.HashData(plainBytes);
+
+        byte[] compressedBytes;
+        if (level != ImageCompressionLevel.None)
+        {
+            using var compressedStream = new MemoryStream();
+            using (var zstdWriter = new ParallelZstd.WriteStream(compressedStream, level.ToZstdLevel(customZstdLevel)))
+            {
+                zstdWriter.Write(plainBytes, 0, plainBytes.Length);
+            }
+
+            compressedBytes = compressedStream.ToArray();
+        }
+        else
+        {
+            compressedBytes = plainBytes;
+        }
+
+        byte[]? nonce = null;
+        byte[]? tag = null;
+        byte[] finalPayload;
+
+        if (encryption is { } enc)
+        {
+            nonce = RandomNumberGenerator.GetBytes(NonceSize);
+            var ciphertext = new byte[compressedBytes.Length];
+            var localTag = new byte[TagSize];
+            using (var aesGcm = new AesGcm(enc.Cek, TagSize))
+            {
+                aesGcm.Encrypt(nonce, compressedBytes, ciphertext, localTag);
+            }
+
+            tag = localTag;
+            finalPayload = ciphertext;
+        }
+        else
+        {
+            finalPayload = compressedBytes;
+        }
+
+        return (finalPayload, contentHash, nonce, tag);
+    }
+
+    /// <summary>
+    /// Version 4/5's chunked encrypted node region: each chunk was independently AES-256-GCM
+    /// encrypted on save, so decryption streams chunk-by-chunk via <see cref="ChunkedGcm.ReadStream"/>
+    /// rather than requiring the whole region in memory at once. <paramref name="useZstd"/>
+    /// distinguishes the compression algorithm wrapped inside (version 4 = gzip, version 5 = Zstd).
+    /// </summary>
+    private static FileNodeMap LoadChunkedEncrypted(
+        FileStream stream,
+        BinaryReader reader,
+        byte[] cek,
+        bool compressed,
+        bool useZstd,
+        Action? reportTick = null)
+    {
+        var baseNonce = reader.ReadBytes(NonceSize);
+
+        try
+        {
+            using var chunkedStream = new ChunkedGcm.ReadStream(stream, cek, baseNonce);
+            return ReadNodeRegion(chunkedStream, compressed, useZstd, reportTick);
+        }
+        catch (CryptographicException)
+        {
+            throw new ImagePasswordIncorrectException();
+        }
+    }
+
+    /// <summary>
+    /// Reads a version 3 or 4 image: capacity/label are always plaintext header fields; the node
+    /// region (from node count onward) is compressed and, when encrypted, additionally wrapped in
+    /// AES-256-GCM using the content-encryption key unwrapped from the password. Version 3 wraps
+    /// the whole node region as one ciphertext blob (legacy, kept only for backward compatibility);
+    /// version 4 uses independently encrypted chunks so no single buffer needs to hold the entire
+    /// node region — see the class remarks and <see cref="ChunkedGcm.ReadStream"/>.
+    /// </summary>
+    private static FileNodeMap LoadCurrent(
+        FileStream stream,
+        BinaryReader reader,
+        int version,
+        ImageCompressionLevel level,
+        bool isEncrypted,
+        string? password,
+        out ulong capacityBytes,
+        out string volumeLabel,
+        out byte[]? cek,
+        Action? reportTick = null)
+    {
+        capacityBytes = reader.ReadUInt64();
+        volumeLabel = reader.ReadString();
+        cek = null;
+        var compressed = level != ImageCompressionLevel.None;
+
+        if (version == SegmentedVersion)
+        {
+            return LoadSegmented(reader, compressed, isEncrypted, password, out cek, reportTick);
+        }
+
+        var useZstd = version >= 5;
+
+        if (!isEncrypted)
+        {
+            // The node region is the last thing in the file for an unencrypted image, so
+            // decompressing straight off the file stream (rather than buffering it) is safe —
+            // the decompression stream simply reads until end of file.
+            return ReadNodeRegion(stream, compressed, useZstd, reportTick);
+        }
+
+        if (password is null)
+        {
+            throw new ImagePasswordRequiredException();
+        }
+
+        var salt = reader.ReadBytes(SaltSize);
+        var iterations = reader.ReadInt32();
+        var wrapNonce = reader.ReadBytes(NonceSize);
+        var wrapTag = reader.ReadBytes(TagSize);
+        var wrappedCek = reader.ReadBytes(CekSize);
+
+        var resolvedCek = UnwrapCek(wrappedCek, password, salt, iterations, wrapNonce, wrapTag);
+        cek = resolvedCek;
+
+        return version switch
+        {
+            3 => LoadLegacyEncryptedBlob(stream, reader, resolvedCek, compressed, reportTick),
+            4 or 5 => LoadChunkedEncrypted(stream, reader, resolvedCek, compressed, useZstd, reportTick),
+            _ => throw new InvalidDataException($"Unsupported image version: {version}."),
+        };
+    }
+
+    /// <summary>
+    /// Reads a version 1/2 image: capacity, label, node count, and nodes all live inside a
+    /// single optionally gzip-compressed region right after the header — never encrypted.
+    /// </summary>
+    private static FileNodeMap LoadLegacy(
+        FileStream stream,
+        BinaryReader reader,
+        int version,
+        ImageCompressionLevel level,
+        out ulong capacityBytes,
+        out string volumeLabel,
+        Action? reportTick = null)
+    {
+        using var payloadReader = OpenLegacyPayloadReader(stream, reader, version, level);
+        capacityBytes = payloadReader.ReadUInt64();
+        volumeLabel = payloadReader.ReadString();
+
+        return ReadNodes(payloadReader, reportTick);
+    }
+
+    /// <summary>
+    /// Version 3's whole-blob encrypted node region: a single AES-256-GCM ciphertext covering the
+    /// entire (already gzip-compressed) node region. Requires materializing the whole region as
+    /// one byte array, which is what version 4 exists to avoid — kept only so pre-existing images
+    /// keep loading.
+    /// </summary>
+    private static FileNodeMap LoadLegacyEncryptedBlob(
+        FileStream stream,
+        BinaryReader reader,
+        byte[] cek,
+        bool compressed,
+        Action? reportTick = null)
+    {
+        var dataNonce = reader.ReadBytes(NonceSize);
+        var dataTag = reader.ReadBytes(TagSize);
+        var ciphertext = reader.ReadBytes((int)(stream.Length - stream.Position));
+
+        var plaintext = new byte[ciphertext.Length];
+        try
+        {
+            using var aesGcm = new AesGcm(cek, TagSize);
+            aesGcm.Decrypt(dataNonce, ciphertext, dataTag, plaintext);
+        }
+        catch (CryptographicException)
+        {
+            throw new ImagePasswordIncorrectException();
+        }
+
+        try
+        {
+            // The whole ciphertext was already read off `stream` above, so `stream.Position` is
+            // already at (or near) end-of-file here — reportTick will jump close to 1.0 on the
+            // first node and stay there for the rest of this legacy (version 3) path.
+            using var nodeRegionStream = new MemoryStream(plaintext, writable: false);
+            return ReadNodeRegion(nodeRegionStream, compressed, useZstd: false, reportTick);
+        }
+        finally
+        {
+            CryptographicOperations.ZeroMemory(plaintext);
+        }
+    }
+
+    /// <summary>
+    /// Reads a version 6 (segmented) image: after the plaintext capacity/label and, when
+    /// encrypted, the same key-wrap fields as version 3+, reads the segment index and then each
+    /// segment's payload in turn, decrypting (if encrypted) and decompressing (if compressed)
+    /// each one independently before parsing its nodes. See the class remarks for the on-disk
+    /// layout. Segment sizes are bounded by the writer to a few MB, so — unlike version 3's
+    /// whole-image encrypted blob — decrypting a segment's ciphertext with the single-shot
+    /// <see cref="AesGcm"/> API here never risks its ~2 GB ceiling.
+    /// </summary>
+    private static FileNodeMap LoadSegmented(
+        BinaryReader reader,
+        bool compressed,
+        bool isEncrypted,
+        string? password,
+        out byte[]? cek,
+        Action? reportTick)
+    {
+        cek = null;
+        byte[]? resolvedCek = null;
+
+        if (isEncrypted)
+        {
+            if (password is null)
+            {
+                throw new ImagePasswordRequiredException();
+            }
+
+            var salt = reader.ReadBytes(SaltSize);
+            var iterations = reader.ReadInt32();
+            var wrapNonce = reader.ReadBytes(NonceSize);
+            var wrapTag = reader.ReadBytes(TagSize);
+            var wrappedCek = reader.ReadBytes(CekSize);
+
+            resolvedCek = UnwrapCek(wrappedCek, password, salt, iterations, wrapNonce, wrapTag);
+            cek = resolvedCek;
+        }
+
+        var segmentCount = reader.ReadInt32();
+        var segments = new SegmentIndexEntry[segmentCount];
+        for (var i = 0; i < segmentCount; i++)
+        {
+            var nodeCount = reader.ReadInt32();
+            var payloadLength = reader.ReadInt64();
+            var contentHash = reader.ReadBytes(Sha256Size);
+            byte[]? nonce = null;
+            byte[]? tag = null;
+            if (isEncrypted)
+            {
+                nonce = reader.ReadBytes(NonceSize);
+                tag = reader.ReadBytes(TagSize);
+            }
+
+            segments[i] = new SegmentIndexEntry(nodeCount, payloadLength, contentHash, nonce, tag);
+        }
+
+        var nodeMap = new FileNodeMap();
+
+        foreach (var segment in segments)
+        {
+            var raw = reader.ReadBytes(checked((int)segment.PayloadLength));
+            byte[] payload;
+
+            if (isEncrypted)
+            {
+                payload = new byte[raw.Length];
+                try
+                {
+                    using var aesGcm = new AesGcm(resolvedCek!, TagSize);
+                    aesGcm.Decrypt(segment.Nonce!, raw, segment.Tag!, payload);
+                }
+                catch (CryptographicException)
+                {
+                    throw new ImagePasswordIncorrectException();
+                }
+            }
+            else
+            {
+                payload = raw;
+            }
+
+            using var payloadStream = new MemoryStream(payload, writable: false);
+            Stream nodeStream = compressed ? new ParallelZstd.ReadStream(payloadStream) : payloadStream;
+            try
+            {
+                using var payloadReader = new BinaryReader(nodeStream, System.Text.Encoding.UTF8, leaveOpen: true);
+                for (var i = 0; i < segment.NodeCount; i++)
+                {
+                    var (path, node) = ReadNode(payloadReader);
+                    nodeMap.Add(path, node);
+                    reportTick?.Invoke();
+                }
+            }
+            finally
+            {
+                if (compressed)
+                {
+                    nodeStream.Dispose();
+                }
+            }
+        }
+
+        return nodeMap;
+    }
+
+    /// <summary>
+    /// Opens the reader over a version 1/2 image's single payload region — gzip-decompressing it
+    /// first when the image is a compressed version 2 (version 1 is never compressed). Shared by
+    /// <see cref="PeekHeader"/> (reads capacity/label only) and <see cref="LoadLegacy"/> (reads
+    /// capacity/label, then the full node region) so both stay in sync on this legacy layout rule.
+    /// </summary>
+    private static BinaryReader OpenLegacyPayloadReader(FileStream stream, BinaryReader reader, int version, ImageCompressionLevel level)
+    {
+        var compressed = version == 2 && level != ImageCompressionLevel.None;
+        return compressed
+            ? new BinaryReader(new GZipStream(stream, CompressionMode.Decompress, leaveOpen: true), System.Text.Encoding.UTF8)
+            : reader;
+    }
+
+    private static void ReadHeader(
+        BinaryReader reader,
+        out int version,
+        out ImageCompressionLevel level,
+        out bool isEncrypted)
+    {
+        var magic = reader.ReadBytes(4);
+        if (!magic.SequenceEqual(Magic))
+        {
+            throw new InvalidDataException("Not a valid ManagedDrive image file.");
+        }
+
+        version = reader.ReadInt32();
+        if (version is not (1 or 2 or 3 or 4 or 5 or SegmentedVersion))
+        {
+            throw new InvalidDataException($"Unsupported image version: {version}.");
+        }
+
+        level = version >= 2 ? (ImageCompressionLevel)reader.ReadByte() : ImageCompressionLevel.None;
+        isEncrypted = version >= 3 && reader.ReadByte() != 0;
+    }
+
+    private static (string Path, FileNode Node) ReadNode(BinaryReader reader)
+    {
+        var metadata = NodeMetadataIO.ReadMetadata(reader);
+        var path = metadata.Path;
+
+        var node = new FileNode
+        {
+            FileInfo = metadata.FileInfo,
+            FileSecurity = metadata.Security,
+        };
+
+        var dataLen = reader.ReadInt64();
+        if (dataLen > 0 && !node.IsDirectory)
+        {
+            var aligned = FileNode.AlignToAllocationUnit(node.FileInfo.AllocationSize);
+            node.FileData = FileContent.CreateZeroed(aligned);
+            node.FileData.FillFromStream(reader.BaseStream, dataLen);
+        }
+        else if (dataLen > 0)
+        {
+            // Skip data bytes for directories (should not occur in well-formed images)
+            reader.ReadBytes((int)dataLen);
+        }
+
+        return (path, node);
+    }
+
+    /// <summary>
+    /// Reads the node-count-prefixed node region from <paramref name="source"/>, transparently
+    /// decompressing when <paramref name="compressed"/> is set — via Zstd when
+    /// <paramref name="useZstd"/> is set (version 5, current), otherwise via gzip (versions 1-4,
+    /// read-only). Mirrors <see cref="WriteNodeRegion"/>.
+    /// </summary>
+    private static FileNodeMap ReadNodeRegion(Stream source, bool compressed, bool useZstd, Action? reportTick = null)
+    {
+        using var payloadReader = new BinaryReader(
+            compressed
+                ? useZstd
+                    ? new ParallelZstd.ReadStream(source)
+                    : new GZipStream(source, CompressionMode.Decompress, leaveOpen: true)
+                : source,
+            System.Text.Encoding.UTF8,
+            leaveOpen: true);
+
+        return ReadNodes(payloadReader, reportTick);
+    }
+
+    private static FileNodeMap ReadNodes(BinaryReader payloadReader, Action? reportTick = null)
+    {
+        var nodeMap = new FileNodeMap();
+        var count = payloadReader.ReadInt32();
+
+        for (var i = 0; i < count; i++)
+        {
+            var (path, node) = ReadNode(payloadReader);
+            nodeMap.Add(path, node);
+            reportTick?.Invoke();
+        }
+
+        return nodeMap;
+    }
+
+    /// <summary>
+    /// Writes a version 6 (segmented) image, grouping consecutive nodes (in the sorted order
+    /// <see cref="FileNodeMap.GetAllNodes"/> returns them) into segments whose summed allocation
+    /// size is close to <paramref name="segmentTargetBytes"/>. This full rewrite still
+    /// recompresses/re-encrypts every node on every call — used both as the very first save that
+    /// establishes each node's <see cref="FileNode.SavedSegmentIndex"/> baseline, and as
+    /// <see cref="SaveSegmentedIncremental"/>'s fallback whenever there is no compatible existing
+    /// image to reuse segments from.
+    /// </summary>
+    private static void SaveSegmented(
+        FileNodeMap nodeMap,
+        ulong capacityBytes,
+        string volumeLabel,
+        string imagePath,
+        ImageCompressionLevel level,
+        ImageEncryptionInfo? encryption,
+        IProgress<double>? progress,
+        int? customZstdLevel,
+        long segmentTargetBytes)
+    {
+        var directory = Path.GetDirectoryName(imagePath);
+        if (!string.IsNullOrEmpty(directory))
+        {
+            Directory.CreateDirectory(directory);
+        }
+
+        var nodes = nodeMap.GetAllNodes();
+        var totalBytes = nodeMap.GetTotalAllocated();
+        var segments = new List<(int NodeCount, byte[] Payload, byte[] ContentHash, byte[]? Nonce, byte[]? Tag)>();
+
+        // Captured per node before writing, so the post-save version bookkeeping below reflects
+        // exactly the state that was actually persisted, not whatever a concurrent WinFsp write
+        // might have bumped it to while this save was in flight.
+        var capturedContentVersion = new ulong[nodes.Count];
+        var capturedMetadataVersion = new ulong[nodes.Count];
+        var nodeSegmentIndex = new int[nodes.Count];
+
+        var cursor = 0;
+        ulong writtenBytes = 0;
+
+        while (cursor < nodes.Count)
+        {
+            var segmentIndex = segments.Count;
+            var chunk = new List<KeyValuePair<string, FileNode>>();
+            long segmentBytes = 0;
+
+            do
+            {
+                var kvp = nodes[cursor];
+                capturedContentVersion[cursor] = kvp.Value.ContentVersion;
+                capturedMetadataVersion[cursor] = kvp.Value.MetadataVersion;
+                nodeSegmentIndex[cursor] = segmentIndex;
+                chunk.Add(kvp);
+                segmentBytes += (long)kvp.Value.FileInfo.AllocationSize;
+                cursor++;
+            }
+            while (cursor < nodes.Count && segmentBytes < segmentTargetBytes);
+
+            var (finalPayload, contentHash, nonce, tag) = BuildSegmentPayload(
+                chunk,
+                level,
+                customZstdLevel,
+                encryption,
+                node => writtenBytes += node.FileInfo.AllocationSize);
+            progress?.Report(totalBytes == 0 ? 1.0 : (double)writtenBytes / totalBytes);
+
+            segments.Add((chunk.Count, finalPayload, contentHash, nonce, tag));
+        }
+
+        var tempPath = imagePath + ".tmp";
+        try
+        {
+            using (var stream = new FileStream(tempPath, new FileStreamOptions
+            {
+                Mode = FileMode.Create,
+                Access = FileAccess.Write,
+                BufferSize = FileStreamBufferSize,
+            }))
+            using (var writer = new BinaryWriter(stream, System.Text.Encoding.UTF8, leaveOpen: true))
+            {
+                writer.Write(Magic);
+                writer.Write(SegmentedVersion);
+                writer.Write((byte)level);
+                writer.Write((byte)(encryption is not null ? 1 : 0));
+                writer.Write(capacityBytes);
+                writer.Write(volumeLabel);
+
+                if (encryption is { } enc)
+                {
+                    var salt = RandomNumberGenerator.GetBytes(SaltSize);
+                    var wrappedCek = WrapCek(enc.Cek, enc.Password, salt, Pbkdf2Iterations, out var wrapNonce, out var wrapTag);
+                    writer.Write(salt);
+                    writer.Write(Pbkdf2Iterations);
+                    writer.Write(wrapNonce);
+                    writer.Write(wrapTag);
+                    writer.Write(wrappedCek);
+                }
+
+                writer.Write(segments.Count);
+                foreach (var seg in segments)
+                {
+                    writer.Write(seg.NodeCount);
+                    writer.Write((long)seg.Payload.Length);
+                    writer.Write(seg.ContentHash);
+                    if (encryption is not null)
+                    {
+                        writer.Write(seg.Nonce!);
+                        writer.Write(seg.Tag!);
+                    }
+                }
+
+                foreach (var seg in segments)
+                {
+                    writer.Write(seg.Payload);
+                }
+
+                writer.Flush();
+                stream.Flush(flushToDisk: true);
+            }
+
+            File.Move(tempPath, imagePath, overwrite: true);
+        }
+        catch
+        {
+            try
+            {
+                File.Delete(tempPath);
+            }
+            catch
+            {
+                // Best-effort cleanup of the partial temp file.
+            }
+
+            throw;
+        }
+
+        // Only reached once the image has actually landed at imagePath. Record what was saved so
+        // a future incremental save can tell which nodes are unchanged since this point, without
+        // clobbering versions bumped by a WinFsp write that raced with this save (the CAS check
+        // below) or losing track of paths removed while this save was in flight (only safe to
+        // drain now that their absence from `nodes` has actually been persisted).
+        for (var i = 0; i < nodes.Count; i++)
+        {
+            var node = nodes[i].Value;
+            if (node.SavedContentVersion == ulong.MaxValue || node.SavedContentVersion < capturedContentVersion[i])
+            {
+                node.SavedContentVersion = capturedContentVersion[i];
+            }
+
+            if (node.SavedMetadataVersion == ulong.MaxValue || node.SavedMetadataVersion < capturedMetadataVersion[i])
+            {
+                node.SavedMetadataVersion = capturedMetadataVersion[i];
+            }
+
+            node.SavedSegmentIndex = nodeSegmentIndex[i];
+        }
+
+        nodeMap.DrainRemovedSincePersist();
+    }
+
+    private static void SaveSegmentedIncremental(
+                                                                FileNodeMap nodeMap,
+        ulong capacityBytes,
+        string volumeLabel,
+        string imagePath,
+        ImageCompressionLevel level,
+        ImageEncryptionInfo? encryption,
+        IProgress<double>? progress,
+        int? customZstdLevel,
+        long segmentTargetBytes)
+    {
+        var isEncrypted = encryption is not null;
+
+        if (!TryOpenOldSegmentIndex(imagePath, level, isEncrypted, out var oldStream, out var oldReader, out var oldSegments))
+        {
+            SaveSegmented(nodeMap, capacityBytes, volumeLabel, imagePath, level, encryption, progress,
+                customZstdLevel, segmentTargetBytes);
+            return;
+        }
+
+        {
+            var nodes = nodeMap.GetAllNodes();
+
+            // Group each live node's array position by the segment it belonged to as of the last
+            // save. Positions whose node was never saved (or whose recorded segment no longer
+            // exists in the old image) go straight into the rewrite pool.
+            var byOldSegment = new Dictionary<int, List<int>>();
+            var poolPositions = new List<int>();
+
+            for (var pos = 0; pos < nodes.Count; pos++)
+            {
+                var savedSegment = nodes[pos].Value.SavedSegmentIndex;
+                if (savedSegment < 0 || savedSegment >= oldSegments.Length)
+                {
+                    // savedSegment < 0 is the ordinary case: the node has never been through a
+                    // segmented save. savedSegment >= oldSegments.Length should not happen — it
+                    // would mean SavedSegmentIndex bookkeeping elsewhere pointed a node at a
+                    // segment that doesn't exist in the image we just read — so flag that case
+                    // specifically rather than silently folding it into "never saved".
+                    System.Diagnostics.Debug.Assert(
+                        savedSegment < 0,
+                        $"Node '{nodes[pos].Key}' has SavedSegmentIndex {savedSegment}, out of range for " +
+                        $"{oldSegments.Length} segment(s) in the existing image — SavedSegmentIndex bookkeeping bug?");
+
+                    poolPositions.Add(pos);
+                    continue;
+                }
+
+                if (!byOldSegment.TryGetValue(savedSegment, out var members))
+                {
+                    byOldSegment[savedSegment] = members = [];
+                }
+
+                members.Add(pos);
+            }
+
+            // A segment is reusable only if every node it originally held is still present
+            // (matching node count rules out removals) and none of them changed (content or
+            // metadata) since that save. Anything else — including the still-clean members of a
+            // segment disqualified by one dirty sibling — goes into the rewrite pool, since reuse
+            // only works at whole-segment granularity.
+            var reusable = new bool[oldSegments.Length];
+            for (var i = 0; i < oldSegments.Length; i++)
+            {
+                if (!byOldSegment.TryGetValue(i, out var members))
+                {
+                    // Every node that was in this segment is gone (all removed, or the whole
+                    // segment shrank to nothing) — nothing to reuse or rewrite for it.
+                    reusable[i] = false;
+                    continue;
+                }
+
+                if (members.Count != oldSegments[i].NodeCount)
+                {
+                    // At least one member of this segment was removed since the last save. Its
+                    // surviving members can't be reused as part of it (the old bytes cover a node
+                    // that's gone) but they still need to be written somewhere.
+                    reusable[i] = false;
+                    poolPositions.AddRange(members);
+                    continue;
+                }
+
+                var clean = true;
+                foreach (var pos in members)
+                {
+                    var node = nodes[pos].Value;
+                    if (node.ContentVersion != node.SavedContentVersion || node.MetadataVersion != node.SavedMetadataVersion)
+                    {
+                        clean = false;
+                        break;
+                    }
+                }
+
+                reusable[i] = clean;
+                if (!clean)
+                {
+                    poolPositions.AddRange(members);
+                }
+            }
+
+            // Single sequential pass over the old image's segment payload region: copy the bytes of
+            // reusable segments, seek past (never buffer) the rest. Segment order in the file
+            // matches oldSegments' order, so no random access is needed. Guarded by try/finally so
+            // a corrupted/truncated old image (bad PayloadLength, premature EOF) still closes the
+            // handle instead of leaking it on the way out.
+            var reusedSegments = new List<(int OldIndex, SegmentIndexEntry Entry, byte[] Payload)>();
+            try
+            {
+                for (var i = 0; i < oldSegments.Length; i++)
+                {
+                    var entry = oldSegments[i];
+                    if (reusable[i])
+                    {
+                        reusedSegments.Add((i, entry, oldReader.ReadBytes(checked((int)entry.PayloadLength))));
+                    }
+                    else
+                    {
+                        oldReader.BaseStream.Seek(entry.PayloadLength, SeekOrigin.Current);
+                    }
+                }
+            }
+            finally
+            {
+                // Close the old image now, before opening the temp file below, whether or not the
+                // loop above succeeded — Windows refuses to replace a file over an open handle to
+                // it (even a shared-read one), so this must happen before the File.Move that
+                // follows, and it must still happen if the loop threw.
+                oldReader.Dispose();
+                oldStream.Dispose();
+            }
+
+            poolPositions.Sort();
+
+            var totalBytes = nodeMap.GetTotalAllocated();
+            ulong writtenBytes = 0;
+            foreach (var (oldIndex, _, _) in reusedSegments)
+            {
+                foreach (var pos in byOldSegment[oldIndex])
+                {
+                    writtenBytes += nodes[pos].Value.FileInfo.AllocationSize;
+                }
+            }
+
+            var newSegments = new List<(List<int> Positions, byte[] Payload, byte[] ContentHash, byte[]? Nonce, byte[]? Tag)>();
+            var capturedContentVersion = new ulong[nodes.Count];
+            var capturedMetadataVersion = new ulong[nodes.Count];
+
+            var cursor = 0;
+            while (cursor < poolPositions.Count)
+            {
+                var chunkPositions = new List<int>();
+                long segmentBytes = 0;
+
+                do
+                {
+                    var pos = poolPositions[cursor];
+                    var node = nodes[pos].Value;
+                    capturedContentVersion[pos] = node.ContentVersion;
+                    capturedMetadataVersion[pos] = node.MetadataVersion;
+                    chunkPositions.Add(pos);
+                    segmentBytes += (long)node.FileInfo.AllocationSize;
+                    cursor++;
+                }
+                while (cursor < poolPositions.Count && segmentBytes < segmentTargetBytes);
+
+                var (finalPayload, contentHash, nonce, tag) = BuildSegmentPayload(
+                    chunkPositions.Select(pos => nodes[pos]),
+                    level,
+                    customZstdLevel,
+                    encryption,
+                    node => writtenBytes += node.FileInfo.AllocationSize);
+                progress?.Report(totalBytes == 0 ? 1.0 : (double)writtenBytes / totalBytes);
+
+                newSegments.Add((chunkPositions, finalPayload, contentHash, nonce, tag));
+            }
+
+            var tempPath = imagePath + ".tmp";
+            try
+            {
+                using (var stream = new FileStream(tempPath, new FileStreamOptions
+                {
+                    Mode = FileMode.Create,
+                    Access = FileAccess.Write,
+                    BufferSize = FileStreamBufferSize,
+                }))
+                using (var writer = new BinaryWriter(stream, System.Text.Encoding.UTF8, leaveOpen: true))
+                {
+                    writer.Write(Magic);
+                    writer.Write(SegmentedVersion);
+                    writer.Write((byte)level);
+                    writer.Write((byte)(encryption is not null ? 1 : 0));
+                    writer.Write(capacityBytes);
+                    writer.Write(volumeLabel);
+
+                    if (encryption is { } enc)
+                    {
+                        var salt = RandomNumberGenerator.GetBytes(SaltSize);
+                        var wrappedCek = WrapCek(enc.Cek, enc.Password, salt, Pbkdf2Iterations, out var wrapNonce, out var wrapTag);
+                        writer.Write(salt);
+                        writer.Write(Pbkdf2Iterations);
+                        writer.Write(wrapNonce);
+                        writer.Write(wrapTag);
+                        writer.Write(wrappedCek);
+                    }
+
+                    writer.Write(reusedSegments.Count + newSegments.Count);
+
+                    foreach (var (_, entry, _) in reusedSegments)
+                    {
+                        writer.Write(entry.NodeCount);
+                        writer.Write(entry.PayloadLength);
+                        writer.Write(entry.ContentHash);
+                        if (encryption is not null)
+                        {
+                            writer.Write(entry.Nonce!);
+                            writer.Write(entry.Tag!);
+                        }
+                    }
+
+                    foreach (var seg in newSegments)
+                    {
+                        writer.Write(seg.Positions.Count);
+                        writer.Write((long)seg.Payload.Length);
+                        writer.Write(seg.ContentHash);
+                        if (encryption is not null)
+                        {
+                            writer.Write(seg.Nonce!);
+                            writer.Write(seg.Tag!);
+                        }
+                    }
+
+                    foreach (var (_, _, payload) in reusedSegments)
+                    {
+                        writer.Write(payload);
+                    }
+
+                    foreach (var seg in newSegments)
+                    {
+                        writer.Write(seg.Payload);
+                    }
+
+                    writer.Flush();
+                    stream.Flush(flushToDisk: true);
+                }
+
+                File.Move(tempPath, imagePath, overwrite: true);
+            }
+            catch
+            {
+                try
+                {
+                    File.Delete(tempPath);
+                }
+                catch
+                {
+                    // Best-effort cleanup of the partial temp file.
+                }
+
+                throw;
+            }
+
+            // Reused-segment members are left untouched: their SavedContentVersion/
+            // SavedMetadataVersion already match what was just persisted (that equality was the
+            // reuse criterion above), and touching them here could wrongly launder a mutation that
+            // raced in after the criterion was checked but before this point — the bytes actually
+            // on disk for that node are still the pre-race ones. Only the segment index they now
+            // live at needs updating.
+            var finalSegmentIndex = 0;
+            foreach (var (oldIndex, _, _) in reusedSegments)
+            {
+                foreach (var pos in byOldSegment[oldIndex])
+                {
+                    nodes[pos].Value.SavedSegmentIndex = finalSegmentIndex;
+                }
+
+                finalSegmentIndex++;
+            }
+
+            foreach (var seg in newSegments)
+            {
+                foreach (var pos in seg.Positions)
+                {
+                    var node = nodes[pos].Value;
+                    if (node.SavedContentVersion == ulong.MaxValue || node.SavedContentVersion < capturedContentVersion[pos])
+                    {
+                        node.SavedContentVersion = capturedContentVersion[pos];
+                    }
+
+                    if (node.SavedMetadataVersion == ulong.MaxValue || node.SavedMetadataVersion < capturedMetadataVersion[pos])
+                    {
+                        node.SavedMetadataVersion = capturedMetadataVersion[pos];
+                    }
+
+                    node.SavedSegmentIndex = finalSegmentIndex;
+                }
+
+                finalSegmentIndex++;
+            }
+
+            nodeMap.DrainRemovedSincePersist();
+        }
+    }
+
+    /// <summary>
+    /// Opens <paramref name="imagePath"/> and reads through its header and segment index, iff it is
+    /// a version 6 image whose compression level and encryption state match the current save
+    /// request. Positioned at the start of the segment payload region on success. Never reads or
+    /// requires a password — reusable segments are copied as opaque bytes, never decrypted.
+    /// </summary>
+    private static bool TryOpenOldSegmentIndex(
+        string imagePath,
+        ImageCompressionLevel level,
+        bool isEncrypted,
+        [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out FileStream? stream,
+        [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out BinaryReader? reader,
+        out SegmentIndexEntry[] segments)
+    {
+        stream = null;
+        reader = null;
+        segments = [];
+
+        if (!File.Exists(imagePath))
+        {
+            return false;
+        }
+
+        FileStream? candidateStream = null;
+        try
+        {
+            candidateStream = new FileStream(imagePath, FileMode.Open, FileAccess.Read, FileShare.Read);
+            var candidateReader = new BinaryReader(candidateStream, System.Text.Encoding.UTF8, leaveOpen: true);
+
+            var magic = candidateReader.ReadBytes(4);
+            if (!magic.SequenceEqual(Magic))
+            {
+                candidateStream.Dispose();
+                return false;
+            }
+
+            var version = candidateReader.ReadInt32();
+            if (version != SegmentedVersion)
+            {
+                candidateStream.Dispose();
+                return false;
+            }
+
+            var oldLevel = (ImageCompressionLevel)candidateReader.ReadByte();
+            var oldIsEncrypted = candidateReader.ReadByte() != 0;
+            if (oldLevel != level || oldIsEncrypted != isEncrypted)
+            {
+                candidateStream.Dispose();
+                return false;
+            }
+
+            candidateReader.ReadUInt64(); // capacity — always rewritten fresh, not compared
+            candidateReader.ReadString(); // volume label — always rewritten fresh, not compared
+
+            if (isEncrypted)
+            {
+                // Key-wrap fields are rewritten fresh on every save (new salt/wrap-nonce), so their
+                // values are irrelevant here — only their fixed byte length matters, to reach the
+                // segment index. Reused segments' ciphertext stays valid regardless, since it was
+                // never wrapped by these fields — only the content-encryption key (assumed, by
+                // caller contract, to be the same key across saves once encryption is enabled) was
+                // ever used to encrypt segment payloads.
+                candidateReader.ReadBytes(SaltSize);
+                candidateReader.ReadInt32();
+                candidateReader.ReadBytes(NonceSize);
+                candidateReader.ReadBytes(TagSize);
+                candidateReader.ReadBytes(CekSize);
+            }
+
+            var segmentCount = candidateReader.ReadInt32();
+            var entries = new SegmentIndexEntry[segmentCount];
+            for (var i = 0; i < segmentCount; i++)
+            {
+                var nodeCount = candidateReader.ReadInt32();
+                var payloadLength = candidateReader.ReadInt64();
+                var contentHash = candidateReader.ReadBytes(Sha256Size);
+                byte[]? nonce = null;
+                byte[]? tag = null;
+                if (isEncrypted)
+                {
+                    nonce = candidateReader.ReadBytes(NonceSize);
+                    tag = candidateReader.ReadBytes(TagSize);
+                }
+
+                entries[i] = new SegmentIndexEntry(nodeCount, payloadLength, contentHash, nonce, tag);
+            }
+
+            stream = candidateStream;
+            reader = candidateReader;
+            segments = entries;
+            return true;
+        }
+        catch
+        {
+            candidateStream?.Dispose();
+            return false;
+        }
+    }
+
+    private static byte[] UnwrapCek(
+            byte[] wrappedCek,
+            string password,
+            byte[] salt,
+            int iterations,
+            byte[] nonce,
+            byte[] tag)
+    {
+        var kek = Rfc2898DeriveBytes.Pbkdf2(password, salt, iterations, HashAlgorithmName.SHA256, CekSize);
+        try
+        {
+            var cek = new byte[wrappedCek.Length];
+            try
+            {
+                using var aesGcm = new AesGcm(kek, TagSize);
+                aesGcm.Decrypt(nonce, wrappedCek, tag, cek);
+            }
+            catch (CryptographicException)
+            {
+                throw new ImagePasswordIncorrectException();
+            }
+
+            return cek;
+        }
+        finally
+        {
+            CryptographicOperations.ZeroMemory(kek);
+        }
+    }
+
+    private static byte[] WrapCek(
+            byte[] cek,
+            string password,
+            byte[] salt,
+            int iterations,
+            out byte[] nonce,
+            out byte[] tag)
+    {
+        var kek = Rfc2898DeriveBytes.Pbkdf2(password, salt, iterations, HashAlgorithmName.SHA256, CekSize);
+        try
+        {
+            nonce = RandomNumberGenerator.GetBytes(NonceSize);
+            var wrapped = new byte[cek.Length];
+            var localTag = new byte[TagSize];
+            using (var aesGcm = new AesGcm(kek, TagSize))
+            {
+                aesGcm.Encrypt(nonce, cek, wrapped, localTag);
+            }
+
+            tag = localTag;
+            return wrapped;
+        }
+        finally
+        {
+            CryptographicOperations.ZeroMemory(kek);
+        }
+    }
+
+    private static void WriteNode(BinaryWriter writer, string path, FileNode node)
+    {
+        NodeMetadataIO.WriteMetadata(writer, path, node);
+
+        if (node is { IsDirectory: false, FileData: not null, FileInfo.FileSize: > 0 })
+        {
+            var fileSize = Math.Min(node.FileInfo.FileSize, (ulong)node.FileData.Length);
+            writer.Write((long)fileSize);
+            node.FileData.CopyTo(writer.BaseStream, (long)fileSize);
+        }
+        else
+        {
+            writer.Write(0L);
+        }
+    }
+
+    /// <summary>
     /// Writes the node-count-prefixed node region for <paramref name="nodeMap"/> directly into
     /// <paramref name="target"/>, Zstd-compressing on the fly (in parallel across chunks, see
     /// <see cref="ParallelZstd"/>) when <paramref name="compress"/> is set. Never materializes the
@@ -391,321 +1571,10 @@ public static class DiskImageSerializer
         }
     }
 
-    /// <summary>
-    /// Reads a version 1/2 image: capacity, label, node count, and nodes all live inside a
-    /// single optionally gzip-compressed region right after the header — never encrypted.
-    /// </summary>
-    private static FileNodeMap LoadLegacy(
-        FileStream stream,
-        BinaryReader reader,
-        int version,
-        ImageCompressionLevel level,
-        out ulong capacityBytes,
-        out string volumeLabel,
-        Action? reportTick = null)
-    {
-        using var payloadReader = OpenLegacyPayloadReader(stream, reader, version, level);
-        capacityBytes = payloadReader.ReadUInt64();
-        volumeLabel = payloadReader.ReadString();
-
-        return ReadNodes(payloadReader, reportTick);
-    }
-
-    /// <summary>
-    /// Opens the reader over a version 1/2 image's single payload region — gzip-decompressing it
-    /// first when the image is a compressed version 2 (version 1 is never compressed). Shared by
-    /// <see cref="PeekHeader"/> (reads capacity/label only) and <see cref="LoadLegacy"/> (reads
-    /// capacity/label, then the full node region) so both stay in sync on this legacy layout rule.
-    /// </summary>
-    private static BinaryReader OpenLegacyPayloadReader(FileStream stream, BinaryReader reader, int version, ImageCompressionLevel level)
-    {
-        var compressed = version == 2 && level != ImageCompressionLevel.None;
-        return compressed
-            ? new BinaryReader(new GZipStream(stream, CompressionMode.Decompress, leaveOpen: true), System.Text.Encoding.UTF8)
-            : reader;
-    }
-
-    /// <summary>
-    /// Reads a version 3 or 4 image: capacity/label are always plaintext header fields; the node
-    /// region (from node count onward) is compressed and, when encrypted, additionally wrapped in
-    /// AES-256-GCM using the content-encryption key unwrapped from the password. Version 3 wraps
-    /// the whole node region as one ciphertext blob (legacy, kept only for backward compatibility);
-    /// version 4 uses independently encrypted chunks so no single buffer needs to hold the entire
-    /// node region — see the class remarks and <see cref="ChunkedGcm.ReadStream"/>.
-    /// </summary>
-    private static FileNodeMap LoadCurrent(
-        FileStream stream,
-        BinaryReader reader,
-        int version,
-        ImageCompressionLevel level,
-        bool isEncrypted,
-        string? password,
-        out ulong capacityBytes,
-        out string volumeLabel,
-        out byte[]? cek,
-        Action? reportTick = null)
-    {
-        capacityBytes = reader.ReadUInt64();
-        volumeLabel = reader.ReadString();
-        cek = null;
-        var compressed = level != ImageCompressionLevel.None;
-
-        var useZstd = version >= 5;
-
-        if (!isEncrypted)
-        {
-            // The node region is the last thing in the file for an unencrypted image, so
-            // decompressing straight off the file stream (rather than buffering it) is safe —
-            // the decompression stream simply reads until end of file.
-            return ReadNodeRegion(stream, compressed, useZstd, reportTick);
-        }
-
-        if (password is null)
-        {
-            throw new ImagePasswordRequiredException();
-        }
-
-        var salt = reader.ReadBytes(SaltSize);
-        var iterations = reader.ReadInt32();
-        var wrapNonce = reader.ReadBytes(NonceSize);
-        var wrapTag = reader.ReadBytes(TagSize);
-        var wrappedCek = reader.ReadBytes(CekSize);
-
-        var resolvedCek = UnwrapCek(wrappedCek, password, salt, iterations, wrapNonce, wrapTag);
-        cek = resolvedCek;
-
-        return version switch
-        {
-            3 => LoadLegacyEncryptedBlob(stream, reader, resolvedCek, compressed, reportTick),
-            4 or 5 => LoadChunkedEncrypted(stream, reader, resolvedCek, compressed, useZstd, reportTick),
-            _ => throw new InvalidDataException($"Unsupported image version: {version}."),
-        };
-    }
-
-    /// <summary>
-    /// Version 3's whole-blob encrypted node region: a single AES-256-GCM ciphertext covering the
-    /// entire (already gzip-compressed) node region. Requires materializing the whole region as
-    /// one byte array, which is what version 4 exists to avoid — kept only so pre-existing images
-    /// keep loading.
-    /// </summary>
-    private static FileNodeMap LoadLegacyEncryptedBlob(
-        FileStream stream,
-        BinaryReader reader,
-        byte[] cek,
-        bool compressed,
-        Action? reportTick = null)
-    {
-        var dataNonce = reader.ReadBytes(NonceSize);
-        var dataTag = reader.ReadBytes(TagSize);
-        var ciphertext = reader.ReadBytes((int)(stream.Length - stream.Position));
-
-        var plaintext = new byte[ciphertext.Length];
-        try
-        {
-            using var aesGcm = new AesGcm(cek, TagSize);
-            aesGcm.Decrypt(dataNonce, ciphertext, dataTag, plaintext);
-        }
-        catch (CryptographicException)
-        {
-            throw new ImagePasswordIncorrectException();
-        }
-
-        try
-        {
-            // The whole ciphertext was already read off `stream` above, so `stream.Position` is
-            // already at (or near) end-of-file here — reportTick will jump close to 1.0 on the
-            // first node and stay there for the rest of this legacy (version 3) path.
-            using var nodeRegionStream = new MemoryStream(plaintext, writable: false);
-            return ReadNodeRegion(nodeRegionStream, compressed, useZstd: false, reportTick);
-        }
-        finally
-        {
-            CryptographicOperations.ZeroMemory(plaintext);
-        }
-    }
-
-    /// <summary>
-    /// Version 4/5's chunked encrypted node region: each chunk was independently AES-256-GCM
-    /// encrypted on save, so decryption streams chunk-by-chunk via <see cref="ChunkedGcm.ReadStream"/>
-    /// rather than requiring the whole region in memory at once. <paramref name="useZstd"/>
-    /// distinguishes the compression algorithm wrapped inside (version 4 = gzip, version 5 = Zstd).
-    /// </summary>
-    private static FileNodeMap LoadChunkedEncrypted(
-        FileStream stream,
-        BinaryReader reader,
-        byte[] cek,
-        bool compressed,
-        bool useZstd,
-        Action? reportTick = null)
-    {
-        var baseNonce = reader.ReadBytes(NonceSize);
-
-        try
-        {
-            using var chunkedStream = new ChunkedGcm.ReadStream(stream, cek, baseNonce);
-            return ReadNodeRegion(chunkedStream, compressed, useZstd, reportTick);
-        }
-        catch (CryptographicException)
-        {
-            throw new ImagePasswordIncorrectException();
-        }
-    }
-
-    /// <summary>
-    /// Reads the node-count-prefixed node region from <paramref name="source"/>, transparently
-    /// decompressing when <paramref name="compressed"/> is set — via Zstd when
-    /// <paramref name="useZstd"/> is set (version 5, current), otherwise via gzip (versions 1-4,
-    /// read-only). Mirrors <see cref="WriteNodeRegion"/>.
-    /// </summary>
-    private static FileNodeMap ReadNodeRegion(Stream source, bool compressed, bool useZstd, Action? reportTick = null)
-    {
-        using var payloadReader = new BinaryReader(
-            compressed
-                ? useZstd
-                    ? new ParallelZstd.ReadStream(source)
-                    : new GZipStream(source, CompressionMode.Decompress, leaveOpen: true)
-                : source,
-            System.Text.Encoding.UTF8,
-            leaveOpen: true);
-
-        return ReadNodes(payloadReader, reportTick);
-    }
-
-    private static void ReadHeader(
-        BinaryReader reader,
-        out int version,
-        out ImageCompressionLevel level,
-        out bool isEncrypted)
-    {
-        var magic = reader.ReadBytes(4);
-        if (!magic.SequenceEqual(Magic))
-        {
-            throw new InvalidDataException("Not a valid ManagedDrive image file.");
-        }
-
-        version = reader.ReadInt32();
-        if (version is not (1 or 2 or 3 or 4 or 5))
-        {
-            throw new InvalidDataException($"Unsupported image version: {version}.");
-        }
-
-        level = version >= 2 ? (ImageCompressionLevel)reader.ReadByte() : ImageCompressionLevel.None;
-        isEncrypted = version >= 3 && reader.ReadByte() != 0;
-    }
-
-    private static (string Path, FileNode Node) ReadNode(BinaryReader reader)
-    {
-        var metadata = NodeMetadataIO.ReadMetadata(reader);
-        var path = metadata.Path;
-
-        var node = new FileNode
-        {
-            FileInfo = metadata.FileInfo,
-            FileSecurity = metadata.Security,
-        };
-
-        var dataLen = reader.ReadInt64();
-        if (dataLen > 0 && !node.IsDirectory)
-        {
-            var aligned = FileNode.AlignToAllocationUnit(node.FileInfo.AllocationSize);
-            node.FileData = FileContent.CreateZeroed(aligned);
-            node.FileData.FillFromStream(reader.BaseStream, dataLen);
-        }
-        else if (dataLen > 0)
-        {
-            // Skip data bytes for directories (should not occur in well-formed images)
-            reader.ReadBytes((int)dataLen);
-        }
-
-        return (path, node);
-    }
-
-    private static FileNodeMap ReadNodes(BinaryReader payloadReader, Action? reportTick = null)
-    {
-        var nodeMap = new FileNodeMap();
-        var count = payloadReader.ReadInt32();
-
-        for (var i = 0; i < count; i++)
-        {
-            var (path, node) = ReadNode(payloadReader);
-            nodeMap.Add(path, node);
-            reportTick?.Invoke();
-        }
-
-        return nodeMap;
-    }
-
-    private static byte[] UnwrapCek(
-        byte[] wrappedCek,
-        string password,
-        byte[] salt,
-        int iterations,
-        byte[] nonce,
-        byte[] tag)
-    {
-        var kek = Rfc2898DeriveBytes.Pbkdf2(password, salt, iterations, HashAlgorithmName.SHA256, CekSize);
-        try
-        {
-            var cek = new byte[wrappedCek.Length];
-            try
-            {
-                using var aesGcm = new AesGcm(kek, TagSize);
-                aesGcm.Decrypt(nonce, wrappedCek, tag, cek);
-            }
-            catch (CryptographicException)
-            {
-                throw new ImagePasswordIncorrectException();
-            }
-
-            return cek;
-        }
-        finally
-        {
-            CryptographicOperations.ZeroMemory(kek);
-        }
-    }
-
-    private static byte[] WrapCek(
-        byte[] cek,
-        string password,
-        byte[] salt,
-        int iterations,
-        out byte[] nonce,
-        out byte[] tag)
-    {
-        var kek = Rfc2898DeriveBytes.Pbkdf2(password, salt, iterations, HashAlgorithmName.SHA256, CekSize);
-        try
-        {
-            nonce = RandomNumberGenerator.GetBytes(NonceSize);
-            var wrapped = new byte[cek.Length];
-            var localTag = new byte[TagSize];
-            using (var aesGcm = new AesGcm(kek, TagSize))
-            {
-                aesGcm.Encrypt(nonce, cek, wrapped, localTag);
-            }
-
-            tag = localTag;
-            return wrapped;
-        }
-        finally
-        {
-            CryptographicOperations.ZeroMemory(kek);
-        }
-    }
-
-    private static void WriteNode(BinaryWriter writer, string path, FileNode node)
-    {
-        NodeMetadataIO.WriteMetadata(writer, path, node);
-
-        if (node is { IsDirectory: false, FileData: not null, FileInfo.FileSize: > 0 })
-        {
-            var fileSize = Math.Min(node.FileInfo.FileSize, (ulong)node.FileData.Length);
-            writer.Write((long)fileSize);
-            node.FileData.CopyTo(writer.BaseStream, (long)fileSize);
-        }
-        else
-        {
-            writer.Write(0L);
-        }
-    }
+    private readonly record struct SegmentIndexEntry(
+        int NodeCount,
+        long PayloadLength,
+        byte[] ContentHash,
+        byte[]? Nonce,
+        byte[]? Tag);
 }

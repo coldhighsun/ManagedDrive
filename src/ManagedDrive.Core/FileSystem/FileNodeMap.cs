@@ -9,15 +9,25 @@ public sealed class FileNodeMap : IDisposable
 {
     private readonly Dictionary<string, FileNode> _map = new(StringComparer.OrdinalIgnoreCase);
 
-    // Parallel key index so directory enumeration (GetChildren) can seek directly to a path
-    // prefix's range in O(log n) via GetViewBetween, instead of scanning the whole namespace
-    // from the start looking for where the prefix run begins. _map itself is a plain Dictionary
-    // (O(1) lookup/insert/remove) precisely because it no longer needs to maintain order.
+    /// <summary>
+    /// Paths removed since the last successful image save, for incremental image save to emit tombstones for.
+    /// Cleared by DrainRemovedSincePersist() once a save has picked them up.
+    /// </summary>
+    private readonly HashSet<string> _removedSincePersist = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Parallel key index so directory enumeration (GetChildren) can seek directly to a path
+    /// prefix's range in O(log n) via GetViewBetween, instead of scanning the whole namespace
+    /// from the start looking for where the prefix run begins. _map itself is a plain Dictionary
+    /// (O(1) lookup/insert/remove) precisely because it no longer needs to maintain order.
+    /// </summary>
     private readonly SortedSet<string> _sortedKeys = new(StringComparer.OrdinalIgnoreCase);
 
-    // Read/write lock instead of a mutual-exclusion lock: lookups and directory enumerations
-    // (the read-heavy majority) can proceed concurrently, and a full-scan enumeration no longer
-    // blocks unrelated metadata lookups. Structural mutations still take the exclusive write lock.
+    /// <summary>
+    /// Read/write lock instead of a mutual-exclusion lock: lookups and directory enumerations
+    /// (the read-heavy majority) can proceed concurrently, and a full-scan enumeration no longer
+    /// blocks unrelated metadata lookups. Structural mutations still take the exclusive write lock.
+    /// </summary>
     private readonly ReaderWriterLockSlim _syncRoot = new(LockRecursionPolicy.NoRecursion);
 
     private ulong _totalAllocated;
@@ -65,6 +75,7 @@ public sealed class FileNodeMap : IDisposable
             node.LeafName = ComputeLeafName(filePath);
             _map[filePath] = node;
             _totalAllocated += node.FileInfo.AllocationSize;
+            _removedSincePersist.Remove(filePath);
         }
         finally
         {
@@ -84,6 +95,7 @@ public sealed class FileNodeMap : IDisposable
             _map.Clear();
             _sortedKeys.Clear();
             _totalAllocated = 0;
+            _removedSincePersist.Clear();
 
             if (hasRoot)
             {
@@ -96,6 +108,15 @@ public sealed class FileNodeMap : IDisposable
         {
             _syncRoot.ExitWriteLock();
         }
+    }
+
+    /// <summary>
+    /// Releases the reader/writer lock backing this map. Call only once the owning file system is
+    /// no longer serving callbacks.
+    /// </summary>
+    public void Dispose()
+    {
+        _syncRoot.Dispose();
     }
 
     /// <summary>
@@ -214,6 +235,7 @@ public sealed class FileNodeMap : IDisposable
             {
                 _sortedKeys.Remove(filePath);
                 _totalAllocated -= removed.FileInfo.AllocationSize;
+                _removedSincePersist.Add(filePath);
             }
         }
         finally
@@ -245,8 +267,11 @@ public sealed class FileNodeMap : IDisposable
                 var newKey = string.Concat(newPath, key.AsSpan(oldPath.Length));
                 descendant.FilePath = newKey;
                 descendant.LeafName = ComputeLeafName(newKey);
+                descendant.MetadataVersion++;
                 _map[newKey] = descendant;
                 _sortedKeys.Add(newKey);
+                _removedSincePersist.Add(key);
+                _removedSincePersist.Remove(newKey);
             }
         }
         finally
@@ -300,12 +325,34 @@ public sealed class FileNodeMap : IDisposable
     }
 
     /// <summary>
-    /// Releases the reader/writer lock backing this map. Call only once the owning file system is
-    /// no longer serving callbacks.
+    /// Returns the set of paths removed since the last call to this method, and clears it. Today's
+    /// incremental image save (<c>DiskImageSerializer.SaveSegmentedIncremental</c>) detects removed
+    /// nodes indirectly instead — a segment's member count no longer matching what was recorded for
+    /// it is enough to force a rewrite — so it calls this purely to reset <see cref="_removedSincePersist"/>
+    /// after each successful save and does not use the returned paths. They're returned (rather
+    /// than this being a void <c>Reset()</c>) for a possible future save format that writes explicit
+    /// per-path tombstones; if a save that would consume the result fails, the caller is responsible
+    /// for not losing track of it.
     /// </summary>
-    public void Dispose()
+    /// <returns>The paths removed since the previous drain.</returns>
+    internal IReadOnlySet<string> DrainRemovedSincePersist()
     {
-        _syncRoot.Dispose();
+        _syncRoot.EnterWriteLock();
+        try
+        {
+            if (_removedSincePersist.Count == 0)
+            {
+                return new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            }
+
+            var result = new HashSet<string>(_removedSincePersist, StringComparer.OrdinalIgnoreCase);
+            _removedSincePersist.Clear();
+            return result;
+        }
+        finally
+        {
+            _syncRoot.ExitWriteLock();
+        }
     }
 
     private static string ComputeLeafName(string filePath)

@@ -25,27 +25,6 @@ public sealed class FileNode
     public byte[]? FileSecurity;
 
     /// <summary>
-    /// Bumped by <see cref="ManagedDrive.Core.FileSystem.MemoryFileSystem"/> every time
-    /// <see cref="FileData"/>'s bytes or logical length actually change (write, truncate,
-    /// overwrite). Lets callers such as <c>SnapshotManager.ComputeHash</c> cache a content
-    /// hash and cheaply detect whether it is still valid, without relying on wall-clock
-    /// timestamps (which callers other than the WinFsp write path aren't guaranteed to advance
-    /// in lockstep with content).
-    /// </summary>
-    internal ulong ContentVersion;
-
-    /// <summary>
-    /// The content hash last computed for this node, cached against <see cref="ContentVersion"/>
-    /// at the time it was computed. <c>null</c> when no hash has been computed yet.
-    /// </summary>
-    internal byte[]? CachedContentHash;
-
-    /// <summary>
-    /// The <see cref="ContentVersion"/> value <see cref="CachedContentHash"/> was computed for.
-    /// </summary>
-    internal ulong CachedContentHashVersion;
-
-    /// <summary>
     /// The allocation granularity in bytes. All allocation sizes are rounded up to this boundary.
     /// </summary>
     internal const ulong AllocationUnit = 512;
@@ -62,6 +41,55 @@ public sealed class FileNode
     /// directory or nodes synthesized from an imported archive.
     /// </summary>
     internal static readonly byte[] DefaultSecurityDescriptorBytes = BuildDefaultSecurityDescriptorBytes();
+
+    /// <summary>
+    /// The content hash last computed for this node, cached against <see cref="ContentVersion"/>
+    /// at the time it was computed. <c>null</c> when no hash has been computed yet.
+    /// </summary>
+    internal byte[]? CachedContentHash;
+
+    /// <summary>
+    /// The <see cref="ContentVersion"/> value <see cref="CachedContentHash"/> was computed for.
+    /// </summary>
+    internal ulong CachedContentHashVersion;
+
+    /// <summary>
+    /// Bumped by <see cref="ManagedDrive.Core.FileSystem.MemoryFileSystem"/> every time
+    /// <see cref="FileData"/>'s bytes or logical length actually change (write, truncate,
+    /// overwrite). Lets callers such as <c>SnapshotManager.ComputeHash</c> cache a content
+    /// hash and cheaply detect whether it is still valid, without relying on wall-clock
+    /// timestamps (which callers other than the WinFsp write path aren't guaranteed to advance
+    /// in lockstep with content).
+    /// </summary>
+    internal ulong ContentVersion;
+
+    /// <summary>
+    /// Bumped by <see cref="ManagedDrive.Core.FileSystem.MemoryFileSystem"/> every time metadata
+    /// other than content changes (rename, attributes/timestamps, security descriptor). Paired
+    /// with <see cref="ContentVersion"/> so incremental image save can detect a dirty node without
+    /// re-hashing its content.
+    /// </summary>
+    internal ulong MetadataVersion;
+
+    /// <summary>
+    /// The <see cref="ContentVersion"/> value as of the last successful image save. Used by
+    /// incremental image save logic to detect nodes whose content changed since that save,
+    /// without depending on wall-clock timestamps.
+    /// </summary>
+    internal ulong SavedContentVersion = ulong.MaxValue;
+
+    /// <summary>
+    /// The <see cref="MetadataVersion"/> value as of the last successful image save.
+    /// </summary>
+    internal ulong SavedMetadataVersion = ulong.MaxValue;
+
+    /// <summary>
+    /// The index (within the version-6 segmented image's segment index) of the segment this node
+    /// was written into during the last successful segmented save, or <c>-1</c> if it has never
+    /// been part of one. Lets a future incremental save regroup nodes by their existing segment
+    /// instead of re-partitioning from scratch on every save.
+    /// </summary>
+    internal int SavedSegmentIndex = -1;
 
     private static long _nextIndex = 1;
 
