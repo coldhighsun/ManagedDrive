@@ -39,7 +39,7 @@ jobs:
         run: dotnet build --no-restore -c Release
 
       - name: Test
-        run: dotnet test --no-build -c Release --logger "trx;LogFileName=results.trx"
+        run: dotnet test --no-build -c Release --report-xunit-trx --report-xunit-trx-filename results.trx
 
       - name: Upload test results
         if: always()
