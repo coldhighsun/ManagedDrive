@@ -11,9 +11,11 @@ namespace ManagedDrive.App.Cli;
 /// This class is the entire contract surface between the CLI pipe server and <see cref="MainViewModel"/>:
 /// <see cref="MainViewModel.ExitWithoutConfirmation"/>, <see cref="MainViewModel.FormatByMountPointAsync"/>,
 /// <see cref="MainViewModel.MountArchiveAsync"/>, <see cref="MainViewModel.MountImageAsync"/>,
-/// <see cref="MainViewModel.SaveByMountPointAsync"/>, and <see cref="MainViewModel.UnmountByMountPointAsync"/>
-/// (plus the read-only <see cref="MainViewModel.Disks"/> collection for <see cref="ListDisks"/>). Changing
-/// any of their signatures requires updating this adapter in lockstep.
+/// <see cref="MainViewModel.SaveByMountPointAsync"/>, <see cref="MainViewModel.UnmountByMountPointAsync"/>,
+/// <see cref="MainViewModel.ListSnapshotsByMountPointAsync"/>, <see cref="MainViewModel.RestoreSnapshotByMountPointAsync"/>,
+/// and <see cref="MainViewModel.DeleteSnapshotByMountPointAsync"/> (plus the read-only
+/// <see cref="MainViewModel.Disks"/> collection for <see cref="ListDisks"/>). Changing any of their
+/// signatures requires updating this adapter in lockstep.
 /// </remarks>
 internal sealed class MainViewModelCliDiskController(MainViewModel mainViewModel) : ICliDiskController
 {
@@ -25,6 +27,9 @@ internal sealed class MainViewModelCliDiskController(MainViewModel mainViewModel
     /// </summary>
     private static readonly TimeSpan ExitDelay = TimeSpan.FromMilliseconds(300);
 
+    public Task<(bool Success, string Message)> DeleteSnapshotAsync(string mountPoint, int index) =>
+        mainViewModel.DeleteSnapshotByMountPointAsync(mountPoint, index);
+
     public Task<(bool Success, string Message)> FormatAsync(string mountPoint) =>
         mainViewModel.FormatByMountPointAsync(mountPoint);
 
@@ -33,11 +38,17 @@ internal sealed class MainViewModelCliDiskController(MainViewModel mainViewModel
             .Select(vm => new CliDiskInfo(vm.MountPoint, vm.VolumeLabel, vm.Disk.UsedBytes, vm.Disk.TotalBytes))
             .ToList();
 
+    public Task<(bool Success, string Message, IReadOnlyList<CliSnapshotInfo>? Snapshots)> ListSnapshotsAsync(string mountPoint) =>
+        mainViewModel.ListSnapshotsByMountPointAsync(mountPoint);
+
     public Task<(bool Success, string Message)> MountArchiveAsync(string archivePath, string? mountPoint, CliMountOverrides overrides) =>
         mainViewModel.MountArchiveAsync(archivePath, mountPoint, overrides);
 
     public Task<(bool Success, string Message)> MountImageAsync(string imagePath, string mountPoint, CliMountOverrides overrides) =>
             mainViewModel.MountImageAsync(imagePath, mountPoint, overrides);
+
+    public Task<(bool Success, string Message)> RestoreSnapshotAsync(string mountPoint, int index) =>
+        mainViewModel.RestoreSnapshotByMountPointAsync(mountPoint, index);
 
     public Task RequestExitAsync()
     {

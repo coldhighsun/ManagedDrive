@@ -39,7 +39,7 @@ Create, mount and manage in-memory volumes that appear as normal drive letters i
 - Progress bar overlay for long operations (image save, archive import, export)
 
 **CLI**
-- `mdrive` (ships alongside `ManagedDrive.exe`) scripts mount/unmount/format/save/list/exit against the running app over a named pipe, auto-launching it if needed
+- `mdrive` (ships alongside `ManagedDrive.exe`) scripts mount/unmount/format/save/list/snapshot/exit against the running app over a named pipe, auto-launching it if needed
 
 **Convenience & safety**
 - Optional Explorer right-click integration: **"Mount as RAM disk (ManagedDrive)"** for zip/7z/rar/tar archives
@@ -90,6 +90,8 @@ mdrive mount C:\disks\scratch.mdr R: --auto-mount --compression Optimal --custom
 mdrive list
 mdrive save R:
 mdrive format R: --yes
+mdrive snapshot list R:
+mdrive snapshot restore R: 1
 mdrive unmount R:
 mdrive exit
 ```
@@ -102,6 +104,9 @@ mdrive exit
 | `format <drive-letter> --yes` | Deletes all files on a mounted disk. Requires `--yes`/`-y` to confirm. |
 | `save <drive-letter>` | Saves a mounted disk's contents to its backing image immediately. |
 | `list` | Lists currently mounted disks with usage and capacity. |
+| `snapshot list <drive-letter>` | Lists a mounted disk's snapshots, newest first (index 1 = newest). |
+| `snapshot restore <drive-letter> <index>` | Restores a mounted disk's contents from the given snapshot, replacing its current contents. |
+| `snapshot delete <drive-letter> <index>` | Deletes a single snapshot of a mounted disk. |
 | `exit` | Exits the running ManagedDrive application. |
 
 Run `mdrive --help` or `mdrive <command> --help` for the full option list.
@@ -288,7 +293,7 @@ This project bundles [WinFsp](https://winfsp.dev/) and [SharpCompress](https://g
 - 可选每日检查更新，发现新版本时通知提醒
 
 **命令行**
-- `mdrive`（随 `ManagedDrive.exe` 发布）通过命名管道对运行中的应用执行 mount/unmount/format/save/list/exit，应用未运行时自动启动
+- `mdrive`（随 `ManagedDrive.exe` 发布）通过命名管道对运行中的应用执行 mount/unmount/format/save/list/snapshot/exit，应用未运行时自动启动
 
 ### 安装
 
@@ -324,6 +329,8 @@ mdrive mount C:\disks\scratch.mdr R: --auto-mount --compression Optimal --custom
 mdrive list
 mdrive save R:
 mdrive format R: --yes
+mdrive snapshot list R:
+mdrive snapshot restore R: 1
 mdrive unmount R:
 mdrive exit
 ```
@@ -336,6 +343,9 @@ mdrive exit
 | `format <盘符> --yes` | 清空已挂载磁盘上的所有文件，须加 `--yes`/`-y` 确认。 |
 | `save <盘符>` | 立即将已挂载磁盘的内容保存到其绑定的镜像文件。 |
 | `list` | 列出当前已挂载的磁盘及其用量与容量。 |
+| `snapshot list <盘符>` | 列出已挂载磁盘的快照，按时间倒序排列（序号 1 为最新）。 |
+| `snapshot restore <盘符> <序号>` | 用指定序号的快照恢复已挂载磁盘的内容，会替换当前内容。 |
+| `snapshot delete <盘符> <序号>` | 删除已挂载磁盘的某个快照。 |
 | `exit` | 退出正在运行的 ManagedDrive 应用。 |
 
 运行 `mdrive --help` 或 `mdrive <命令> --help` 可查看完整的选项列表。

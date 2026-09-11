@@ -181,6 +181,9 @@
     <sys:String x:Key="Msg.RestoreSnapshotConfirmTitle">恢复快照</sys:String>
     <sys:String x:Key="Msg.DeleteSnapshotConfirmTitle">删除快照</sys:String>
     <sys:String x:Key="Msg.DeleteSnapshotConfirmBody">删除快照 {0}？此操作无法撤销。</sys:String>
+    <sys:String x:Key="Msg.SnapshotIndexOutOfRange">快照序号无效。该磁盘共有 {0} 个快照。</sys:String>
+    <sys:String x:Key="Msg.RestoreSnapshotFailedUnknown">恢复快照失败，原因未知。</sys:String>
+    <sys:String x:Key="Status.SnapshotDeleted">已删除 {0} 的一个快照</sys:String>
 
     <!-- SnapshotDiffDialog -->
     <sys:String x:Key="SnapshotDiff.Title">快照变化</sys:String>

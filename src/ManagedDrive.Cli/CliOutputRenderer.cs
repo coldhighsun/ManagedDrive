@@ -19,6 +19,12 @@ public static class CliOutputRenderer
             return response.ExitCode;
         }
 
+        if (response.Snapshots != null)
+        {
+            RenderSnapshotList(response.Snapshots);
+            return response.ExitCode;
+        }
+
         if (response.Success)
         {
             AnsiConsole.MarkupLine($"[green]{Markup.Escape(response.Message)}[/]");
@@ -52,6 +58,30 @@ public static class CliOutputRenderer
                 Markup.Escape(disk.VolumeLabel),
                 ByteFormatter.Format(disk.UsedBytes),
                 ByteFormatter.Format(disk.TotalBytes));
+        }
+
+        AnsiConsole.Write(table);
+    }
+
+    private static void RenderSnapshotList(IReadOnlyList<CliSnapshotInfo> snapshots)
+    {
+        if (snapshots.Count == 0)
+        {
+            AnsiConsole.MarkupLine("[yellow]No snapshots are available for this disk.[/]");
+            return;
+        }
+
+        var table = new Table().Border(TableBorder.Rounded);
+        table.AddColumn("Index");
+        table.AddColumn("Timestamp (local)");
+        table.AddColumn("Size");
+
+        foreach (var snapshot in snapshots)
+        {
+            table.AddRow(
+                snapshot.Index.ToString(),
+                snapshot.TimestampUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss"),
+                ByteFormatter.Format(snapshot.SizeBytes));
         }
 
         AnsiConsole.Write(table);

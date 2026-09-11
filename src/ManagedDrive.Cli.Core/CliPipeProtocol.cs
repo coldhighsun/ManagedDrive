@@ -32,4 +32,9 @@ public static class CliPipeProtocol
 /// process. Mirrors <see cref="CliOutcome"/> — rendering into terminal output is the calling
 /// process's responsibility.
 /// </summary>
-public sealed record CliResponse(bool Success, string Message, IReadOnlyList<CliDiskInfo>? Disks, int ExitCode);
+public sealed record CliResponse(
+    bool Success,
+    string Message,
+    IReadOnlyList<CliDiskInfo>? Disks,
+    int ExitCode,
+    IReadOnlyList<CliSnapshotInfo>? Snapshots = null);
