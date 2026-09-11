@@ -148,7 +148,7 @@ public partial class App
         // Constructed before AutoMountDisksAsync so that an auto-mounted disk which is already the
         // TEMP target gets its global symlink published at startup. Rooted as a field only to keep
         // its Disks.CollectionChanged subscription alive.
-        _globalMountCoordinator = new(_mainViewModel);
+        _globalMountCoordinator = new(_mainViewModel, _serviceProvider!.GetRequiredService<ILogger<GlobalMountCoordinator>>());
 
         _tempDirCompatChecker.CheckOnStartup(config);
 
