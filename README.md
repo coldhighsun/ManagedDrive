@@ -4,6 +4,10 @@
 [![Latest Release](https://img.shields.io/github/v/release/coldhighsun/ManagedDrive)](https://github.com/coldhighsun/ManagedDrive/releases/latest)
 [![GitHub All Releases](https://img.shields.io/github/downloads/coldhighsun/ManagedDrive/total)](https://github.com/coldhighsun/ManagedDrive/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![.NET](https://img.shields.io/badge/.NET-10-512BD4?logo=dotnet)](https://dotnet.microsoft.com/)
+[![Platform: Windows](https://img.shields.io/badge/platform-Windows-0078D6?logo=windows)](https://github.com/coldhighsun/ManagedDrive)
+[![GitHub Stars](https://img.shields.io/github/stars/coldhighsun/ManagedDrive?style=flat)](https://github.com/coldhighsun/ManagedDrive/stargazers)
+[![Last Commit](https://img.shields.io/github/last-commit/coldhighsun/ManagedDrive)](https://github.com/coldhighsun/ManagedDrive/commits/main)
 
 [English](#english) | [中文](#中文)
 
@@ -27,33 +31,31 @@ Create, mount and manage in-memory volumes that appear as normal drive letters i
 **Persistence, snapshots & cloning**
 - Save to a `.mdr` image and restore it on next mount, or import an existing image directly (**Import Disk...**)
 - Import an archive (zip, 7z, rar, tar, or anything [SharpCompress](https://github.com/adamhathcock/sharpcompress) reads) as a read-only disk (**Import Archive...**), with capacity/label derived automatically
-- Optional auto-save (1–60 min interval) plus a final save before unmount/exit (disableable per disk via **Save on exit**); skipped when nothing changed, failures raise a tray/status-bar notification. Saves are incremental — only files changed since the last save are recompressed/re-encrypted, so periodic auto-save on a large, mostly-unchanged disk stays fast
+- Optional auto-save plus a final save before unmount/exit; incremental, so periodic auto-save on a large, mostly-unchanged disk stays fast
 - Selectable image compression (Off / Fast / Balanced / Max, default Fast)
-- Snapshot / version history capped by count and/or size, deduplicated by content hash; restore via **Restore Snapshot...**, which also lets you delete individual snapshots
+- Snapshot / version history capped by count and/or size, deduplicated by content hash; restore via **Restore Snapshot...**
 - Clone a disk onto another mounted disk or export it to a new `.mdr` file (**Clone Disk...**)
-- Optional `.mdr` password protection (AES-256-GCM envelope encryption — the password only wraps a random per-disk key, so changing it never re-encrypts file data); set via "Encrypt Image" in the disk dialog (8–64 characters, with a live strength hint) and prompted for on mount whenever an image is encrypted. Sensitive buffers are zeroed from memory as soon as they're no longer needed.
-- Progress bar overlay for long operations (image save, archive import, export) instead of an unresponsive-looking app
+- Optional `.mdr` password protection (AES-256-GCM); changing the password never re-encrypts file data
+- Progress bar overlay for long operations (image save, archive import, export)
 
 **CLI**
-- `mdrive` (ships alongside `ManagedDrive.exe`) scripts mount/unmount/format/save/list/exit against the running app over a named pipe
-- Auto-launches `ManagedDrive.exe` if needed and waits for it to be ready before sending the command
+- `mdrive` (ships alongside `ManagedDrive.exe`) scripts mount/unmount/format/save/list/exit against the running app over a named pipe, auto-launching it if needed
 
 **Convenience & safety**
-- Optional Explorer right-click integration: adds **"Mount as RAM disk (ManagedDrive)"** for zip/7z/rar/tar archives — one click mounts, auto-launching the app if needed and opening the new drive in Explorer
-- Tray icon with a hover tooltip (per-disk usage + available memory), quick menu, optional start-minimized mode, and a brief read/write flash on activity
-- Available system memory shown live in the status bar (2 s refresh)
-- Status bar also shows the most recently accessed file, pushed live (throttled to 300 ms) rather than polled, paused while the window is hidden in the tray
-- Per-disk high-usage warning (50–90% range, default 90%, with hysteresis)
-- Temp directory redirection to a disk's `Temp` folder, auto-reset on unmount/remount, with a startup warning if TEMP is left on a RAM disk
-- Exit confirmation with a saving overlay while pending saves finish; TEMP is reset first if it points at a mounted disk
-- Double-click to open a disk in Explorer; right-click for shortcuts or **View Disk Contents...** (a read-only, sortable Name/Size/Type tree)
+- Optional Explorer right-click integration: **"Mount as RAM disk (ManagedDrive)"** for zip/7z/rar/tar archives
+- Tray icon with a hover tooltip (per-disk usage + available memory), quick menu, and optional start-minimized mode
+- Live status bar: available system memory and most recently accessed file
+- Per-disk high-usage warning with a configurable threshold
+- Temp directory redirection to a disk's `Temp` folder, with a startup warning if TEMP is left on a RAM disk
+- Exit confirmation with a saving overlay while pending saves finish
+- Double-click to open a disk in Explorer; right-click for shortcuts or **View Disk Contents...**
 
 **UI**
-- Bilingual (English / Simplified Chinese) and light/dark themes, both auto-detected with manual override, switching instantly
-- Disk cards with status badges (read-only, current-TEMP, backing image, password-protected), a usage bar that warns past the high-usage threshold, and a live read/write throughput chart
-- Freely resizable window, no maximize/fullscreen
-- About dialog with version, GitHub link, and an "update available" link when a newer release exists
-- Optional daily update check against GitHub Releases; a tray balloon + dialog (View Release / Skip / Remind Later) appears on a new release
+- Bilingual (English / Simplified Chinese) and light/dark themes, auto-detected with manual override
+- Disk cards with status badges (read-only, current-TEMP, backing image, password-protected), a usage bar and a live read/write throughput chart
+- Freely resizable window
+- About dialog with version, GitHub link, and an "update available" link
+- Optional daily update check against GitHub Releases, with a notification on a new release
 
 ### Installation
 
@@ -204,19 +206,19 @@ ManagedDrive uses **WinFsp** (Windows File System Proxy) to present an in-memory
 
 ### Performance
 
-Measured with [BenchmarkDotNet](https://benchmarkdotnet.org/) (Intel Core i9-13980HX, 64 GB RAM, KIOXIA KXG8AZNV1T02 NVMe SSD, Windows 11 Pro, .NET 10.0.10):
+Measured with [BenchmarkDotNet](https://benchmarkdotnet.org/) (Intel Core i9-13980HX, 64 GB RAM, KIOXIA KXG8AZNV1T02 NVMe SSD, Windows 11 Pro, .NET 10.0.12):
 
 | Scenario | RAM Disk | NVMe SSD | Ratio |
 |---|---:|---:|---:|
-| Sequential write, 4 KB | 2.4 MB/s | 1.3 MB/s | **RAM 1.9× faster** |
-| Sequential write, 1 MB | 561.8 MB/s | 137.4 MB/s | **RAM 4.1× faster** |
-| Sequential read (OS cache), 4 KB | 6.0 MB/s | 8.7 MB/s | NVMe 1.4× faster |
-| Sequential read (OS cache), 1 MB | 938.5 MB/s | 2,143.3 MB/s | NVMe 2.3× faster |
-| Random 4 KB read (uncached), 30 seeks | 1.36 ms | 2.18 ms | **RAM 1.6× faster** |
-| Random 4 KB read (OS cache), 30 seeks | 1.36 ms | 0.52 ms | NVMe 2.6× faster |
-| 30× small-file (4 KB) create+write | 47.4 ms (1.58 ms/file) | 79.9 ms (2.66 ms/file) | **RAM 1.7× faster** |
+| Sequential write, 4 KB | 1.7 MB/s | 1.0 MB/s | **RAM 1.8× faster** |
+| Sequential write, 1 MB | 385.2 MB/s | 91.8 MB/s | **RAM 4.2× faster** |
+| Sequential read (OS cache), 4 KB | 4.0 MB/s | 6.2 MB/s | NVMe 1.5× faster |
+| Sequential read (OS cache), 1 MB | 632.2 MB/s | 1,331.4 MB/s | NVMe 2.1× faster |
+| Random 4 KB read (uncached), 30 seeks | 1.82 ms | 3.34 ms | **RAM 1.8× faster** |
+| Random 4 KB read (OS cache), 30 seeks | 1.93 ms | 0.91 ms | NVMe 2.1× faster |
+| 30× small-file (4 KB) create+write | 68.5 ms (2.28 ms/file) | 111.4 ms (3.71 ms/file) | **RAM 1.6× faster** |
 
-Writes win big (up to 4.1×) by skipping block allocation, journaling, and the physical write. Uncached random reads benefit from zero seek latency (1.6× faster). Small-file creates are also faster (1.7×) because metadata operations stay in memory. Cached reads, however, favor the NVMe path — NTFS reads from the OS page cache stay entirely in-kernel, while the RAM disk incurs an extra kernel–userspace round trip through WinFsp. Run `dotnet run --project benchmarks/ManagedDrive.Benchmarks -c Release` for current numbers on your own hardware (see [Running Benchmarks](#running-benchmarks) below).
+Writes win big (up to 4.2×) by skipping block allocation, journaling, and the physical write. Uncached random reads benefit from zero seek latency (1.8× faster). Small-file creates are also faster (1.6×) because metadata operations stay in memory. Cached reads, however, favor the NVMe path — NTFS reads from the OS page cache stay entirely in-kernel, while the RAM disk incurs an extra kernel–userspace round trip through WinFsp. Run `dotnet run --project benchmarks/ManagedDrive.Benchmarks -c Release` for current numbers on your own hardware (see [Running Benchmarks](#running-benchmarks) below).
 
 ### Running Tests
 
@@ -262,33 +264,31 @@ This project bundles [WinFsp](https://winfsp.dev/) and [SharpCompress](https://g
 **持久化、快照与克隆**
 - 保存为 `.mdr` 镜像并在下次挂载时还原，或直接导入已有镜像（**导入磁盘...**）
 - 导入压缩包（zip/7z/rar/tar 等 [SharpCompress](https://github.com/adamhathcock/sharpcompress) 支持的格式）为只读磁盘（**导入压缩包...**），容量/卷标自动推算
-- 可选自动保存（1-60 分钟）及卸载/退出前的收尾保存（可按磁盘通过**退出时保存**关闭）；内容未变时跳过，失败会有托盘/状态栏提示。保存采用增量方式——只有自上次保存以来变化过的文件才会重新压缩/加密，大容量、内容基本未变的磁盘做周期性自动保存依然很快
+- 可选自动保存及卸载/退出前的收尾保存；保存采用增量方式，大容量、内容基本未变的磁盘做周期性自动保存依然很快
 - 可选镜像压缩级别（不压缩／快速／均衡／最高，默认快速）
-- 按数量/大小上限保留的快照版本历史，内容去重存储；通过**还原快照...**还原或删除单个快照
+- 按数量/大小上限保留的快照版本历史，内容去重存储；通过**还原快照...**还原
 - 克隆磁盘到另一已挂载磁盘，或导出为新 `.mdr` 文件（**克隆磁盘...**）
-- 可选 `.mdr` 密码保护（AES-256-GCM 信封加密——密码仅包裹一个随机每盘密钥，改密码无需重新加密文件）；在磁盘对话框中通过"加密镜像"设置（8–64 位，带实时强度提示），加密镜像挂载时会提示输入密码；敏感缓冲区用完即从内存清零
-- 长耗时操作（保存镜像、导入/导出压缩包）显示带进度条的忙碌遮罩，避免应用看起来无响应
+- 可选 `.mdr` 密码保护（AES-256-GCM）；改密码无需重新加密文件
+- 长耗时操作（保存镜像、导入/导出压缩包）显示带进度条的忙碌遮罩
 
 **便利与安全**
-- 可选资源管理器右键集成：为 zip/7z/rar/tar 添加**"挂载为内存盘 (ManagedDrive)"**菜单项，一键挂载并自动启动应用、打开资源管理器
-- 托盘图标带悬浮提示（各盘用量+可用内存）、快捷菜单、可选最小化启动，读写活动时短暂闪烁指示
-- 状态栏实时显示可用系统内存（2 秒刷新）
-- 状态栏同时推送最近访问的文件（节流至 300 毫秒一次，非轮询），窗口最小化到托盘时暂停
-- 每磁盘可配置高用量警告（范围 50%–90%，默认 90%，带回滞防抖）
-- 临时目录重定向到某磁盘的 `Temp` 文件夹，卸载/重挂自动恢复，TEMP 遗留在内存盘上时启动提示
-- 退出确认并显示保存遮罩直至待处理保存完成；TEMP 指向已挂载磁盘时会先重置
-- 双击在资源管理器中打开磁盘；右键提供快捷方式或**磁盘内容...**（可排序的名称/大小/类型树状列表，支持多选删除；只读磁盘禁用删除）
+- 可选资源管理器右键集成：**"挂载为内存盘 (ManagedDrive)"**菜单项，用于 zip/7z/rar/tar
+- 托盘图标带悬浮提示（各盘用量+可用内存）、快捷菜单、可选最小化启动
+- 状态栏实时显示可用系统内存和最近访问的文件
+- 每磁盘可配置高用量警告阈值
+- 临时目录重定向到某磁盘的 `Temp` 文件夹，TEMP 遗留在内存盘上时启动提示
+- 退出确认并显示保存遮罩直至待处理保存完成
+- 双击在资源管理器中打开磁盘；右键提供快捷方式或**磁盘内容...**
 
 **界面**
-- 双语（中/英）及浅色/深色主题，均可自动检测或手动切换，即时生效
-- 磁盘卡片带状态角标（只读、当前临时目录、绑定镜像、密码保护）、超阈值变色的使用率进度条，以及实时读写速度曲线图
-- 窗口可自由拖拽调整大小，不支持最大化/全屏
+- 双语（中/英）及浅色/深色主题，均可自动检测或手动切换
+- 磁盘卡片带状态角标（只读、当前临时目录、绑定镜像、密码保护）、使用率进度条，以及实时读写速度曲线图
+- 窗口可自由拖拽调整大小
 - 关于对话框显示版本、GitHub 链接，有新版本时显示更新链接
-- 可选每日检查更新；发现新版本时弹出托盘气泡+对话框（查看发布页/忽略/稍后提醒）
+- 可选每日检查更新，发现新版本时通知提醒
 
 **命令行**
-- `mdrive`（随 `ManagedDrive.exe` 发布）通过命名管道对运行中的应用执行 mount/unmount/format/save/list/exit
-- 若应用未运行会自动启动并等待就绪后发送命令
+- `mdrive`（随 `ManagedDrive.exe` 发布）通过命名管道对运行中的应用执行 mount/unmount/format/save/list/exit，应用未运行时自动启动
 
 ### 安装
 
@@ -442,19 +442,19 @@ ManagedDrive 使用 **WinFsp**（Windows 文件系统代理）将内存目录树
 
 ### 性能基准
 
-使用 [BenchmarkDotNet](https://benchmarkdotnet.org/) 测量（Intel Core i9-13980HX、64 GB 内存、KIOXIA KXG8AZNV1T02 NVMe SSD、Windows 11 Pro、.NET 10.0.10）：
+使用 [BenchmarkDotNet](https://benchmarkdotnet.org/) 测量（Intel Core i9-13980HX、64 GB 内存、KIOXIA KXG8AZNV1T02 NVMe SSD、Windows 11 Pro、.NET 10.0.12）：
 
 | 场景 | 内存盘 | NVMe SSD | 倍率 |
 |---|---:|---:|---:|
-| 顺序写入，4 KB | 2.4 MB/s | 1.3 MB/s | **内存盘快 1.9×** |
-| 顺序写入，1 MB | 561.8 MB/s | 137.4 MB/s | **内存盘快 4.1×** |
-| 顺序读取（OS 缓存），4 KB | 6.0 MB/s | 8.7 MB/s | NVMe 快 1.4× |
-| 顺序读取（OS 缓存），1 MB | 938.5 MB/s | 2,143.3 MB/s | NVMe 快 2.3× |
-| 随机 4 KB 读取（未缓存），30 次寻址 | 1.36 ms | 2.18 ms | **内存盘快 1.6×** |
-| 随机 4 KB 读取（OS 缓存），30 次寻址 | 1.36 ms | 0.52 ms | NVMe 快 2.6× |
-| 30 次小文件（4 KB）创建+写入 | 47.4 ms（1.58 ms/文件） | 79.9 ms（2.66 ms/文件） | **内存盘快 1.7×** |
+| 顺序写入，4 KB | 1.7 MB/s | 1.0 MB/s | **内存盘快 1.8×** |
+| 顺序写入，1 MB | 385.2 MB/s | 91.8 MB/s | **内存盘快 4.2×** |
+| 顺序读取（OS 缓存），4 KB | 4.0 MB/s | 6.2 MB/s | NVMe 快 1.5× |
+| 顺序读取（OS 缓存），1 MB | 632.2 MB/s | 1,331.4 MB/s | NVMe 快 2.1× |
+| 随机 4 KB 读取（未缓存），30 次寻址 | 1.82 ms | 3.34 ms | **内存盘快 1.8×** |
+| 随机 4 KB 读取（OS 缓存），30 次寻址 | 1.93 ms | 0.91 ms | NVMe 快 2.1× |
+| 30 次小文件（4 KB）创建+写入 | 68.5 ms（2.28 ms/文件） | 111.4 ms（3.71 ms/文件） | **内存盘快 1.6×** |
 
-写入优势显著（最高 4.1×），因为跳过了物理块分配、日志记录和实际落盘。未缓存的随机读取受益于零寻址延迟（快 1.6×）。小文件创建也更快（1.7×），因为元数据操作全在内存中完成。但缓存读取方面 NVMe 更优——NTFS 从 OS 页缓存读取时全程在内核态完成，而内存盘需要经过 WinFsp 的内核–用户态往返，增加了额外开销。运行 `dotnet run --project benchmarks/ManagedDrive.Benchmarks -c Release` 可在你自己的硬件上获取当前数据（见下方[运行基准测试](#running-benchmarks-zh)）。
+写入优势显著（最高 4.2×），因为跳过了物理块分配、日志记录和实际落盘。未缓存的随机读取受益于零寻址延迟（快 1.8×）。小文件创建也更快（1.6×），因为元数据操作全在内存中完成。但缓存读取方面 NVMe 更优——NTFS 从 OS 页缓存读取时全程在内核态完成，而内存盘需要经过 WinFsp 的内核–用户态往返，增加了额外开销。运行 `dotnet run --project benchmarks/ManagedDrive.Benchmarks -c Release` 可在你自己的硬件上获取当前数据（见下方[运行基准测试](#running-benchmarks-zh)）。
 
 ### 运行测试
 
