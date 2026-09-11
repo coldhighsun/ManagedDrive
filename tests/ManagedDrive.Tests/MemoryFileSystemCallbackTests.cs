@@ -101,23 +101,18 @@ public sealed class MemoryFileSystemCallbackTests
     [Fact]
     public void Write_OnReadOnlyFileSystem_ReturnsWriteProtectedAndLeavesContentUnchanged()
     {
-        var fs = new MemoryFileSystem(1024 * 1024, "Label");
-        fs.Create("\\file.bin", 0, 0, (uint)FileAttributes.Normal, [], 0,
-            out var fileNode, out _, out _, out _);
-        var roFs = new MemoryFileSystem(1024 * 1024, "Label", fs.NodeMap, readOnly: true);
-        var ptr = Marshal.AllocHGlobal(4);
-        try
+        var fs = new MemoryFileSystem(1024 * 1024, "Label", readOnly: true);
+        var node = new FileNode
         {
-            Marshal.Copy([9, 9, 9, 9], 0, ptr, 4);
-            var status = roFs.Write(fileNode!, null!, ptr, 0, 4, false, false, out var bytesTransferred, out _);
+            FileInfo = { FileAttributes = (uint)FileAttributes.Normal, AllocationSize = 512 },
+            FileData = FileContent.CreateZeroed(512),
+        };
+        fs.NodeMap.Add("\\file.bin", node);
 
-            Assert.Equal(unchecked((int)0xC00000A2), status); // STATUS_MEDIA_WRITE_PROTECTED
-            Assert.Equal(0u, bytesTransferred);
-        }
-        finally
-        {
-            Marshal.FreeHGlobal(ptr);
-        }
+        var status = fs.Write(node, null!, IntPtr.Zero, 0, 0, false, false, out var bytesTransferred, out _);
+
+        Assert.Equal(unchecked((int)0xC00000A2), status); // STATUS_MEDIA_WRITE_PROTECTED
+        Assert.Equal(0u, bytesTransferred);
     }
 
     [Fact]
