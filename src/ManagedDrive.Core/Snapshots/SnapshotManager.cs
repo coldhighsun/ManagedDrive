@@ -103,7 +103,8 @@ public static partial class SnapshotManager
             Logger.LogWarning(ex, "Failed to delete snapshot '{Path}'", snapshotPath);
         }
 
-        GarbageCollectBlobs(mainImagePath);
+        var remaining = ListSnapshotEntries(mainImagePath);
+        GarbageCollectBlobs(mainImagePath, remaining.Select(e => e.Summary));
     }
 
     /// <summary>
@@ -220,7 +221,23 @@ public static partial class SnapshotManager
     /// logical (pre-dedup, uncompressed) content size, read cheaply from the index header
     /// without touching any blob.
     /// </summary>
-    public static List<SnapshotInfo> ListSnapshots(string mainImagePath)
+    public static List<SnapshotInfo> ListSnapshots(string mainImagePath) =>
+        ListSnapshotEntries(mainImagePath).Select(e => e.Info).ToList();
+
+    /// <summary>
+    /// One snapshot's cheap metadata (<see cref="SnapshotInfo"/>) paired with its full
+    /// <see cref="SnapshotStore.SnapshotSummary"/> (which also carries the referenced blob
+    /// hashes), so a single index-file parse can serve both a listing and blob garbage collection.
+    /// </summary>
+    private readonly record struct SnapshotListEntry(SnapshotInfo Info, SnapshotStore.SnapshotSummary Summary);
+
+    /// <summary>
+    /// Scans <paramref name="mainImagePath"/>'s directory for its snapshot index files, parsing
+    /// each one exactly once (via <see cref="SnapshotStore.ReadSummary"/>) to get both its cheap
+    /// listing metadata and its full summary (including referenced blob hashes). Sorted oldest
+    /// first, same as <see cref="ListSnapshots"/>.
+    /// </summary>
+    private static List<SnapshotListEntry> ListSnapshotEntries(string mainImagePath)
     {
         var directory = Path.GetDirectoryName(mainImagePath);
         if (string.IsNullOrEmpty(directory) || !Directory.Exists(directory))
@@ -229,7 +246,7 @@ public static partial class SnapshotManager
         }
 
         var baseName = Path.GetFileNameWithoutExtension(mainImagePath);
-        var snapshots = new List<SnapshotInfo>();
+        var entries = new List<SnapshotListEntry>();
 
         foreach (var path in Directory.EnumerateFiles(directory, $"{baseName}.*.mdr"))
         {
@@ -249,12 +266,12 @@ public static partial class SnapshotManager
                 ? parsed
                 : new(File.GetLastWriteTimeUtc(path), TimeSpan.Zero);
 
-            var logicalSize = SnapshotStore.ReadSummary(path).LogicalSizeBytes;
-            snapshots.Add(new(path, timestamp, logicalSize));
+            var summary = SnapshotStore.ReadSummary(path);
+            entries.Add(new(new(path, timestamp, summary.LogicalSizeBytes), summary));
         }
 
-        snapshots.Sort((a, b) => a.TimestampUtc.CompareTo(b.TimestampUtc));
-        return snapshots;
+        entries.Sort((a, b) => a.Info.TimestampUtc.CompareTo(b.Info.TimestampUtc));
+        return entries;
     }
 
     /// <summary>
@@ -282,45 +299,50 @@ public static partial class SnapshotManager
             return;
         }
 
-        var snapshots = ListSnapshots(mainImagePath);
+        var entries = ListSnapshotEntries(mainImagePath);
         var totalBytes = 0UL;
-        foreach (var snapshot in snapshots)
+        foreach (var entry in entries)
         {
-            totalBytes += (ulong)snapshot.SizeBytes;
+            totalBytes += (ulong)entry.Info.SizeBytes;
         }
 
-        var remainingCount = (uint)snapshots.Count;
+        var remainingCount = (uint)entries.Count;
 
         var index = 0;
-        while (index < snapshots.Count &&
+        while (index < entries.Count &&
                ((maxCount is { } mc && remainingCount > mc) ||
                 (maxTotalBytes is { } mb && totalBytes > mb)))
         {
-            var snapshot = snapshots[index];
+            var entry = entries[index];
             try
             {
-                File.Delete(snapshot.Path);
-                totalBytes -= (ulong)snapshot.SizeBytes;
+                File.Delete(entry.Info.Path);
+                totalBytes -= (ulong)entry.Info.SizeBytes;
                 remainingCount--;
+
+                // Deleted successfully: drop it from the "still on disk" list without advancing
+                // index, since the next element has shifted into this slot.
+                entries.RemoveAt(index);
             }
             catch (IOException ex)
             {
-                // Best-effort pruning; leave this file for the next attempt.
+                // Best-effort pruning; the file is still on disk and its blobs are still
+                // referenced, so keep it in `entries` for GarbageCollectBlobs below and move on.
                 Logger.LogWarningThrottled(
-                    $"prune-failed:{snapshot.Path}", TimeSpan.FromMinutes(10),
-                    "Failed to prune snapshot '{Path}': {Error}", snapshot.Path, ex.Message);
+                    $"prune-failed:{entry.Info.Path}", TimeSpan.FromMinutes(10),
+                    "Failed to prune snapshot '{Path}': {Error}", entry.Info.Path, ex.Message);
+                index++;
             }
             catch (UnauthorizedAccessException ex)
             {
                 Logger.LogWarningThrottled(
-                    $"prune-failed:{snapshot.Path}", TimeSpan.FromMinutes(10),
-                    "Failed to prune snapshot '{Path}': {Error}", snapshot.Path, ex.Message);
+                    $"prune-failed:{entry.Info.Path}", TimeSpan.FromMinutes(10),
+                    "Failed to prune snapshot '{Path}': {Error}", entry.Info.Path, ex.Message);
+                index++;
             }
-
-            index++;
         }
 
-        GarbageCollectBlobs(mainImagePath);
+        GarbageCollectBlobs(mainImagePath, entries.Select(e => e.Summary));
     }
 
     /// <summary>
@@ -382,10 +404,12 @@ public static partial class SnapshotManager
     }
 
     /// <summary>
-    /// Deletes every blob in this image's blob directory that is not referenced by any
-    /// remaining snapshot (mark-and-sweep; no persistent reference counts).
+    /// Deletes every blob in this image's blob directory that is not referenced by any of
+    /// <paramref name="summaries"/> (mark-and-sweep; no persistent reference counts). Callers
+    /// pass the summaries of every snapshot still on disk, already parsed once by
+    /// <see cref="ListSnapshotEntries"/>, so this never re-scans or re-parses snapshot indexes.
     /// </summary>
-    private static void GarbageCollectBlobs(string mainImagePath)
+    private static void GarbageCollectBlobs(string mainImagePath, IEnumerable<SnapshotStore.SnapshotSummary> summaries)
     {
         var blobDirectory = BlobDirectory(mainImagePath);
         if (!Directory.Exists(blobDirectory))
@@ -394,9 +418,9 @@ public static partial class SnapshotManager
         }
 
         var referenced = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var snapshot in ListSnapshots(mainImagePath))
+        foreach (var summary in summaries)
         {
-            foreach (var hash in SnapshotStore.ReadSummary(snapshot.Path).ReferencedHashesHex)
+            foreach (var hash in summary.ReferencedHashesHex)
             {
                 referenced.Add(hash);
             }
