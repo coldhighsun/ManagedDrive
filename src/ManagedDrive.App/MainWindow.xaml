@@ -105,6 +105,12 @@
                             AutomationProperties.Name="{DynamicResource Tip.Minimize}">
                         <TextBlock Style="{StaticResource IconText}" Text="&#xE921;" FontSize="12"/>
                     </Button>
+                    <Button x:Name="MaximizeBtn" Style="{StaticResource IconButton}"
+                            Click="MaximizeButton_Click"
+                            ToolTip="{DynamicResource Tip.MaximizeRestore}"
+                            AutomationProperties.Name="{DynamicResource Tip.MaximizeRestore}">
+                        <TextBlock x:Name="MaximizeIcon" Style="{StaticResource IconText}" Text="&#xE922;" FontSize="12"/>
+                    </Button>
                     <Button Style="{StaticResource IconButton}"
                             Click="CloseButton_Click"
                             ToolTip="{DynamicResource Tip.HideToTray}"

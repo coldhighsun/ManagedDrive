@@ -24,11 +24,24 @@ public partial class MainWindow
         InitializeComponent();
         DataContext = viewModel;
         WindowMaximizeHelper.HookMaximizeBehavior(this);
+        StateChanged += (_, _) => UpdateMaximizeIcon();
+        UpdateMaximizeIcon();
     }
 
     private void CloseButton_Click(object sender, RoutedEventArgs e) => Close();
 
     private void MinimizeButton_Click(object sender, RoutedEventArgs e) => WindowState = WindowState.Minimized;
+
+    private void MaximizeButton_Click(object sender, RoutedEventArgs e) =>
+        WindowState = WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized;
+
+    /// <summary>
+    /// Swaps the caption button's glyph between "maximize" and "restore" to match the current
+    /// <see cref="Window.WindowState"/>, since it toggles between the two rather than having
+    /// separate buttons for each.
+    /// </summary>
+    private void UpdateMaximizeIcon() =>
+        MaximizeIcon.Text = WindowState == WindowState.Maximized ? "" : "";
 
     private void ImportBtn_Click(object sender, RoutedEventArgs e) => OpenAttachedContextMenu(sender);
 
