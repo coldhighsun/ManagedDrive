@@ -11,7 +11,7 @@
     <sys:String x:Key="Btn.ImportArchive">导入压缩包...</sys:String>
     <sys:String x:Key="Btn.OpenInExplorer">在资源管理器中打开</sys:String>
     <sys:String x:Key="Btn.OpenImageDirectory">打开镜像文件目录</sys:String>
-    <sys:String x:Key="Btn.EditDisk">编辑磁盘…</sys:String>
+    <sys:String x:Key="Btn.EditDisk">修改磁盘设置…</sys:String>
     <sys:String x:Key="Btn.Unmount">卸载...</sys:String>
     <sys:String x:Key="Btn.SaveImage">保存镜像</sys:String>
     <sys:String x:Key="Btn.SetAsTempDir">设为临时文件夹...</sys:String>
@@ -239,6 +239,7 @@
     <sys:String x:Key="Tray.About">关于</sys:String>
     <sys:String x:Key="Tray.Exit">退出</sys:String>
     <sys:String x:Key="Tray.NoDisksMounted">暂无已挂载的磁盘</sys:String>
+    <sys:String x:Key="Tray.LoadingDisks">正在加载…</sys:String>
     <sys:String x:Key="Tray.HighUsageTitle">RAM 磁盘空间不足</sys:String>
     <sys:String x:Key="Tray.HighUsageBody">{0}（{1}）已使用 {2:F0}%。</sys:String>
     <sys:String x:Key="Tray.SaveFailedTitle">保存失败</sys:String>
