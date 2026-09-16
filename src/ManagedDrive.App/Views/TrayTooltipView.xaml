@@ -92,14 +92,37 @@
 
                 <TextBlock FontSize="13"
                            Foreground="{DynamicResource AppForegroundLight}"
+                           Text="{DynamicResource Tray.LoadingDisks}">
+                    <TextBlock.Style>
+                        <Style TargetType="TextBlock">
+                            <Setter Property="Visibility" Value="Collapsed" />
+                            <Style.Triggers>
+                                <MultiDataTrigger>
+                                    <MultiDataTrigger.Conditions>
+                                        <Condition Binding="{Binding ElementName=DiskList, Path=HasItems}" Value="False" />
+                                        <Condition Binding="{Binding BusyOverlay.IsBusy}" Value="True" />
+                                    </MultiDataTrigger.Conditions>
+                                    <Setter Property="Visibility" Value="Visible" />
+                                </MultiDataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBlock.Style>
+                </TextBlock>
+
+                <TextBlock FontSize="13"
+                           Foreground="{DynamicResource AppForegroundLight}"
                            Text="{DynamicResource Tray.NoDisksMounted}">
                     <TextBlock.Style>
                         <Style TargetType="TextBlock">
                             <Setter Property="Visibility" Value="Collapsed" />
                             <Style.Triggers>
-                                <DataTrigger Binding="{Binding ElementName=DiskList, Path=HasItems}" Value="False">
+                                <MultiDataTrigger>
+                                    <MultiDataTrigger.Conditions>
+                                        <Condition Binding="{Binding ElementName=DiskList, Path=HasItems}" Value="False" />
+                                        <Condition Binding="{Binding BusyOverlay.IsBusy}" Value="False" />
+                                    </MultiDataTrigger.Conditions>
                                     <Setter Property="Visibility" Value="Visible" />
-                                </DataTrigger>
+                                </MultiDataTrigger>
                             </Style.Triggers>
                         </Style>
                     </TextBlock.Style>
