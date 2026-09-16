@@ -602,7 +602,7 @@ public sealed class MemoryFileSystem : FileSystemBase
             return STATUS_ACCESS_DENIED;
         }
 
-        if (NodeMap.TryGet(newFileName, out var existing) && existing != null)
+        if (NodeMap.TryGet(newFileName, out var existing) && existing != null && !ReferenceEquals(existing, node))
         {
             if (!replaceIfExists)
             {
