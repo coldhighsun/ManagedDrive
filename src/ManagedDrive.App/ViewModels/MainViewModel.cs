@@ -515,6 +515,11 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             return (false, Loc.Format("Val.MountPointAlreadyMounted", mountPoint));
         }
 
+        if (!MountPointValidator.TryValidateDirectoryMountPoint(mountPoint, out var mountPointError))
+        {
+            return (false, mountPointError!);
+        }
+
         var otherDisks = GetOtherDiskOptions(excluding: null);
         if (IsPathInUse(otherDisks, archivePath, d => d.SourceArchivePath))
         {
@@ -626,6 +631,11 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         if (Disks.Any(d => string.Equals(d.MountPoint, mountPoint, StringComparison.OrdinalIgnoreCase)))
         {
             return (false, Loc.Format("Val.MountPointAlreadyMounted", mountPoint));
+        }
+
+        if (!MountPointValidator.TryValidateDirectoryMountPoint(mountPoint, out var mountPointError))
+        {
+            return (false, mountPointError!);
         }
 
         var otherDisks = GetOtherDiskOptions(excluding: null);
