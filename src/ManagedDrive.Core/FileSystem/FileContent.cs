@@ -21,8 +21,12 @@ namespace ManagedDrive.Core.FileSystem;
 /// meeting both goals above, since <see cref="ChunkSize"/>-sized arrays stay in gen0.
 /// </para>
 /// <para>
-/// Instances are not internally synchronized. Like the previous raw <c>byte[]</c>, content is
-/// mutated only from WinFsp callbacks, which the driver serializes per file.
+/// WinFsp serializes <see cref="ReadTo"/>/<see cref="WriteFrom"/>/<see cref="Resize"/> per file
+/// across driver callbacks, but the periodic image save (<c>DiskImageSerializer</c>) and archive
+/// export read a node's content from a background thread while that same file may still be open
+/// for writes. <see cref="_lock"/> guards every method that touches <see cref="_chunks"/> so a
+/// save can't observe a chunk list mid-resize (torn read, or an index that's gone stale between
+/// the length check and the chunk access).
 /// </para>
 /// </summary>
 public sealed class FileContent
@@ -38,6 +42,12 @@ public sealed class FileContent
     // so a small file doesn't pay a full 64 KiB chunk. Only its capacity may exceed its used
     // portion; a shrink leaves the last chunk's capacity in place rather than reallocating it.
     private readonly List<byte[]> _chunks = [];
+
+    /// <summary>
+    /// Guards all access to <see cref="_chunks"/> and <see cref="_length"/>, since a background
+    /// save/export can read this content concurrently with a WinFsp write/resize callback.
+    /// </summary>
+    private readonly Lock _lock = new();
 
     private long _length;
 
@@ -59,13 +69,16 @@ public sealed class FileContent
     {
         get
         {
-            long total = 0;
-            foreach (var chunk in _chunks)
+            lock (_lock)
             {
-                total += chunk.Length;
-            }
+                long total = 0;
+                foreach (var chunk in _chunks)
+                {
+                    total += chunk.Length;
+                }
 
-            return total;
+                return total;
+            }
         }
     }
 
@@ -107,6 +120,14 @@ public sealed class FileContent
     /// </summary>
     /// <param name="alignedLength">The new logical length in bytes.</param>
     public void Resize(ulong alignedLength)
+    {
+        lock (_lock)
+        {
+            ResizeCore(alignedLength);
+        }
+    }
+
+    private void ResizeCore(ulong alignedLength)
     {
         var newLength = (long)alignedLength;
         if (newLength == _length)
@@ -196,21 +217,24 @@ public sealed class FileContent
     /// <param name="length">Number of bytes to copy.</param>
     public void ReadTo(ulong offset, IntPtr destination, uint length)
     {
-        var pos = (long)offset;
-        var destOffset = 0;
-        var remaining = (long)length;
-
-        while (remaining > 0)
+        lock (_lock)
         {
-            var chunkIndex = (int)(pos / ChunkSize);
-            var chunkOffset = (int)(pos % ChunkSize);
-            var n = (int)Math.Min(remaining, ChunkSize - chunkOffset);
+            var pos = (long)offset;
+            var destOffset = 0;
+            var remaining = (long)length;
 
-            Marshal.Copy(_chunks[chunkIndex], chunkOffset, IntPtr.Add(destination, destOffset), n);
+            while (remaining > 0)
+            {
+                var chunkIndex = (int)(pos / ChunkSize);
+                var chunkOffset = (int)(pos % ChunkSize);
+                var n = (int)Math.Min(remaining, ChunkSize - chunkOffset);
 
-            pos += n;
-            destOffset += n;
-            remaining -= n;
+                Marshal.Copy(_chunks[chunkIndex], chunkOffset, IntPtr.Add(destination, destOffset), n);
+
+                pos += n;
+                destOffset += n;
+                remaining -= n;
+            }
         }
     }
 
@@ -224,21 +248,24 @@ public sealed class FileContent
     /// <param name="length">Number of bytes to copy.</param>
     public void WriteFrom(IntPtr source, ulong offset, uint length)
     {
-        var pos = (long)offset;
-        var srcOffset = 0;
-        var remaining = (long)length;
-
-        while (remaining > 0)
+        lock (_lock)
         {
-            var chunkIndex = (int)(pos / ChunkSize);
-            var chunkOffset = (int)(pos % ChunkSize);
-            var n = (int)Math.Min(remaining, ChunkSize - chunkOffset);
+            var pos = (long)offset;
+            var srcOffset = 0;
+            var remaining = (long)length;
 
-            Marshal.Copy(IntPtr.Add(source, srcOffset), _chunks[chunkIndex], chunkOffset, n);
+            while (remaining > 0)
+            {
+                var chunkIndex = (int)(pos / ChunkSize);
+                var chunkOffset = (int)(pos % ChunkSize);
+                var n = (int)Math.Min(remaining, ChunkSize - chunkOffset);
 
-            pos += n;
-            srcOffset += n;
-            remaining -= n;
+                Marshal.Copy(IntPtr.Add(source, srcOffset), _chunks[chunkIndex], chunkOffset, n);
+
+                pos += n;
+                srcOffset += n;
+                remaining -= n;
+            }
         }
     }
 
@@ -249,15 +276,18 @@ public sealed class FileContent
     /// <param name="count">Number of leading bytes to write.</param>
     public void CopyTo(Stream destination, long count)
     {
-        var remaining = count;
-        var chunkIndex = 0;
-
-        while (remaining > 0)
+        lock (_lock)
         {
-            var n = (int)Math.Min(remaining, ChunkSize);
-            destination.Write(_chunks[chunkIndex], 0, n);
-            remaining -= n;
-            chunkIndex++;
+            var remaining = count;
+            var chunkIndex = 0;
+
+            while (remaining > 0)
+            {
+                var n = (int)Math.Min(remaining, ChunkSize);
+                destination.Write(_chunks[chunkIndex], 0, n);
+                remaining -= n;
+                chunkIndex++;
+            }
         }
     }
 
@@ -310,15 +340,18 @@ public sealed class FileContent
     /// <param name="count">Number of leading bytes to hash.</param>
     public void HashInto(IncrementalHash hash, long count)
     {
-        var remaining = count;
-        var chunkIndex = 0;
-
-        while (remaining > 0)
+        lock (_lock)
         {
-            var n = (int)Math.Min(remaining, ChunkSize);
-            hash.AppendData(_chunks[chunkIndex].AsSpan(0, n));
-            remaining -= n;
-            chunkIndex++;
+            var remaining = count;
+            var chunkIndex = 0;
+
+            while (remaining > 0)
+            {
+                var n = (int)Math.Min(remaining, ChunkSize);
+                hash.AppendData(_chunks[chunkIndex].AsSpan(0, n));
+                remaining -= n;
+                chunkIndex++;
+            }
         }
     }
 
@@ -475,28 +508,31 @@ public sealed class FileContent
 
         public override int Read(byte[] buffer, int offset, int count)
         {
-            var available = length - _position;
-            if (available <= 0)
+            lock (content._lock)
             {
-                return 0;
+                var available = length - _position;
+                if (available <= 0)
+                {
+                    return 0;
+                }
+
+                var toRead = (int)Math.Min(count, available);
+                var read = 0;
+
+                while (read < toRead)
+                {
+                    var chunkIndex = (int)(_position / ChunkSize);
+                    var chunkOffset = (int)(_position % ChunkSize);
+                    var n = Math.Min(toRead - read, ChunkSize - chunkOffset);
+
+                    Buffer.BlockCopy(content._chunks[chunkIndex], chunkOffset, buffer, offset + read, n);
+
+                    _position += n;
+                    read += n;
+                }
+
+                return read;
             }
-
-            var toRead = (int)Math.Min(count, available);
-            var read = 0;
-
-            while (read < toRead)
-            {
-                var chunkIndex = (int)(_position / ChunkSize);
-                var chunkOffset = (int)(_position % ChunkSize);
-                var n = Math.Min(toRead - read, ChunkSize - chunkOffset);
-
-                Buffer.BlockCopy(content._chunks[chunkIndex], chunkOffset, buffer, offset + read, n);
-
-                _position += n;
-                read += n;
-            }
-
-            return read;
         }
 
         public override long Seek(long offset, SeekOrigin origin)
