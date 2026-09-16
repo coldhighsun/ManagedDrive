@@ -30,7 +30,19 @@ public sealed class FileNodeMap : IDisposable
     /// </summary>
     private readonly ReaderWriterLockSlim _syncRoot = new(LockRecursionPolicy.NoRecursion);
 
-    private ulong _totalAllocated;
+    /// <summary>
+    /// Running total of <see cref="Fsp.Interop.FileInfo.AllocationSize"/> across every stored
+    /// node, in bytes. Signed (rather than <c>ulong</c>, which the public API still exposes via
+    /// <see cref="GetTotalAllocated"/>) because it is updated exclusively via
+    /// <see cref="Interlocked"/>, whose <c>long</c> overloads are the ones guaranteed available —
+    /// this value never approaches <see cref="long.MaxValue"/> for any real disk capacity. It is
+    /// deliberately not covered by <see cref="_syncRoot"/>: <see cref="UpdateAllocationSize"/>
+    /// (the hot path, called on every extending write) mutates it without taking the write lock,
+    /// so every other mutation site below must use <c>Interlocked</c> too, even though they
+    /// already hold the write lock for their own structural changes — the write lock provides no
+    /// exclusion against a thread that never takes it.
+    /// </summary>
+    private long _totalAllocated;
 
     /// <summary>
     /// Gets the number of nodes currently stored in the map.
@@ -64,7 +76,7 @@ public sealed class FileNodeMap : IDisposable
         {
             if (_map.TryGetValue(filePath, out var existing))
             {
-                _totalAllocated -= existing.FileInfo.AllocationSize;
+                Interlocked.Add(ref _totalAllocated, -(long)existing.FileInfo.AllocationSize);
             }
             else
             {
@@ -74,7 +86,7 @@ public sealed class FileNodeMap : IDisposable
             node.FilePath = filePath;
             node.LeafName = ComputeLeafName(filePath);
             _map[filePath] = node;
-            _totalAllocated += node.FileInfo.AllocationSize;
+            Interlocked.Add(ref _totalAllocated, (long)node.FileInfo.AllocationSize);
             _removedSincePersist.Remove(filePath);
         }
         finally
@@ -94,14 +106,14 @@ public sealed class FileNodeMap : IDisposable
             var hasRoot = _map.TryGetValue("\\", out var root);
             _map.Clear();
             _sortedKeys.Clear();
-            _totalAllocated = 0;
+            Interlocked.Exchange(ref _totalAllocated, 0);
             _removedSincePersist.Clear();
 
             if (hasRoot)
             {
                 _map["\\"] = root!;
                 _sortedKeys.Add("\\");
-                _totalAllocated = root!.FileInfo.AllocationSize;
+                Interlocked.Exchange(ref _totalAllocated, (long)root!.FileInfo.AllocationSize);
             }
         }
         finally
@@ -156,7 +168,7 @@ public sealed class FileNodeMap : IDisposable
     /// <returns>
     /// A sequence of (path, node) pairs for immediate children of <paramref name="dirPath"/>.
     /// </returns>
-    public IEnumerable<KeyValuePair<string, FileNode>> GetChildren(string dirPath, string? marker)
+    public IReadOnlyList<KeyValuePair<string, FileNode>> GetChildren(string dirPath, string? marker)
     {
         // For root "\" (length 1) the prefix equals dirPath itself; for others append "\"
         var prefix = dirPath.Length == 1 ? dirPath : (dirPath + "\\");
@@ -179,15 +191,17 @@ public sealed class FileNodeMap : IDisposable
                     continue;
                 }
 
-                // Only immediate children: no additional backslash after the prefix
-                var childName = path[prefix.Length..];
-                if (childName.Contains('\\'))
+                // Only immediate children: no additional backslash after the prefix. Compare via
+                // span so the common marker == null case never allocates a substring just to
+                // test for a separator.
+                var childSpan = path.AsSpan(prefix.Length);
+                if (childSpan.Contains('\\'))
                 {
                     continue;
                 }
 
                 if (marker != null &&
-                    string.Compare(childName, marker, StringComparison.OrdinalIgnoreCase) <= 0)
+                    childSpan.CompareTo(marker, StringComparison.OrdinalIgnoreCase) <= 0)
                 {
                     continue;
                 }
@@ -204,23 +218,49 @@ public sealed class FileNodeMap : IDisposable
     }
 
     /// <summary>
-    /// Returns the total number of bytes currently allocated across all nodes in the map.
+    /// Returns whether the directory at <paramref name="dirPath"/> has at least one immediate
+    /// child. Equivalent to <c>GetChildren(dirPath, null).Any()</c> but never materializes the
+    /// full child list — it returns as soon as the first match is found.
     /// </summary>
-    /// <returns>
-    /// The sum of <see cref="Fsp.Interop.FileInfo.AllocationSize"/> for every stored node.
-    /// </returns>
-    public ulong GetTotalAllocated()
+    /// <param name="dirPath">Absolute path of the directory to check.</param>
+    public bool HasChildren(string dirPath)
     {
+        var prefix = dirPath.Length == 1 ? dirPath : (dirPath + "\\");
+        var upperBound = prefix + '￿';
+
         _syncRoot.EnterReadLock();
         try
         {
-            return _totalAllocated;
+            foreach (var path in _sortedKeys.GetViewBetween(prefix, upperBound))
+            {
+                if (string.Equals(path, dirPath, StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                if (path.AsSpan(prefix.Length).Contains('\\'))
+                {
+                    continue;
+                }
+
+                return true;
+            }
+
+            return false;
         }
         finally
         {
             _syncRoot.ExitReadLock();
         }
     }
+
+    /// <summary>
+    /// Returns the total number of bytes currently allocated across all nodes in the map.
+    /// </summary>
+    /// <returns>
+    /// The sum of <see cref="Fsp.Interop.FileInfo.AllocationSize"/> for every stored node.
+    /// </returns>
+    public ulong GetTotalAllocated() => (ulong)Interlocked.Read(ref _totalAllocated);
 
     /// <summary>
     /// Removes the node at <paramref name="filePath"/>, if present.
@@ -234,7 +274,7 @@ public sealed class FileNodeMap : IDisposable
             if (_map.Remove(filePath, out var removed))
             {
                 _sortedKeys.Remove(filePath);
-                _totalAllocated -= removed.FileInfo.AllocationSize;
+                Interlocked.Add(ref _totalAllocated, -(long)removed.FileInfo.AllocationSize);
                 _removedSincePersist.Add(filePath);
             }
         }
@@ -258,7 +298,7 @@ public sealed class FileNodeMap : IDisposable
             if (_map.Remove(dirPath, out var removed))
             {
                 _sortedKeys.Remove(dirPath);
-                _totalAllocated -= removed.FileInfo.AllocationSize;
+                Interlocked.Add(ref _totalAllocated, -(long)removed.FileInfo.AllocationSize);
                 _removedSincePersist.Add(dirPath);
             }
 
@@ -271,7 +311,7 @@ public sealed class FileNodeMap : IDisposable
                 if (_map.Remove(key, out var descendant))
                 {
                     _sortedKeys.Remove(key);
-                    _totalAllocated -= descendant.FileInfo.AllocationSize;
+                    Interlocked.Add(ref _totalAllocated, -(long)descendant.FileInfo.AllocationSize);
                     _removedSincePersist.Add(key);
                 }
             }
@@ -345,21 +385,21 @@ public sealed class FileNodeMap : IDisposable
     /// only supported way to change a node's allocation size outside of <see cref="Add"/> and
     /// <see cref="Remove"/>.
     /// </summary>
+    /// <remarks>
+    /// Deliberately does not take <see cref="_syncRoot"/>: this is the hot path for every
+    /// extending write, and <see cref="FileNode.FileInfo"/>'s <c>AllocationSize</c> field is only
+    /// ever mutated by the single WinFsp thread that owns <paramref name="node"/>, so no lock is
+    /// needed to protect it. The shared <see cref="_totalAllocated"/> counter is still safe to
+    /// update concurrently with structural changes elsewhere in the map because every mutation
+    /// site uses <see cref="Interlocked"/>.
+    /// </remarks>
     /// <param name="node">The node whose allocation size is changing.</param>
     /// <param name="newAllocationSize">The new allocation size, in bytes.</param>
     public void UpdateAllocationSize(FileNode node, ulong newAllocationSize)
     {
-        _syncRoot.EnterWriteLock();
-        try
-        {
-            _totalAllocated -= node.FileInfo.AllocationSize;
-            node.FileInfo.AllocationSize = newAllocationSize;
-            _totalAllocated += newAllocationSize;
-        }
-        finally
-        {
-            _syncRoot.ExitWriteLock();
-        }
+        var delta = (long)newAllocationSize - (long)node.FileInfo.AllocationSize;
+        node.FileInfo.AllocationSize = newAllocationSize;
+        Interlocked.Add(ref _totalAllocated, delta);
     }
 
     /// <summary>

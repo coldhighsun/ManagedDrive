@@ -120,6 +120,50 @@ public sealed class FileNodeMapTests
     }
 
     [Fact]
+    public void HasChildren_EmptyDirectory_ReturnsFalse()
+    {
+        var map = new FileNodeMap();
+        map.Add("\\Empty", MakeDir());
+
+        Assert.False(map.HasChildren("\\Empty"));
+    }
+
+    [Fact]
+    public void HasChildren_NonEmptyDirectory_ReturnsTrue()
+    {
+        var map = new FileNodeMap();
+        map.Add("\\Sub", MakeDir());
+        map.Add("\\Sub\\File.txt", MakeFile());
+
+        Assert.True(map.HasChildren("\\Sub"));
+    }
+
+    [Fact]
+    public void HasChildren_SimilarlyNamedSiblingDirectory_DoesNotCountAsChild()
+    {
+        var map = new FileNodeMap();
+        map.Add("\\Sub", MakeDir());
+        map.Add("\\SubOther", MakeDir());
+        map.Add("\\SubOther\\File.txt", MakeFile());
+
+        Assert.False(map.HasChildren("\\Sub"));
+        Assert.True(map.HasChildren("\\SubOther"));
+    }
+
+    [Fact]
+    public void HasChildren_RootDirectory_Works()
+    {
+        var map = new FileNodeMap();
+        map.Add("\\", MakeDir());
+
+        Assert.False(map.HasChildren("\\"));
+
+        map.Add("\\A", MakeFile());
+
+        Assert.True(map.HasChildren("\\"));
+    }
+
+    [Fact]
     public void GetTotalAllocated_AfterClearAll_ExcludesRemovedNodes()
     {
         var map = new FileNodeMap();
