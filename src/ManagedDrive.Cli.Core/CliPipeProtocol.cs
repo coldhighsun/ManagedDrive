@@ -37,4 +37,5 @@ public sealed record CliResponse(
     string Message,
     IReadOnlyList<CliDiskInfo>? Disks,
     int ExitCode,
-    IReadOnlyList<CliSnapshotInfo>? Snapshots = null);
+    IReadOnlyList<CliSnapshotInfo>? Snapshots = null,
+    bool Json = false);

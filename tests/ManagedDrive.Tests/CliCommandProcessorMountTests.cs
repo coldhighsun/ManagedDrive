@@ -78,6 +78,103 @@ public class CliCommandProcessorMountTests
     }
 
     [Fact]
+    public async Task Export_ForwardsPathFormatCompressionPassword_ToController()
+    {
+        var controller = new FakeCliDiskController { ExportSuccess = true, ExportMessage = "Exported." };
+
+        var outcome = await CliCommandProcessor.ExecuteAsync(
+            ["export", "r", "out.zip", "--format", "Zip", "--compression", "SmallestSize"],
+            controller);
+
+        Assert.True(outcome.Success);
+        Assert.Equal(0, outcome.ExitCode);
+        Assert.Equal("R:", controller.LastMountPoint);
+        Assert.Equal("out.zip", controller.LastExportOutputPath);
+        Assert.Equal(ManagedDrive.Cli.Core.ArchiveExportFormat.Zip, controller.LastExportFormat);
+        Assert.Equal(ManagedDrive.Cli.Core.ImageCompressionLevel.SmallestSize, controller.LastExportCompressionLevel);
+        Assert.Null(controller.LastExportPassword);
+    }
+
+    [Fact]
+    public async Task Export_WithPassword_ForwardsPasswordAndNoFormat()
+    {
+        var controller = new FakeCliDiskController { ExportSuccess = true };
+
+        var outcome = await CliCommandProcessor.ExecuteAsync(
+            ["export", "R:", "out.mdr", "--password", "secret"],
+            controller);
+
+        Assert.True(outcome.Success);
+        Assert.Null(controller.LastExportFormat);
+        Assert.Equal("secret", controller.LastExportPassword);
+    }
+
+    [Fact]
+    public async Task Export_PasswordWithFormat_ReturnsErrorWithoutCallingController()
+    {
+        var controller = new FakeCliDiskController();
+
+        var outcome = await CliCommandProcessor.ExecuteAsync(
+            ["export", "R:", "out.zip", "--format", "Zip", "--password", "secret"],
+            controller);
+
+        Assert.False(outcome.Success);
+        Assert.Equal(1, outcome.ExitCode);
+        Assert.Null(controller.LastExportOutputPath);
+    }
+
+    [Fact]
+    public async Task Export_PasswordAndPasswordFile_ReturnsErrorWithoutCallingController()
+    {
+        var controller = new FakeCliDiskController();
+
+        var outcome = await CliCommandProcessor.ExecuteAsync(
+            ["export", "R:", "out.mdr", "--password", "a", "--password-file", "b.txt"],
+            controller);
+
+        Assert.False(outcome.Success);
+        Assert.Equal(1, outcome.ExitCode);
+        Assert.Null(controller.LastExportOutputPath);
+    }
+
+    [Fact]
+    public async Task Export_ControllerReturnsEmptyMessage_ReturnsNotMountedMessage()
+    {
+        var controller = new FakeCliDiskController { ExportSuccess = false, ExportMessage = string.Empty };
+
+        var outcome = await CliCommandProcessor.ExecuteAsync(["export", "R:", "out.mdr"], controller);
+
+        Assert.False(outcome.Success);
+        Assert.Equal(1, outcome.ExitCode);
+        Assert.Equal("No disk is currently mounted at R:.", outcome.Message);
+    }
+
+    [Fact]
+    public async Task List_Json_ReturnsOutcomeWithJsonFlagSet()
+    {
+        var controller = new FakeCliDiskController
+        {
+            Disks = [new CliDiskInfo("R:", "MyDisk", 1024, 4096)],
+        };
+
+        var outcome = await CliCommandProcessor.ExecuteAsync(["list", "--json"], controller);
+
+        Assert.True(outcome.Success);
+        Assert.True(outcome.Json);
+        Assert.Single(outcome.Disks!);
+    }
+
+    [Fact]
+    public async Task List_WithoutJson_ReturnsOutcomeWithJsonFlagUnset()
+    {
+        var controller = new FakeCliDiskController();
+
+        var outcome = await CliCommandProcessor.ExecuteAsync(["list"], controller);
+
+        Assert.False(outcome.Json);
+    }
+
+    [Fact]
     public async Task Exit_InvokesRequestExitAsync()
     {
         var controller = new FakeCliDiskController();
@@ -133,6 +230,40 @@ public class CliCommandProcessorMountTests
 
         public Task<(bool Success, string Message)> DeleteSnapshotAsync(string mountPoint, int index) =>
             Task.FromResult((false, string.Empty));
+
+        public string? LastExportOutputPath
+        {
+            get; private set;
+        }
+
+        public ManagedDrive.Cli.Core.ArchiveExportFormat? LastExportFormat
+        {
+            get; private set;
+        }
+
+        public ManagedDrive.Cli.Core.ImageCompressionLevel? LastExportCompressionLevel
+        {
+            get; private set;
+        }
+
+        public string? LastExportPassword
+        {
+            get; private set;
+        }
+
+        public bool ExportSuccess { get; set; } = true;
+
+        public string ExportMessage { get; set; } = string.Empty;
+
+        public Task<(bool Success, string Message)> ExportAsync(string mountPoint, string outputPath, ManagedDrive.Cli.Core.ArchiveExportFormat? archiveFormat, ManagedDrive.Cli.Core.ImageCompressionLevel compressionLevel, string? password)
+        {
+            LastMountPoint = mountPoint;
+            LastExportOutputPath = outputPath;
+            LastExportFormat = archiveFormat;
+            LastExportCompressionLevel = compressionLevel;
+            LastExportPassword = password;
+            return Task.FromResult((ExportSuccess, ExportMessage));
+        }
 
         public Task<(bool Success, string Message)> FormatAsync(string mountPoint) =>
             Task.FromResult((false, string.Empty));

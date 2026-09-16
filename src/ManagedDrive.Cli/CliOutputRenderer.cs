@@ -1,5 +1,6 @@
 using ManagedDrive.Cli.Core;
 using Spectre.Console;
+using System.Text.Json;
 
 namespace ManagedDrive.Cli;
 
@@ -11,10 +12,18 @@ namespace ManagedDrive.Cli;
 /// </summary>
 public static class CliOutputRenderer
 {
+    private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
+
     public static int Render(CliResponse response)
     {
         if (response.Disks != null)
         {
+            if (response.Json)
+            {
+                Console.WriteLine(JsonSerializer.Serialize(response.Disks, JsonOptions));
+                return response.ExitCode;
+            }
+
             RenderDiskList(response.Disks);
             return response.ExitCode;
         }

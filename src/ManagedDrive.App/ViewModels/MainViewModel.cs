@@ -739,6 +739,56 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     }
 
     /// <summary>
+    /// Exports the disk currently mounted at <paramref name="mountPoint"/> to a standalone file,
+    /// for use by the CLI command channel. Mirrors <c>ExecuteCloneOrExportDisk</c>'s export
+    /// branch but without any dialogs/busy overlay.
+    /// </summary>
+    /// <param name="mountPoint">The mount point to export, e.g. <c>"R:"</c>.</param>
+    /// <param name="outputPath">Destination file path to write the export to.</param>
+    /// <param name="archiveFormat"><c>null</c> to export a <c>.mdr</c> image; otherwise the archive container format.</param>
+    /// <param name="compressionLevel">Compression level applied to the export.</param>
+    /// <param name="password">
+    /// Password to encrypt the exported <c>.mdr</c> image with, or <c>null</c> for no encryption.
+    /// Ignored when <paramref name="archiveFormat"/> is set.
+    /// </param>
+    /// <returns>
+    /// <c>(true, message)</c> on success; <c>(false, message)</c> if the export failed; or
+    /// <c>(false, string.Empty)</c> if no disk is currently mounted at <paramref name="mountPoint"/>.
+    /// </returns>
+    public async Task<(bool Success, string Message)> ExportByMountPointAsync(
+        string mountPoint, string outputPath, Core.Archive.ArchiveExportFormat? archiveFormat, Core.Mounting.ImageCompressionLevel compressionLevel, string? password)
+    {
+        _logger.LogInformation("CLI export requested: {MountPoint} -> {OutputPath}.", mountPoint, outputPath);
+
+        var vm = Disks.FirstOrDefault(d => string.Equals(d.MountPoint, mountPoint, StringComparison.OrdinalIgnoreCase));
+        if (vm == null)
+        {
+            return (false, string.Empty);
+        }
+
+        try
+        {
+            if (archiveFormat is { } format)
+            {
+                await Task.Run(() => vm.Disk.ExportToArchive(outputPath, format, compressionLevel));
+            }
+            else
+            {
+                await Task.Run(() => vm.Disk.ExportToImage(outputPath, compressionLevel, password));
+            }
+
+            StatusText = Loc.Format("Status.DiskExported", vm.MountPoint, outputPath);
+            _logger.LogInformation("CLI export completed: {MountPoint} -> {OutputPath}.", mountPoint, outputPath);
+            return (true, StatusText);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "CLI export failed: {MountPoint} -> {OutputPath}.", mountPoint, outputPath);
+            return (false, Loc.Format("Msg.SaveImageFailed", ex.Message));
+        }
+    }
+
+    /// <summary>
     /// Deletes a single snapshot of the disk currently mounted at <paramref name="mountPoint"/>,
     /// for use by the CLI command channel.
     /// </summary>
