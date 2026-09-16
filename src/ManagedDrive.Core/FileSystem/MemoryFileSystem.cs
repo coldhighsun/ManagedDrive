@@ -15,6 +15,16 @@ public sealed class MemoryFileSystem : FileSystemBase
 {
     private const uint InvalidFileAttributes = FileNode.InvalidFileAttributes;
 
+    /// <summary>
+    /// Safety margin of physical memory, in bytes, that must remain available after a growing
+    /// write for it to be allowed. Growth allocates plain managed <c>byte[]</c> chunks (see
+    /// <see cref="FileContent"/>), so nothing else in the system is warned as free memory runs
+    /// out; without this reserve, a large enough RAM disk write could push the whole machine
+    /// into swapping or an out-of-memory condition before the write itself ever fails.
+    /// </summary>
+    private const ulong LowMemoryReserveBytes = 256UL * 1024 * 1024;
+
+    private readonly Func<ulong> _availableMemoryProvider;
     private readonly bool _readOnly;
     private volatile bool _isDirty;
     private ContentAccessInfo? _lastContentReadAccess;
@@ -32,11 +42,16 @@ public sealed class MemoryFileSystem : FileSystemBase
     /// <param name="maxCapacity">Maximum capacity of the volume in bytes.</param>
     /// <param name="volumeLabel">NTFS volume label shown in Explorer.</param>
     /// <param name="readOnly">When <c>true</c>, all mutating operations return <c>STATUS_MEDIA_WRITE_PROTECTED</c>.</param>
-    public MemoryFileSystem(ulong maxCapacity, string volumeLabel, bool readOnly = false)
+    /// <param name="availableMemoryProvider">
+    /// Overrides the source of "currently available physical memory" used by the low-memory
+    /// write guard, for test injection. Defaults to <see cref="SystemMemoryInfo.GetAvailablePhysicalBytes"/>.
+    /// </param>
+    public MemoryFileSystem(ulong maxCapacity, string volumeLabel, bool readOnly = false, Func<ulong>? availableMemoryProvider = null)
     {
         _readOnly = readOnly;
         _maxCapacity = maxCapacity;
         _volumeLabel = volumeLabel;
+        _availableMemoryProvider = availableMemoryProvider ?? SystemMemoryInfo.GetAvailablePhysicalBytes;
         NodeMap = new();
     }
 
@@ -48,11 +63,16 @@ public sealed class MemoryFileSystem : FileSystemBase
     /// <param name="volumeLabel">NTFS volume label shown in Explorer.</param>
     /// <param name="existingNodeMap">Pre-populated node map to use as backing store.</param>
     /// <param name="readOnly">When <c>true</c>, all mutating operations return <c>STATUS_MEDIA_WRITE_PROTECTED</c>.</param>
-    public MemoryFileSystem(ulong maxCapacity, string volumeLabel, FileNodeMap existingNodeMap, bool readOnly = false)
+    /// <param name="availableMemoryProvider">
+    /// Overrides the source of "currently available physical memory" used by the low-memory
+    /// write guard, for test injection. Defaults to <see cref="SystemMemoryInfo.GetAvailablePhysicalBytes"/>.
+    /// </param>
+    public MemoryFileSystem(ulong maxCapacity, string volumeLabel, FileNodeMap existingNodeMap, bool readOnly = false, Func<ulong>? availableMemoryProvider = null)
     {
         _readOnly = readOnly;
         _maxCapacity = maxCapacity;
         _volumeLabel = volumeLabel;
+        _availableMemoryProvider = availableMemoryProvider ?? SystemMemoryInfo.GetAvailablePhysicalBytes;
         NodeMap = existingNodeMap;
     }
 
@@ -201,7 +221,7 @@ public sealed class MemoryFileSystem : FileSystemBase
     /// Creates a new file or directory node.
     /// </summary>
     /// <returns>
-    /// STATUS_SUCCESS, STATUS_OBJECT_NAME_COLLISION, or STATUS_DISK_FULL.
+    /// STATUS_SUCCESS, STATUS_OBJECT_NAME_COLLISION, STATUS_DISK_FULL, or STATUS_INSUFFICIENT_RESOURCES.
     /// </returns>
     public override int Create(
         string fileName,
@@ -235,6 +255,11 @@ public sealed class MemoryFileSystem : FileSystemBase
         if (WouldExceedCapacity(aligned))
         {
             return STATUS_DISK_FULL;
+        }
+
+        if (WouldExceedSystemMemory(aligned))
+        {
+            return STATUS_INSUFFICIENT_RESOURCES;
         }
 
         var now = FileTimeNow();
@@ -452,7 +477,7 @@ public sealed class MemoryFileSystem : FileSystemBase
     /// then resets its content to zero length.
     /// </summary>
     /// <returns>
-    /// STATUS_SUCCESS or STATUS_DISK_FULL.
+    /// STATUS_SUCCESS, STATUS_DISK_FULL, or STATUS_INSUFFICIENT_RESOURCES.
     /// </returns>
     public override int Overwrite(
         object fileNode,
@@ -477,6 +502,12 @@ public sealed class MemoryFileSystem : FileSystemBase
         {
             fileInfo = node.FileInfo;
             return STATUS_DISK_FULL;
+        }
+
+        if (WouldExceedSystemMemory(extra))
+        {
+            fileInfo = node.FileInfo;
+            return STATUS_INSUFFICIENT_RESOURCES;
         }
 
         if (replaceFileAttributes)
@@ -693,7 +724,7 @@ public sealed class MemoryFileSystem : FileSystemBase
     /// When <c>false</c>, the logical file size is updated and the allocation grows if needed.
     /// </summary>
     /// <returns>
-    /// STATUS_SUCCESS or STATUS_DISK_FULL.
+    /// STATUS_SUCCESS, STATUS_DISK_FULL, or STATUS_INSUFFICIENT_RESOURCES.
     /// </returns>
     public override int SetFileSize(
         object fileNode,
@@ -779,7 +810,7 @@ public sealed class MemoryFileSystem : FileSystemBase
     /// Writes data from the caller-supplied buffer into a file, extending it if necessary.
     /// </summary>
     /// <returns>
-    /// STATUS_SUCCESS or STATUS_DISK_FULL.
+    /// STATUS_SUCCESS, STATUS_DISK_FULL, or STATUS_INSUFFICIENT_RESOURCES.
     /// </returns>
     public override int Write(
         object fileNode,
@@ -984,7 +1015,7 @@ public sealed class MemoryFileSystem : FileSystemBase
     /// if needed.
     /// </summary>
     /// <returns>
-    /// STATUS_SUCCESS or STATUS_DISK_FULL.
+    /// STATUS_SUCCESS, STATUS_DISK_FULL, or STATUS_INSUFFICIENT_RESOURCES.
     /// </returns>
     private int SetFileSizeCore(FileNode node, ulong newSize, bool setAllocationSize)
     {
@@ -1003,6 +1034,11 @@ public sealed class MemoryFileSystem : FileSystemBase
                 if (WouldExceedCapacity(extra))
                 {
                     return STATUS_DISK_FULL;
+                }
+
+                if (WouldExceedSystemMemory(extra))
+                {
+                    return STATUS_INSUFFICIENT_RESOURCES;
                 }
             }
 
@@ -1057,4 +1093,12 @@ public sealed class MemoryFileSystem : FileSystemBase
     /// currently allocated total would exceed the volume's capacity ceiling.
     /// </summary>
     private bool WouldExceedCapacity(ulong extra) => NodeMap.GetTotalAllocated() + extra > _maxCapacity;
+
+    /// <summary>
+    /// Returns <c>true</c> when allocating <paramref name="extra"/> more bytes would leave less
+    /// than <see cref="LowMemoryReserveBytes"/> of physical memory available system-wide. This is
+    /// independent of <see cref="WouldExceedCapacity"/> — a disk can still have configured
+    /// capacity headroom while the host machine itself is nearly out of RAM.
+    /// </summary>
+    private bool WouldExceedSystemMemory(ulong extra) => extra > 0 && _availableMemoryProvider() < extra + LowMemoryReserveBytes;
 }
