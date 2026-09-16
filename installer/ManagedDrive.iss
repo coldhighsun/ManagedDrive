@@ -312,6 +312,34 @@ begin
     Log('Failed to remove "' + Dir + '" from PATH.');
 end;
 
+// Mirrors StartupManager.cs's RunKeyPath/ValueName - deletes the opt-in "start with Windows"
+// entry if the user ever enabled it in Settings. Plain HKCU access needs no elevation, same as
+// IsTempOnManagedDriveMountPoint's HKCU\Environment read above.
+procedure RemoveStartupEntry();
+begin
+  if RegDeleteValue(HKCU, 'SOFTWARE\Microsoft\Windows\CurrentVersion\Run', 'ManagedDrive') then
+    Log('Removed startup registry entry.')
+  else
+    Log('Startup registry entry not present; nothing to remove.');
+end;
+
+// Mirrors ShellContextMenuManager.cs's SupportedExtensions/VerbName - deletes the opt-in
+// "import as ManagedDrive" Explorer context menu entry for every supported archive extension,
+// if the user ever enabled it in Settings.
+procedure RemoveShellContextMenuEntries();
+var
+  Extensions: TArrayOfString;
+  I: Integer;
+begin
+  Extensions := ['.zip', '.7z', '.rar', '.tar'];
+  for I := 0 to GetArrayLength(Extensions) - 1 do
+  begin
+    if RegDeleteKeyIncludingSubkeys(HKCU,
+      'Software\Classes\SystemFileAssociations\' + Extensions[I] + '\shell\ManagedDriveImportArchive') then
+      Log('Removed shell context menu entry for "' + Extensions[I] + '".');
+  end;
+end;
+
 // The optional SYSTEM helper service (cross-session RAM-disk symlink visibility - see
 // CLAUDE.md). Best-effort only: ManagedDrive itself works fine without it, so every
 // step here only Log()s on failure rather than aborting setup.
@@ -715,5 +743,9 @@ begin
   end;
 
   if CurUninstallStep = usPostUninstall then
+  begin
     RemoveDirFromPath(ExpandConstant('{app}'));
+    RemoveStartupEntry();
+    RemoveShellContextMenuEntries();
+  end;
 end;
