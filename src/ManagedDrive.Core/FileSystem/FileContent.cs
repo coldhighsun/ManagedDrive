@@ -37,11 +37,25 @@ public sealed class FileContent
     /// </summary>
     public const int ChunkSize = 64 * 1024;
 
-    // Invariant: every chunk except the last is exactly ChunkSize bytes. The last chunk is
-    // right-sized (a power of two, capped at ChunkSize) to just cover the file's remaining bytes,
-    // so a small file doesn't pay a full 64 KiB chunk. Only its capacity may exceed its used
-    // portion; a shrink leaves the last chunk's capacity in place rather than reallocating it.
-    private readonly List<byte[]> _chunks = [];
+    /// <summary>
+    /// Shared, never-mutated all-zero buffer used to satisfy reads of a sparse (<c>null</c>)
+    /// chunk without allocating. Safe to share across every <see cref="FileContent"/> instance
+    /// since read paths only ever copy out of it.
+    /// </summary>
+    private static readonly byte[] ZeroChunk = new byte[ChunkSize];
+
+    // Invariant: every chunk except the last is exactly ChunkSize bytes once materialized. The
+    // last chunk is right-sized (a power of two, capped at ChunkSize) to just cover the file's
+    // remaining bytes, so a small file doesn't pay a full 64 KiB chunk. Only its capacity may
+    // exceed its used portion; a shrink leaves the last chunk's capacity in place rather than
+    // reallocating it.
+    //
+    // A chunk entry is null until the first write lands inside it — growth (CreateZeroed/Resize)
+    // never allocates a backing array up front, since the whole point of growing is to expose
+    // more zero bytes, and a null entry already reads as zero via ZeroChunk. This is what lets a
+    // freshly created or freshly extended file cost near-zero real memory until something is
+    // actually written into it.
+    private readonly List<byte[]?> _chunks = [];
 
     /// <summary>
     /// Guards all access to <see cref="_chunks"/> and <see cref="_length"/>, since a background
@@ -62,8 +76,9 @@ public sealed class FileContent
     public long Length => _length;
 
     /// <summary>
-    /// Gets the total number of bytes actually allocated across all chunks. Test/diagnostic hook
-    /// used to guard against over-allocation of small files.
+    /// Gets the total number of bytes actually allocated across all materialized (non-sparse)
+    /// chunks. Test/diagnostic hook used to guard against over-allocation of small files and to
+    /// confirm sparse chunks aren't materialized unnecessarily.
     /// </summary>
     internal long BackingByteCount
     {
@@ -74,7 +89,7 @@ public sealed class FileContent
                 long total = 0;
                 foreach (var chunk in _chunks)
                 {
-                    total += chunk.Length;
+                    total += chunk?.Length ?? 0;
                 }
 
                 return total;
@@ -144,48 +159,56 @@ public sealed class FileContent
 
         var oldLength = _length;
         var oldChunkCount = _chunks.Count;
-        var oldTerminalCapacity = oldChunkCount > 0 ? _chunks[oldChunkCount - 1].Length : 0;
+        var oldTerminal = oldChunkCount > 0 ? _chunks[oldChunkCount - 1] : null;
+        var oldTerminalCapacity = oldTerminal?.Length ?? 0;
         var neededChunks = ChunkCountFor(newLength);
 
         if (newLength > oldLength)
         {
-            // If the old last chunk was right-sized (partial) and will no longer be the terminal
-            // chunk, promote it to a full ChunkSize chunk first.
-            if (oldChunkCount > 0 && neededChunks > oldChunkCount && _chunks[oldChunkCount - 1].Length < ChunkSize)
+            // If the old last chunk was right-sized (partial), materialized, and will no longer
+            // be the terminal chunk, promote it to a full ChunkSize chunk first. A sparse (null)
+            // old terminal needs no promotion — it already reads as zero at any size.
+            if (oldChunkCount > 0 && neededChunks > oldChunkCount && oldTerminal != null && oldTerminal.Length < ChunkSize)
             {
-                var old = _chunks[oldChunkCount - 1];
                 var promoted = new byte[ChunkSize];
-                Buffer.BlockCopy(old, 0, promoted, 0, old.Length);
+                Buffer.BlockCopy(oldTerminal, 0, promoted, 0, oldTerminal.Length);
                 _chunks[oldChunkCount - 1] = promoted;
             }
 
-            // Append full-size chunks for every position except the terminal one.
+            // Append sparse placeholders for every position except the terminal one. Each reads
+            // as zero until something is actually written into it.
             while (_chunks.Count < neededChunks - 1)
             {
-                _chunks.Add(new byte[ChunkSize]);
+                _chunks.Add(null);
             }
 
-            // Size (or grow) the terminal chunk to cover its portion of the new length.
-            var terminalUsed = newLength - (long)(neededChunks - 1) * ChunkSize;
-            var wantCapacity = TerminalCapacity(terminalUsed);
+            // Grow the terminal chunk's capacity to cover its portion of the new length, but only
+            // if it's already materialized — a sparse terminal stays sparse regardless of how
+            // much logical length it now needs to cover.
             if (_chunks.Count == neededChunks)
             {
                 var terminal = _chunks[neededChunks - 1];
-                if (terminal.Length < wantCapacity)
+                if (terminal != null)
                 {
-                    var bigger = new byte[wantCapacity];
-                    Buffer.BlockCopy(terminal, 0, bigger, 0, terminal.Length);
-                    _chunks[neededChunks - 1] = bigger;
+                    var terminalUsed = newLength - (long)(neededChunks - 1) * ChunkSize;
+                    var wantCapacity = TerminalCapacity(terminalUsed);
+                    if (terminal.Length < wantCapacity)
+                    {
+                        var bigger = new byte[wantCapacity];
+                        Buffer.BlockCopy(terminal, 0, bigger, 0, terminal.Length);
+                        _chunks[neededChunks - 1] = bigger;
+                    }
                 }
             }
             else
             {
-                _chunks.Add(new byte[wantCapacity]);
+                _chunks.Add(null);
             }
 
             // Only bytes that fall inside capacity that existed before this grow can hold stale
             // data (from an earlier shrink, or a promoted chunk's former slack); everything past
-            // that boundary sits in freshly allocated (already-zero) arrays. Zero just that slice.
+            // that boundary is either a freshly allocated (already-zero) array or still sparse
+            // (also zero). Zero just that slice.
             var preExistingCapacity = oldChunkCount > 0
                 ? (long)(oldChunkCount - 1) * ChunkSize + oldTerminalCapacity
                 : 0;
@@ -229,7 +252,7 @@ public sealed class FileContent
                 var chunkOffset = (int)(pos % ChunkSize);
                 var n = (int)Math.Min(remaining, ChunkSize - chunkOffset);
 
-                Marshal.Copy(_chunks[chunkIndex], chunkOffset, IntPtr.Add(destination, destOffset), n);
+                Marshal.Copy(_chunks[chunkIndex] ?? ZeroChunk, chunkOffset, IntPtr.Add(destination, destOffset), n);
 
                 pos += n;
                 destOffset += n;
@@ -259,8 +282,9 @@ public sealed class FileContent
                 var chunkIndex = (int)(pos / ChunkSize);
                 var chunkOffset = (int)(pos % ChunkSize);
                 var n = (int)Math.Min(remaining, ChunkSize - chunkOffset);
+                var chunk = _chunks[chunkIndex] ??= AllocateChunk(chunkIndex);
 
-                Marshal.Copy(IntPtr.Add(source, srcOffset), _chunks[chunkIndex], chunkOffset, n);
+                Marshal.Copy(IntPtr.Add(source, srcOffset), chunk, chunkOffset, n);
 
                 pos += n;
                 srcOffset += n;
@@ -284,7 +308,7 @@ public sealed class FileContent
             while (remaining > 0)
             {
                 var n = (int)Math.Min(remaining, ChunkSize);
-                destination.Write(_chunks[chunkIndex], 0, n);
+                destination.Write(_chunks[chunkIndex] ?? ZeroChunk, 0, n);
                 remaining -= n;
                 chunkIndex++;
             }
@@ -311,11 +335,12 @@ public sealed class FileContent
         while (remaining > 0)
         {
             var segment = (int)Math.Min(remaining, ChunkSize);
+            var chunk = _chunks[chunkIndex] ??= AllocateChunk(chunkIndex);
             var filled = 0;
 
             while (filled < segment)
             {
-                var read = source.Read(_chunks[chunkIndex], filled, segment - filled);
+                var read = source.Read(chunk, filled, segment - filled);
                 if (read == 0)
                 {
                     return totalFilled + filled;
@@ -348,7 +373,7 @@ public sealed class FileContent
             while (remaining > 0)
             {
                 var n = (int)Math.Min(remaining, ChunkSize);
-                hash.AppendData(_chunks[chunkIndex].AsSpan(0, n));
+                hash.AppendData((_chunks[chunkIndex] ?? ZeroChunk).AsSpan(0, n));
                 remaining -= n;
                 chunkIndex++;
             }
@@ -383,7 +408,12 @@ public sealed class FileContent
         while (remaining > 0)
         {
             var n = (int)Math.Min(remaining, ChunkSize);
-            Buffer.BlockCopy(_chunks[chunkIndex], 0, result, destOffset, n);
+            var chunk = _chunks[chunkIndex];
+            if (chunk != null)
+            {
+                Buffer.BlockCopy(chunk, 0, result, destOffset, n);
+            }
+
             remaining -= n;
             destOffset += n;
             chunkIndex++;
@@ -393,10 +423,11 @@ public sealed class FileContent
     }
 
     /// <summary>
-    /// Returns a deep, independent copy of this content.
+    /// Returns a deep, independent copy of this content. A chunk this instance has never written
+    /// to stays sparse in the clone too, instead of eagerly materializing it.
     /// </summary>
     /// <returns>
-    /// A new <see cref="FileContent"/> whose chunks are copies of this instance's chunks.
+    /// A new <see cref="FileContent"/> whose materialized chunks are copies of this instance's.
     /// </returns>
     public FileContent Clone()
     {
@@ -410,7 +441,13 @@ public sealed class FileContent
             // instances (a shrink can leave a larger terminal capacity behind), but the logical
             // bytes match.
             var n = (int)Math.Min(remaining, ChunkSize);
-            Buffer.BlockCopy(_chunks[chunkIndex], 0, clone._chunks[chunkIndex], 0, n);
+            var chunk = _chunks[chunkIndex];
+            if (chunk != null)
+            {
+                var cloneChunk = clone._chunks[chunkIndex] ??= clone.AllocateChunk(chunkIndex);
+                Buffer.BlockCopy(chunk, 0, cloneChunk, 0, n);
+            }
+
             remaining -= n;
             chunkIndex++;
         }
@@ -453,8 +490,9 @@ public sealed class FileContent
             var chunkIndex = (int)(pos / ChunkSize);
             var chunkOffset = (int)(pos % ChunkSize);
             var n = Math.Min(remaining, ChunkSize - chunkOffset);
+            var chunk = _chunks[chunkIndex] ??= AllocateChunk(chunkIndex);
 
-            data.Slice(srcOffset, n).CopyTo(_chunks[chunkIndex].AsSpan(chunkOffset, n));
+            data.Slice(srcOffset, n).CopyTo(chunk.AsSpan(chunkOffset, n));
 
             pos += n;
             srcOffset += n;
@@ -472,12 +510,36 @@ public sealed class FileContent
             var chunkIndex = (int)(pos / ChunkSize);
             var chunkOffset = (int)(pos % ChunkSize);
             var n = (int)Math.Min(remaining, ChunkSize - chunkOffset);
+            var chunk = _chunks[chunkIndex];
 
-            Array.Clear(_chunks[chunkIndex], chunkOffset, n);
+            // A sparse chunk already reads as zero; only a materialized chunk needs clearing.
+            if (chunk != null)
+            {
+                Array.Clear(chunk, chunkOffset, n);
+            }
 
             pos += n;
             remaining -= n;
         }
+    }
+
+    /// <summary>
+    /// Allocates a zero-initialized backing array for the chunk at <paramref name="chunkIndex"/>,
+    /// sized to that chunk's role: <see cref="ChunkSize"/> for every chunk except the terminal
+    /// one, which is right-sized to <see cref="TerminalCapacity"/> for its portion of
+    /// <see cref="_length"/>. Called only when a sparse chunk is about to receive real data.
+    /// </summary>
+    /// <param name="chunkIndex">Index of the chunk to materialize, within the current <see cref="_chunks"/> bounds.</param>
+    /// <returns>A newly allocated, zero-filled backing array for that chunk.</returns>
+    private byte[] AllocateChunk(int chunkIndex)
+    {
+        if (chunkIndex == _chunks.Count - 1)
+        {
+            var terminalUsed = _length - (long)chunkIndex * ChunkSize;
+            return new byte[TerminalCapacity(terminalUsed)];
+        }
+
+        return new byte[ChunkSize];
     }
 
     /// <summary>
@@ -525,7 +587,7 @@ public sealed class FileContent
                     var chunkOffset = (int)(_position % ChunkSize);
                     var n = Math.Min(toRead - read, ChunkSize - chunkOffset);
 
-                    Buffer.BlockCopy(content._chunks[chunkIndex], chunkOffset, buffer, offset + read, n);
+                    Buffer.BlockCopy(content._chunks[chunkIndex] ?? ZeroChunk, chunkOffset, buffer, offset + read, n);
 
                     _position += n;
                     read += n;

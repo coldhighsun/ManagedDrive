@@ -28,33 +28,76 @@ public class FileContentTests
     [InlineData(512)]
     [InlineData(4096)]
     [InlineData(32768)]
-    public void SmallFile_DoesNotAllocateFullChunk(int alignedLength)
+    [InlineData(FileContent.ChunkSize + 512)]
+    public void CreateZeroed_DoesNotMaterializeAnyChunks(int alignedLength)
     {
         var content = FileContent.CreateZeroed((ulong)alignedLength);
 
-        // A small file must not pay a whole 64 KiB chunk: the terminal chunk is right-sized.
+        // Nothing has been written yet, so every chunk must stay sparse (null) until touched.
+        Assert.Equal(0, content.BackingByteCount);
+    }
+
+    [Theory]
+    [InlineData(512)]
+    [InlineData(4096)]
+    [InlineData(32768)]
+    public void WriteFrom_SmallFile_MaterializesOnlyRightSizedTailChunk(int alignedLength)
+    {
+        var content = FileContent.CreateZeroed((ulong)alignedLength);
+
+        WriteBytes(content, 0, [1, 2, 3]);
+
+        // Writing into the terminal chunk must not pay a whole 64 KiB chunk: it's right-sized.
         Assert.Equal(alignedLength, content.BackingByteCount);
     }
 
     [Fact]
-    public void MultiChunkFile_AllocatesFullChunksPlusRightSizedTail()
+    public void WriteFrom_MultiChunkFile_MaterializesOnlyTouchedChunk()
     {
-        var content = FileContent.CreateZeroed(FileContent.ChunkSize + 512);
+        var content = FileContent.CreateZeroed(FileContent.ChunkSize * 4);
 
-        // One full 64 KiB chunk + a 512-byte tail, not two full chunks.
-        Assert.Equal(FileContent.ChunkSize + 512, content.BackingByteCount);
+        WriteBytes(content, 0, [1, 2, 3]);
+
+        // Only the first (touched) chunk materializes; the other three stay sparse.
+        Assert.Equal(FileContent.ChunkSize, content.BackingByteCount);
     }
 
     [Fact]
-    public void GrowAcrossChunkBoundary_PromotesTailToFullChunk()
+    public void GrowAcrossChunkBoundary_PromotesWrittenTailToFullChunk_NewTailStaysSparse()
     {
         var content = FileContent.CreateZeroed(4096);
+        WriteBytes(content, 0, [1, 2, 3]);
         Assert.Equal(4096, content.BackingByteCount);
 
         content.Resize(FileContent.ChunkSize + 512);
 
-        // The former 4 KiB tail is promoted to a full chunk; new tail is 512 bytes.
-        Assert.Equal(FileContent.ChunkSize + 512, content.BackingByteCount);
+        // The written 4 KiB tail is promoted to a full chunk; the newly exposed 512-byte tail was
+        // never written, so it stays sparse instead of materializing a second small array.
+        Assert.Equal(FileContent.ChunkSize, content.BackingByteCount);
+    }
+
+    [Fact]
+    public void ReadTo_SparseRegion_ReturnsZeroWithoutMaterializing()
+    {
+        var content = FileContent.CreateZeroed(FileContent.ChunkSize * 2);
+
+        var bytes = ReadBytes(content, 0, FileContent.ChunkSize * 2);
+
+        Assert.All(bytes, b => Assert.Equal(0, b));
+        Assert.Equal(0, content.BackingByteCount);
+    }
+
+    [Fact]
+    public void Clone_PreservesSparsenessOfUnwrittenChunks()
+    {
+        var original = FileContent.CreateZeroed(FileContent.ChunkSize * 2);
+        WriteBytes(original, 0, [1, 2, 3]);
+
+        var clone = original.Clone();
+
+        // Only the chunk the source actually wrote to should materialize in the clone.
+        Assert.Equal(FileContent.ChunkSize, clone.BackingByteCount);
+        Assert.Equal(new byte[] { 1, 2, 3 }, ReadBytes(clone, 0, 3));
     }
 
     [Fact]
