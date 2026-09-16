@@ -102,6 +102,6 @@ public sealed class CliPipeServer(MainViewModel mainViewModel) : IDisposable
         var result = await Application.Current.Dispatcher.InvokeAsync(
             () => CliCommandProcessor.ExecuteAsync(args, _diskController)).Task.Unwrap();
 
-        await writer.WriteLineAsync(CliPipeProtocol.SerializeResponse(new(result.Success, result.Message, result.Disks, result.ExitCode, result.Snapshots)));
+        await writer.WriteLineAsync(CliPipeProtocol.SerializeResponse(new(result.Success, result.Message, result.Disks, result.ExitCode, result.Snapshots, result.Json)));
     }
 }

@@ -264,11 +264,91 @@ public static class CliCommandProcessor
         snapshotCommand.Subcommands.Add(snapshotRestoreCommand);
         snapshotCommand.Subcommands.Add(snapshotDeleteCommand);
 
+        var exportDriveArgument = new Argument<string>("drive-letter")
+        {
+            Description = "Drive letter of a currently mounted disk, e.g. R:",
+        };
+        var exportOutputArgument = new Argument<string>("output-path")
+        {
+            Description = "Path to write the exported .mdr image or archive to.",
+        };
+        var exportFormatOption = new Option<ArchiveExportFormat?>("--format")
+        {
+            Description = "Export as an archive instead of a .mdr image: Zip or SevenZip.",
+        };
+        var exportCompressionOption = new Option<ImageCompressionLevel>("--compression")
+        {
+            DefaultValueFactory = _ => ImageCompressionLevel.Fastest,
+            Description = "Compression level: None, Fastest, Optimal, or SmallestSize.",
+        };
+        var exportPasswordOption = new Option<string?>("--password")
+        {
+            Description = "Encrypt the exported .mdr image with this password. Not valid together with --format.",
+        };
+        var exportPasswordFileOption = new Option<string?>("--password-file")
+        {
+            Description = "Path to a file whose first line is the password to encrypt the exported .mdr image with. Mutually exclusive with --password.",
+        };
+
+        var exportCommand = new Command("export", "Exports a mounted disk to a standalone .mdr image or archive file.");
+        exportCommand.Arguments.Add(exportDriveArgument);
+        exportCommand.Arguments.Add(exportOutputArgument);
+        exportCommand.Options.Add(exportFormatOption);
+        exportCommand.Options.Add(exportCompressionOption);
+        exportCommand.Options.Add(exportPasswordOption);
+        exportCommand.Options.Add(exportPasswordFileOption);
+        exportCommand.SetAction(async (parseResult, _) =>
+        {
+            var format = parseResult.GetValue(exportFormatOption);
+            var password = parseResult.GetValue(exportPasswordOption);
+            var passwordFile = parseResult.GetValue(exportPasswordFileOption);
+
+            if (password is not null && passwordFile is not null)
+            {
+                outcome = new CliOutcome(false, "--password and --password-file cannot both be specified.", null, 1);
+                return 1;
+            }
+
+            if ((password is not null || passwordFile is not null) && format is not null)
+            {
+                outcome = new CliOutcome(false, "--password/--password-file cannot be used together with --format.", null, 1);
+                return 1;
+            }
+
+            if (passwordFile is not null)
+            {
+                try
+                {
+                    password = File.ReadLines(passwordFile).FirstOrDefault() ?? string.Empty;
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    outcome = new CliOutcome(false, $"Could not read --password-file: {ex.Message}", null, 1);
+                    return 1;
+                }
+            }
+
+            var exitCode = await ExportAsync(
+                parseResult.GetValue(exportDriveArgument)!,
+                parseResult.GetValue(exportOutputArgument)!,
+                format,
+                parseResult.GetValue(exportCompressionOption),
+                password,
+                diskController,
+                o => outcome = o);
+            return exitCode;
+        });
+
+        var listJsonOption = new Option<bool>("--json")
+        {
+            Description = "Output the disk list as JSON instead of a table.",
+        };
         var listCommand = new Command("list", "Lists currently mounted disks.");
-        listCommand.SetAction((_, _) =>
+        listCommand.Options.Add(listJsonOption);
+        listCommand.SetAction((parseResult, _) =>
         {
             var disks = diskController.ListDisks();
-            outcome = new(true, string.Empty, disks, 0);
+            outcome = new(true, string.Empty, disks, 0, Json: parseResult.GetValue(listJsonOption));
             return Task.FromResult(0);
         });
 
@@ -286,6 +366,7 @@ public static class CliCommandProcessor
         rootCommand.Subcommands.Add(unmountCommand);
         rootCommand.Subcommands.Add(formatCommand);
         rootCommand.Subcommands.Add(saveCommand);
+        rootCommand.Subcommands.Add(exportCommand);
         rootCommand.Subcommands.Add(listCommand);
         rootCommand.Subcommands.Add(snapshotCommand);
         rootCommand.Subcommands.Add(exitCommand);
@@ -306,6 +387,21 @@ public static class CliCommandProcessor
         // No handler ran to completion (parse error, --help, unknown subcommand, etc.) — fall
         // back to whatever System.CommandLine wrote to the buffer.
         return new(exitCode == 0, buffer.ToString(), null, exitCode);
+    }
+
+    private static async Task<int> ExportAsync(
+        string driveLetter, string outputPath, ArchiveExportFormat? archiveFormat, ImageCompressionLevel compressionLevel,
+        string? password, ICliDiskController diskController, Action<CliOutcome> setOutcome)
+    {
+        driveLetter = NormalizeDriveLetter(driveLetter);
+
+        var (success, message) = await diskController.ExportAsync(driveLetter, outputPath, archiveFormat, compressionLevel, password);
+        setOutcome(new(
+            success,
+            string.IsNullOrEmpty(message) ? $"No disk is currently mounted at {driveLetter}." : message,
+            null,
+            success ? 0 : 1));
+        return success ? 0 : 1;
     }
 
     private static async Task<int> FormatAsync(string driveLetter, bool confirmed, ICliDiskController diskController, Action<CliOutcome> setOutcome)
@@ -473,4 +569,5 @@ public sealed record CliOutcome(
     string Message,
     IReadOnlyList<CliDiskInfo>? Disks,
     int ExitCode,
-    IReadOnlyList<CliSnapshotInfo>? Snapshots = null);
+    IReadOnlyList<CliSnapshotInfo>? Snapshots = null,
+    bool Json = false);

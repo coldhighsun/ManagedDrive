@@ -1,4 +1,5 @@
 using ManagedDrive.Cli.Core;
+using CliCore = ManagedDrive.Cli.Core;
 
 namespace ManagedDrive.App.Cli;
 
@@ -11,7 +12,8 @@ namespace ManagedDrive.App.Cli;
 /// This class is the entire contract surface between the CLI pipe server and <see cref="MainViewModel"/>:
 /// <see cref="MainViewModel.ExitWithoutConfirmation"/>, <see cref="MainViewModel.FormatByMountPointAsync"/>,
 /// <see cref="MainViewModel.MountArchiveAsync"/>, <see cref="MainViewModel.MountImageAsync"/>,
-/// <see cref="MainViewModel.SaveByMountPointAsync"/>, <see cref="MainViewModel.UnmountByMountPointAsync"/>,
+/// <see cref="MainViewModel.SaveByMountPointAsync"/>, <see cref="MainViewModel.ExportByMountPointAsync"/>,
+/// <see cref="MainViewModel.UnmountByMountPointAsync"/>,
 /// <see cref="MainViewModel.ListSnapshotsByMountPointAsync"/>, <see cref="MainViewModel.RestoreSnapshotByMountPointAsync"/>,
 /// and <see cref="MainViewModel.DeleteSnapshotByMountPointAsync"/> (plus the read-only
 /// <see cref="MainViewModel.Disks"/> collection for <see cref="ListDisks"/>). Changing any of their
@@ -29,6 +31,14 @@ internal sealed class MainViewModelCliDiskController(MainViewModel mainViewModel
 
     public Task<(bool Success, string Message)> DeleteSnapshotAsync(string mountPoint, int index) =>
         mainViewModel.DeleteSnapshotByMountPointAsync(mountPoint, index);
+
+    public Task<(bool Success, string Message)> ExportAsync(string mountPoint, string outputPath, CliCore.ArchiveExportFormat? archiveFormat, CliCore.ImageCompressionLevel compressionLevel, string? password) =>
+        mainViewModel.ExportByMountPointAsync(
+            mountPoint,
+            outputPath,
+            archiveFormat is { } format ? (Core.Archive.ArchiveExportFormat)format : null,
+            (Core.Mounting.ImageCompressionLevel)compressionLevel,
+            password);
 
     public Task<(bool Success, string Message)> FormatAsync(string mountPoint) =>
         mainViewModel.FormatByMountPointAsync(mountPoint);

@@ -19,6 +19,28 @@ public interface ICliDiskController
     Task<(bool Success, string Message)> FormatAsync(string mountPoint);
 
     /// <summary>
+    /// Exports the disk currently mounted at <paramref name="mountPoint"/> to a standalone file —
+    /// either a plain <c>.mdr</c> image (<paramref name="archiveFormat"/> is <c>null</c>) or an
+    /// archive (<paramref name="archiveFormat"/> is set) — without touching the disk's own
+    /// persistence configuration.
+    /// </summary>
+    /// <param name="mountPoint">The mount point to export, e.g. <c>"R:"</c>.</param>
+    /// <param name="outputPath">Destination file path to write the export to.</param>
+    /// <param name="archiveFormat"><c>null</c> to export a <c>.mdr</c> image; otherwise the archive container format.</param>
+    /// <param name="compressionLevel">Compression level applied to the export.</param>
+    /// <param name="password">
+    /// Password to encrypt the exported <c>.mdr</c> image with, or <c>null</c> for no encryption.
+    /// Ignored when <paramref name="archiveFormat"/> is set, since archive formats don't support it.
+    /// </param>
+    /// <returns>
+    /// <c>(true, message)</c> on success; <c>(false, message)</c> with a human-readable reason
+    /// otherwise. <paramref name="mountPoint"/> not being mounted is reported as
+    /// <c>(false, string.Empty)</c> so the CLI layer can render its own not-mounted message.
+    /// </returns>
+    Task<(bool Success, string Message)> ExportAsync(
+        string mountPoint, string outputPath, ArchiveExportFormat? archiveFormat, ImageCompressionLevel compressionLevel, string? password);
+
+    /// <summary>
     /// Returns a snapshot of all currently mounted disks.
     /// </summary>
     IReadOnlyList<CliDiskInfo> ListDisks();
