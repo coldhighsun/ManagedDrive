@@ -35,12 +35,12 @@ public sealed class FileNodeMap : IDisposable
     /// node, in bytes. Signed (rather than <c>ulong</c>, which the public API still exposes via
     /// <see cref="GetTotalAllocated"/>) because it is updated exclusively via
     /// <see cref="Interlocked"/>, whose <c>long</c> overloads are the ones guaranteed available —
-    /// this value never approaches <see cref="long.MaxValue"/> for any real disk capacity. It is
-    /// deliberately not covered by <see cref="_syncRoot"/>: <see cref="UpdateAllocationSize"/>
-    /// (the hot path, called on every extending write) mutates it without taking the write lock,
-    /// so every other mutation site below must use <c>Interlocked</c> too, even though they
-    /// already hold the write lock for their own structural changes — the write lock provides no
-    /// exclusion against a thread that never takes it.
+    /// this value never approaches <see cref="long.MaxValue"/> for any real disk capacity.
+    /// <see cref="UpdateAllocationSize"/> (the hot path, called on every extending write) mutates
+    /// it while holding only the *read* lock, so it can run concurrently with other calls to
+    /// itself, but every mutation site below still uses <c>Interlocked</c> (rather than a plain
+    /// <c>+=</c>/<c>-=</c> under the write lock they hold anyway) so their updates compose
+    /// correctly with a concurrent <see cref="UpdateAllocationSize"/> call instead of racing it.
     /// </summary>
     private long _totalAllocated;
 
@@ -386,20 +386,32 @@ public sealed class FileNodeMap : IDisposable
     /// <see cref="Remove"/>.
     /// </summary>
     /// <remarks>
-    /// Deliberately does not take <see cref="_syncRoot"/>: this is the hot path for every
-    /// extending write, and <see cref="FileNode.FileInfo"/>'s <c>AllocationSize</c> field is only
-    /// ever mutated by the single WinFsp thread that owns <paramref name="node"/>, so no lock is
-    /// needed to protect it. The shared <see cref="_totalAllocated"/> counter is still safe to
-    /// update concurrently with structural changes elsewhere in the map because every mutation
-    /// site uses <see cref="Interlocked"/>.
+    /// Takes the *read* lock rather than the write lock: this is the hot path for every extending
+    /// write, and <see cref="FileNode.FileInfo"/>'s <c>AllocationSize</c> field is only ever
+    /// mutated by the single WinFsp thread that owns <paramref name="node"/>, so it doesn't need
+    /// exclusion against other calls to this method (which the read lock still allows to run
+    /// concurrently on other nodes). It does need exclusion against <see cref="Add"/>,
+    /// <see cref="Remove"/>, <see cref="RemoveSubtree"/>, and <see cref="ClearAll"/>, which read or
+    /// overwrite the very node this call is resizing (or reset <see cref="_totalAllocated"/>
+    /// outright) — the read lock, being mutually exclusive with their write lock, prevents this
+    /// call's <see cref="Interlocked"/> update from racing with theirs or from being clobbered by
+    /// <see cref="ClearAll"/>'s non-additive <see cref="Interlocked.Exchange(ref long, long)"/>.
     /// </remarks>
     /// <param name="node">The node whose allocation size is changing.</param>
     /// <param name="newAllocationSize">The new allocation size, in bytes.</param>
     public void UpdateAllocationSize(FileNode node, ulong newAllocationSize)
     {
-        var delta = (long)newAllocationSize - (long)node.FileInfo.AllocationSize;
-        node.FileInfo.AllocationSize = newAllocationSize;
-        Interlocked.Add(ref _totalAllocated, delta);
+        _syncRoot.EnterReadLock();
+        try
+        {
+            var delta = (long)newAllocationSize - (long)node.FileInfo.AllocationSize;
+            node.FileInfo.AllocationSize = newAllocationSize;
+            Interlocked.Add(ref _totalAllocated, delta);
+        }
+        finally
+        {
+            _syncRoot.ExitReadLock();
+        }
     }
 
     /// <summary>
