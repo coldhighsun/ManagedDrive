@@ -1,4 +1,5 @@
 using Fsp;
+using Fsp.Interop;
 using System.Runtime.InteropServices;
 using ThrottledLogging;
 
@@ -419,7 +420,37 @@ public sealed class RamDisk : IDisposable
 
         _fs.NodeMap.ClearAll();
         _fs.MarkDirty();
+        NotifyVolumeContentsChanged();
         return true;
+    }
+
+    /// <summary>
+    /// Tells WinFsp the whole tree under the volume root may have changed, so any Explorer window
+    /// (or other listener) watching a directory on this disk re-enumerates instead of showing stale
+    /// cached entries. Used after bulk content replacement (<see cref="Format"/>,
+    /// <see cref="TryCloneFrom"/>, <see cref="TryRestoreFromSnapshot"/>) that mutates
+    /// <see cref="MemoryFileSystem.NodeMap"/> directly rather than through individual WinFsp
+    /// callbacks, which is what normally drives per-file notifications. Best-effort: a failure here
+    /// (e.g. the host isn't running) is not surfaced to the caller.
+    /// </summary>
+    private void NotifyVolumeContentsChanged()
+    {
+        try
+        {
+            _host.Notify([
+                new NotifyInfo
+                {
+                    FileName = "\\",
+                    Action = NotifyAction.Modified,
+                    Filter = NotifyFilter.ChangeFileName | NotifyFilter.ChangeDirName |
+                             NotifyFilter.ChangeSize | NotifyFilter.ChangeLastWrite,
+                },
+            ]);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogDebug(ex, "Failed to notify WinFsp of a bulk content change on {MountPoint}.", MountPoint);
+        }
     }
 
     /// <summary>
@@ -622,8 +653,16 @@ public sealed class RamDisk : IDisposable
     /// <c>true</c> on success; <c>false</c> when this disk is read-only or its capacity is
     /// smaller than the source disk's used bytes.
     /// </returns>
-    public bool TryCloneFrom(RamDisk source, out string? error) =>
-        _fs.TryReplaceContents(source._fs.NodeMap, out error);
+    public bool TryCloneFrom(RamDisk source, out string? error)
+    {
+        if (!_fs.TryReplaceContents(source._fs.NodeMap, out error))
+        {
+            return false;
+        }
+
+        NotifyVolumeContentsChanged();
+        return true;
+    }
 
     /// <summary>
     /// Resolves the underlying NT device path (e.g. <c>\Device\Volume{GUID}</c>) that this disk's
@@ -681,7 +720,13 @@ public sealed class RamDisk : IDisposable
             try
             {
                 var nodeMap = SnapshotManager.LoadSnapshot(snapshotPath, out _, out _, _cek);
-                return _fs.TryReplaceContents(nodeMap, out error);
+                if (!_fs.TryReplaceContents(nodeMap, out error))
+                {
+                    return false;
+                }
+
+                NotifyVolumeContentsChanged();
+                return true;
             }
             catch (Exception ex)
             {
