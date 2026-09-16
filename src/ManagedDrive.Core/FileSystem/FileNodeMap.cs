@@ -245,6 +245,44 @@ public sealed class FileNodeMap : IDisposable
     }
 
     /// <summary>
+    /// Removes the node at <paramref name="dirPath"/> together with every descendant beneath it
+    /// (anything whose path starts with <c>dirPath + "\\"</c>). Used when a rename replaces an
+    /// existing directory so its former children don't linger as orphans in the map.
+    /// </summary>
+    /// <param name="dirPath">Absolute path of the directory (or file) to remove, with its subtree.</param>
+    public void RemoveSubtree(string dirPath)
+    {
+        _syncRoot.EnterWriteLock();
+        try
+        {
+            if (_map.Remove(dirPath, out var removed))
+            {
+                _sortedKeys.Remove(dirPath);
+                _totalAllocated -= removed.FileInfo.AllocationSize;
+                _removedSincePersist.Add(dirPath);
+            }
+
+            var prefix = dirPath + "\\";
+            var upperBound = prefix + '￿';
+            var keys = new List<string>(_sortedKeys.GetViewBetween(prefix, upperBound));
+
+            foreach (var key in keys)
+            {
+                if (_map.Remove(key, out var descendant))
+                {
+                    _sortedKeys.Remove(key);
+                    _totalAllocated -= descendant.FileInfo.AllocationSize;
+                    _removedSincePersist.Add(key);
+                }
+            }
+        }
+        finally
+        {
+            _syncRoot.ExitWriteLock();
+        }
+    }
+
+    /// <summary>
     /// Renames all descendant nodes of <paramref name="oldPath"/> so that their paths
     /// begin with <paramref name="newPath"/> instead.
     /// </summary>

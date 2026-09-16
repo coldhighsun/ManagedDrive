@@ -575,7 +575,9 @@ public sealed class MemoryFileSystem : FileSystemBase
     /// it is replaced only if <paramref name="replaceIfExists"/> is <c>true</c>.
     /// </summary>
     /// <returns>
-    /// STATUS_SUCCESS or STATUS_OBJECT_NAME_COLLISION.
+    /// STATUS_SUCCESS, STATUS_OBJECT_NAME_COLLISION, STATUS_DIRECTORY_NOT_EMPTY,
+    /// STATUS_ACCESS_DENIED (renaming a directory into its own subtree), or
+    /// STATUS_FILE_IS_A_DIRECTORY/STATUS_NOT_A_DIRECTORY (replacing across the file/directory kind).
     /// </returns>
     public override int Rename(
         object fileNode,
@@ -589,6 +591,17 @@ public sealed class MemoryFileSystem : FileSystemBase
             return STATUS_MEDIA_WRITE_PROTECTED;
         }
 
+        var node = (FileNode)fileNode;
+
+        if (node.IsDirectory &&
+            newFileName.Length > fileName.Length &&
+            newFileName.StartsWith(fileName, StringComparison.OrdinalIgnoreCase) &&
+            newFileName[fileName.Length] == '\\')
+        {
+            // Can't move a directory into its own subtree.
+            return STATUS_ACCESS_DENIED;
+        }
+
         if (NodeMap.TryGet(newFileName, out var existing) && existing != null)
         {
             if (!replaceIfExists)
@@ -596,10 +609,23 @@ public sealed class MemoryFileSystem : FileSystemBase
                 return STATUS_OBJECT_NAME_COLLISION;
             }
 
-            NodeMap.Remove(newFileName);
-        }
+            if (existing.IsDirectory != node.IsDirectory)
+            {
+                return existing.IsDirectory ? STATUS_FILE_IS_A_DIRECTORY : STATUS_NOT_A_DIRECTORY;
+            }
 
-        var node = (FileNode)fileNode;
+            if (existing.IsDirectory)
+            {
+                foreach (var _ in NodeMap.GetChildren(newFileName, null))
+                {
+                    return STATUS_DIRECTORY_NOT_EMPTY;
+                }
+            }
+
+            // Directories are already verified empty above, but RemoveSubtree also clears any
+            // descendants left behind by an earlier inconsistency instead of orphaning them.
+            NodeMap.RemoveSubtree(newFileName);
+        }
 
         if (node.IsDirectory)
         {

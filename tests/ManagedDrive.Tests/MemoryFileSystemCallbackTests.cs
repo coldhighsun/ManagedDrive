@@ -238,6 +238,81 @@ public sealed class MemoryFileSystemCallbackTests
     }
 
     [Fact]
+    public void Rename_DirectoryIntoOwnSubtree_ReturnsAccessDenied()
+    {
+        var fs = new MemoryFileSystem(1024 * 1024, "Label");
+        fs.Create("\\dir", 0, 0, (uint)FileAttributes.Directory, [], 0,
+            out var dirNode, out _, out _, out _);
+        fs.Create("\\dir\\child", 0, 0, (uint)FileAttributes.Directory, [], 0, out _, out _, out _, out _);
+
+        var status = fs.Rename(dirNode!, null!, "\\dir", "\\dir\\child\\dir", replaceIfExists: false);
+
+        Assert.Equal(unchecked((int)0xC0000022), status); // STATUS_ACCESS_DENIED
+        Assert.True(fs.NodeMap.TryGet("\\dir", out _));
+    }
+
+    [Fact]
+    public void Rename_ReplacingNonEmptyDirectory_ReturnsDirectoryNotEmpty()
+    {
+        var fs = new MemoryFileSystem(1024 * 1024, "Label");
+        fs.Create("\\source", 0, 0, (uint)FileAttributes.Directory, [], 0,
+            out var sourceNode, out _, out _, out _);
+        fs.Create("\\target", 0, 0, (uint)FileAttributes.Directory, [], 0, out _, out _, out _, out _);
+        fs.Create("\\target\\child.bin", 0, 0, (uint)FileAttributes.Normal, [], 0, out _, out _, out _, out _);
+
+        var status = fs.Rename(sourceNode!, null!, "\\source", "\\target", replaceIfExists: true);
+
+        Assert.Equal(unchecked((int)0xC0000101), status); // STATUS_DIRECTORY_NOT_EMPTY
+        Assert.True(fs.NodeMap.TryGet("\\target\\child.bin", out _));
+    }
+
+    [Fact]
+    public void Rename_ReplacingEmptyDirectory_RemovesOldTargetAndSucceeds()
+    {
+        var fs = new MemoryFileSystem(1024 * 1024, "Label");
+        fs.Create("\\source", 0, 0, (uint)FileAttributes.Directory, [], 0,
+            out var sourceNode, out _, out _, out _);
+        fs.Create("\\source\\child.bin", 0, 0, (uint)FileAttributes.Normal, [], 0, out _, out _, out _, out _);
+        fs.Create("\\target", 0, 0, (uint)FileAttributes.Directory, [], 0, out _, out _, out _, out _);
+
+        var status = fs.Rename(sourceNode!, null!, "\\source", "\\target", replaceIfExists: true);
+
+        Assert.Equal(0, status);
+        Assert.False(fs.NodeMap.TryGet("\\source", out _));
+        Assert.True(fs.NodeMap.TryGet("\\target", out var moved));
+        Assert.Same(sourceNode, moved);
+        Assert.True(fs.NodeMap.TryGet("\\target\\child.bin", out _));
+    }
+
+    [Fact]
+    public void Rename_FileOverExistingDirectory_ReturnsFileIsADirectory()
+    {
+        var fs = new MemoryFileSystem(1024 * 1024, "Label");
+        fs.Create("\\source.bin", 0, 0, (uint)FileAttributes.Normal, [], 0,
+            out var sourceNode, out _, out _, out _);
+        fs.Create("\\target", 0, 0, (uint)FileAttributes.Directory, [], 0, out _, out _, out _, out _);
+
+        var status = fs.Rename(sourceNode!, null!, "\\source.bin", "\\target", replaceIfExists: true);
+
+        Assert.Equal(unchecked((int)0xC00000BA), status); // STATUS_FILE_IS_A_DIRECTORY
+        Assert.True(fs.NodeMap.TryGet("\\target", out _));
+    }
+
+    [Fact]
+    public void Rename_DirectoryOverExistingFile_ReturnsNotADirectory()
+    {
+        var fs = new MemoryFileSystem(1024 * 1024, "Label");
+        fs.Create("\\source", 0, 0, (uint)FileAttributes.Directory, [], 0,
+            out var sourceNode, out _, out _, out _);
+        fs.Create("\\target.bin", 0, 0, (uint)FileAttributes.Normal, [], 0, out _, out _, out _, out _);
+
+        var status = fs.Rename(sourceNode!, null!, "\\source", "\\target.bin", replaceIfExists: true);
+
+        Assert.Equal(unchecked((int)0xC0000103), status); // STATUS_NOT_A_DIRECTORY
+        Assert.True(fs.NodeMap.TryGet("\\target.bin", out _));
+    }
+
+    [Fact]
     public void SetBasicInfo_UpdatesAttributesAndBumpsMetadataVersion()
     {
         var fs = new MemoryFileSystem(1024 * 1024, "Label");
