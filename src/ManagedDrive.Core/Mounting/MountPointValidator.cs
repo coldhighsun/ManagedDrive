@@ -23,12 +23,19 @@ public static class MountPointValidator
     /// conflicts, and <see cref="RamDisk.Create"/> already waits for the letter to become visible.
     /// </summary>
     /// <param name="mountPoint">The mount point to validate.</param>
+    /// <param name="otherMountPoints">
+    /// The mount points of every other currently mounted disk, used to reject a directory that
+    /// lives inside one of them — a RAM disk's mounted folder is not a durable location: it
+    /// disappears the instant that other disk is unmounted or the app exits without saving, so
+    /// nesting one mount inside another creates a fragile lifecycle dependency between them.
+    /// </param>
     /// <param name="error">Set to a human-readable message when the method returns <c>false</c>.</param>
     /// <returns>
     /// <c>true</c> if <paramref name="mountPoint"/> is a drive letter, or an existing empty
-    /// directory; <c>false</c> otherwise.
+    /// directory that is not nested inside any of <paramref name="otherMountPoints"/>;
+    /// <c>false</c> otherwise.
     /// </returns>
-    public static bool TryValidateDirectoryMountPoint(string mountPoint, out string? error)
+    public static bool TryValidateDirectoryMountPoint(string mountPoint, IEnumerable<string> otherMountPoints, out string? error)
     {
         if (IsDriveLetter(mountPoint))
         {
@@ -48,7 +55,27 @@ public static class MountPointValidator
             return false;
         }
 
+        var normalizedTarget = NormalizeForPrefixCheck(mountPoint);
+        foreach (var other in otherMountPoints)
+        {
+            if (normalizedTarget.StartsWith(NormalizeForPrefixCheck(other), StringComparison.OrdinalIgnoreCase))
+            {
+                error = $"Mount point directory is inside the already-mounted disk at {other}: {mountPoint}";
+                return false;
+            }
+        }
+
         error = null;
         return true;
+    }
+
+    /// <summary>
+    /// Normalizes a mount point to an absolute, trailing-backslash-terminated path suitable for
+    /// an <see cref="string.StartsWith(string, StringComparison)"/> containment check.
+    /// </summary>
+    private static string NormalizeForPrefixCheck(string mountPoint)
+    {
+        var full = IsDriveLetter(mountPoint) ? mountPoint + '\\' : Path.GetFullPath(mountPoint);
+        return full.EndsWith('\\') ? full : full + '\\';
     }
 }
