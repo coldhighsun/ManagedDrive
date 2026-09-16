@@ -146,12 +146,9 @@ public sealed class MemoryFileSystem : FileSystemBase
 
         var node = (FileNode)fileNode;
 
-        if (node.IsDirectory)
+        if (node.IsDirectory && NodeMap.HasChildren(fileName))
         {
-            foreach (var _ in NodeMap.GetChildren(fileName, null))
-            {
-                return STATUS_DIRECTORY_NOT_EMPTY;
-            }
+            return STATUS_DIRECTORY_NOT_EMPTY;
         }
 
         return STATUS_SUCCESS;
@@ -614,12 +611,9 @@ public sealed class MemoryFileSystem : FileSystemBase
                 return existing.IsDirectory ? STATUS_FILE_IS_A_DIRECTORY : STATUS_NOT_A_DIRECTORY;
             }
 
-            if (existing.IsDirectory)
+            if (existing.IsDirectory && NodeMap.HasChildren(newFileName))
             {
-                foreach (var _ in NodeMap.GetChildren(newFileName, null))
-                {
-                    return STATUS_DIRECTORY_NOT_EMPTY;
-                }
+                return STATUS_DIRECTORY_NOT_EMPTY;
             }
 
             // Directories are already verified empty above, but RemoveSubtree also clears any

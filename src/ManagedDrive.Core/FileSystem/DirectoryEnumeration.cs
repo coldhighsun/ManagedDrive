@@ -63,7 +63,9 @@ internal static class DirectoryEnumeration
             childMarker = marker;
         }
 
-        foreach (var kvp in nodeMap.GetChildren(dir.FilePath, childMarker))
+        var children = nodeMap.GetChildren(dir.FilePath, childMarker);
+        entries.Capacity = entries.Count + children.Count;
+        foreach (var kvp in children)
         {
             var childName = kvp.Value.LeafName;
             if (WildcardMatcher.Matches(pattern, childName))
