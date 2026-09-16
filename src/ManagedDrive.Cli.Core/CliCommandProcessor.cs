@@ -25,7 +25,7 @@ public static class CliCommandProcessor
         };
         var mountDriveArgument = new Argument<string>("drive-letter")
         {
-            Description = "Drive letter to mount at, e.g. R:",
+            Description = "Drive letter to mount at (e.g. R:), or the path of an existing empty directory.",
         };
         var mountReadOnlyOption = new Option<bool?>("--read-only")
         {
@@ -141,7 +141,7 @@ public static class CliCommandProcessor
         };
         var mountArchiveDriveArgument = new Argument<string?>("drive-letter")
         {
-            Description = "Drive letter to mount at, e.g. R:. If omitted, the first free letter from Z: down to D: is picked automatically.",
+            Description = "Drive letter to mount at (e.g. R:), or the path of an existing empty directory. If omitted, the first free letter from Z: down to D: is picked automatically.",
             Arity = ArgumentArity.ZeroOrOne,
         };
         var mountArchiveAutoMountOption = new Option<bool?>("--auto-mount")

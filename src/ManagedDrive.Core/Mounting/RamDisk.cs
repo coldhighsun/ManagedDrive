@@ -767,8 +767,7 @@ public sealed class RamDisk : IDisposable
     /// Returns <c>true</c> when <paramref name="mountPoint"/> is a Windows drive-letter path
     /// of the form <c>X:</c> (single letter followed by a colon).
     /// </summary>
-    private static bool IsDriveLetter(string mountPoint) =>
-        mountPoint.Length == 2 && char.IsLetter(mountPoint[0]) && mountPoint[1] == ':';
+    private static bool IsDriveLetter(string mountPoint) => MountPointValidator.IsDriveLetter(mountPoint);
 
     /// <summary>
     /// Broadcasts a <c>EventDriveAdd</c> Shell change notification so that Windows Explorer

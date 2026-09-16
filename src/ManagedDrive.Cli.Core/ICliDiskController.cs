@@ -51,8 +51,8 @@ public interface ICliDiskController
     /// </summary>
     /// <param name="archivePath">Path to an existing archive file.</param>
     /// <param name="mountPoint">
-    /// The drive letter to mount at, or <c>null</c> to automatically pick the first free letter
-    /// from <c>Z:</c> down to <c>D:</c>.
+    /// The drive letter to mount at, the path of an existing empty directory, or <c>null</c> to
+    /// automatically pick the first free letter from <c>Z:</c> down to <c>D:</c>.
     /// </param>
     /// <param name="overrides">
     /// Per-field values the user explicitly passed via CLI flags; only <see cref="CliMountOverrides.AutoMount"/>
@@ -70,14 +70,14 @@ public interface ICliDiskController
     /// Mounts an existing disk image at <paramref name="mountPoint"/>.
     /// </summary>
     /// <param name="imagePath">Path to an existing <c>.mdr</c> disk image.</param>
-    /// <param name="mountPoint">The drive letter to mount at.</param>
+    /// <param name="mountPoint">The drive letter to mount at, or the path of an existing empty directory.</param>
     /// <param name="overrides">
     /// Per-field values the user explicitly passed via CLI flags; any <c>null</c> field defers to
     /// a saved profile for <paramref name="imagePath"/> if one exists, or the built-in default.
     /// </param>
     /// <returns>
     /// <c>(true, message)</c> on success; <c>(false, message)</c> with a human-readable reason
-    /// otherwise.
+    /// otherwise — including a mount point directory that doesn't exist or isn't empty.
     /// </returns>
     Task<(bool Success, string Message)> MountImageAsync(string imagePath, string mountPoint, CliMountOverrides overrides);
 
