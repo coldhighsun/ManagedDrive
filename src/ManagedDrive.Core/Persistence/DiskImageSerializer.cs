@@ -68,12 +68,17 @@ public readonly record struct ImageEncryptionInfo(string Password, byte[] Cek);
 ///   </item>
 ///   <item>Node region contents: Int32 node count, then for each node: path, metadata, security descriptor bytes, file data bytes</item>
 ///   <item>
-///     Version 6 (segmented node region, read-only so far — nothing writes it outside of tests):
+///     Version 6 (segmented node region; written by <see cref="SaveIncremental"/>, which is what
+///     <see cref="RamDisk.SaveToImage"/> uses for every production auto-save and manual save):
 ///     replaces the single continuous node region with a sequence of independently compressed and
 ///     (when encrypted) independently encrypted <em>segments</em>, each covering a contiguous run
-///     of nodes. This exists so a future incremental save can copy the bytes of unchanged segments
-///     verbatim instead of recompressing/re-encrypting the whole node region on every save. Layout
-///     after the plaintext capacity/label (and, when encrypted, the same key-wrap fields as version
+///     of nodes. <see cref="SaveIncremental"/> reuses the on-disk bytes of a segment verbatim,
+///     without recompressing or re-encrypting it, whenever every node in that segment is unchanged
+///     since the prior save (tracked per-node via <see cref="FileNode.SavedContentVersion"/>,
+///     <see cref="FileNode.SavedMetadataVersion"/>, and <see cref="FileNode.SavedSegmentIndex"/>),
+///     falling back to a full rewrite when there is no compatible existing image to reuse (first
+///     save, or the existing image predates version 6). Layout after the plaintext capacity/label
+///     (and, when encrypted, the same key-wrap fields as version
 ///     3+ — but no single file-level base nonce, since each segment carries its own nonce):
 ///     <list type="bullet">
 ///       <item>Int32 segment count</item>
