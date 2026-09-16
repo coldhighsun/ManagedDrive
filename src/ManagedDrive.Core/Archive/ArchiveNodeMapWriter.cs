@@ -53,38 +53,54 @@ public static class ArchiveNodeMapWriter
             }
         }
 
-        using var stream = File.Create(archivePath);
-        using var writer = OpenWriter(stream, format, level);
-
-        var processedBytes = 0L;
-        foreach (var (path, node) in nodes)
+        var tempPath = archivePath + ".tmp";
+        try
         {
-            var entryKey = path.TrimStart('\\').Replace('\\', '/');
-            if (entryKey.Length == 0)
+            using (var stream = File.Create(tempPath))
+            using (var writer = OpenWriter(stream, format, level))
             {
-                // The root directory itself is implicit in an archive, same as on the read side.
-                continue;
+                var processedBytes = 0L;
+                foreach (var (path, node) in nodes)
+                {
+                    var entryKey = path.TrimStart('\\').Replace('\\', '/');
+                    if (entryKey.Length == 0)
+                    {
+                        // The root directory itself is implicit in an archive, same as on the read side.
+                        continue;
+                    }
+
+                    var modificationTime = DateTimeOffset.FromFileTime((long)node.FileInfo.LastWriteTime).UtcDateTime;
+
+                    if (node.IsDirectory)
+                    {
+                        writer.WriteDirectory(entryKey, modificationTime);
+                        continue;
+                    }
+
+                    var size = (long)node.FileInfo.FileSize;
+                    using var entryStream = node.FileData is null
+                        ? new MemoryStream()
+                        : node.FileData.AsReadOnlyStream(size);
+                    writer.Write(entryKey, entryStream, modificationTime);
+
+                    if (totalBytes > 0)
+                    {
+                        processedBytes += size;
+                        progress?.Report(Math.Clamp((double)processedBytes / totalBytes, 0.0, 1.0));
+                    }
+                }
             }
 
-            var modificationTime = DateTimeOffset.FromFileTime((long)node.FileInfo.LastWriteTime).UtcDateTime;
-
-            if (node.IsDirectory)
+            File.Move(tempPath, archivePath, overwrite: true);
+        }
+        catch
+        {
+            if (File.Exists(tempPath))
             {
-                writer.WriteDirectory(entryKey, modificationTime);
-                continue;
+                File.Delete(tempPath);
             }
 
-            var size = (int)node.FileInfo.FileSize;
-            using var entryStream = node.FileData is null
-                ? new MemoryStream()
-                : node.FileData.AsReadOnlyStream(size);
-            writer.Write(entryKey, entryStream, modificationTime);
-
-            if (totalBytes > 0)
-            {
-                processedBytes += size;
-                progress?.Report(Math.Clamp((double)processedBytes / totalBytes, 0.0, 1.0));
-            }
+            throw;
         }
 
         progress?.Report(1.0);
