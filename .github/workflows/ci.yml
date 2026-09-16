@@ -38,6 +38,9 @@ jobs:
       - name: Build
         run: dotnet build --no-restore -c Release
 
+      - name: Verify formatting
+        run: dotnet format --verify-no-changes --no-restore
+
       - name: Test
         run: dotnet test --no-build -c Release -- --report-xunit-trx --report-xunit-trx-filename results.trx
 
