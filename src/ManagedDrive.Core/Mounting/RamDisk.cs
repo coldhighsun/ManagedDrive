@@ -862,44 +862,26 @@ public sealed class RamDisk : IDisposable
 
     /// <summary>
     /// Compares the disk's current contents against the most recently written snapshot of
-    /// <paramref name="mainImagePath"/>, if one exists. Returns <c>false</c> (i.e. "write a new
-    /// snapshot") when there is no prior snapshot, or when reading/comparing it fails for any
-    /// reason — a comparison failure should never silently suppress a snapshot.
+    /// <paramref name="mainImagePath"/>, if one exists. See
+    /// <see cref="RamDiskSaveDecisions.IsUnchangedSinceLatestSnapshot"/> for the decision logic.
     /// </summary>
-    private bool IsUnchangedSinceLatestSnapshot(string mainImagePath)
-    {
-        try
-        {
-            var snapshots = SnapshotManager.ListSnapshots(mainImagePath);
-            if (snapshots.Count == 0)
-            {
-                return false;
-            }
-
-            var latest = snapshots[^1];
-            return !SnapshotManager.DiffAgainstCurrent(latest.Path, _fs.NodeMap).HasChanges;
-        }
-        catch
-        {
-            return false;
-        }
-    }
+    private bool IsUnchangedSinceLatestSnapshot(string mainImagePath) =>
+        RamDiskSaveDecisions.IsUnchangedSinceLatestSnapshot(mainImagePath, _fs.NodeMap);
 
     /// <summary>
-    /// Whether an exit/shutdown save should run: gated by <see cref="DiskOptions.SaveImageOnExit"/>
-    /// on top of the shared <see cref="NeedsSave"/> condition. Used by <see cref="Dispose"/> and
+    /// Whether an exit/shutdown save should run. Used by <see cref="Dispose"/> and
     /// <see cref="SaveToImageSafe"/> so a disk with save-on-exit disabled is left untouched when
-    /// the app exits or Windows shuts down, while periodic auto-save is unaffected.
+    /// the app exits or Windows shuts down, while periodic auto-save is unaffected. See
+    /// <see cref="RamDiskSaveDecisions.NeedsExitSave"/> for the decision logic.
     /// </summary>
-    private bool NeedsExitSave() => Options.SaveImageOnExit && NeedsSave();
+    private bool NeedsExitSave() => RamDiskSaveDecisions.NeedsExitSave(Options.SaveImageOnExit, NeedsSave());
 
     /// <summary>
-    /// Whether a save would actually write anything: the disk has unsaved changes, or the
-    /// configured persist path has changed since the last successful save. Shared by
-    /// <see cref="SaveToImageSafe"/> and <see cref="TryAutoSave"/> so both skip saving under the
-    /// same condition.
+    /// Whether a save would actually write anything. Shared by <see cref="SaveToImageSafe"/> and
+    /// <see cref="TryAutoSave"/> so both skip saving under the same condition. See
+    /// <see cref="RamDiskSaveDecisions.NeedsSave"/> for the decision logic.
     /// </summary>
-    private bool NeedsSave() => _fs.IsDirty || Options.PersistImagePath != _lastSavedImagePath;
+    private bool NeedsSave() => RamDiskSaveDecisions.NeedsSave(_fs.IsDirty, Options.PersistImagePath, _lastSavedImagePath);
 
     private void OnContentAccessed(bool isWrite) => ContentAccessed?.Invoke(isWrite);
 
