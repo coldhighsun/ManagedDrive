@@ -1,6 +1,6 @@
 using System.Runtime.InteropServices;
 
-namespace ManagedDrive.App.Services;
+namespace ManagedDrive.Core.Diagnostics;
 
 /// <summary>
 /// Reads system-wide physical memory availability via the Win32 API, mirroring what
@@ -22,17 +22,55 @@ public static class SystemMemoryInfo
     [DllImport("kernel32.dll", SetLastError = true)]
     private static extern bool GlobalMemoryStatusEx(ref MEMORYSTATUSEX lpBuffer);
 
+    /// <summary>
+    /// Native <c>MEMORYSTATUSEX</c> structure passed to <see cref="GlobalMemoryStatusEx"/>.
+    /// </summary>
     [StructLayout(LayoutKind.Sequential)]
     private struct MEMORYSTATUSEX
     {
+        /// <summary>
+        /// Size of this structure, in bytes, as required by <see cref="GlobalMemoryStatusEx"/>.
+        /// </summary>
         public uint dwLength;
+
+        /// <summary>
+        /// Approximate percentage of physical memory currently in use.
+        /// </summary>
         public uint dwMemoryLoad;
+
+        /// <summary>
+        /// Total physical memory, in bytes.
+        /// </summary>
         public ulong ullTotalPhys;
+
+        /// <summary>
+        /// Available physical memory, in bytes.
+        /// </summary>
         public ulong ullAvailPhys;
+
+        /// <summary>
+        /// Total size of the page file, in bytes.
+        /// </summary>
         public ulong ullTotalPageFile;
+
+        /// <summary>
+        /// Available size of the page file, in bytes.
+        /// </summary>
         public ulong ullAvailPageFile;
+
+        /// <summary>
+        /// Total size of the user-mode portion of the virtual address space, in bytes.
+        /// </summary>
         public ulong ullTotalVirtual;
+
+        /// <summary>
+        /// Available size of the user-mode portion of the virtual address space, in bytes.
+        /// </summary>
         public ulong ullAvailVirtual;
+
+        /// <summary>
+        /// Reserved; always zero.
+        /// </summary>
         public ulong ullAvailExtendedVirtual;
     }
 }
