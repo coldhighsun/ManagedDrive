@@ -515,12 +515,12 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             return (false, Loc.Format("Val.MountPointAlreadyMounted", mountPoint));
         }
 
-        if (!MountPointValidator.TryValidateDirectoryMountPoint(mountPoint, out var mountPointError))
+        var otherDisks = GetOtherDiskOptions(excluding: null);
+        if (!MountPointValidator.TryValidateDirectoryMountPoint(mountPoint, otherDisks.Select(d => d.MountPoint), out var mountPointError))
         {
             return (false, mountPointError!);
         }
 
-        var otherDisks = GetOtherDiskOptions(excluding: null);
         if (IsPathInUse(otherDisks, archivePath, d => d.SourceArchivePath))
         {
             return (false, Loc.Get("Val.ArchivePathInUse"));
@@ -633,12 +633,12 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             return (false, Loc.Format("Val.MountPointAlreadyMounted", mountPoint));
         }
 
-        if (!MountPointValidator.TryValidateDirectoryMountPoint(mountPoint, out var mountPointError))
+        var otherDisks = GetOtherDiskOptions(excluding: null);
+        if (!MountPointValidator.TryValidateDirectoryMountPoint(mountPoint, otherDisks.Select(d => d.MountPoint), out var mountPointError))
         {
             return (false, mountPointError!);
         }
 
-        var otherDisks = GetOtherDiskOptions(excluding: null);
         if (IsPathInUse(otherDisks, imagePath, d => d.PersistImagePath))
         {
             return (false, Loc.Get("Val.ImagePathInUse"));
