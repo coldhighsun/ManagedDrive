@@ -41,6 +41,15 @@ jobs:
       - name: Verify formatting
         run: dotnet format --verify-no-changes --no-restore
 
+      - name: Audit for vulnerable packages
+        run: |
+          $output = dotnet list package --vulnerable --include-transitive 2>&1
+          $output | Write-Output
+          if ($output -match "has the following vulnerable packages") {
+            throw "Vulnerable package(s) detected - see output above."
+          }
+        shell: pwsh
+
       - name: Test
         run: dotnet test --no-build -c Release -- --report-xunit-trx --report-xunit-trx-filename results.trx
 
@@ -134,6 +143,17 @@ jobs:
           Invoke-WebRequest `
             -Uri "https://github.com/winfsp/winfsp/releases/download/v2.2B4/winfsp-2.2.26215.msi" `
             -OutFile "installer\winfsp-2.2.26215.msi"
+        shell: pwsh
+
+      - name: Verify WinFsp MSI checksum
+        # Pins the download to the exact bytes we've tested against; bump this hash
+        # deliberately (alongside the URL above) when upgrading the bundled WinFsp version.
+        run: |
+          $expectedHash = "2ECB5C89405488A95BBD8A01875E02C48534FD37BBDFD84488F7590464D65944"
+          $actualHash = (Get-FileHash "installer\winfsp-2.2.26215.msi" -Algorithm SHA256).Hash
+          if ($actualHash -ne $expectedHash) {
+            throw "WinFsp MSI checksum mismatch: expected $expectedHash, got $actualHash"
+          }
         shell: pwsh
 
       - name: Install Inno Setup
