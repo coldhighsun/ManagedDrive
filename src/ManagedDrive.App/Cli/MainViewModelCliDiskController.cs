@@ -12,7 +12,8 @@ namespace ManagedDrive.App.Cli;
 /// This class is the entire contract surface between the CLI pipe server and <see cref="MainViewModel"/>:
 /// <see cref="MainViewModel.ExitWithoutConfirmation"/>, <see cref="MainViewModel.FormatByMountPointAsync"/>,
 /// <see cref="MainViewModel.MountArchiveAsync"/>, <see cref="MainViewModel.MountImageAsync"/>,
-/// <see cref="MainViewModel.SaveByMountPointAsync"/>, <see cref="MainViewModel.ExportByMountPointAsync"/>,
+/// <see cref="MainViewModel.SaveByMountPointAsync"/>, <see cref="MainViewModel.SetPasswordByMountPointAsync"/>,
+/// <see cref="MainViewModel.ExportByMountPointAsync"/>,
 /// <see cref="MainViewModel.UnmountByMountPointAsync"/>,
 /// <see cref="MainViewModel.ListSnapshotsByMountPointAsync"/>, <see cref="MainViewModel.RestoreSnapshotByMountPointAsync"/>,
 /// and <see cref="MainViewModel.DeleteSnapshotByMountPointAsync"/> (plus the read-only
@@ -73,6 +74,9 @@ internal sealed class MainViewModelCliDiskController(MainViewModel mainViewModel
 
     public Task<(bool Success, string Message)> SaveAsync(string mountPoint) =>
         mainViewModel.SaveByMountPointAsync(mountPoint);
+
+    public Task<(bool Success, string Message)> SetPasswordAsync(string mountPoint, string? newPassword) =>
+        mainViewModel.SetPasswordByMountPointAsync(mountPoint, newPassword);
 
     public Task<bool> UnmountAsync(string mountPoint, bool deleteImage) =>
                 mainViewModel.UnmountByMountPointAsync(mountPoint, deleteImage);

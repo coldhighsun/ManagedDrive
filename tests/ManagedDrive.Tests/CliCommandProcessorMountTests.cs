@@ -296,6 +296,9 @@ public class CliCommandProcessorMountTests
         public Task<(bool Success, string Message)> SaveAsync(string mountPoint) =>
             Task.FromResult((false, string.Empty));
 
+        public Task<(bool Success, string Message)> SetPasswordAsync(string mountPoint, string? newPassword) =>
+            Task.FromResult((false, string.Empty));
+
         public Task<bool> UnmountAsync(string mountPoint, bool deleteImage)
         {
             LastMountPoint = mountPoint;

@@ -265,6 +265,8 @@
     <sys:String x:Key="Status.AutoMountFailed">自动挂载"{0}"失败：{1}</sys:String>
     <sys:String x:Key="Status.MountFailed">挂载失败</sys:String>
     <sys:String x:Key="Status.ImageSaved">已保存 {0} 的镜像</sys:String>
+    <sys:String x:Key="Status.PasswordSet">已为 {0} 设置密码。</sys:String>
+    <sys:String x:Key="Status.PasswordRemoved">已移除 {0} 的密码。</sys:String>
     <sys:String x:Key="Status.SaveFailed">{0} 保存失败：{1}</sys:String>
     <sys:String x:Key="Status.CapacityAdjusted">{0}：容量已从 {1} MB 自动提升到 {2} MB，以容纳已加载的镜像</sys:String>
     <sys:String x:Key="Status.Unmounted">已卸载 {0}</sys:String>

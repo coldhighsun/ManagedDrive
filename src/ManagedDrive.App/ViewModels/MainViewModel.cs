@@ -765,6 +765,35 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     }
 
     /// <summary>
+    /// Sets or removes the encryption password of the disk currently mounted at
+    /// <paramref name="mountPoint"/>, for use by the CLI command channel. Takes effect on the
+    /// next save — mirrors <c>ExecuteEditDisk</c>'s live (non-remounting) password-change path,
+    /// since <see cref="RamDisk.SetPassword"/> doesn't require a remount by itself.
+    /// </summary>
+    /// <param name="mountPoint">The mount point to change, e.g. <c>"R:"</c>.</param>
+    /// <param name="newPassword">The new password, or <see langword="null"/> to remove protection.</param>
+    /// <returns>
+    /// <c>(true, message)</c> on success; or <c>(false, string.Empty)</c> if no disk is currently
+    /// mounted at <paramref name="mountPoint"/>.
+    /// </returns>
+    public Task<(bool Success, string Message)> SetPasswordByMountPointAsync(string mountPoint, string? newPassword)
+    {
+        _logger.LogInformation("CLI set-password requested for {MountPoint}.", mountPoint);
+
+        var vm = Disks.FirstOrDefault(d => string.Equals(d.MountPoint, mountPoint, StringComparison.OrdinalIgnoreCase));
+        if (vm == null)
+        {
+            return Task.FromResult((false, string.Empty));
+        }
+
+        vm.Disk.SetPassword(newPassword);
+        _logger.LogInformation("CLI set-password completed for {MountPoint}.", mountPoint);
+        return Task.FromResult((true, newPassword is null
+            ? Loc.Format("Status.PasswordRemoved", mountPoint)
+            : Loc.Format("Status.PasswordSet", mountPoint)));
+    }
+
+    /// <summary>
     /// Exports the disk currently mounted at <paramref name="mountPoint"/> to a standalone file,
     /// for use by the CLI command channel. Mirrors <c>ExecuteCloneOrExportDisk</c>'s export
     /// branch but without any dialogs/busy overlay.

@@ -144,6 +144,18 @@ public interface ICliDiskController
     Task<(bool Success, string Message)> SaveAsync(string mountPoint);
 
     /// <summary>
+    /// Sets or removes the encryption password of the disk currently mounted at
+    /// <paramref name="mountPoint"/>. Takes effect on the next save.
+    /// </summary>
+    /// <param name="mountPoint">The mount point to change, e.g. <c>"R:"</c>.</param>
+    /// <param name="newPassword">The new password, or <see langword="null"/> to remove protection.</param>
+    /// <returns>
+    /// <c>(true, message)</c> on success; <c>(false, string.Empty)</c> if no disk is currently
+    /// mounted at <paramref name="mountPoint"/>.
+    /// </returns>
+    Task<(bool Success, string Message)> SetPasswordAsync(string mountPoint, string? newPassword);
+
+    /// <summary>
     /// Unmounts the disk currently mounted at <paramref name="mountPoint"/>.
     /// </summary>
     /// <param name="mountPoint">The mount point to unmount (e.g. <c>"R:"</c>).</param>
