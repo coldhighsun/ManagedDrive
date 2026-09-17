@@ -9,6 +9,15 @@ public sealed class MountManager : IDisposable
 {
     private readonly Dictionary<string, RamDisk> _disks = new(StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>
+    /// Mount points currently being mounted by an in-flight <see cref="Mount"/> call, i.e.
+    /// reserved but not yet in <see cref="_disks"/>. Closes the race where two concurrent
+    /// <see cref="Mount"/> calls for the same mount point would otherwise both pass a
+    /// point-in-time check against <see cref="_disks"/> and both proceed to actually mount a
+    /// disk before either is registered.
+    /// </summary>
+    private readonly HashSet<string> _reservedMountPoints = new(StringComparer.OrdinalIgnoreCase);
+
     private readonly Lock _syncRoot = new();
 
     /// <summary>
@@ -113,31 +122,36 @@ public sealed class MountManager : IDisposable
     /// </exception>
     public RamDisk Mount(DiskOptions options, string? password = null, IProgress<double>? progress = null)
     {
-        // Reserved up front under the lock so two concurrent Mount calls for the same mount
-        // point can't both succeed and race to overwrite each other's dictionary entry — the
-        // loser's RamDisk would otherwise never be unmounted or disposed.
+        // Reserve the mount point up front, under the lock, for the whole duration of the mount
+        // (not just a point-in-time check) so a second concurrent Mount call for the same mount
+        // point fails immediately instead of racing RamDisk.Create — which actually mounts a live
+        // WinFsp volume — against this call.
         lock (_syncRoot)
         {
-            if (_disks.ContainsKey(options.MountPoint))
+            if (_disks.ContainsKey(options.MountPoint) || !_reservedMountPoints.Add(options.MountPoint))
             {
                 throw new InvalidOperationException($"A disk is already mounted at '{options.MountPoint}'.");
             }
         }
 
-        var disk = RamDisk.Create(options, password, progress);
+        RamDisk disk;
+        try
+        {
+            disk = RamDisk.Create(options, password, progress);
+        }
+        finally
+        {
+            lock (_syncRoot)
+            {
+                _reservedMountPoints.Remove(options.MountPoint);
+            }
+        }
+
         disk.ContentAccessed += OnDiskContentAccessed;
 
         lock (_syncRoot)
         {
-            if (!_disks.TryAdd(options.MountPoint, disk))
-            {
-                // Lost a race against another Mount call for the same mount point that reserved
-                // it between our check above and now. Dispose the disk we just created instead
-                // of leaking it, and surface the same error as the up-front check.
-                disk.ContentAccessed -= OnDiskContentAccessed;
-                disk.Dispose();
-                throw new InvalidOperationException($"A disk is already mounted at '{options.MountPoint}'.");
-            }
+            _disks[options.MountPoint] = disk;
         }
 
         DiskMounted?.Invoke(this, disk);
