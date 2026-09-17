@@ -214,6 +214,10 @@
     <sys:String x:Key="DiskContent.TypeFile">{0} File</sys:String>
     <sys:String x:Key="DiskContent.TypeFileGeneric">File</sys:String>
     <sys:String x:Key="DiskContent.Delete">Delete</sys:String>
+    <sys:String x:Key="DiskContent.Export">Export to...</sys:String>
+    <sys:String x:Key="DiskContent.FilterPlaceholder">Filter by name (supports * and ?)</sys:String>
+    <sys:String x:Key="Tip.DiskContentFilter">Show only files/folders whose name matches this text. Supports * and ? wildcards; plain text matches anywhere in the name.</sys:String>
+    <sys:String x:Key="DiskContent.NoMatches">No files or folders match this filter.</sys:String>
     <sys:String x:Key="Btn.Close">Close</sys:String>
     <sys:String x:Key="Msg.RestoreSnapshotConfirmBody">Restore {0} ({1}) from snapshot {2}?&#x0a;&#x0a;Current contents will be replaced.</sys:String>
     <sys:String x:Key="Status.SnapshotRestored">Restored {0} from a snapshot</sys:String>
@@ -321,8 +325,10 @@
     <sys:String x:Key="Msg.DeleteNodeConfirmBodyFolder">Delete "{0}" and everything inside it? This cannot be undone.</sys:String>
     <sys:String x:Key="Msg.DeleteNodeConfirmBodyMultiple">Delete the {0} selected items? This cannot be undone.</sys:String>
     <sys:String x:Key="DiskContent.Deleting">Deleting...</sys:String>
-    <sys:String x:Key="DiskContent.DeletingProgress">Deleting... ({0}/{1})</sys:String>
+    <sys:String x:Key="DiskContent.Exporting">Exporting...</sys:String>
+    <sys:String x:Key="DiskContent.OperationProgress">{0} ({1}/{2})</sys:String>
     <sys:String x:Key="Msg.DeleteNodeFailed">Failed to delete "{0}":&#x0a;{1}</sys:String>
+    <sys:String x:Key="Msg.ExportNodeFailed">Failed to export "{0}":&#x0a;{1}</sys:String>
     <sys:String x:Key="Msg.EditDiskConfirmTitle">Edit Disk</sys:String>
     <sys:String x:Key="Msg.EditDiskConfirmBody">Edit {0} ({1})?&#x0a;&#x0a;The disk will be unmounted and remounted with the new settings. All data currently in memory will be lost.</sys:String>
     <sys:String x:Key="Msg.TempDirWillBeReset">This disk is currently your Windows Temp directory. It will be automatically reset to the system default before unmounting.</sys:String>

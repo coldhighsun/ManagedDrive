@@ -214,6 +214,10 @@
     <sys:String x:Key="DiskContent.TypeFile">{0} 文件</sys:String>
     <sys:String x:Key="DiskContent.TypeFileGeneric">文件</sys:String>
     <sys:String x:Key="DiskContent.Delete">删除</sys:String>
+    <sys:String x:Key="DiskContent.Export">导出到...</sys:String>
+    <sys:String x:Key="DiskContent.FilterPlaceholder">按名称过滤（支持 * 和 ?）</sys:String>
+    <sys:String x:Key="Tip.DiskContentFilter">只显示名称匹配此文本的文件/文件夹。支持 * 和 ? 通配符；纯文本按名称中任意位置匹配。</sys:String>
+    <sys:String x:Key="DiskContent.NoMatches">没有匹配此过滤条件的文件或文件夹。</sys:String>
     <sys:String x:Key="Btn.Close">关闭</sys:String>
     <sys:String x:Key="Msg.RestoreSnapshotConfirmBody">从快照 {2} 恢复 {0}（{1}）？&#x0a;&#x0a;当前内容将被替换。</sys:String>
     <sys:String x:Key="Status.SnapshotRestored">已从快照恢复 {0}</sys:String>
@@ -321,8 +325,10 @@
     <sys:String x:Key="Msg.DeleteNodeConfirmBodyFolder">删除"{0}"及其全部内容？此操作无法撤销。</sys:String>
     <sys:String x:Key="Msg.DeleteNodeConfirmBodyMultiple">确定要删除选中的 {0} 个项目吗？此操作无法撤销。</sys:String>
     <sys:String x:Key="DiskContent.Deleting">正在删除...</sys:String>
-    <sys:String x:Key="DiskContent.DeletingProgress">正在删除... ({0}/{1})</sys:String>
+    <sys:String x:Key="DiskContent.Exporting">正在导出...</sys:String>
+    <sys:String x:Key="DiskContent.OperationProgress">{0} ({1}/{2})</sys:String>
     <sys:String x:Key="Msg.DeleteNodeFailed">删除"{0}"失败：&#x0a;{1}</sys:String>
+    <sys:String x:Key="Msg.ExportNodeFailed">导出"{0}"失败：&#x0a;{1}</sys:String>
     <sys:String x:Key="Msg.EditDiskConfirmTitle">编辑磁盘</sys:String>
     <sys:String x:Key="Msg.EditDiskConfirmBody">确认编辑 {0}（{1}）？&#x0a;&#x0a;磁盘将以新参数重新挂载，内存中的所有数据将丢失。</sys:String>
     <sys:String x:Key="Msg.TempDirWillBeReset">此磁盘当前是您的 Windows 临时文件夹。卸载前将自动恢复为系统默认临时目录。</sys:String>

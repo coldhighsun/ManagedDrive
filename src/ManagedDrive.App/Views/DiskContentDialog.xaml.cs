@@ -26,7 +26,8 @@ public partial class DiskContentDialog
     private readonly List<DiskContentNode> _rootNodes = [];
     private readonly ObservableCollection<DiskContentRow> _rows = [];
     private readonly DiskViewModel _target;
-    private CancellationTokenSource? _deleteCts;
+    private CancellationTokenSource? _busyCts;
+    private string _filterText = string.Empty;
     private bool _sortAscending = true;
     private SortKey _sortKey = SortKey.Name;
 
@@ -60,7 +61,7 @@ public partial class DiskContentDialog
         // dialog (and its close-button/context-menu-driven cancellation surface) is gone — fires
         // for every close path (title bar X, bottom Close button, Esc), since Window.Closing is
         // the common point they all funnel through.
-        Closing += (_, _) => _deleteCts?.Cancel();
+        Closing += (_, _) => _busyCts?.Cancel();
 
         var nodes = target.Disk.GetAllNodes();
         var root = BuildTree(nodes);
@@ -72,6 +73,7 @@ public partial class DiskContentDialog
         {
             EmptyText.Visibility = Visibility.Visible;
             ContentList.Visibility = Visibility.Collapsed;
+            FilterBox.IsEnabled = false;
         }
         else
         {
@@ -144,6 +146,26 @@ public partial class DiskContentDialog
 
         PropagateSizes(root);
         return root;
+    }
+
+    /// <summary>
+    /// Recursively collects every node under <paramref name="nodes"/> (files and directories
+    /// alike) whose <see cref="DiskContentNode.Name"/> matches <paramref name="pattern"/>, into
+    /// <paramref name="results"/>. Used by <see cref="ApplyFilter"/> to flatten the tree into a
+    /// single filtered list, since a match nested several levels deep would otherwise be hidden
+    /// by its collapsed ancestors.
+    /// </summary>
+    private static void CollectMatching(IEnumerable<DiskContentNode> nodes, string pattern, List<DiskContentNode> results)
+    {
+        foreach (var node in nodes)
+        {
+            if (WildcardMatcher.Matches(pattern, node.Name))
+            {
+                results.Add(node);
+            }
+
+            CollectMatching(node.Children, pattern, results);
+        }
     }
 
     /// <summary>
@@ -307,7 +329,7 @@ public partial class DiskContentDialog
     /// the WinFsp <c>CanDelete</c>/<c>Cleanup</c> callbacks handle dirty-tracking and capacity
     /// accounting exactly as they would for any other client), after a single confirmation
     /// prompt covering the whole selection. The actual delete I/O runs off the UI thread behind
-    /// <see cref="DeleteOverlay"/>, since a recursive directory delete of many files can take a
+    /// <see cref="BusyOverlay"/>, since a recursive directory delete of many files can take a
     /// noticeable amount of time.
     /// </summary>
     private async void DeleteNode_Click(object sender, RoutedEventArgs e)
@@ -317,18 +339,7 @@ public partial class DiskContentDialog
             return;
         }
 
-        var selectedNodes = ContentList.SelectedItems.Cast<DiskContentRow>().Select(r => r.Node).ToList();
-        if (selectedNodes.Count == 0)
-        {
-            if (GetRowFromMenuItem(sender) is not { } fallbackRow)
-            {
-                return;
-            }
-
-            selectedNodes = [fallbackRow.Node];
-        }
-
-        var nodesToDelete = ExcludeDescendantsOfSelectedDirectories(selectedNodes);
+        var nodesToDelete = GetSelectedNodesOrFallback(sender);
         if (nodesToDelete.Count == 0)
         {
             return;
@@ -351,11 +362,8 @@ public partial class DiskContentDialog
         }
 
         IProgress<(int Completed, int Total)> progress =
-            new Progress<(int Completed, int Total)>(p => UpdateDeleteProgressText(p.Completed, p.Total));
-        ShowDeleteOverlay();
-
-        _deleteCts = new CancellationTokenSource();
-        var token = _deleteCts.Token;
+            new Progress<(int Completed, int Total)>(p => UpdateBusyProgressText(Loc.Get("DiskContent.Deleting"), p.Completed, p.Total));
+        var token = ShowBusyOverlay(Loc.Get("DiskContent.Deleting"));
 
         var deletedNodes = new List<DiskContentNode>();
         (string Name, string Message)? failure = null;
@@ -416,9 +424,7 @@ public partial class DiskContentDialog
         }
         finally
         {
-            _deleteCts.Dispose();
-            _deleteCts = null;
-            HideDeleteOverlay();
+            HideBusyOverlay();
         }
 
         foreach (var node in deletedNodes)
@@ -439,22 +445,155 @@ public partial class DiskContentDialog
         }
     }
 
+    /// <summary>
+    /// Re-filters the content list as the user types, wrapping the entered text in <c>*...*</c>
+    /// wildcards (unless it already contains <c>*</c>/<c>?</c>) so it behaves as a substring
+    /// search rather than requiring a whole-name match.
+    /// </summary>
+    private void FilterBox_TextChanged(object sender, TextChangedEventArgs e)
+    {
+        _filterText = FilterBox.Text.Trim();
+        RebuildRows();
+    }
+
     private void ExpanderButton_Click(object sender, RoutedEventArgs e)
     {
-        if (((Button)sender).DataContext is DiskContentRow row)
+        if (((Button)sender).DataContext is DiskContentRow { CanExpand: true } row)
         {
             ToggleExpanded(row);
         }
     }
 
     /// <summary>
-    /// Hides <see cref="DeleteOverlay"/> and stops its spinner animation.
+    /// Exports every selected row's node (or the right-clicked row when nothing is selected) to a
+    /// user-chosen local folder, copying each file/directory from its real filesystem path via
+    /// <see cref="ToRealPath"/> — the same path the WinFsp mount itself serves reads from, so this
+    /// is a plain file copy rather than anything RAM-disk-specific. Runs off the UI thread behind
+    /// <see cref="BusyOverlay"/>, same as <see cref="DeleteNode_Click"/>.
     /// </summary>
-    private void HideDeleteOverlay()
+    private async void ExportNode_Click(object sender, RoutedEventArgs e)
     {
-        DeleteSpinnerRotate.BeginAnimation(RotateTransform.AngleProperty, null);
-        DeleteOverlay.Visibility = Visibility.Collapsed;
+        var nodesToExport = GetSelectedNodesOrFallback(sender);
+        if (nodesToExport.Count == 0)
+        {
+            return;
+        }
+
+        var dlg = new OpenFolderDialog
+        {
+            Title = Loc.Get("DiskContent.Export"),
+        };
+
+        if (dlg.ShowDialog() != true)
+        {
+            return;
+        }
+
+        var destinationRoot = dlg.FolderName;
+
+        IProgress<(int Completed, int Total)> progress =
+            new Progress<(int Completed, int Total)>(p => UpdateBusyProgressText(Loc.Get("DiskContent.Exporting"), p.Completed, p.Total));
+        var token = ShowBusyOverlay(Loc.Get("DiskContent.Exporting"));
+
+        (string Name, string Message)? failure = null;
+
+        try
+        {
+            await Task.Run(() =>
+            {
+                var totalFiles = nodesToExport.Sum(node => node.IsDirectory ? CountFilesSafe(ToRealPath(node.FullPath)) : 1);
+                var completed = 0;
+                progress.Report((completed, totalFiles));
+
+                foreach (var node in nodesToExport)
+                {
+                    token.ThrowIfCancellationRequested();
+
+                    var sourcePath = ToRealPath(node.FullPath);
+                    var destinationPath = Path.Combine(destinationRoot, node.Name);
+
+                    try
+                    {
+                        if (node.IsDirectory)
+                        {
+                            Directory.CreateDirectory(destinationPath);
+                            foreach (var sourceFilePath in Directory.EnumerateFiles(sourcePath, "*", SearchOption.AllDirectories))
+                            {
+                                token.ThrowIfCancellationRequested();
+                                var relative = Path.GetRelativePath(sourcePath, sourceFilePath);
+                                var destinationFilePath = Path.Combine(destinationPath, relative);
+                                Directory.CreateDirectory(Path.GetDirectoryName(destinationFilePath)!);
+                                File.Copy(sourceFilePath, destinationFilePath, overwrite: true);
+                                completed++;
+                                progress.Report((completed, totalFiles));
+                            }
+                        }
+                        else
+                        {
+                            File.Copy(sourcePath, destinationPath, overwrite: true);
+                            completed++;
+                            progress.Report((completed, totalFiles));
+                        }
+                    }
+                    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                    {
+                        failure = (node.Name, ex.Message);
+                        break;
+                    }
+                }
+            }, token);
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+        finally
+        {
+            HideBusyOverlay();
+        }
+
+        if (failure is { } f)
+        {
+            new ConfirmDialog(Loc.Get("DiskContent.Export"), Loc.Format("Msg.ExportNodeFailed", f.Name, f.Message))
+            {
+                Owner = this,
+            }.ShowDialog();
+        }
+    }
+
+    /// <summary>
+    /// Resolves the node set a delete/export action should act on: the current multi-selection,
+    /// or (when nothing is selected, e.g. a bare right-click) just the row the context menu was
+    /// opened on. Either way, descendants of another selected directory are dropped so a
+    /// recursive operation on the ancestor isn't repeated on its own children.
+    /// </summary>
+    private List<DiskContentNode> GetSelectedNodesOrFallback(object menuItemSender)
+    {
+        var selectedNodes = ContentList.SelectedItems.Cast<DiskContentRow>().Select(r => r.Node).ToList();
+        if (selectedNodes.Count == 0)
+        {
+            if (GetRowFromMenuItem(menuItemSender) is not { } fallbackRow)
+            {
+                return [];
+            }
+
+            selectedNodes = [fallbackRow.Node];
+        }
+
+        return ExcludeDescendantsOfSelectedDirectories(selectedNodes);
+    }
+
+    /// <summary>
+    /// Hides <see cref="BusyOverlay"/>, stops its spinner animation, disposes/clears
+    /// <see cref="_busyCts"/>, and re-enables the content list.
+    /// </summary>
+    private void HideBusyOverlay()
+    {
+        BusySpinnerRotate.BeginAnimation(RotateTransform.AngleProperty, null);
+        BusyOverlay.Visibility = Visibility.Collapsed;
         ContentList.IsEnabled = true;
+        _busyCts?.Dispose();
+        _busyCts = null;
     }
 
     /// <summary>
@@ -474,14 +613,36 @@ public partial class DiskContentDialog
     }
 
     /// <summary>
-    /// Rebuilds <see cref="_rows"/> from <see cref="_rootNodes"/> in their current sort order,
-    /// descending into a node's children only while that node is present in
-    /// <see cref="_expandedNodes"/>.
+    /// Rebuilds <see cref="_rows"/> from <see cref="_rootNodes"/> in their current sort order.
+    /// With no active filter, descends into a node's children only while that node is present in
+    /// <see cref="_expandedNodes"/> (the normal tree view). With an active filter, ignores
+    /// expansion state entirely and instead shows a flat list of every matching node anywhere in
+    /// the tree, each labeled with its full path since the surrounding hierarchy is no longer
+    /// visible to give it context.
     /// </summary>
     private void RebuildRows()
     {
         _rows.Clear();
-        AddRows(_rootNodes, depth: 0);
+
+        if (string.IsNullOrEmpty(_filterText))
+        {
+            AddRows(_rootNodes, depth: 0);
+        }
+        else
+        {
+            var pattern = _filterText.Contains('*') || _filterText.Contains('?') ? _filterText : $"*{_filterText}*";
+            var matches = new List<DiskContentNode>();
+            CollectMatching(_rootNodes, pattern, matches);
+            matches.Sort(BuildComparer(_sortKey, _sortAscending));
+
+            foreach (var node in matches)
+            {
+                _rows.Add(new DiskContentRow(node, depth: 0, showFullPath: true));
+            }
+        }
+
+        NoMatchesText.Visibility = _rootNodes.Count > 0 && _rows.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+        ContentList.Visibility = NoMatchesText.Visibility == Visibility.Visible ? Visibility.Collapsed : Visibility.Visible;
     }
 
     /// <summary>
@@ -504,7 +665,7 @@ public partial class DiskContentDialog
     /// </summary>
     private void Row_MouseDoubleClick(object sender, MouseButtonEventArgs e)
     {
-        if (((ListViewItem)sender).Content is not DiskContentRow row || !row.HasChildren)
+        if (((ListViewItem)sender).Content is not DiskContentRow row || !row.CanExpand)
         {
             return;
         }
@@ -550,17 +711,24 @@ public partial class DiskContentDialog
     }
 
     /// <summary>
-    /// Shows <see cref="DeleteOverlay"/> over the content list and starts its spinner spinning,
-    /// also disabling the list so the selection can't change mid-delete.
+    /// Shows <see cref="BusyOverlay"/> over the content list with <paramref name="initialText"/>
+    /// and starts its spinner spinning, disabling the list so the selection can't change
+    /// mid-operation. Creates and returns the <see cref="CancellationToken"/> for the caller's
+    /// background work (stored in <see cref="_busyCts"/> so the dialog's <c>Closing</c> handler
+    /// can cancel an in-flight delete/export instead of leaving it running after the dialog is
+    /// gone).
     /// </summary>
-    private void ShowDeleteOverlay()
+    private CancellationToken ShowBusyOverlay(string initialText)
     {
         ContentList.IsEnabled = false;
-        DeleteProgressText.Text = Loc.Get("DiskContent.Deleting");
-        DeleteOverlay.Visibility = Visibility.Visible;
-        DeleteSpinnerRotate.BeginAnimation(
+        BusyProgressText.Text = initialText;
+        BusyOverlay.Visibility = Visibility.Visible;
+        BusySpinnerRotate.BeginAnimation(
             RotateTransform.AngleProperty,
             new DoubleAnimation(0, 360, TimeSpan.FromSeconds(1)) { RepeatBehavior = RepeatBehavior.Forever });
+
+        _busyCts = new CancellationTokenSource();
+        return _busyCts.Token;
     }
 
     /// <summary>
@@ -585,14 +753,14 @@ public partial class DiskContentDialog
         Path.Combine(_mountPoint, virtualPath.TrimStart('\\').Replace('\\', Path.DirectorySeparatorChar));
 
     /// <summary>
-    /// Updates the delete overlay's status text with a "x / total" file count, or falls back to
-    /// the plain "Deleting..." text when <paramref name="total"/> is unknown/zero (e.g. the
+    /// Updates the busy overlay's status text with a "x / total" file count, or falls back to
+    /// <paramref name="fallbackText"/> when <paramref name="total"/> is unknown/zero (e.g. the
     /// selection is only empty directories, or the up-front file count failed).
     /// </summary>
-    private void UpdateDeleteProgressText(int completed, int total) =>
-        DeleteProgressText.Text = total > 0
-            ? Loc.Format("DiskContent.DeletingProgress", completed, total)
-            : Loc.Get("DiskContent.Deleting");
+    private void UpdateBusyProgressText(string fallbackText, int completed, int total) =>
+        BusyProgressText.Text = total > 0
+            ? Loc.Format("DiskContent.OperationProgress", fallbackText, completed, total)
+            : fallbackText;
 
     /// <summary>
     /// Shows a chevron next to the active sort column's header text (pointing up for ascending,
@@ -738,7 +906,7 @@ public sealed class DiskContentNode
 /// <see cref="DiskContentNode"/> plus its nesting depth (used only to indent the Name cell's
 /// content, not the whole row) and current expand/collapse state.
 /// </summary>
-public sealed class DiskContentRow(DiskContentNode node, int depth) : INotifyPropertyChanged
+public sealed class DiskContentRow(DiskContentNode node, int depth, bool showFullPath = false) : INotifyPropertyChanged
 {
     private bool _isExpanded;
 
@@ -747,11 +915,27 @@ public sealed class DiskContentRow(DiskContentNode node, int depth) : INotifyPro
 
     /// <summary>
     /// Gets this row's nesting depth (0 for top-level nodes), used to indent the Name column.
+    /// Always 0 for a filtered row (see <see cref="ShowFullPath"/>), since filtered results are
+    /// shown as a flat list rather than nested under their ancestors.
     /// </summary>
     public int Depth { get; } = depth;
 
     /// <summary>
-    /// Gets whether <see cref="Node"/> has any children, controlling whether the expander is shown.
+    /// Gets the text shown in the Name column: <see cref="DiskContentNode.Name"/> normally, or
+    /// <see cref="DiskContentNode.FullPath"/> (without the leading <c>\</c>) for a filtered row,
+    /// since its surrounding folder hierarchy is no longer visible to give it context.
+    /// </summary>
+    public string DisplayName => showFullPath ? Node.FullPath.TrimStart('\\') : Node.Name;
+
+    /// <summary>
+    /// Gets whether this row can be expanded/collapsed. Always <see langword="false"/> for a
+    /// filtered row: the flat filtered list has no nested children to reveal, and toggling one
+    /// would incorrectly fall back to the unfiltered tree view (see <see cref="ToggleExpanded"/>).
+    /// </summary>
+    public bool CanExpand => HasChildren && !showFullPath;
+
+    /// <summary>
+    /// Gets whether <see cref="Node"/> has any children.
     /// </summary>
     public bool HasChildren => Node.Children.Count > 0;
 
