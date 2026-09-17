@@ -68,6 +68,34 @@ public sealed class MemoryFileSystemCallbackTests
     }
 
     [Fact]
+    public void ClearDirtySince_MutationAfterCapturedVersion_LeavesDiskDirty()
+    {
+        var fs = new MemoryFileSystem(1024 * 1024, "Label");
+        fs.Create("\\file.bin", 0, 0, (uint)FileAttributes.Normal, [], 0, out _, out _, out _, out _);
+        var versionAtSaveStart = fs.CaptureMutationVersion();
+
+        // Simulates a write racing an in-progress save: it happens after the save captured its
+        // starting version, so clearing dirty "since" that version must not appear to clean it up.
+        fs.MarkDirty();
+
+        fs.ClearDirtySince(versionAtSaveStart);
+
+        Assert.True(fs.IsDirty);
+    }
+
+    [Fact]
+    public void ClearDirtySince_NoMutationAfterCapturedVersion_ClearsDirty()
+    {
+        var fs = new MemoryFileSystem(1024 * 1024, "Label");
+        fs.Create("\\file.bin", 0, 0, (uint)FileAttributes.Normal, [], 0, out _, out _, out _, out _);
+        var versionAtSaveStart = fs.CaptureMutationVersion();
+
+        fs.ClearDirtySince(versionAtSaveStart);
+
+        Assert.False(fs.IsDirty);
+    }
+
+    [Fact]
     public void ContentAccessed_FiresForReadsAndWrites()
     {
         var fs = new MemoryFileSystem(1024 * 1024, "Label");
