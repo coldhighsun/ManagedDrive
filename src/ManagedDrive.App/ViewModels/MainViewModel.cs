@@ -1454,45 +1454,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             return;
         }
 
-        var otherDisks = GetOtherDiskOptions(excluding: null);
-        if (IsPathInUse(otherDisks, openDialog.FileName, d => d.SourceArchivePath))
-        {
-            ShowWarning(Loc.Get("Val.ArchivePathInUse"));
-            return;
-        }
-
-        ulong totalBytes;
-        string suggestedLabel;
-        try
-        {
-            ArchiveNodeMapBuilder.PeekArchive(openDialog.FileName, out totalBytes, out suggestedLabel);
-        }
-        catch (InvalidDataException)
-        {
-            ShowWarning(Loc.Get("Val.ImportInvalidArchive"));
-            return;
-        }
-
-        var dialog = CreateDiskDialog.ForArchiveImport(openDialog.FileName, totalBytes, suggestedLabel, otherDisks);
-        dialog.Owner = Application.Current.MainWindow;
-
-        if (dialog.ShowDialog() != true)
-        {
-            return;
-        }
-
-        _logger.LogInformation("Import archive requested: {ArchivePath} -> {MountPoint}.", openDialog.FileName, dialog.Result!.MountPoint);
-        using var cts = new CancellationTokenSource();
-        BusyOverlay.Start(Loc.Get("Busy.ImportingArchive"), indeterminate: totalBytes == 0, totalBytes: totalBytes > 0 ? totalBytes : null, cancellationSource: cts);
-        try
-        {
-            var progress = new Progress<double>(BusyOverlay.Report);
-            await MountAndAddAsync(dialog.Result!, progress: progress, cancellationToken: cts.Token);
-        }
-        finally
-        {
-            BusyOverlay.Stop();
-        }
+        await ImportArchiveAsync(openDialog.FileName);
     }
 
     private async void ExecuteImportDisk()
@@ -1509,8 +1471,67 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             return;
         }
 
+        await ImportDiskAsync(openDialog.FileName);
+    }
+
+    /// <summary>
+    /// Imports an archive file (<c>.zip</c> etc.) at <paramref name="archivePath"/> as a new
+    /// read-only disk, prompting for mount options via <see cref="CreateDiskDialog"/>. Shared by
+    /// <see cref="ExecuteImportArchive"/> (file picker) and drag-and-drop (see
+    /// <see cref="ImportDroppedFileAsync"/>).
+    /// </summary>
+    private async Task ImportArchiveAsync(string archivePath)
+    {
         var otherDisks = GetOtherDiskOptions(excluding: null);
-        if (IsPathInUse(otherDisks, openDialog.FileName, d => d.PersistImagePath))
+        if (IsPathInUse(otherDisks, archivePath, d => d.SourceArchivePath))
+        {
+            ShowWarning(Loc.Get("Val.ArchivePathInUse"));
+            return;
+        }
+
+        ulong totalBytes;
+        string suggestedLabel;
+        try
+        {
+            ArchiveNodeMapBuilder.PeekArchive(archivePath, out totalBytes, out suggestedLabel);
+        }
+        catch (InvalidDataException)
+        {
+            ShowWarning(Loc.Get("Val.ImportInvalidArchive"));
+            return;
+        }
+
+        var dialog = CreateDiskDialog.ForArchiveImport(archivePath, totalBytes, suggestedLabel, otherDisks);
+        dialog.Owner = Application.Current.MainWindow;
+
+        if (dialog.ShowDialog() != true)
+        {
+            return;
+        }
+
+        _logger.LogInformation("Import archive requested: {ArchivePath} -> {MountPoint}.", archivePath, dialog.Result!.MountPoint);
+        using var cts = new CancellationTokenSource();
+        BusyOverlay.Start(Loc.Get("Busy.ImportingArchive"), indeterminate: totalBytes == 0, totalBytes: totalBytes > 0 ? totalBytes : null, cancellationSource: cts);
+        try
+        {
+            var progress = new Progress<double>(BusyOverlay.Report);
+            await MountAndAddAsync(dialog.Result!, progress: progress, cancellationToken: cts.Token);
+        }
+        finally
+        {
+            BusyOverlay.Stop();
+        }
+    }
+
+    /// <summary>
+    /// Imports a <c>.mdr</c> disk image at <paramref name="imagePath"/>, prompting for mount
+    /// options via <see cref="CreateDiskDialog"/>. Shared by <see cref="ExecuteImportDisk"/>
+    /// (file picker) and drag-and-drop (see <see cref="ImportDroppedFileAsync"/>).
+    /// </summary>
+    private async Task ImportDiskAsync(string imagePath)
+    {
+        var otherDisks = GetOtherDiskOptions(excluding: null);
+        if (IsPathInUse(otherDisks, imagePath, d => d.PersistImagePath))
         {
             ShowWarning(Loc.Get("Val.ImagePathInUse"));
             return;
@@ -1520,7 +1541,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         string volumeLabel;
         try
         {
-            DiskImageSerializer.PeekHeader(openDialog.FileName, out capacityBytes, out volumeLabel, out _);
+            DiskImageSerializer.PeekHeader(imagePath, out capacityBytes, out volumeLabel, out _);
         }
         catch (InvalidDataException)
         {
@@ -1528,7 +1549,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             return;
         }
 
-        var dialog = new CreateDiskDialog(openDialog.FileName, capacityBytes, volumeLabel, otherDisks)
+        var dialog = new CreateDiskDialog(imagePath, capacityBytes, volumeLabel, otherDisks)
         {
             Owner = Application.Current.MainWindow
         };
@@ -1538,9 +1559,9 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             return;
         }
 
-        _logger.LogInformation("Import disk image requested: {ImagePath} -> {MountPoint}.", openDialog.FileName, dialog.Result!.MountPoint);
+        _logger.LogInformation("Import disk image requested: {ImagePath} -> {MountPoint}.", imagePath, dialog.Result!.MountPoint);
 
-        var fileSizeBytes = (ulong)new FileInfo(openDialog.FileName).Length;
+        var fileSizeBytes = (ulong)new FileInfo(imagePath).Length;
         using var cts = new CancellationTokenSource();
         BusyOverlay.Start(Loc.Get("Busy.ImportingImage"), totalBytes: fileSizeBytes, cancellationSource: cts);
         try
@@ -1553,6 +1574,18 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             BusyOverlay.Stop();
         }
     }
+
+    /// <summary>
+    /// Imports a file dropped onto the main window: <c>.mdr</c> goes through
+    /// <see cref="ImportDiskAsync"/>, anything else through <see cref="ImportArchiveAsync"/> (the
+    /// archive importer validates the format itself and reports <c>Val.ImportInvalidArchive</c>
+    /// if it isn't one).
+    /// </summary>
+    /// <param name="path">Absolute path of the dropped file.</param>
+    public Task ImportDroppedFileAsync(string path) =>
+        Path.GetExtension(path).Equals(".mdr", StringComparison.OrdinalIgnoreCase)
+            ? ImportDiskAsync(path)
+            : ImportArchiveAsync(path);
 
     private async void ExecuteResetTempDirs()
     {
