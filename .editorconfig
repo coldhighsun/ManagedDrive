@@ -1,5 +1,6 @@
-# EditorConfig: documents existing conventions (see CLAUDE.md). Not enforced in CI this round —
-# severities are "suggestion" only, since EnforceCodeStyleInBuild is intentionally not enabled yet.
+# EditorConfig: documents existing conventions (see CLAUDE.md). Enforced in CI via
+# Directory.Build.props' EnforceCodeStyleInBuild=true, so `dotnet build` fails on any
+# rule below marked "warning".
 root = true
 
 [*]
@@ -12,10 +13,10 @@ trim_trailing_whitespace = true
 indent_style = space
 indent_size = 4
 
-csharp_style_namespace_declarations = file_scoped:suggestion
-csharp_style_var_for_built_in_types = true:suggestion
-csharp_style_var_when_type_is_apparent = true:suggestion
-csharp_style_var_elsewhere = true:suggestion
+csharp_style_namespace_declarations = file_scoped:warning
+csharp_style_var_for_built_in_types = true:warning
+csharp_style_var_when_type_is_apparent = true:warning
+csharp_style_var_elsewhere = true:warning
 csharp_style_prefer_primary_constructors = true:suggestion
 csharp_new_line_before_open_brace = all
 csharp_style_expression_bodied_methods = when_on_single_line:suggestion

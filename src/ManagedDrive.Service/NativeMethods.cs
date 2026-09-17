@@ -32,7 +32,7 @@ internal static class NativeMethods
     /// </summary>
     public static bool DeviceExists(string devicePath)
     {
-        using SafeFileHandle handle = CreateFile(
+        using var handle = CreateFile(
             @"\\?\GLOBALROOT" + devicePath,
             GENERIC_NONE,
             FILE_SHARE_READ | FILE_SHARE_WRITE,
