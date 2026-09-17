@@ -39,7 +39,7 @@ Create, mount and manage in-memory volumes that appear as normal drive letters i
 - Progress bar overlay for long operations (image save, archive import, export)
 
 **CLI**
-- `mdrive` (ships alongside `ManagedDrive.exe`) scripts mount/unmount/format/save/set-password/export/list/snapshot/exit against the running app over a named pipe, auto-launching it if needed
+- `mdrive` (ships alongside `ManagedDrive.exe`) scripts create/mount/unmount/format/save/set-password/export/list/ls/snapshot/exit against the running app over a named pipe, auto-launching it if needed
 - Mount to a drive letter or the path of an existing empty directory (WinFsp's directory mount-point support), validated up front with a clear error instead of a raw driver status code
 
 **Convenience & safety**
@@ -87,10 +87,12 @@ The ZIP also includes `mdrive.exe`, a companion CLI (see [CLI Usage](#cli-usage)
 `mdrive.exe` ships alongside `ManagedDrive.exe` and forwards commands to the running app over a named pipe, so scripts can drive ManagedDrive without opening the UI. If the app isn't already running, `mdrive` launches it and retries for up to 10 seconds before giving up.
 
 ```powershell
+mdrive create R: --capacity-mb 512 --label Scratch --image C:\disks\scratch.mdr
 mdrive mount C:\disks\scratch.mdr R: --auto-mount --compression Optimal --custom-zstd-level 19
 mdrive mount C:\disks\scratch.mdr C:\Mounts\Scratch
 mdrive list
 mdrive list --json
+mdrive ls R: \Projects
 mdrive save R:
 mdrive set-password R: --password-file C:\secrets\scratch.pwd
 mdrive export R: C:\backups\scratch.mdr
@@ -104,6 +106,7 @@ mdrive exit
 
 | Command | Description |
 |---|---|
+| `create <drive-letter> --capacity-mb <n> [options]` | Creates a brand-new, empty RAM disk. Options: `--label` (defaults to "RAM Disk"), `--image` (path to persist the disk to; omit for a memory-only disk discarded on unmount), `--password`, `--password-file` (encrypt `--image` with a password; requires `--image`; mutually exclusive with each other). |
 | `mount <image-path> <drive-letter> [options]` | Mounts an existing `.mdr` image. `drive-letter` may be a drive letter (`R:`) or the path of an existing, empty directory. Options: `--read-only`, `--auto-mount`, `--auto-save-minutes`, `--compression <None\|Fastest\|Optimal\|SmallestSize>`, `--custom-zstd-level <1-22>` (overrides the preset Zstd level mapped from `--compression`; only takes effect when the compression level is not `None`), `--max-snapshot-count`, `--max-snapshot-size-mb`, `--high-usage-warn-percent`, `--password`, `--password-file` (mutually exclusive; needed only if the image is encrypted — `--password-file` reads the first line of a file and is recommended over `--password` to avoid exposing it in shell history or the process list). Any option left unset keeps the image's saved profile value (or its default). |
 | `mount-archive <archive-path> [drive-letter]` | Imports an archive (zip/7z/rar/tar/...) as a read-only disk and opens it in Explorer once mounted. `drive-letter` may be a drive letter or the path of an existing, empty directory; if omitted entirely, the first free letter from `Z:` down to `D:` is used. Used internally by the Explorer right-click menu entry. |
 | `unmount <drive-letter>` | Unmounts a mounted disk. |
@@ -112,6 +115,7 @@ mdrive exit
 | `set-password <drive-letter> [options]` | Sets or removes a mounted disk's encryption password, taking effect on the next save. Exactly one of `--password`, `--password-file` (reads the first line of a file; recommended over `--password` to avoid exposing it in shell history or the process list), or `--remove` (removes password protection) must be given. |
 | `export <drive-letter> <output-path> [options]` | Exports a mounted disk to a standalone `.mdr` image or archive file, without touching the disk's own persistence settings. Options: `--format <Zip\|SevenZip>` (exports an archive instead of a `.mdr` image), `--compression <None\|Fastest\|Optimal\|SmallestSize>`, `--password`, `--password-file` (encrypt the exported `.mdr` image; not valid together with `--format`, since archive formats don't support encryption). |
 | `list [--json]` | Lists currently mounted disks with usage and capacity. `--json` outputs the list as JSON instead of a table, for scripting. |
+| `ls <drive-letter> [path]` | Lists the immediate children (name, type, size) of a directory on a mounted disk. `path` (e.g. `\Folder`) defaults to the root. |
 | `snapshot list <drive-letter>` | Lists a mounted disk's snapshots, newest first (index 1 = newest). |
 | `snapshot restore <drive-letter> <index>` | Restores a mounted disk's contents from the given snapshot, replacing its current contents. |
 | `snapshot delete <drive-letter> <index>` | Deletes a single snapshot of a mounted disk. |
@@ -218,7 +222,7 @@ This project bundles [WinFsp](https://winfsp.dev/) and [SharpCompress](https://g
 - 可选每日检查更新，发现新版本时通知提醒
 
 **命令行**
-- `mdrive`（随 `ManagedDrive.exe` 发布）通过命名管道对运行中的应用执行 mount/unmount/format/save/set-password/export/list/snapshot/exit，应用未运行时自动启动
+- `mdrive`（随 `ManagedDrive.exe` 发布）通过命名管道对运行中的应用执行 create/mount/unmount/format/save/set-password/export/list/ls/snapshot/exit，应用未运行时自动启动
 - 可挂载到盘符，也可挂载到已存在的空目录（WinFsp 的目录挂载点支持），挂载前会先校验并给出清晰错误提示，而不是原始的驱动状态码
 
 ### 安装
@@ -251,10 +255,12 @@ ZIP 中还包含 `mdrive.exe`（配套命令行工具，见下方[命令行用�
 `mdrive.exe` 随 `ManagedDrive.exe` 一同发布，通过命名管道将命令转发给正在运行的应用，因此脚本无需打开界面即可操作 ManagedDrive。若应用尚未运行，`mdrive` 会自动启动它，并在最长 10 秒内重试。
 
 ```powershell
+mdrive create R: --capacity-mb 512 --label Scratch --image C:\disks\scratch.mdr
 mdrive mount C:\disks\scratch.mdr R: --auto-mount --compression Optimal --custom-zstd-level 19
 mdrive mount C:\disks\scratch.mdr C:\Mounts\Scratch
 mdrive list
 mdrive list --json
+mdrive ls R: \Projects
 mdrive save R:
 mdrive set-password R: --password-file C:\secrets\scratch.pwd
 mdrive export R: C:\backups\scratch.mdr
@@ -268,6 +274,7 @@ mdrive exit
 
 | 命令 | 说明 |
 |---|---|
+| `create <盘符> --capacity-mb <数值> [选项]` | 新建一块全新的空白 RAM 盘。可选项：`--label`（默认 "RAM Disk"）、`--image`（持久化镜像路径；省略则为仅内存磁盘，卸载后即丢弃）、`--password`、`--password-file`（为 `--image` 加密；需配合 `--image` 使用；二者互斥）。 |
 | `mount <镜像路径> <盘符> [选项]` | 将已有的 `.mdr` 镜像挂载。`盘符`可以是一个盘符（`R:`），也可以是一个已存在的空目录路径。可选项：`--read-only`、`--auto-mount`、`--auto-save-minutes`、`--compression <None\|Fastest\|Optimal\|SmallestSize>`、`--max-snapshot-count`、`--max-snapshot-size-mb`、`--high-usage-warn-percent`、`--password`、`--password-file`（二者互斥；仅当镜像已加密时需要——推荐使用 `--password-file`（读取文件首行作为密码）而非 `--password`，以避免密码出现在 shell 历史或进程列表中）。未指定的选项沿用该镜像已保存的配置值（或其默认值）。 |
 | `mount-archive <压缩包路径> [盘符]` | 将压缩包（zip/7z/rar/tar 等）作为只读磁盘导入挂载，挂载完成后会自动在资源管理器中打开该盘符。`盘符`可以是一个盘符，也可以是一个已存在的空目录路径；完全省略时自动从 `Z:` 向下查找第一个可用盘符。资源管理器右键菜单项内部即调用此命令。 |
 | `unmount <盘符>` | 卸载已挂载的磁盘。 |
@@ -276,6 +283,7 @@ mdrive exit
 | `set-password <盘符> [选项]` | 设置或移除已挂载磁盘的加密密码，下次保存时生效。`--password`、`--password-file`（读取文件首行作为密码，推荐使用以避免密码出现在 shell 历史或进程列表中）、`--remove`（移除密码保护）三者须指定且只能指定一个。 |
 | `export <盘符> <输出路径> [选项]` | 将已挂载磁盘导出为独立的 `.mdr` 镜像或压缩包文件，不影响该磁盘自身的持久化配置。可选项：`--format <Zip\|SevenZip>`（导出为压缩包而非 `.mdr` 镜像）、`--compression <None\|Fastest\|Optimal\|SmallestSize>`、`--password`、`--password-file`（为导出的 `.mdr` 镜像加密；与 `--format` 互斥，因为压缩包格式不支持加密）。 |
 | `list [--json]` | 列出当前已挂载的磁盘及其用量与容量。`--json` 以 JSON 而非表格形式输出，便于脚本处理。 |
+| `ls <盘符> [路径]` | 列出已挂载磁盘上某目录的直接子项（名称、类型、大小）。`路径`（如 `\Folder`）省略时列出根目录。 |
 | `snapshot list <盘符>` | 列出已挂载磁盘的快照，按时间倒序排列（序号 1 为最新）。 |
 | `snapshot restore <盘符> <序号>` | 用指定序号的快照恢复已挂载磁盘的内容，会替换当前内容。 |
 | `snapshot delete <盘符> <序号>` | 删除已挂载磁盘的某个快照。 |
