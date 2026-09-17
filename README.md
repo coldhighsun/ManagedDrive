@@ -89,6 +89,7 @@ The ZIP also includes `mdrive.exe`, a companion CLI (see [CLI Usage](#cli-usage)
 ```powershell
 mdrive create R: --capacity-mb 512 --label Scratch --image C:\disks\scratch.mdr
 mdrive clone R: S:
+mdrive edit R: --capacity-mb 1024 --auto-save-minutes 10
 mdrive mount C:\disks\scratch.mdr R: --auto-mount --compression Optimal --custom-zstd-level 19
 mdrive mount C:\disks\scratch.mdr C:\Mounts\Scratch
 mdrive list
@@ -101,6 +102,7 @@ mdrive export R: C:\backups\scratch.zip --format Zip
 mdrive format R: --yes
 mdrive snapshot create R:
 mdrive snapshot list R:
+mdrive snapshot diff R: 1
 mdrive snapshot restore R: 1
 mdrive unmount R:
 mdrive exit
@@ -110,6 +112,7 @@ mdrive exit
 |---|---|
 | `create <drive-letter> --capacity-mb <n> [options]` | Creates a brand-new, empty RAM disk. Options: `--label` (defaults to "RAM Disk"), `--image` (path to persist the disk to; omit for a memory-only disk discarded on unmount), `--password`, `--password-file` (encrypt `--image` with a password; requires `--image`; mutually exclusive with each other). |
 | `clone <source-drive-letter> <target-drive-letter>` | Replaces the target disk's contents with a copy of the source disk's current contents. The target must already be mounted and writable, with capacity at least the source's used bytes. |
+| `edit <drive-letter> [options]` | Applies non-destructive changes to a mounted disk. Options: `--capacity-mb`, `--label`, `--auto-save-minutes`, `--disable-auto-save` (mutually exclusive with `--auto-save-minutes`). At least one option is required. Drive-letter and read-only changes, which require a full remount, are not supported by this command. |
 | `mount <image-path> <drive-letter> [options]` | Mounts an existing `.mdr` image. `drive-letter` may be a drive letter (`R:`) or the path of an existing, empty directory. Options: `--read-only`, `--auto-mount`, `--auto-save-minutes`, `--compression <None\|Fastest\|Optimal\|SmallestSize>`, `--custom-zstd-level <1-22>` (overrides the preset Zstd level mapped from `--compression`; only takes effect when the compression level is not `None`), `--max-snapshot-count`, `--max-snapshot-size-mb`, `--high-usage-warn-percent`, `--password`, `--password-file` (mutually exclusive; needed only if the image is encrypted — `--password-file` reads the first line of a file and is recommended over `--password` to avoid exposing it in shell history or the process list). Any option left unset keeps the image's saved profile value (or its default). |
 | `mount-archive <archive-path> [drive-letter]` | Imports an archive (zip/7z/rar/tar/...) as a read-only disk and opens it in Explorer once mounted. `drive-letter` may be a drive letter or the path of an existing, empty directory; if omitted entirely, the first free letter from `Z:` down to `D:` is used. Used internally by the Explorer right-click menu entry. |
 | `unmount <drive-letter>` | Unmounts a mounted disk. |
@@ -121,6 +124,7 @@ mdrive exit
 | `ls <drive-letter> [path]` | Lists the immediate children (name, type, size) of a directory on a mounted disk. `path` (e.g. `\Folder`) defaults to the root. |
 | `snapshot create <drive-letter>` | Writes a timestamped snapshot of a mounted disk right now, independent of a regular save. Requires an image path and snapshot retention (`--max-snapshot-count`/`--max-snapshot-size-mb`) to be configured. |
 | `snapshot list <drive-letter>` | Lists a mounted disk's snapshots, newest first (index 1 = newest). |
+| `snapshot diff <drive-letter> <index>` | Compares a snapshot against the disk's current live contents, listing added/removed/modified files and directories. |
 | `snapshot restore <drive-letter> <index>` | Restores a mounted disk's contents from the given snapshot, replacing its current contents. |
 | `snapshot delete <drive-letter> <index>` | Deletes a single snapshot of a mounted disk. |
 | `exit` | Exits the running ManagedDrive application. |
@@ -261,6 +265,7 @@ ZIP 中还包含 `mdrive.exe`（配套命令行工具，见下方[命令行用�
 ```powershell
 mdrive create R: --capacity-mb 512 --label Scratch --image C:\disks\scratch.mdr
 mdrive clone R: S:
+mdrive edit R: --capacity-mb 1024 --auto-save-minutes 10
 mdrive mount C:\disks\scratch.mdr R: --auto-mount --compression Optimal --custom-zstd-level 19
 mdrive mount C:\disks\scratch.mdr C:\Mounts\Scratch
 mdrive list
@@ -273,6 +278,7 @@ mdrive export R: C:\backups\scratch.zip --format Zip
 mdrive format R: --yes
 mdrive snapshot create R:
 mdrive snapshot list R:
+mdrive snapshot diff R: 1
 mdrive snapshot restore R: 1
 mdrive unmount R:
 mdrive exit
@@ -282,6 +288,7 @@ mdrive exit
 |---|---|
 | `create <盘符> --capacity-mb <数值> [选项]` | 新建一块全新的空白 RAM 盘。可选项：`--label`（默认 "RAM Disk"）、`--image`（持久化镜像路径；省略则为仅内存磁盘，卸载后即丢弃）、`--password`、`--password-file`（为 `--image` 加密；需配合 `--image` 使用；二者互斥）。 |
 | `clone <源盘符> <目标盘符>` | 用源磁盘的当前内容替换目标磁盘的内容。目标磁盘必须已挂载且可写，容量须不小于源磁盘已用字节数。 |
+| `edit <盘符> [选项]` | 对已挂载磁盘应用非破坏性更改。可选项：`--capacity-mb`、`--label`、`--auto-save-minutes`、`--disable-auto-save`（与 `--auto-save-minutes` 互斥）。至少须指定一项。盘符或只读标志的更改需要完整重挂，本命令不支持。 |
 | `mount <镜像路径> <盘符> [选项]` | 将已有的 `.mdr` 镜像挂载。`盘符`可以是一个盘符（`R:`），也可以是一个已存在的空目录路径。可选项：`--read-only`、`--auto-mount`、`--auto-save-minutes`、`--compression <None\|Fastest\|Optimal\|SmallestSize>`、`--max-snapshot-count`、`--max-snapshot-size-mb`、`--high-usage-warn-percent`、`--password`、`--password-file`（二者互斥；仅当镜像已加密时需要——推荐使用 `--password-file`（读取文件首行作为密码）而非 `--password`，以避免密码出现在 shell 历史或进程列表中）。未指定的选项沿用该镜像已保存的配置值（或其默认值）。 |
 | `mount-archive <压缩包路径> [盘符]` | 将压缩包（zip/7z/rar/tar 等）作为只读磁盘导入挂载，挂载完成后会自动在资源管理器中打开该盘符。`盘符`可以是一个盘符，也可以是一个已存在的空目录路径；完全省略时自动从 `Z:` 向下查找第一个可用盘符。资源管理器右键菜单项内部即调用此命令。 |
 | `unmount <盘符>` | 卸载已挂载的磁盘。 |
@@ -293,6 +300,7 @@ mdrive exit
 | `ls <盘符> [路径]` | 列出已挂载磁盘上某目录的直接子项（名称、类型、大小）。`路径`（如 `\Folder`）省略时列出根目录。 |
 | `snapshot create <盘符>` | 立即为已挂载磁盘写入一个带时间戳的快照，独立于常规保存。需要该磁盘已配置镜像路径及快照保留策略（`--max-snapshot-count`/`--max-snapshot-size-mb`）。 |
 | `snapshot list <盘符>` | 列出已挂载磁盘的快照，按时间倒序排列（序号 1 为最新）。 |
+| `snapshot diff <盘符> <序号>` | 将指定快照与磁盘当前实际内容进行比较，列出新增/删除/修改的文件和目录。 |
 | `snapshot restore <盘符> <序号>` | 用指定序号的快照恢复已挂载磁盘的内容，会替换当前内容。 |
 | `snapshot delete <盘符> <序号>` | 删除已挂载磁盘的某个快照。 |
 | `exit` | 退出正在运行的 ManagedDrive 应用。 |
