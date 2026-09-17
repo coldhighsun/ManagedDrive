@@ -26,7 +26,19 @@ public sealed class MemoryFileSystem : FileSystemBase
 
     private readonly Func<ulong> _availableMemoryProvider;
     private readonly bool _readOnly;
-    private volatile bool _isDirty;
+
+    /// <summary>
+    /// Monotonically increasing counter bumped by every mutation (see <see cref="MarkDirty()"/>).
+    /// Compared against <see cref="_savedVersion"/> to determine <see cref="IsDirty"/>.
+    /// </summary>
+    private long _mutationVersion;
+
+    /// <summary>
+    /// The <see cref="_mutationVersion"/> value as of the last successful save
+    /// (<see cref="ClearDirtySince"/>).
+    /// </summary>
+    private long _savedVersion;
+
     private ContentAccessInfo? _lastContentReadAccess;
     private long _lastContentReadTicks;
     private ContentAccessInfo? _lastContentWriteAccess;
@@ -86,9 +98,9 @@ public sealed class MemoryFileSystem : FileSystemBase
 
     /// <summary>
     /// Gets a value indicating whether the disk's content has changed since the last
-    /// successful save (<see cref="ClearDirty"/>).
+    /// successful save (<see cref="ClearDirtySince"/>).
     /// </summary>
-    internal bool IsDirty => _isDirty;
+    internal bool IsDirty => Interlocked.Read(ref _mutationVersion) != Interlocked.Read(ref _savedVersion);
 
     /// <summary>
     /// Gets an atomic snapshot of the most recent successful <see cref="Read"/> of file content
@@ -880,9 +892,41 @@ public sealed class MemoryFileSystem : FileSystemBase
     }
 
     /// <summary>
-    /// Marks the disk's content as up to date with the on-disk image.
+    /// Gets a mutation-version snapshot suitable for a later <see cref="ClearDirtySince"/> call.
+    /// A save should capture this <em>before</em> it starts copying node data, so that any
+    /// mutation racing the save is not lost when the save completes.
     /// </summary>
-    internal void ClearDirty() => _isDirty = false;
+    internal long CaptureMutationVersion() => Interlocked.Read(ref _mutationVersion);
+
+    /// <summary>
+    /// Marks the disk's content as up to date with the on-disk image as of right now.
+    /// Equivalent to <c>ClearDirtySince(CaptureMutationVersion())</c>; a plain convenience for
+    /// callers (tests, or a save with no concurrent-mutation concern) that don't need to protect
+    /// against a write racing an in-progress save.
+    /// </summary>
+    internal void ClearDirty() => ClearDirtySince(CaptureMutationVersion());
+
+    /// <summary>
+    /// Marks the disk as up to date with the on-disk image, but only if no mutation has
+    /// happened since <paramref name="versionAtSaveStart"/> was captured (via
+    /// <see cref="CaptureMutationVersion"/>) — otherwise a write that raced the save in
+    /// progress would be silently forgotten, leaving the image stale with nothing left dirty
+    /// to trigger a later save.
+    /// </summary>
+    /// <param name="versionAtSaveStart">The mutation version captured before the save began.</param>
+    internal void ClearDirtySince(long versionAtSaveStart)
+    {
+        long current;
+        do
+        {
+            current = Interlocked.Read(ref _savedVersion);
+            if (current >= versionAtSaveStart)
+            {
+                return;
+            }
+        }
+        while (Interlocked.CompareExchange(ref _savedVersion, versionAtSaveStart, current) != current);
+    }
 
     /// <summary>
     /// Marks the disk's content as changed since the last save.
@@ -1003,7 +1047,7 @@ public sealed class MemoryFileSystem : FileSystemBase
     /// </summary>
     private void MarkDirty(DateTimeOffset now)
     {
-        _isDirty = true;
+        Interlocked.Increment(ref _mutationVersion);
         Interlocked.Exchange(ref _lastContentWriteTicks, now.UtcTicks);
         ContentAccessed?.Invoke(true);
     }
