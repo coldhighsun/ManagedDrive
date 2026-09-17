@@ -265,6 +265,8 @@
     <sys:String x:Key="Status.AutoMountFailed">Auto-mount '{0}' failed: {1}</sys:String>
     <sys:String x:Key="Status.MountFailed">Mount failed</sys:String>
     <sys:String x:Key="Status.ImageSaved">Image saved for {0}</sys:String>
+    <sys:String x:Key="Status.PasswordSet">Password set for {0}.</sys:String>
+    <sys:String x:Key="Status.PasswordRemoved">Password removed for {0}.</sys:String>
     <sys:String x:Key="Status.SaveFailed">Save failed for {0}: {1}</sys:String>
     <sys:String x:Key="Status.CapacityAdjusted">{0}: capacity auto-raised from {1} MB to {2} MB to fit the loaded image</sys:String>
     <sys:String x:Key="Status.Unmounted">Unmounted {0}</sys:String>

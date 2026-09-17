@@ -100,17 +100,10 @@ public static class CliCommandProcessor
                 return 1;
             }
 
-            if (passwordFile is not null)
+            if (passwordFile is not null && !TryReadPasswordFile(passwordFile, out password, out var readError))
             {
-                try
-                {
-                    password = File.ReadLines(passwordFile).FirstOrDefault() ?? string.Empty;
-                }
-                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-                {
-                    outcome = new CliOutcome(false, $"Could not read --password-file: {ex.Message}", null, 1);
-                    return 1;
-                }
+                outcome = new CliOutcome(false, readError!, null, 1);
+                return 1;
             }
 
             var overrides = new CliMountOverrides
@@ -214,6 +207,54 @@ public static class CliCommandProcessor
         saveCommand.SetAction(async (parseResult, _) =>
             await SaveAsync(parseResult.GetValue(saveDriveArgument)!, diskController, o => outcome = o));
 
+        var setPasswordDriveArgument = new Argument<string>("drive-letter")
+        {
+            Description = "Drive letter of a currently mounted disk, e.g. R:",
+        };
+        var setPasswordOption = new Option<string?>("--password")
+        {
+            Description = "The new password. Prefer --password-file to avoid it appearing in shell history or the process list.",
+        };
+        var setPasswordFileOption = new Option<string?>("--password-file")
+        {
+            Description = "Path to a file whose first line is the new password. Mutually exclusive with --password.",
+        };
+        var setPasswordRemoveOption = new Option<bool>("--remove")
+        {
+            Description = "Remove password protection instead of setting a new password.",
+        };
+        var setPasswordCommand = new Command("set-password", "Sets or removes the encryption password of a mounted disk. Takes effect on the next save.");
+        setPasswordCommand.Arguments.Add(setPasswordDriveArgument);
+        setPasswordCommand.Options.Add(setPasswordOption);
+        setPasswordCommand.Options.Add(setPasswordFileOption);
+        setPasswordCommand.Options.Add(setPasswordRemoveOption);
+        setPasswordCommand.SetAction(async (parseResult, _) =>
+        {
+            var password = parseResult.GetValue(setPasswordOption);
+            var passwordFile = parseResult.GetValue(setPasswordFileOption);
+            var remove = parseResult.GetValue(setPasswordRemoveOption);
+
+            var specifiedCount = (password is not null ? 1 : 0) + (passwordFile is not null ? 1 : 0) + (remove ? 1 : 0);
+            if (specifiedCount != 1)
+            {
+                outcome = new CliOutcome(false, "Specify exactly one of --password, --password-file, or --remove.", null, 1);
+                return 1;
+            }
+
+            if (passwordFile is not null && !TryReadPasswordFile(passwordFile, out password, out var readError))
+            {
+                outcome = new CliOutcome(false, readError!, null, 1);
+                return 1;
+            }
+
+            var exitCode = await SetPasswordAsync(
+                parseResult.GetValue(setPasswordDriveArgument)!,
+                remove ? null : password,
+                diskController,
+                o => outcome = o);
+            return exitCode;
+        });
+
         var snapshotListDriveArgument = new Argument<string>("drive-letter")
         {
             Description = "Drive letter of a currently mounted disk, e.g. R:",
@@ -315,17 +356,10 @@ public static class CliCommandProcessor
                 return 1;
             }
 
-            if (passwordFile is not null)
+            if (passwordFile is not null && !TryReadPasswordFile(passwordFile, out password, out var readError))
             {
-                try
-                {
-                    password = File.ReadLines(passwordFile).FirstOrDefault() ?? string.Empty;
-                }
-                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-                {
-                    outcome = new CliOutcome(false, $"Could not read --password-file: {ex.Message}", null, 1);
-                    return 1;
-                }
+                outcome = new CliOutcome(false, readError!, null, 1);
+                return 1;
             }
 
             var exitCode = await ExportAsync(
@@ -366,6 +400,7 @@ public static class CliCommandProcessor
         rootCommand.Subcommands.Add(unmountCommand);
         rootCommand.Subcommands.Add(formatCommand);
         rootCommand.Subcommands.Add(saveCommand);
+        rootCommand.Subcommands.Add(setPasswordCommand);
         rootCommand.Subcommands.Add(exportCommand);
         rootCommand.Subcommands.Add(listCommand);
         rootCommand.Subcommands.Add(snapshotCommand);
@@ -459,6 +494,30 @@ public static class CliCommandProcessor
         return success ? 0 : 1;
     }
 
+    /// <summary>
+    /// Reads the first line of <paramref name="passwordFile"/> as a password, for the
+    /// <c>--password-file</c> option shared by <c>mount</c>, <c>export</c>, and <c>set-password</c>.
+    /// </summary>
+    /// <param name="passwordFile">Path to the file whose first line is the password.</param>
+    /// <param name="password">The read password on success; <see langword="null"/> on failure.</param>
+    /// <param name="error">A human-readable message on failure; <see langword="null"/> on success.</param>
+    /// <returns><see langword="true"/> on success.</returns>
+    private static bool TryReadPasswordFile(string passwordFile, out string? password, out string? error)
+    {
+        try
+        {
+            password = File.ReadLines(passwordFile).FirstOrDefault() ?? string.Empty;
+            error = null;
+            return true;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            password = null;
+            error = $"Could not read --password-file: {ex.Message}";
+            return false;
+        }
+    }
+
     private static string NormalizeDriveLetter(string input)
     {
         input = input.Trim();
@@ -492,6 +551,19 @@ public static class CliCommandProcessor
             null,
             1));
         return 1;
+    }
+
+    private static async Task<int> SetPasswordAsync(string driveLetter, string? newPassword, ICliDiskController diskController, Action<CliOutcome> setOutcome)
+    {
+        driveLetter = NormalizeDriveLetter(driveLetter);
+
+        var (success, message) = await diskController.SetPasswordAsync(driveLetter, newPassword);
+        setOutcome(new(
+            success,
+            string.IsNullOrEmpty(message) ? $"No disk is currently mounted at {driveLetter}." : message,
+            null,
+            success ? 0 : 1));
+        return success ? 0 : 1;
     }
 
     private static async Task<int> SnapshotDeleteAsync(string driveLetter, int index, ICliDiskController diskController, Action<CliOutcome> setOutcome)
