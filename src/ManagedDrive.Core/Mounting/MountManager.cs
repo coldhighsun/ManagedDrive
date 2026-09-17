@@ -117,10 +117,20 @@ public sealed class MountManager : IDisposable
     /// Optional progress reporter for the archive-extraction path
     /// (<see cref="DiskOptions.SourceArchivePath"/>), updated with a fraction in [0, 1].
     /// </param>
+    /// <param name="cancellationToken">
+    /// Optional token to cancel a slow archive extraction or image load; see
+    /// <see cref="RamDisk.Create"/>. Cancellation can only happen before the disk is actually
+    /// mounted, so nothing needs unmounting — the mount-point reservation is still released either
+    /// way.
+    /// </param>
     /// <exception cref="InvalidOperationException">
     /// A disk is already registered at <see cref="DiskOptions.MountPoint"/>.
     /// </exception>
-    public RamDisk Mount(DiskOptions options, string? password = null, IProgress<double>? progress = null)
+    public RamDisk Mount(
+        DiskOptions options,
+        string? password = null,
+        IProgress<double>? progress = null,
+        CancellationToken cancellationToken = default)
     {
         // Reserve the mount point up front, under the lock, for the whole duration of the mount
         // (not just a point-in-time check) so a second concurrent Mount call for the same mount
@@ -137,7 +147,7 @@ public sealed class MountManager : IDisposable
         RamDisk disk;
         try
         {
-            disk = RamDisk.Create(options, password, progress);
+            disk = RamDisk.Create(options, password, progress, cancellationToken);
         }
         finally
         {
