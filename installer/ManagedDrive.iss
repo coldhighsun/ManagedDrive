@@ -10,6 +10,12 @@
   #define AppVersion "0.0.0"
 #endif
 
+; AppVersionTag is the "v"-prefixed tag used only for the output filename, so the
+; installer name matches the portable zip's naming (e.g. ManagedDrive-v1.2.3-...).
+#ifndef AppVersionTag
+  #define AppVersionTag "v" + AppVersion
+#endif
+
 #define WinFspMsiName "winfsp-2.2.26215.msi"
 #define HelperServiceName "ManagedDriveHelper"
 #define HelperServiceExeName "ManagedDriveHelper.exe"
@@ -27,7 +33,7 @@ DefaultDirName={autopf}\ManagedDrive
 DefaultGroupName=ManagedDrive
 DisableProgramGroupPage=yes
 OutputDir=Output
-OutputBaseFilename=ManagedDrive-Setup-{#AppVersion}
+OutputBaseFilename=ManagedDrive-Setup-{#AppVersionTag}
 Compression=lzma2
 SolidCompression=yes
 ArchitecturesAllowed=x64compatible
