@@ -284,6 +284,18 @@ public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
     public IReadOnlyList<double> ReadSpeedHistory => SnapshotHistory(_readSpeedHistory);
 
     /// <summary>
+    /// Gets the cumulative bytes read from this disk since it was mounted, formatted as a
+    /// human-readable string.
+    /// </summary>
+    public string TotalReadFormatted => ByteFormatter.Format((ulong)Disk.TotalBytesRead);
+
+    /// <summary>
+    /// Gets the cumulative bytes written to this disk since it was mounted, formatted as a
+    /// human-readable string.
+    /// </summary>
+    public string TotalWrittenFormatted => ByteFormatter.Format((ulong)Disk.TotalBytesWritten);
+
+    /// <summary>
     /// Gets whether this disk has auto-save enabled, controlling visibility of the
     /// last-image-save timestamp on the disk card.
     /// </summary>
@@ -384,6 +396,8 @@ public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
             OnPropertyChanged(nameof(ReadSpeedHistory));
             OnPropertyChanged(nameof(WriteSpeedFormatted));
             OnPropertyChanged(nameof(WriteSpeedHistory));
+            OnPropertyChanged(nameof(TotalReadFormatted));
+            OnPropertyChanged(nameof(TotalWrittenFormatted));
 
             IsCurrentTempDir = CheckIsCurrentTempDir();
         }
