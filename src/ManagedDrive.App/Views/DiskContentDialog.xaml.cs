@@ -151,7 +151,7 @@ public partial class DiskContentDialog
     /// <summary>
     /// Recursively collects every node under <paramref name="nodes"/> (files and directories
     /// alike) whose <see cref="DiskContentNode.Name"/> matches <paramref name="pattern"/>, into
-    /// <paramref name="results"/>. Used by <see cref="ApplyFilter"/> to flatten the tree into a
+    /// <paramref name="results"/>. Used by <see cref="RebuildRows"/> to flatten the tree into a
     /// single filtered list, since a match nested several levels deep would otherwise be hidden
     /// by its collapsed ancestors.
     /// </summary>
@@ -915,7 +915,7 @@ public sealed class DiskContentRow(DiskContentNode node, int depth, bool showFul
 
     /// <summary>
     /// Gets this row's nesting depth (0 for top-level nodes), used to indent the Name column.
-    /// Always 0 for a filtered row (see <see cref="ShowFullPath"/>), since filtered results are
+    /// Always 0 for a filtered row (see <see cref="DisplayName"/>), since filtered results are
     /// shown as a flat list rather than nested under their ancestors.
     /// </summary>
     public int Depth { get; } = depth;
