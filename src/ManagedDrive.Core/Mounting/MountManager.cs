@@ -21,9 +21,36 @@ public sealed class MountManager : IDisposable
     private readonly Lock _syncRoot = new();
 
     /// <summary>
-    /// Raised whenever any mounted disk's content is read or written, with <c>true</c> for
-    /// writes and <c>false</c> for reads. Forwarded from each disk's
-    /// <see cref="RamDisk.ContentAccessed"/>; fires on WinFsp driver threads, not the UI thread.
+    /// How often <see cref="_activityPollTimer"/> checks for activity recorded by
+    /// <see cref="OnDiskContentAccessed"/> and, if any, raises <see cref="ActivityDetected"/>.
+    /// </summary>
+    private static readonly TimeSpan ActivityPollInterval = TimeSpan.FromMilliseconds(150);
+
+    /// <summary>
+    /// Set (lock-free) by <see cref="OnDiskContentAccessed"/>, which runs on WinFsp driver
+    /// threads; consumed by <see cref="PollActivity"/>. <see cref="ActivityDetected"/> is raised
+    /// from the poll timer rather than directly from <see cref="OnDiskContentAccessed"/> so a
+    /// slow or throwing subscriber can never stall a WinFsp driver thread.
+    /// </summary>
+    private int _pendingRead;
+
+    /// <summary>
+    /// Set (lock-free) by <see cref="OnDiskContentAccessed"/>; consumed by
+    /// <see cref="PollActivity"/>. See <see cref="_pendingRead"/>.
+    /// </summary>
+    private int _pendingWrite;
+
+    /// <summary>
+    /// Periodically drains <see cref="_pendingRead"/>/<see cref="_pendingWrite"/> and raises
+    /// <see cref="ActivityDetected"/> from a timer thread.
+    /// </summary>
+    private readonly Timer _activityPollTimer;
+
+    /// <summary>
+    /// Raised at most once per <see cref="ActivityPollInterval"/> when any mounted disk's content
+    /// was read or written since the last tick, with <c>true</c> if any of those accesses was a
+    /// write and <c>false</c> if all were reads. Raised from a timer thread, never from a WinFsp
+    /// driver thread.
     /// </summary>
     public event Action<bool>? ActivityDetected;
 
@@ -38,6 +65,14 @@ public sealed class MountManager : IDisposable
     public event EventHandler<RamDisk>? DiskUnmounted;
 
     /// <summary>
+    /// Creates a <see cref="MountManager"/> and starts its background activity-poll timer.
+    /// </summary>
+    public MountManager()
+    {
+        _activityPollTimer = new Timer(_ => PollActivity(), null, ActivityPollInterval, ActivityPollInterval);
+    }
+
+    /// <summary>
     /// Unmounts and disposes all active disks.
     /// </summary>
     public void Dispose() => Dispose(null);
@@ -46,13 +81,18 @@ public sealed class MountManager : IDisposable
     /// Unmounts and disposes all active disks, as <see cref="Dispose()"/>, but reports save
     /// progress via <paramref name="onProgress"/>: the disk currently being saved, that disk's
     /// own save fraction in [0, 1], the overall fraction across the whole disposal (also [0, 1],
-    /// accounting for disks already finished/not yet started), and that disk's total used bytes
-    /// (captured before disposal, since <c>disk.UsedBytes</c> can no longer be read afterwards —
-    /// <see cref="RamDisk.Dispose()"/> disposes the underlying node map).
+    /// averaged across all disks' own fractions), and that disk's total used bytes (captured
+    /// before disposal, since <c>disk.UsedBytes</c> can no longer be read afterwards —
+    /// <see cref="RamDisk.Dispose()"/> disposes the underlying node map). Disks are saved
+    /// concurrently (bounded by half the processor count, since each disk's own save already
+    /// parallelizes its Zstd compression internally), so <paramref name="onProgress"/> may be
+    /// invoked from multiple threads at once — it must be thread-safe.
     /// </summary>
     /// <param name="onProgress">Optional progress callback.</param>
     public void Dispose(Action<RamDisk, double, double, ulong>? onProgress)
     {
+        _activityPollTimer.Dispose();
+
         List<RamDisk> all;
 
         lock (_syncRoot)
@@ -63,28 +103,56 @@ public sealed class MountManager : IDisposable
 
         var count = all.Count;
 
+        if (count == 0)
+        {
+            return;
+        }
+
+        // Captured once, before Dispose runs, since UsedBytes reads the node map that
+        // Dispose() tears down — reading it from a progress callback fired after disposal
+        // (e.g. the final 1.0 report below, or a delayed UI-thread dispatch of a mid-save
+        // tick) would throw ObjectDisposedException.
+        var totalBytesByDisk = new ulong[count];
+        var progressByDisk = new double[count];
+        var progressLock = new Lock();
+
         for (var i = 0; i < count; i++)
         {
-            var disk = all[i];
-            var diskIndex = i;
-
-            disk.ContentAccessed -= OnDiskContentAccessed;
-
-            // Captured once, before Dispose runs, since UsedBytes reads the node map that
-            // Dispose() tears down — reading it from a progress callback fired after disposal
-            // (e.g. the final 1.0 report below, or a delayed UI-thread dispatch of a mid-save
-            // tick) would throw ObjectDisposedException.
-            var totalBytes = disk.UsedBytes;
-
-            onProgress?.Invoke(disk, 0.0, (double)diskIndex / count, totalBytes);
-
-            var perDiskProgress = onProgress is null
-                ? null
-                : new Progress<double>(p => onProgress(disk, p, (diskIndex + p) / count, totalBytes));
-            disk.Dispose(perDiskProgress);
-
-            onProgress?.Invoke(disk, 1.0, (double)(diskIndex + 1) / count, totalBytes);
+            totalBytesByDisk[i] = all[i].UsedBytes;
+            all[i].ContentAccessed -= OnDiskContentAccessed;
         }
+
+        void ReportOverall(int diskIndex, double diskProgress)
+        {
+            if (onProgress is null)
+            {
+                return;
+            }
+
+            double overall;
+
+            lock (progressLock)
+            {
+                progressByDisk[diskIndex] = diskProgress;
+                overall = progressByDisk.Sum() / count;
+            }
+
+            onProgress(all[diskIndex], diskProgress, overall, totalBytesByDisk[diskIndex]);
+        }
+
+        // Each disk's own save already parallelizes its Zstd compression internally, so disks
+        // are only saved a few at a time (not fully unbounded) to avoid oversubscribing the CPU.
+        var parallelism = Math.Max(1, Environment.ProcessorCount / 2);
+
+        Parallel.For(0, count, new ParallelOptions { MaxDegreeOfParallelism = parallelism }, i =>
+        {
+            ReportOverall(i, 0.0);
+
+            var perDiskProgress = onProgress is null ? null : new Progress<double>(p => ReportOverall(i, p));
+            all[i].Dispose(perDiskProgress);
+
+            ReportOverall(i, 1.0);
+        });
     }
 
     /// <summary>
@@ -194,5 +262,35 @@ public sealed class MountManager : IDisposable
         return true;
     }
 
-    private void OnDiskContentAccessed(bool isWrite) => ActivityDetected?.Invoke(isWrite);
+    /// <summary>
+    /// Handler for every mounted disk's <see cref="RamDisk.ContentAccessed"/>. Runs on WinFsp
+    /// driver threads, so it only sets a flag — see <see cref="_pendingRead"/>.
+    /// </summary>
+    private void OnDiskContentAccessed(bool isWrite)
+    {
+        if (isWrite)
+        {
+            Volatile.Write(ref _pendingWrite, 1);
+        }
+        else
+        {
+            Volatile.Write(ref _pendingRead, 1);
+        }
+    }
+
+    /// <summary>
+    /// Timer callback for <see cref="_activityPollTimer"/>: drains
+    /// <see cref="_pendingRead"/>/<see cref="_pendingWrite"/> and raises
+    /// <see cref="ActivityDetected"/> at most once per tick if either was set, preferring write.
+    /// </summary>
+    private void PollActivity()
+    {
+        var hadWrite = Interlocked.Exchange(ref _pendingWrite, 0) != 0;
+        var hadRead = Interlocked.Exchange(ref _pendingRead, 0) != 0;
+
+        if (hadWrite || hadRead)
+        {
+            ActivityDetected?.Invoke(hadWrite);
+        }
+    }
 }
