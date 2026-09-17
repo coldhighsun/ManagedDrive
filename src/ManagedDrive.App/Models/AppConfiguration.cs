@@ -90,4 +90,31 @@ public sealed record AppConfiguration
     {
         get; init;
     }
+
+    /// <summary>
+    /// Gets or sets a value indicating whether closing the main window (title bar X) minimizes
+    /// to the system tray instead of exiting the application. Defaults to <c>true</c>, matching
+    /// the app's historical hardcoded behavior; <c>false</c> makes closing the window equivalent
+    /// to the tray "Exit" menu item.
+    /// </summary>
+    public bool CloseToTray { get; init; } = true;
+
+    /// <summary>
+    /// Gets or sets the compression level preselected for a new disk's image file in
+    /// <c>CreateDiskDialog</c>, or <c>null</c> to use the dialog's own hardcoded default
+    /// (<see cref="ImageCompressionLevel.Fastest"/>).
+    /// </summary>
+    public ImageCompressionLevel? DefaultCompressionLevel
+    {
+        get; init;
+    }
+
+    /// <summary>
+    /// Gets or sets the directory preselected when browsing for a new disk's image file path in
+    /// <c>CreateDiskDialog</c>, or <c>null</c> to use the file picker's own default directory.
+    /// </summary>
+    public string? DefaultImageDirectory
+    {
+        get; init;
+    }
 }

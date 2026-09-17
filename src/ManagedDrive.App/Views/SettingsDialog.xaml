@@ -4,7 +4,7 @@
         xmlns:views="clr-namespace:ManagedDrive.App.Views"
         Style="{StaticResource DialogWindowStyle}"
         Title="{DynamicResource Settings.Title}"
-        Width="340" SizeToContent="Height"
+        Width="420" SizeToContent="Height"
         WindowStartupLocation="CenterOwner">
 
     <Grid>
@@ -13,6 +13,16 @@
             <RowDefinition Height="12"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="12"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="12"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="12"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="24"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="12"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="24"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="12"/>
             <RowDefinition Height="Auto"/>
@@ -26,26 +36,34 @@
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
         <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="80"/>
+            <ColumnDefinition Width="130"/>
             <ColumnDefinition Width="*"/>
+            <ColumnDefinition Width="Auto"/>
         </Grid.ColumnDefinitions>
 
         <!-- Run at startup -->
-        <CheckBox Grid.Row="0" Grid.ColumnSpan="2"
+        <CheckBox Grid.Row="0" Grid.ColumnSpan="3"
                   x:Name="RunAtStartupBox"
                   Content="{DynamicResource Settings.RunAtStartup}"
                   Foreground="{DynamicResource AppForeground}"
                   ToolTip="{DynamicResource Tip.RunAtStartup}"/>
 
         <!-- Start minimized -->
-        <CheckBox Grid.Row="2" Grid.ColumnSpan="2" Grid.Column="0"
+        <CheckBox Grid.Row="2" Grid.ColumnSpan="3" Grid.Column="0"
                   x:Name="StartMinimizedBox"
                   Content="{DynamicResource Settings.StartMinimized}"
                   Foreground="{DynamicResource AppForeground}"
                   ToolTip="{DynamicResource Tip.StartMinimized}"/>
 
+        <!-- Close window minimizes to tray -->
+        <CheckBox Grid.Row="4" Grid.ColumnSpan="3" Grid.Column="0"
+                  x:Name="CloseToTrayBox"
+                  Content="{DynamicResource Settings.CloseToTray}"
+                  Foreground="{DynamicResource AppForeground}"
+                  ToolTip="{DynamicResource Tip.CloseToTray}"/>
+
         <!-- Explorer context menu for archives -->
-        <CheckBox Grid.Row="4" Grid.ColumnSpan="2" Grid.Column="0"
+        <CheckBox Grid.Row="6" Grid.ColumnSpan="3" Grid.Column="0"
                   x:Name="ContextMenuEnabledBox"
                   Foreground="{DynamicResource AppForeground}"
                   ToolTip="{DynamicResource Tip.ContextMenuEnabled}">
@@ -54,30 +72,68 @@
         </CheckBox>
 
         <!-- Auto check for updates -->
-        <CheckBox Grid.Row="6" Grid.ColumnSpan="2" Grid.Column="0"
+        <CheckBox Grid.Row="8" Grid.ColumnSpan="3" Grid.Column="0"
                   x:Name="AutoCheckForUpdatesBox"
                   Content="{DynamicResource Settings.AutoCheckForUpdates}"
                   Foreground="{DynamicResource AppForeground}"
                   ToolTip="{DynamicResource Tip.AutoCheckForUpdates}"/>
 
         <!-- Language -->
-        <TextBlock Grid.Row="8" Grid.Column="0"
+        <TextBlock Grid.Row="10" Grid.Column="0"
                    Text="{DynamicResource Settings.Language}"
                    VerticalAlignment="Center"/>
-        <ComboBox Grid.Row="8" Grid.Column="1"
+        <ComboBox Grid.Row="10" Grid.Column="1" Grid.ColumnSpan="2"
                   x:Name="LanguageBox"
                   Style="{StaticResource OutlinedComboBox}"/>
 
         <!-- Theme -->
-        <TextBlock Grid.Row="10" Grid.Column="0"
+        <TextBlock Grid.Row="12" Grid.Column="0"
                    Text="{DynamicResource Settings.Theme}"
                    VerticalAlignment="Center"/>
-        <ComboBox Grid.Row="10" Grid.Column="1"
+        <ComboBox Grid.Row="12" Grid.Column="1" Grid.ColumnSpan="2"
                   x:Name="ThemeBox"
                   Style="{StaticResource OutlinedComboBox}"/>
 
+        <!-- Default compression level for new disks -->
+        <TextBlock Grid.Row="14" Grid.Column="0"
+                   Text="{DynamicResource Settings.DefaultCompressionLevel}"
+                   ToolTip="{DynamicResource Tip.DefaultCompressionLevel}"
+                   VerticalAlignment="Center"/>
+        <ComboBox Grid.Row="14" Grid.Column="1" Grid.ColumnSpan="2"
+                  x:Name="DefaultCompressionLevelBox"
+                  ToolTip="{DynamicResource Tip.DefaultCompressionLevel}"
+                  Style="{StaticResource OutlinedComboBox}"/>
+
+        <!-- Default directory for new disk image files -->
+        <TextBlock Grid.Row="16" Grid.Column="0"
+                   Text="{DynamicResource Settings.DefaultImageDirectory}"
+                   ToolTip="{DynamicResource Tip.DefaultImageDirectory}"
+                   VerticalAlignment="Center"/>
+        <TextBox Grid.Row="16" Grid.Column="1"
+                 x:Name="DefaultImageDirectoryBox"
+                 ToolTip="{DynamicResource Tip.DefaultImageDirectory}"
+                 Style="{StaticResource OutlinedTextBox}"
+                 VerticalContentAlignment="Center"
+                 Margin="0,0,8,0"/>
+        <Button Grid.Row="16" Grid.Column="2"
+                x:Name="BrowseDefaultImageDirectoryButton"
+                Content="{DynamicResource Btn.Browse}"
+                Click="BrowseDefaultImageDirectory_Click"
+                Style="{StaticResource FlatButton}"/>
+
+        <!-- Helper service status -->
+        <TextBlock Grid.Row="18" Grid.Column="0"
+                   Text="{DynamicResource Settings.HelperServiceStatus}"
+                   ToolTip="{DynamicResource Tip.HelperServiceStatus}"
+                   VerticalAlignment="Center"/>
+        <TextBlock Grid.Row="18" Grid.Column="1" Grid.ColumnSpan="2"
+                   x:Name="HelperServiceStatusText"
+                   ToolTip="{DynamicResource Tip.HelperServiceStatus}"
+                   Foreground="{DynamicResource AppForeground}"
+                   VerticalAlignment="Center"/>
+
         <!-- Open log directory / check for updates now -->
-        <StackPanel Grid.Row="12" Grid.ColumnSpan="2" Grid.Column="0"
+        <StackPanel Grid.Row="20" Grid.ColumnSpan="3" Grid.Column="0"
                     Orientation="Horizontal">
             <Button x:Name="OpenLogDirectoryButton"
                     Content="{DynamicResource Settings.OpenLogDirectory}"
@@ -91,7 +147,7 @@
         </StackPanel>
 
         <!-- OK / Cancel -->
-        <StackPanel Grid.Row="14" Grid.ColumnSpan="2" Grid.Column="0"
+        <StackPanel Grid.Row="22" Grid.ColumnSpan="3" Grid.Column="0"
                     Orientation="Horizontal" HorizontalAlignment="Right">
             <Button Content="{DynamicResource Btn.Cancel}" Width="80" IsCancel="True"
                     Style="{StaticResource FlatButton}"

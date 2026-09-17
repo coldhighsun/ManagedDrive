@@ -15,6 +15,7 @@ public partial class CreateDiskDialog
         ImageCompressionLevel.SmallestSize,
     ];
 
+    private readonly string? _defaultImageDirectory;
     private readonly string _importArchivePath = string.Empty;
     private readonly ulong _importCapacityBytes;
     private readonly string _importVolumeLabel = string.Empty;
@@ -39,10 +40,24 @@ public partial class CreateDiskDialog
     /// Options of all other currently active disks, used to validate that the image file path
     /// does not collide with another disk's mount point or image file.
     /// </param>
-    public CreateDiskDialog(IReadOnlyList<DiskOptions>? otherDisks = null)
+    /// <param name="defaultCompressionLevel">
+    /// Compression level preselected in <see cref="CompressionLevelBox"/> instead of the
+    /// hardcoded <see cref="ImageCompressionLevel.Fastest"/>, from
+    /// <see cref="AppConfiguration.DefaultCompressionLevel"/>. Ignored in edit mode, where the
+    /// existing disk's own compression level always wins.
+    /// </param>
+    /// <param name="defaultImageDirectory">
+    /// Directory preselected when browsing for an image file path via
+    /// <see cref="OpenImagePathDialog"/>, from <see cref="AppConfiguration.DefaultImageDirectory"/>.
+    /// </param>
+    public CreateDiskDialog(
+        IReadOnlyList<DiskOptions>? otherDisks = null,
+        ImageCompressionLevel? defaultCompressionLevel = null,
+        string? defaultImageDirectory = null)
     {
         InitializeComponent();
         _otherDisks = otherDisks ?? [];
+        _defaultImageDirectory = defaultImageDirectory;
         _maxCapacityBytes = (ulong)GC.GetGCMemoryInfo().TotalAvailableMemoryBytes;
         LoadDriveLetters(reservedLetter: null);
         VolumeLabelBox.Text = Loc.Get("CreateDisk.DefaultLabel");
@@ -69,7 +84,7 @@ public partial class CreateDiskDialog
             CompressionLevelBox.Items.Add(new CompressionLevelItem(level, Loc.Get(CompressionLevelKey(level))));
         }
 
-        CompressionLevelBox.SelectedIndex = CompressionLevels.IndexOf(ImageCompressionLevel.Fastest);
+        CompressionLevelBox.SelectedIndex = CompressionLevels.IndexOf(defaultCompressionLevel ?? ImageCompressionLevel.Fastest);
         CustomZstdLevelValue = _customZstdLevelValue;
         UpdateCompressionLevelState();
         UpdateAutoSaveEnabledState();
@@ -644,6 +659,11 @@ public partial class CreateDiskDialog
             OverwritePrompt = false,
             FileName = ImagePathBox.Text,
         };
+
+        if (string.IsNullOrEmpty(ImagePathBox.Text) && !string.IsNullOrEmpty(_defaultImageDirectory))
+        {
+            dlg.InitialDirectory = _defaultImageDirectory;
+        }
 
         if (dlg.ShowDialog() == true)
         {
