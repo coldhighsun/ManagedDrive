@@ -205,18 +205,30 @@ public sealed class RamDisk : IDisposable
     /// it is the fraction of the image file's raw bytes read so far (see
     /// <see cref="DiskImageSerializer.Load"/>). Ignored when neither path applies (a brand-new disk).
     /// </param>
-    public static RamDisk Create(DiskOptions options, string? password = null, IProgress<double>? progress = null)
+    /// <param name="cancellationToken">
+    /// Optional token to cancel a slow archive extraction or image load. Checked each time
+    /// <paramref name="progress"/> would be reported, so an unmodified disk or one whose loaded
+    /// content is one huge node/file only notices cancellation at the next report, not
+    /// mid-node/file. Ignored once mounting has actually started (WinFsp's own <c>Mount</c> call
+    /// and the wait for the drive letter to appear are not cancellable).
+    /// </param>
+    public static RamDisk Create(
+        DiskOptions options,
+        string? password = null,
+        IProgress<double>? progress = null,
+        CancellationToken cancellationToken = default)
     {
         MemoryFileSystem fs;
         ulong? originalCapacity = null;
         byte[]? cek = null;
         var loadedFromPersistImagePath = false;
+        var cancellableProgress = CancellableProgress.Wrap(progress, cancellationToken);
 
         if (options.SourceArchivePath != null &&
             File.Exists(options.SourceArchivePath))
         {
             ArchiveNodeMapBuilder.PeekArchive(options.SourceArchivePath, out var totalBytes, out _);
-            var nodeMap = ArchiveNodeMapBuilder.BuildNodeMap(options.SourceArchivePath, (long)totalBytes, progress);
+            var nodeMap = ArchiveNodeMapBuilder.BuildNodeMap(options.SourceArchivePath, (long)totalBytes, cancellableProgress);
 
             var capacity = ResolveAndApplyCapacity(nodeMap, options.CapacityBytes, ref options, out originalCapacity);
 
@@ -234,7 +246,7 @@ public sealed class RamDisk : IDisposable
                 out var savedLabel,
                 password,
                 out cek,
-                progress);
+                cancellableProgress);
 
             var configuredCapacity = savedCapacity > 0 ? savedCapacity : options.CapacityBytes;
             var label = string.IsNullOrEmpty(savedLabel) ? options.VolumeLabel : savedLabel;
@@ -419,8 +431,20 @@ public sealed class RamDisk : IDisposable
     /// <param name="format">The archive container format to write.</param>
     /// <param name="level">Compression level applied to the archive.</param>
     /// <param name="progress">Optional progress reporter, updated with a fraction in [0, 1].</param>
-    public void ExportToArchive(string archivePath, ArchiveExportFormat format, ImageCompressionLevel level, IProgress<double>? progress = null) =>
-        ArchiveNodeMapWriter.WriteArchive(_fs.NodeMap, archivePath, format, level, progress);
+    /// <param name="cancellationToken">
+    /// Optional token to cancel the export. Checked each time <paramref name="progress"/> would be
+    /// reported (per node written), so a disk with one huge file as a single node only notices
+    /// cancellation once that file finishes writing, not mid-file. On cancellation, the partially
+    /// written archive file is left behind exactly as <see cref="ArchiveNodeMapWriter.WriteArchive"/>
+    /// leaves any other failed write — the caller is responsible for deleting it if desired.
+    /// </param>
+    public void ExportToArchive(
+        string archivePath,
+        ArchiveExportFormat format,
+        ImageCompressionLevel level,
+        IProgress<double>? progress = null,
+        CancellationToken cancellationToken = default) =>
+        ArchiveNodeMapWriter.WriteArchive(_fs.NodeMap, archivePath, format, level, CancellableProgress.Wrap(progress, cancellationToken));
 
     /// <summary>
     /// Writes this disk's current contents to a new image file at <paramref name="imagePath"/>.
@@ -436,7 +460,18 @@ public sealed class RamDisk : IDisposable
     /// disk's own <see cref="IsPasswordProtected"/> state, since the export is a standalone copy.
     /// </param>
     /// <param name="progress">Optional progress reporter, updated with a fraction in [0, 1].</param>
-    public void ExportToImage(string imagePath, ImageCompressionLevel level, string? password = null, IProgress<double>? progress = null) =>
+    /// <param name="cancellationToken">
+    /// Optional token to cancel the export. Checked each time <paramref name="progress"/> would be
+    /// reported (per node written). On cancellation, the partially written image file is left
+    /// behind exactly as <see cref="DiskImageSerializer.Save"/> leaves any other failed write — the
+    /// caller is responsible for deleting it if desired.
+    /// </param>
+    public void ExportToImage(
+        string imagePath,
+        ImageCompressionLevel level,
+        string? password = null,
+        IProgress<double>? progress = null,
+        CancellationToken cancellationToken = default) =>
         DiskImageSerializer.Save(
             _fs.NodeMap,
             Options.CapacityBytes,
@@ -444,7 +479,7 @@ public sealed class RamDisk : IDisposable
             imagePath,
             level,
             password is not null ? new ImageEncryptionInfo(password, DiskImageSerializer.GenerateCek()) : null,
-            progress);
+            CancellableProgress.Wrap(progress, cancellationToken));
 
     /// <summary>
     /// Removes all files and directories from the disk, leaving it empty.
@@ -511,7 +546,15 @@ public sealed class RamDisk : IDisposable
     /// Does nothing if <see cref="DiskOptions.PersistImagePath"/> is <c>null</c>.
     /// </summary>
     /// <param name="progress">Optional progress reporter, updated with a fraction in [0, 1].</param>
-    public void SaveToImage(IProgress<double>? progress = null)
+    /// <param name="cancellationToken">
+    /// Optional token to cancel the save. Checked each time <paramref name="progress"/> would be
+    /// reported (per node/segment written). A cancellation leaves the disk exactly as dirty as it
+    /// was before the save started — see <see cref="MemoryFileSystem.ClearDirtySince"/> — so a
+    /// later save (manual or the next auto-save tick) picks up all of the disk's contents rather
+    /// than just what changed after the cancellation. Unlike a genuine save failure, a cancellation
+    /// does not raise <see cref="SaveFailed"/> or log an error.
+    /// </param>
+    public void SaveToImage(IProgress<double>? progress = null, CancellationToken cancellationToken = default)
     {
         if (Options.PersistImagePath == null)
         {
@@ -529,8 +572,12 @@ public sealed class RamDisk : IDisposable
                 Options.PersistImagePath,
                 Options.CompressionLevel,
                 _password is not null && _cek is not null ? new ImageEncryptionInfo(_password, _cek) : null,
-                progress,
+                CancellableProgress.Wrap(progress, cancellationToken),
                 Options.CustomZstdLevel);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
         }
         catch (Exception ex)
         {
@@ -589,7 +636,13 @@ public sealed class RamDisk : IDisposable
     /// given to the image save alone, so the bar doesn't stall at 50% when no snapshot work
     /// follows it.
     /// </param>
-    public void SaveToImageWithSnapshot(IProgress<double>? progress = null)
+    /// <param name="cancellationToken">
+    /// Optional token to cancel either the image save or the snapshot write. See
+    /// <see cref="SaveToImage"/> for how cancellation interacts with the dirty flag; a snapshot
+    /// write canceled mid-way leaves no partial snapshot registered (nothing is added to the
+    /// snapshot index until the write completes).
+    /// </param>
+    public void SaveToImageWithSnapshot(IProgress<double>? progress = null, CancellationToken cancellationToken = default)
     {
         lock (_autoSaveLock)
         {
@@ -602,13 +655,13 @@ public sealed class RamDisk : IDisposable
 
             if (mayWriteSnapshot)
             {
-                SaveToImage(progress is null ? null : new MappedProgress(progress, 0.5, 0.0));
-                TryWriteSnapshot(progress is null ? null : new MappedProgress(progress, 0.5, 0.5));
+                SaveToImage(progress is null ? null : new MappedProgress(progress, 0.5, 0.0), cancellationToken);
+                TryWriteSnapshot(progress is null ? null : new MappedProgress(progress, 0.5, 0.5), cancellationToken);
             }
             else
             {
-                SaveToImage(progress);
-                TryWriteSnapshot();
+                SaveToImage(progress, cancellationToken);
+                TryWriteSnapshot(cancellationToken: cancellationToken);
             }
 
             progress?.Report(1.0);
@@ -992,7 +1045,7 @@ public sealed class RamDisk : IDisposable
     /// accumulating redundant, identical snapshots. Must be called while
     /// <see cref="_autoSaveLock"/> is held.
     /// </summary>
-    private void TryWriteSnapshot(IProgress<double>? progress = null)
+    private void TryWriteSnapshot(IProgress<double>? progress = null, CancellationToken cancellationToken = default)
     {
         if (Options.PersistImagePath is not { } path)
         {
@@ -1022,10 +1075,14 @@ public sealed class RamDisk : IDisposable
                 DateTimeOffset.UtcNow,
                 Options.CompressionLevel,
                 _cek,
-                progress,
+                CancellableProgress.Wrap(progress, cancellationToken),
                 Options.CustomZstdLevel);
 
             SnapshotManager.Prune(path, Options.MaxSnapshotCount, Options.MaxSnapshotSizeBytes);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
         }
         catch (Exception ex)
         {
