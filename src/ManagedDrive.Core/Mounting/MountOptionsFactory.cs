@@ -137,6 +137,11 @@ public static class MountOptionsFactory
         {
             ReadOnly = true,
             SourceArchivePath = archivePath,
+            // A saved profile carried over from a previous image-backed mount of this same mount
+            // point could still have PersistImagePath set; archive- and image-backed options are
+            // mutually exclusive on DiskOptions, so clear it explicitly rather than relying on the
+            // saved profile never having one.
+            PersistImagePath = null,
             AutoMount = autoMountOverride ?? baseOptions.AutoMount,
         };
     }
