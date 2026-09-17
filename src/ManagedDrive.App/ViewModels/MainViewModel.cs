@@ -1205,7 +1205,6 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             {
                 StatusText = Loc.Get("Status.OperationCancelled");
                 _logger.LogInformation("Disk export cancelled: {Source} -> {ExportPath}.", vm.MountPoint, exportPath);
-                DeletePartialExport(exportPath);
             }
             catch (Exception ex)
             {
@@ -1216,25 +1215,6 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             {
                 BusyOverlay.Stop();
             }
-        }
-    }
-
-    /// <summary>
-    /// Deletes a partially written export file left behind by a cancelled
-    /// <see cref="Core.Mounting.RamDisk.ExportToImage"/>/<see cref="Core.Mounting.RamDisk.ExportToArchive"/>
-    /// call. Best-effort: a failure here (e.g. the file is still briefly locked) is logged, not
-    /// surfaced to the user.
-    /// </summary>
-    /// <param name="exportPath">The export destination path to clean up.</param>
-    private void DeletePartialExport(string exportPath)
-    {
-        try
-        {
-            File.Delete(exportPath);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Failed to delete partially written export file {ExportPath} after cancellation.", exportPath);
         }
     }
 

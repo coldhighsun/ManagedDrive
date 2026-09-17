@@ -434,9 +434,10 @@ public sealed class RamDisk : IDisposable
     /// <param name="cancellationToken">
     /// Optional token to cancel the export. Checked each time <paramref name="progress"/> would be
     /// reported (per node written), so a disk with one huge file as a single node only notices
-    /// cancellation once that file finishes writing, not mid-file. On cancellation, the partially
-    /// written archive file is left behind exactly as <see cref="ArchiveNodeMapWriter.WriteArchive"/>
-    /// leaves any other failed write — the caller is responsible for deleting it if desired.
+    /// cancellation once that file finishes writing, not mid-file. <paramref name="archivePath"/>
+    /// itself is never left partially written — <see cref="ArchiveNodeMapWriter.WriteArchive"/>
+    /// writes to a temp file and only renames it to <paramref name="archivePath"/> on success,
+    /// deleting the temp file on any failure including cancellation.
     /// </param>
     public void ExportToArchive(
         string archivePath,
@@ -462,9 +463,10 @@ public sealed class RamDisk : IDisposable
     /// <param name="progress">Optional progress reporter, updated with a fraction in [0, 1].</param>
     /// <param name="cancellationToken">
     /// Optional token to cancel the export. Checked each time <paramref name="progress"/> would be
-    /// reported (per node written). On cancellation, the partially written image file is left
-    /// behind exactly as <see cref="DiskImageSerializer.Save"/> leaves any other failed write — the
-    /// caller is responsible for deleting it if desired.
+    /// reported (per node written). <paramref name="imagePath"/> itself is never left partially
+    /// written — <see cref="DiskImageSerializer.Save"/> writes to a temp file and only renames it
+    /// to <paramref name="imagePath"/> on success, deleting the temp file on any failure including
+    /// cancellation.
     /// </param>
     public void ExportToImage(
         string imagePath,
@@ -664,6 +666,7 @@ public sealed class RamDisk : IDisposable
                 TryWriteSnapshot(cancellationToken: cancellationToken);
             }
 
+            cancellationToken.ThrowIfCancellationRequested();
             progress?.Report(1.0);
         }
     }
@@ -1047,6 +1050,8 @@ public sealed class RamDisk : IDisposable
     /// </summary>
     private void TryWriteSnapshot(IProgress<double>? progress = null, CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         if (Options.PersistImagePath is not { } path)
         {
             progress?.Report(1.0);
