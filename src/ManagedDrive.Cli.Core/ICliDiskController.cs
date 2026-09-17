@@ -117,6 +117,32 @@ public interface ICliDiskController
     Task<(bool Success, string Message, IReadOnlyList<CliFileEntry>? Entries)> ListFilesAsync(string mountPoint, string? path);
 
     /// <summary>
+    /// Replaces the contents of the disk mounted at <paramref name="targetMountPoint"/> with a
+    /// copy of the disk mounted at <paramref name="sourceMountPoint"/>'s current contents.
+    /// </summary>
+    /// <param name="sourceMountPoint">The mount point to copy content from, e.g. <c>"R:"</c>.</param>
+    /// <param name="targetMountPoint">The mount point to overwrite, e.g. <c>"S:"</c>.</param>
+    /// <returns>
+    /// <c>(true, message)</c> on success; <c>(false, message)</c> with a human-readable reason
+    /// otherwise — including either mount point not being mounted, the target being read-only, or
+    /// the target's capacity being smaller than the source's used bytes.
+    /// </returns>
+    Task<(bool Success, string Message)> CloneAsync(string sourceMountPoint, string targetMountPoint);
+
+    /// <summary>
+    /// Writes a timestamped snapshot for the disk currently mounted at <paramref name="mountPoint"/>
+    /// right now, independent of any regular image save.
+    /// </summary>
+    /// <param name="mountPoint">The mount point to snapshot, e.g. <c>"R:"</c>.</param>
+    /// <returns>
+    /// <c>(true, message)</c> on success; <c>(false, message)</c> with a human-readable reason
+    /// otherwise — including no image path being configured, or snapshot retention not being
+    /// configured. <paramref name="mountPoint"/> not being mounted is reported as
+    /// <c>(false, string.Empty)</c> so the CLI layer can render its own not-mounted message.
+    /// </returns>
+    Task<(bool Success, string Message)> CreateSnapshotAsync(string mountPoint);
+
+    /// <summary>
     /// Deletes a single snapshot of the disk currently mounted at <paramref name="mountPoint"/>.
     /// </summary>
     /// <param name="mountPoint">The mount point whose snapshot should be deleted, e.g. <c>"R:"</c>.</param>

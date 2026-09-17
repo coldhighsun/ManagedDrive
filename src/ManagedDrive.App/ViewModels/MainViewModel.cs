@@ -803,6 +803,56 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     }
 
     /// <summary>
+    /// Replaces the contents of the disk mounted at <paramref name="targetMountPoint"/> with a
+    /// copy of the disk mounted at <paramref name="sourceMountPoint"/>'s current contents, for use
+    /// by the CLI command channel. Mirrors <c>ExecuteCloneDisk</c>'s clone-to-mounted-disk branch,
+    /// but without the confirmation dialog.
+    /// </summary>
+    /// <param name="sourceMountPoint">The mount point to copy content from, e.g. <c>"R:"</c>.</param>
+    /// <param name="targetMountPoint">The mount point to overwrite, e.g. <c>"S:"</c>.</param>
+    /// <returns>
+    /// <c>(true, message)</c> on success; <c>(false, message)</c> with a human-readable reason
+    /// otherwise — including either mount point not being mounted, the target being read-only, or
+    /// the target's capacity being smaller than the source's used bytes.
+    /// </returns>
+    public Task<(bool Success, string Message)> CloneByMountPointAsync(string sourceMountPoint, string targetMountPoint)
+    {
+        _logger.LogInformation("CLI clone requested: {Source} -> {Target}.", sourceMountPoint, targetMountPoint);
+
+        var source = Disks.FirstOrDefault(d => string.Equals(d.MountPoint, sourceMountPoint, StringComparison.OrdinalIgnoreCase));
+        if (source == null)
+        {
+            return Task.FromResult((false, Loc.Format("Msg.CliMountPointNotMounted", sourceMountPoint)));
+        }
+
+        var target = Disks.FirstOrDefault(d => string.Equals(d.MountPoint, targetMountPoint, StringComparison.OrdinalIgnoreCase));
+        if (target == null)
+        {
+            return Task.FromResult((false, Loc.Format("Msg.CliMountPointNotMounted", targetMountPoint)));
+        }
+
+        if (target == source)
+        {
+            return Task.FromResult((false, Loc.Get("Val.CliCloneTargetIsSource")));
+        }
+
+        if (target.IsReadOnly)
+        {
+            return Task.FromResult((false, Loc.Format("Val.CliCloneTargetReadOnly", targetMountPoint)));
+        }
+
+        if (!target.Disk.TryCloneFrom(source.Disk, out var error))
+        {
+            _logger.LogWarning("CLI clone failed: {Source} -> {Target}: {Error}", sourceMountPoint, targetMountPoint, error);
+            return Task.FromResult((false, error ?? string.Empty));
+        }
+
+        target.Refresh();
+        _logger.LogInformation("CLI clone completed: {Source} -> {Target}.", sourceMountPoint, targetMountPoint);
+        return Task.FromResult((true, Loc.Format("Status.DiskCloned", sourceMountPoint, targetMountPoint)));
+    }
+
+    /// <summary>
     /// Saves the disk currently mounted at <paramref name="mountPoint"/> to its backing image
     /// file immediately, for use by the CLI command channel.
     /// </summary>
@@ -991,6 +1041,51 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         catch (Exception ex)
         {
             _logger.LogError(ex, "CLI export failed: {MountPoint} -> {OutputPath}.", mountPoint, outputPath);
+            return (false, Loc.Format("Msg.SaveImageFailed", ex.Message));
+        }
+    }
+
+    /// <summary>
+    /// Writes a timestamped snapshot for the disk currently mounted at <paramref name="mountPoint"/>
+    /// right now, for use by the CLI command channel. Mirrors <c>ExecuteCreateSnapshotNow</c>, via
+    /// the same <see cref="RamDisk.SaveToImageWithSnapshot"/> call, but without the busy overlay.
+    /// </summary>
+    /// <param name="mountPoint">The mount point to snapshot, e.g. <c>"R:"</c>.</param>
+    /// <returns>
+    /// <c>(true, message)</c> on success; <c>(false, message)</c> if no image path is configured
+    /// or snapshot retention isn't configured (<see cref="DiskOptions.MaxSnapshotCount"/>/
+    /// <see cref="DiskOptions.MaxSnapshotSizeBytes"/>); or <c>(false, string.Empty)</c> if no disk
+    /// is currently mounted at <paramref name="mountPoint"/>.
+    /// </returns>
+    public async Task<(bool Success, string Message)> CreateSnapshotByMountPointAsync(string mountPoint)
+    {
+        _logger.LogInformation("CLI snapshot create requested for {MountPoint}.", mountPoint);
+
+        var vm = Disks.FirstOrDefault(d => string.Equals(d.MountPoint, mountPoint, StringComparison.OrdinalIgnoreCase));
+        if (vm == null)
+        {
+            return (false, string.Empty);
+        }
+
+        if (!vm.HasImagePath)
+        {
+            return (false, Loc.Get("Msg.SaveImageNoPath"));
+        }
+
+        if (!vm.SnapshotsEnabled)
+        {
+            return (false, Loc.Get("Msg.CliSnapshotsNotEnabled"));
+        }
+
+        try
+        {
+            await Task.Run(() => vm.Disk.SaveToImageWithSnapshot());
+            _logger.LogInformation("CLI snapshot create completed for {MountPoint}.", mountPoint);
+            return (true, Loc.Format("Status.ImageSaved", mountPoint));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "CLI snapshot create failed for {MountPoint}.", mountPoint);
             return (false, Loc.Format("Msg.SaveImageFailed", ex.Message));
         }
     }
