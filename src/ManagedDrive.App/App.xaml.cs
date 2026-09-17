@@ -136,7 +136,7 @@ public partial class App
 
         var iconStream = GetResourceStream(new("pack://application:,,,/ManagedDrive.ico"))!.Stream;
         _trayIconController = new(
-            Dispatcher, iconStream, ShowMainWindow, ShowMainWindowAndCreate, ResetTempDirsFromTrayAsync,
+            Dispatcher, iconStream, _mainViewModel, ShowMainWindow, ShowMainWindowAndCreate, ResetTempDirsFromTrayAsync,
             ShowMainWindowAndSettings, ShowAboutDialog, ExitApplication);
         _trayTooltipController = new(_mainViewModel, _trayIconController);
         _tempDirCompatChecker = new(_settings, _trayIconController, () => _mainWindow is { IsLoaded: true } ? _mainWindow : null);

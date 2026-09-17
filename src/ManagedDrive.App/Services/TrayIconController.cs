@@ -40,6 +40,14 @@ public sealed class TrayIconController : IDisposable
     /// </summary>
     private readonly Icon?[] _trayActivityIcons = new Icon?[4];
 
+    private readonly MainViewModel _mainViewModel;
+    private readonly System.Windows.Forms.ToolStripMenuItem _menuShow;
+    private readonly System.Windows.Forms.ToolStripMenuItem _menuNewDisk;
+    private readonly System.Windows.Forms.ToolStripMenuItem _menuResetTempDirs;
+    private readonly System.Windows.Forms.ToolStripMenuItem _menuSettings;
+    private readonly System.Windows.Forms.ToolStripMenuItem _menuAbout;
+    private readonly System.Windows.Forms.ToolStripMenuItem _menuExit;
+    private readonly List<System.Windows.Forms.ToolStripItem> _diskMenuItems = [];
     private readonly System.Windows.Forms.NotifyIcon _trayIcon;
     private readonly Icon _trayIconNormal;
     private bool _blinkOn;
@@ -50,6 +58,11 @@ public sealed class TrayIconController : IDisposable
     /// </summary>
     /// <param name="dispatcher">The UI dispatcher; menu/mouse callbacks are marshalled through it.</param>
     /// <param name="iconStream">Stream containing the base <c>.ico</c> resource.</param>
+    /// <param name="mainViewModel">
+    /// Supplies the live <see cref="MainViewModel.Disks"/> collection and the
+    /// open-in-Explorer/save-image/unmount commands for the per-disk submenu rebuilt each time the
+    /// context menu opens.
+    /// </param>
     /// <param name="onShow">Invoked from the "Show" menu item and double-click.</param>
     /// <param name="onNewDisk">Invoked from the "New Disk" menu item.</param>
     /// <param name="onResetTempDirsAsync">Invoked from the "Reset TEMP Dirs" menu item.</param>
@@ -59,6 +72,7 @@ public sealed class TrayIconController : IDisposable
     public TrayIconController(
         Dispatcher dispatcher,
         Stream iconStream,
+        MainViewModel mainViewModel,
         Action onShow,
         Action onNewDisk,
         Func<Task> onResetTempDirsAsync,
@@ -67,16 +81,25 @@ public sealed class TrayIconController : IDisposable
         Action onExit)
     {
         _dispatcher = dispatcher;
+        _mainViewModel = mainViewModel;
 
         var menu = new System.Windows.Forms.ContextMenuStrip();
-        menu.Items.Add(Loc.Get("Tray.Show"), null, (_, _) => dispatcher.Invoke(onShow));
-        menu.Items.Add(Loc.Get("Tray.NewDisk"), null, (_, _) => dispatcher.Invoke(onNewDisk));
+        _menuShow = new(Loc.Get("Tray.Show"), null, (_, _) => dispatcher.Invoke(onShow));
+        _menuNewDisk = new(Loc.Get("Tray.NewDisk"), null, (_, _) => dispatcher.Invoke(onNewDisk));
+        _menuResetTempDirs = new(Loc.Get("Tray.ResetTempDirs"), null, async (_, _) => await dispatcher.InvokeAsync(onResetTempDirsAsync));
+        _menuSettings = new(Loc.Get("Tray.Settings"), null, (_, _) => dispatcher.Invoke(onSettings));
+        _menuAbout = new(Loc.Get("Tray.About"), null, (_, _) => dispatcher.Invoke(onAbout));
+        _menuExit = new(Loc.Get("Tray.Exit"), null, (_, _) => dispatcher.Invoke(onExit));
+
+        menu.Items.Add(_menuShow);
+        menu.Items.Add(_menuNewDisk);
         menu.Items.Add(new System.Windows.Forms.ToolStripSeparator());
-        menu.Items.Add(Loc.Get("Tray.ResetTempDirs"), null, async (_, _) => await dispatcher.InvokeAsync(onResetTempDirsAsync));
-        menu.Items.Add(Loc.Get("Tray.Settings"), null, (_, _) => dispatcher.Invoke(onSettings));
-        menu.Items.Add(Loc.Get("Tray.About"), null, (_, _) => dispatcher.Invoke(onAbout));
+        menu.Items.Add(_menuResetTempDirs);
+        menu.Items.Add(_menuSettings);
+        menu.Items.Add(_menuAbout);
         menu.Items.Add(new System.Windows.Forms.ToolStripSeparator());
-        menu.Items.Add(Loc.Get("Tray.Exit"), null, (_, _) => dispatcher.Invoke(onExit));
+        menu.Items.Add(_menuExit);
+        menu.Opening += (_, _) => dispatcher.Invoke(RebuildDiskMenuItems);
 
         _trayIconNormal = new(iconStream);
         BuildTrayActivityIcons(_trayIconNormal);
@@ -260,6 +283,13 @@ public sealed class TrayIconController : IDisposable
         foreach (System.Windows.Forms.ToolStripItem item in menu.Items)
         {
             item.ForeColor = foreground;
+            if (item is System.Windows.Forms.ToolStripMenuItem { HasDropDownItems: true } parent)
+            {
+                foreach (System.Windows.Forms.ToolStripItem child in parent.DropDownItems)
+                {
+                    child.ForeColor = foreground;
+                }
+            }
         }
     }
 
@@ -360,16 +390,48 @@ public sealed class TrayIconController : IDisposable
 
     private void UpdateTrayMenuHeaders()
     {
+        _menuShow.Text = Loc.Get("Tray.Show");
+        _menuNewDisk.Text = Loc.Get("Tray.NewDisk");
+        _menuResetTempDirs.Text = Loc.Get("Tray.ResetTempDirs");
+        _menuSettings.Text = Loc.Get("Tray.Settings");
+        _menuAbout.Text = Loc.Get("Tray.About");
+        _menuExit.Text = Loc.Get("Tray.Exit");
+    }
+
+    /// <summary>
+    /// Rebuilds the per-disk submenu (one entry per mounted disk, each expanding to Open in
+    /// Explorer / Save Image / Unmount) right before the context menu is shown, so it always
+    /// reflects the current <see cref="MainViewModel.Disks"/> contents and current language/theme
+    /// without needing to track collection or property-changed events between openings.
+    /// </summary>
+    private void RebuildDiskMenuItems()
+    {
         if (_trayIcon.ContextMenuStrip is not { } menu)
         {
             return;
         }
 
-        menu.Items[0].Text = Loc.Get("Tray.Show");
-        menu.Items[1].Text = Loc.Get("Tray.NewDisk");
-        menu.Items[3].Text = Loc.Get("Tray.ResetTempDirs");
-        menu.Items[4].Text = Loc.Get("Tray.Settings");
-        menu.Items[5].Text = Loc.Get("Tray.About");
-        menu.Items[7].Text = Loc.Get("Tray.Exit");
+        foreach (var item in _diskMenuItems)
+        {
+            menu.Items.Remove(item);
+            item.Dispose();
+        }
+
+        _diskMenuItems.Clear();
+
+        var insertIndex = menu.Items.IndexOf(_menuShow) + 1;
+        foreach (var vm in _mainViewModel.Disks)
+        {
+            var diskItem = new System.Windows.Forms.ToolStripMenuItem($"{vm.MountPoint} ({vm.VolumeLabel})");
+            diskItem.DropDownItems.Add(Loc.Get("Btn.OpenInExplorer"), null, (_, _) => _dispatcher.Invoke(() => vm.OpenInExplorerCommand.Execute(null)));
+            diskItem.DropDownItems.Add(Loc.Get("Btn.SaveImage"), null, (_, _) => _dispatcher.Invoke(() => _mainViewModel.SaveImageCommand.Execute(vm)));
+            diskItem.DropDownItems.Add(Loc.Get("Btn.Unmount"), null, (_, _) => _dispatcher.Invoke(() => _mainViewModel.UnmountCommand.Execute(vm)));
+
+            menu.Items.Insert(insertIndex, diskItem);
+            _diskMenuItems.Add(diskItem);
+            insertIndex++;
+        }
+
+        ApplyTrayMenuTheme();
     }
 }
