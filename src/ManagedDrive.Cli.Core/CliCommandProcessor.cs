@@ -255,6 +255,93 @@ public static class CliCommandProcessor
             return exitCode;
         });
 
+        var createDriveArgument = new Argument<string>("drive-letter")
+        {
+            Description = "Drive letter to mount the new disk at (e.g. R:), or the path of an existing empty directory.",
+        };
+        var createCapacityMbOption = new Option<uint>("--capacity-mb")
+        {
+            Description = "The disk's capacity in MB.",
+            Required = true,
+        };
+        var createLabelOption = new Option<string?>("--label")
+        {
+            Description = "The volume label. Defaults to \"RAM Disk\" if omitted.",
+        };
+        var createImageOption = new Option<string?>("--image")
+        {
+            Description = "Path to persist the disk to (created on first save). Omit for a memory-only disk discarded on unmount.",
+        };
+        var createPasswordOption = new Option<string?>("--password")
+        {
+            Description = "Password to encrypt --image with. Requires --image. Prefer --password-file to avoid it appearing in shell history or the process list.",
+        };
+        var createPasswordFileOption = new Option<string?>("--password-file")
+        {
+            Description = "Path to a file whose first line is the password to encrypt --image with. Mutually exclusive with --password.",
+        };
+
+        var createCommand = new Command("create", "Creates a brand-new, empty RAM disk.");
+        createCommand.Arguments.Add(createDriveArgument);
+        createCommand.Options.Add(createCapacityMbOption);
+        createCommand.Options.Add(createLabelOption);
+        createCommand.Options.Add(createImageOption);
+        createCommand.Options.Add(createPasswordOption);
+        createCommand.Options.Add(createPasswordFileOption);
+        createCommand.SetAction(async (parseResult, _) =>
+        {
+            var password = parseResult.GetValue(createPasswordOption);
+            var passwordFile = parseResult.GetValue(createPasswordFileOption);
+
+            if (password is not null && passwordFile is not null)
+            {
+                outcome = new CliOutcome(false, "--password and --password-file cannot both be specified.", null, 1);
+                return 1;
+            }
+
+            if (passwordFile is not null && !TryReadPasswordFile(passwordFile, out password, out var readError))
+            {
+                outcome = new CliOutcome(false, readError!, null, 1);
+                return 1;
+            }
+
+            var imagePath = parseResult.GetValue(createImageOption);
+            if (password is not null && imagePath is null)
+            {
+                outcome = new CliOutcome(false, "--password/--password-file requires --image.", null, 1);
+                return 1;
+            }
+
+            var exitCode = await CreateAsync(
+                parseResult.GetValue(createDriveArgument)!,
+                parseResult.GetValue(createCapacityMbOption) * 1024UL * 1024UL,
+                parseResult.GetValue(createLabelOption),
+                imagePath,
+                password,
+                diskController,
+                o => outcome = o);
+            return exitCode;
+        });
+
+        var lsDriveArgument = new Argument<string>("drive-letter")
+        {
+            Description = "Drive letter of a currently mounted disk, e.g. R:",
+        };
+        var lsPathArgument = new Argument<string?>("path")
+        {
+            Description = "Directory to list, e.g. \\Folder. Omit to list the root.",
+            Arity = ArgumentArity.ZeroOrOne,
+        };
+        var lsCommand = new Command("ls", "Lists the immediate children of a directory on a mounted disk.");
+        lsCommand.Arguments.Add(lsDriveArgument);
+        lsCommand.Arguments.Add(lsPathArgument);
+        lsCommand.SetAction(async (parseResult, _) =>
+            await LsAsync(
+                parseResult.GetValue(lsDriveArgument)!,
+                parseResult.GetValue(lsPathArgument),
+                diskController,
+                o => outcome = o));
+
         var snapshotListDriveArgument = new Argument<string>("drive-letter")
         {
             Description = "Drive letter of a currently mounted disk, e.g. R:",
@@ -397,12 +484,14 @@ public static class CliCommandProcessor
         var rootCommand = new RootCommand("ManagedDrive CLI — quick mount/unmount for RAM disks.");
         rootCommand.Subcommands.Add(mountCommand);
         rootCommand.Subcommands.Add(mountArchiveCommand);
+        rootCommand.Subcommands.Add(createCommand);
         rootCommand.Subcommands.Add(unmountCommand);
         rootCommand.Subcommands.Add(formatCommand);
         rootCommand.Subcommands.Add(saveCommand);
         rootCommand.Subcommands.Add(setPasswordCommand);
         rootCommand.Subcommands.Add(exportCommand);
         rootCommand.Subcommands.Add(listCommand);
+        rootCommand.Subcommands.Add(lsCommand);
         rootCommand.Subcommands.Add(snapshotCommand);
         rootCommand.Subcommands.Add(exitCommand);
 
@@ -422,6 +511,37 @@ public static class CliCommandProcessor
         // No handler ran to completion (parse error, --help, unknown subcommand, etc.) — fall
         // back to whatever System.CommandLine wrote to the buffer.
         return new(exitCode == 0, buffer.ToString(), null, exitCode);
+    }
+
+    private static async Task<int> CreateAsync(
+        string driveLetter, ulong capacityBytes, string? volumeLabel, string? imagePath, string? password,
+        ICliDiskController diskController, Action<CliOutcome> setOutcome)
+    {
+        driveLetter = NormalizeDriveLetter(driveLetter);
+
+        var (success, message) = await diskController.CreateAsync(driveLetter, capacityBytes, volumeLabel, imagePath, password);
+        setOutcome(new(success, message, null, success ? 0 : 1));
+        return success ? 0 : 1;
+    }
+
+    private static async Task<int> LsAsync(string driveLetter, string? path, ICliDiskController diskController, Action<CliOutcome> setOutcome)
+    {
+        driveLetter = NormalizeDriveLetter(driveLetter);
+
+        var (success, message, entries) = await diskController.ListFilesAsync(driveLetter, path);
+        if (!success)
+        {
+            setOutcome(new(
+                false,
+                string.IsNullOrEmpty(message) ? $"No disk is currently mounted at {driveLetter}." : message,
+                null,
+                1));
+            return 1;
+        }
+
+        var lines = entries!.Select(e => e.IsDirectory ? $"{e.Name}/" : $"{e.Name}\t{e.SizeBytes}");
+        setOutcome(new(true, string.Join('\n', lines), null, 0));
+        return 0;
     }
 
     private static async Task<int> ExportAsync(

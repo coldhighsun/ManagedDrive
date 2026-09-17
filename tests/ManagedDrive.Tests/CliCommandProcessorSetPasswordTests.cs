@@ -143,5 +143,11 @@ public class CliCommandProcessorSetPasswordTests
             Task.FromResult((false, string.Empty));
 
         public Task<bool> UnmountAsync(string mountPoint, bool deleteImage) => Task.FromResult(false);
+
+        public Task<(bool Success, string Message)> CreateAsync(string mountPoint, ulong capacityBytes, string? volumeLabel, string? imagePath, string? password) =>
+            Task.FromResult((false, string.Empty));
+
+        public Task<(bool Success, string Message, IReadOnlyList<CliFileEntry>? Entries)> ListFilesAsync(string mountPoint, string? path) =>
+            Task.FromResult<(bool, string, IReadOnlyList<CliFileEntry>?)>((false, string.Empty, null));
     }
 }
