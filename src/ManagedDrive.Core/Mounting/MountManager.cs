@@ -7,6 +7,8 @@ namespace ManagedDrive.Core.Mounting;
 /// </summary>
 public sealed class MountManager : IDisposable
 {
+    private static readonly ILogger<MountManager> Logger = AppLog.CreateLogger<MountManager>();
+
     private readonly Dictionary<string, RamDisk> _disks = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
@@ -282,15 +284,26 @@ public sealed class MountManager : IDisposable
     /// Timer callback for <see cref="_activityPollTimer"/>: drains
     /// <see cref="_pendingRead"/>/<see cref="_pendingWrite"/> and raises
     /// <see cref="ActivityDetected"/> at most once per tick if either was set, preferring write.
+    /// A subscriber exception is caught and logged rather than left to propagate out of this
+    /// <see cref="Timer"/> callback, where it would otherwise be unhandled and crash the process.
     /// </summary>
     private void PollActivity()
     {
         var hadWrite = Interlocked.Exchange(ref _pendingWrite, 0) != 0;
         var hadRead = Interlocked.Exchange(ref _pendingRead, 0) != 0;
 
-        if (hadWrite || hadRead)
+        if (!hadWrite && !hadRead)
+        {
+            return;
+        }
+
+        try
         {
             ActivityDetected?.Invoke(hadWrite);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "ActivityDetected subscriber threw during activity poll.");
         }
     }
 }
