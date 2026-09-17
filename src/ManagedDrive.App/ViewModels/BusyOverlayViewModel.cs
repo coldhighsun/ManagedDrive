@@ -1,3 +1,4 @@
+using ManagedDrive.App.Infrastructure;
 using ManagedDrive.Cli.Core;
 
 namespace ManagedDrive.App.ViewModels;
@@ -9,6 +10,19 @@ namespace ManagedDrive.App.ViewModels;
 /// </summary>
 public sealed class BusyOverlayViewModel : INotifyPropertyChanged
 {
+    /// <summary>
+    /// The <see cref="CancellationTokenSource"/> for the operation currently shown by the
+    /// overlay, or <see langword="null"/> when <see cref="Start"/> wasn't given one (that
+    /// operation doesn't support cancellation, so <see cref="CanCancel"/> stays <see langword="false"/>
+    /// and <see cref="CancelCommand"/> has nothing to do).
+    /// </summary>
+    private CancellationTokenSource? _cancellationSource;
+
+    /// <summary>
+    /// Initializes the overlay's <see cref="CancelCommand"/>.
+    /// </summary>
+    public BusyOverlayViewModel() => CancelCommand = new RelayCommand(_ => Cancel(), _ => CanCancel && !IsCancellationRequested);
+
     /// <inheritdoc />
     public event PropertyChangedEventHandler? PropertyChanged;
 
@@ -29,6 +43,54 @@ public sealed class BusyOverlayViewModel : INotifyPropertyChanged
             OnPropertyChanged(nameof(IsBusy));
         }
     }
+
+    /// <summary>
+    /// Gets whether the operation currently shown by the overlay can be cancelled, i.e.
+    /// <see cref="Start"/> was given a <see cref="CancellationTokenSource"/>.
+    /// </summary>
+    public bool CanCancel
+    {
+        get;
+        private set
+        {
+            if (field == value)
+            {
+                return;
+            }
+
+            field = value;
+            OnPropertyChanged(nameof(CanCancel));
+            CancelCommand.Refresh();
+        }
+    }
+
+    /// <summary>
+    /// Gets whether <see cref="CancelCommand"/> has already been invoked for the operation
+    /// currently shown by the overlay, so the button can disable itself instead of firing
+    /// <see cref="CancellationTokenSource.Cancel()"/> a second time while the caller is still
+    /// unwinding from the first.
+    /// </summary>
+    public bool IsCancellationRequested
+    {
+        get;
+        private set
+        {
+            if (field == value)
+            {
+                return;
+            }
+
+            field = value;
+            OnPropertyChanged(nameof(IsCancellationRequested));
+            CancelCommand.Refresh();
+        }
+    }
+
+    /// <summary>
+    /// Command bound to the overlay's Cancel button; requests cancellation of the operation
+    /// currently shown, if it supports cancellation.
+    /// </summary>
+    public RelayCommand CancelCommand { get; }
 
     /// <summary>
     /// Gets whether the operation has no computable total, so the progress bar should render
@@ -135,13 +197,21 @@ public sealed class BusyOverlayViewModel : INotifyPropertyChanged
     /// Total byte count for the operation, used to populate <see cref="DetailText"/> as progress
     /// advances, or <see langword="null"/> to leave <see cref="DetailText"/> empty.
     /// </param>
-    public void Start(string statusText, bool indeterminate = false, ulong? totalBytes = null)
+    /// <param name="cancellationSource">
+    /// The <see cref="CancellationTokenSource"/> the caller's operation observes, or
+    /// <see langword="null"/> when that operation doesn't support cancellation — the overlay then
+    /// shows no Cancel button for it. Owned by the caller: <see cref="Stop"/> does not dispose it.
+    /// </param>
+    public void Start(string statusText, bool indeterminate = false, ulong? totalBytes = null, CancellationTokenSource? cancellationSource = null)
     {
         StatusText = statusText;
         IsIndeterminate = indeterminate;
         Progress = 0;
         _totalBytes = totalBytes;
         DetailText = totalBytes is { } total ? FormatDetail(0, total) : string.Empty;
+        _cancellationSource = cancellationSource;
+        CanCancel = cancellationSource is not null;
+        IsCancellationRequested = false;
         IsBusy = true;
     }
 
@@ -151,7 +221,29 @@ public sealed class BusyOverlayViewModel : INotifyPropertyChanged
     /// <summary>
     /// Hides the overlay.
     /// </summary>
-    public void Stop() => IsBusy = false;
+    public void Stop()
+    {
+        IsBusy = false;
+        _cancellationSource = null;
+        CanCancel = false;
+    }
+
+    /// <summary>
+    /// Requests cancellation of the operation currently shown, via the
+    /// <see cref="CancellationTokenSource"/> passed to <see cref="Start"/>. Does nothing if
+    /// <see cref="Start"/> wasn't given one, or if this was already called for the current
+    /// operation.
+    /// </summary>
+    private void Cancel()
+    {
+        if (_cancellationSource is null || IsCancellationRequested)
+        {
+            return;
+        }
+
+        IsCancellationRequested = true;
+        _cancellationSource.Cancel();
+    }
 
     private void OnPropertyChanged(string propertyName) =>
         PropertyChanged?.Invoke(this, new(propertyName));

@@ -661,6 +661,12 @@
                          Minimum="0" Maximum="1"
                          Value="{Binding BusyOverlay.Progress, Mode=OneWay}"
                          IsIndeterminate="{Binding BusyOverlay.IsIndeterminate}"/>
+            <Button Content="{DynamicResource Btn.Cancel}" Width="80"
+                    Margin="0,10,0,0"
+                    HorizontalAlignment="Center"
+                    Style="{StaticResource FlatButton}"
+                    Command="{Binding BusyOverlay.CancelCommand}"
+                    Visibility="{Binding BusyOverlay.CanCancel, Converter={StaticResource BoolToVis}}"/>
         </StackPanel>
     </Border>
     </Grid>
