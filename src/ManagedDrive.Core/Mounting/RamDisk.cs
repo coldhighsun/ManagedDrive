@@ -21,7 +21,7 @@ public sealed class RamDisk : IDisposable
     private readonly FileSystemHost _host;
     private Timer? _autoSaveTimer;
     private byte[]? _cek;
-    private bool _disposed;
+    private int _disposed;
     private string? _lastSavedImagePath;
     private string? _password;
 
@@ -240,6 +240,12 @@ public sealed class RamDisk : IDisposable
         if (status != FileSystemBase.STATUS_SUCCESS)
         {
             host.Dispose();
+            fs.NodeMap.Dispose();
+            if (cek is not null)
+            {
+                System.Security.Cryptography.CryptographicOperations.ZeroMemory(cek);
+            }
+
             throw new InvalidOperationException(
                 $"WinFsp Mount failed for '{options.MountPoint}'. NTSTATUS: 0x{(uint)status:X8}");
         }
@@ -250,6 +256,12 @@ public sealed class RamDisk : IDisposable
         if (IsDriveLetter(options.MountPoint) && !WaitForDriveVisible(options.MountPoint))
         {
             host.Dispose();
+            fs.NodeMap.Dispose();
+            if (cek is not null)
+            {
+                System.Security.Cryptography.CryptographicOperations.ZeroMemory(cek);
+            }
+
             throw new InvalidOperationException(
                 $"WinFsp did not expose drive '{options.MountPoint}' within 2.5 s. " +
                 "Verify that the WinFsp kernel driver is loaded and that the drive letter is not already in use.");
@@ -321,7 +333,13 @@ public sealed class RamDisk : IDisposable
     /// <param name="progress">Optional progress reporter, updated with a fraction in [0, 1].</param>
     public void Dispose(IProgress<double>? progress)
     {
-        if (!_disposed)
+        if (Interlocked.Exchange(ref _disposed, 1) != 0)
+        {
+            // Already disposed (or a concurrent Dispose is in flight) — nothing more to do.
+            return;
+        }
+
+        try
         {
             _fs.ContentAccessed -= OnContentAccessed;
             _autoSaveTimer?.Dispose();
@@ -352,8 +370,12 @@ public sealed class RamDisk : IDisposable
 
             _host.Unmount();
             _host.Dispose();
-
-            // The host is unmounted, so no WinFsp callbacks can still touch the map.
+        }
+        finally
+        {
+            // The host is unmounted, so no WinFsp callbacks can still touch the map. Runs even
+            // if the final save or the unmount above threw, so the node map's lock and the CEK
+            // are always released rather than leaked.
             _fs.NodeMap.Dispose();
 
             if (_cek is not null)
@@ -363,7 +385,6 @@ public sealed class RamDisk : IDisposable
             }
 
             _password = null;
-            _disposed = true;
         }
     }
 
@@ -418,8 +439,12 @@ public sealed class RamDisk : IDisposable
             return false;
         }
 
-        _fs.NodeMap.ClearAll();
-        _fs.MarkDirty();
+        lock (_autoSaveLock)
+        {
+            _fs.NodeMap.ClearAll();
+            _fs.MarkDirty();
+        }
+
         NotifyVolumeContentsChanged();
         return true;
     }
@@ -472,6 +497,8 @@ public sealed class RamDisk : IDisposable
             return;
         }
 
+        var versionAtSaveStart = _fs.CaptureMutationVersion();
+
         try
         {
             DiskImageSerializer.SaveIncremental(
@@ -494,7 +521,7 @@ public sealed class RamDisk : IDisposable
         }
 
         LastSaveTime = DateTimeOffset.UtcNow;
-        _fs.ClearDirty();
+        _fs.ClearDirtySince(versionAtSaveStart);
         _lastSavedImagePath = Options.PersistImagePath;
         Logger.LogInformation("Saved disk image to {ImagePath}.", Options.PersistImagePath);
     }
@@ -581,28 +608,31 @@ public sealed class RamDisk : IDisposable
     /// <param name="newPassword">The new password, or <see langword="null"/> to remove protection.</param>
     public void SetPassword(string? newPassword)
     {
-        if (newPassword is not null)
+        lock (_autoSaveLock)
         {
-            _cek ??= DiskImageSerializer.GenerateCek();
-            _password = newPassword;
-        }
-        else
-        {
-            if (_cek is not null)
+            if (newPassword is not null)
             {
-                System.Security.Cryptography.CryptographicOperations.ZeroMemory(_cek);
+                _cek ??= DiskImageSerializer.GenerateCek();
+                _password = newPassword;
+            }
+            else
+            {
+                if (_cek is not null)
+                {
+                    System.Security.Cryptography.CryptographicOperations.ZeroMemory(_cek);
+                }
+
+                _password = null;
+                _cek = null;
+
+                if (Options.PersistImagePath is { } path)
+                {
+                    SnapshotManager.DeleteAllSnapshots(path);
+                }
             }
 
-            _password = null;
-            _cek = null;
-
-            if (Options.PersistImagePath is { } path)
-            {
-                SnapshotManager.DeleteAllSnapshots(path);
-            }
+            _fs.MarkDirty();
         }
-
-        _fs.MarkDirty();
     }
 
     /// <summary>
@@ -625,22 +655,25 @@ public sealed class RamDisk : IDisposable
     /// </returns>
     public bool TryApplyOptions(DiskOptions newOptions, out string? error)
     {
-        if (newOptions.CapacityBytes != Options.CapacityBytes &&
-            !_fs.TryUpdateCapacity(newOptions.CapacityBytes))
+        lock (_autoSaveLock)
         {
-            error = $"Cannot reduce capacity: current usage ({UsedBytes:N0} bytes) exceeds the requested capacity ({newOptions.CapacityBytes:N0} bytes).";
-            return false;
-        }
+            if (newOptions.CapacityBytes != Options.CapacityBytes &&
+                !_fs.TryUpdateCapacity(newOptions.CapacityBytes))
+            {
+                error = $"Cannot reduce capacity: current usage ({UsedBytes:N0} bytes) exceeds the requested capacity ({newOptions.CapacityBytes:N0} bytes).";
+                return false;
+            }
 
-        if (newOptions.VolumeLabel != Options.VolumeLabel)
-        {
-            _fs.UpdateVolumeLabel(newOptions.VolumeLabel);
-        }
+            if (newOptions.VolumeLabel != Options.VolumeLabel)
+            {
+                _fs.UpdateVolumeLabel(newOptions.VolumeLabel);
+            }
 
-        Options = newOptions;
-        ConfigureAutoSaveTimer();
-        error = null;
-        return true;
+            Options = newOptions;
+            ConfigureAutoSaveTimer();
+            error = null;
+            return true;
+        }
     }
 
     /// <summary>
@@ -655,9 +688,12 @@ public sealed class RamDisk : IDisposable
     /// </returns>
     public bool TryCloneFrom(RamDisk source, out string? error)
     {
-        if (!_fs.TryReplaceContents(source._fs.NodeMap, out error))
+        lock (_autoSaveLock)
         {
-            return false;
+            if (!_fs.TryReplaceContents(source._fs.NodeMap, out error))
+            {
+                return false;
+            }
         }
 
         NotifyVolumeContentsChanged();
