@@ -108,14 +108,36 @@ public sealed class MountManager : IDisposable
     /// Optional progress reporter for the archive-extraction path
     /// (<see cref="DiskOptions.SourceArchivePath"/>), updated with a fraction in [0, 1].
     /// </param>
+    /// <exception cref="InvalidOperationException">
+    /// A disk is already registered at <see cref="DiskOptions.MountPoint"/>.
+    /// </exception>
     public RamDisk Mount(DiskOptions options, string? password = null, IProgress<double>? progress = null)
     {
+        // Reserved up front under the lock so two concurrent Mount calls for the same mount
+        // point can't both succeed and race to overwrite each other's dictionary entry — the
+        // loser's RamDisk would otherwise never be unmounted or disposed.
+        lock (_syncRoot)
+        {
+            if (_disks.ContainsKey(options.MountPoint))
+            {
+                throw new InvalidOperationException($"A disk is already mounted at '{options.MountPoint}'.");
+            }
+        }
+
         var disk = RamDisk.Create(options, password, progress);
         disk.ContentAccessed += OnDiskContentAccessed;
 
         lock (_syncRoot)
         {
-            _disks[options.MountPoint] = disk;
+            if (!_disks.TryAdd(options.MountPoint, disk))
+            {
+                // Lost a race against another Mount call for the same mount point that reserved
+                // it between our check above and now. Dispose the disk we just created instead
+                // of leaking it, and surface the same error as the up-front check.
+                disk.ContentAccessed -= OnDiskContentAccessed;
+                disk.Dispose();
+                throw new InvalidOperationException($"A disk is already mounted at '{options.MountPoint}'.");
+            }
         }
 
         DiskMounted?.Invoke(this, disk);
