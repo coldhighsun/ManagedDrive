@@ -147,6 +147,8 @@
     <sys:String x:Key="Val.PasswordIncorrect">密码不正确。</sys:String>
     <sys:String x:Key="Val.CliPasswordRequired">该镜像已加密，请提供 --password 或 --password-file。</sys:String>
     <sys:String x:Key="Val.CliPasswordIncorrect">提供的密码不正确。</sys:String>
+    <sys:String x:Key="Val.CliBadCapacity">容量必须大于 0。</sys:String>
+    <sys:String x:Key="Msg.CliPathNotFound">路径不存在：{0}</sys:String>
     <sys:String x:Key="PasswordPrompt.Title">请输入密码</sys:String>
     <sys:String x:Key="PasswordPrompt.LabelHeader">卷标</sys:String>
     <sys:String x:Key="PasswordPrompt.DriveHeader">盘符</sys:String>

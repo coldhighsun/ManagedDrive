@@ -147,6 +147,8 @@
     <sys:String x:Key="Val.PasswordIncorrect">Incorrect password.</sys:String>
     <sys:String x:Key="Val.CliPasswordRequired">This image is password-protected. Supply --password or --password-file.</sys:String>
     <sys:String x:Key="Val.CliPasswordIncorrect">The supplied password is incorrect.</sys:String>
+    <sys:String x:Key="Val.CliBadCapacity">Capacity must be greater than 0.</sys:String>
+    <sys:String x:Key="Msg.CliPathNotFound">Path not found: {0}</sys:String>
     <sys:String x:Key="PasswordPrompt.Title">Enter Password</sys:String>
     <sys:String x:Key="PasswordPrompt.LabelHeader">Label</sys:String>
     <sys:String x:Key="PasswordPrompt.DriveHeader">Drive</sys:String>

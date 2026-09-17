@@ -725,6 +725,84 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     }
 
     /// <summary>
+    /// Creates a brand-new, empty RAM disk at <paramref name="mountPoint"/>, without any
+    /// interactive dialogs, for use by the CLI command channel.
+    /// </summary>
+    /// <param name="mountPoint">The drive letter to mount at (e.g. <c>"R:"</c>).</param>
+    /// <param name="capacityBytes">The disk's capacity in bytes.</param>
+    /// <param name="volumeLabel">The volume label, or <c>null</c> to use the built-in default.</param>
+    /// <param name="imagePath">
+    /// Optional path to persist the disk to (created on first save); <c>null</c> for a
+    /// memory-only disk that is discarded on unmount.
+    /// </param>
+    /// <param name="password">Optional password to encrypt <paramref name="imagePath"/> with.</param>
+    /// <returns>
+    /// <c>(true, message)</c> on success; <c>(false, message)</c> with a human-readable reason
+    /// otherwise (mount point already in use, invalid capacity, or image path collision).
+    /// </returns>
+    public async Task<(bool Success, string Message)> CreateByOptionsAsync(
+        string mountPoint, ulong capacityBytes, string? volumeLabel, string? imagePath, string? password)
+    {
+        _logger.LogInformation("CLI create requested: {MountPoint}, capacity {CapacityBytes} bytes.", mountPoint, capacityBytes);
+
+        if (Disks.Any(d => string.Equals(d.MountPoint, mountPoint, StringComparison.OrdinalIgnoreCase)))
+        {
+            return (false, Loc.Format("Val.MountPointAlreadyMounted", mountPoint));
+        }
+
+        var otherDisks = GetOtherDiskOptions(excluding: null);
+        if (!MountPointValidator.TryValidateDirectoryMountPoint(mountPoint, otherDisks.Select(d => d.MountPoint), out var mountPointError))
+        {
+            return (false, mountPointError!);
+        }
+
+        if (capacityBytes == 0)
+        {
+            return (false, Loc.Get("Val.CliBadCapacity"));
+        }
+
+        imagePath = string.IsNullOrWhiteSpace(imagePath) ? null : imagePath.Trim();
+        if (imagePath != null)
+        {
+            if (!CreateDiskOptionsBuilder.IsValidImagePath(imagePath))
+            {
+                return (false, Loc.Get("Val.BadImagePath"));
+            }
+
+            var availability = CreateDiskOptionsBuilder.ValidateImagePathAvailable(imagePath, otherDisks);
+            if (availability != CreateDiskValidationError.None)
+            {
+                return (false, availability == CreateDiskValidationError.ImagePathIsSnapshot
+                    ? Loc.Get("Val.ImagePathIsSnapshot")
+                    : Loc.Get("Val.ImagePathInUse"));
+            }
+        }
+
+        var options = new DiskOptions
+        {
+            MountPoint = mountPoint,
+            VolumeLabel = string.IsNullOrWhiteSpace(volumeLabel) ? "RAM Disk" : volumeLabel.Trim(),
+            CapacityBytes = capacityBytes,
+            PersistImagePath = imagePath,
+        };
+
+        try
+        {
+            var disk = await Task.Run(() => _mountManager.Mount(options, password));
+            AddDiskSorted(new(disk));
+            SaveSettings();
+            StatusText = Loc.Format("Status.MountedWithCapacity", disk.MountPoint, options.VolumeLabel, options.CapacityBytes / (1024 * 1024));
+            _logger.LogInformation("CLI create succeeded: {MountPoint}.", disk.MountPoint);
+            return (true, StatusText);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "CLI create failed for {MountPoint}.", mountPoint);
+            return (false, Loc.Format("Msg.MountFailed", ex.Message));
+        }
+    }
+
+    /// <summary>
     /// Saves the disk currently mounted at <paramref name="mountPoint"/> to its backing image
     /// file immediately, for use by the CLI command channel.
     /// </summary>
@@ -791,6 +869,80 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         return Task.FromResult((true, newPassword is null
             ? Loc.Format("Status.PasswordRemoved", mountPoint)
             : Loc.Format("Status.PasswordSet", mountPoint)));
+    }
+
+    /// <summary>
+    /// Lists the immediate children of <paramref name="path"/> on the disk currently mounted at
+    /// <paramref name="mountPoint"/>, for use by the CLI command channel.
+    /// </summary>
+    /// <param name="mountPoint">The mount point to list, e.g. <c>"R:"</c>.</param>
+    /// <param name="path">The directory to list; <c>null</c> or empty lists the root.</param>
+    /// <returns>
+    /// <c>(true, string.Empty, entries)</c> on success (an empty list when the directory has no
+    /// children); <c>(false, message, null)</c> if <paramref name="path"/> doesn't exist or names
+    /// a file; or <c>(false, string.Empty, null)</c> if no disk is currently mounted at
+    /// <paramref name="mountPoint"/>.
+    /// </returns>
+    public Task<(bool Success, string Message, IReadOnlyList<CliFileEntry>? Entries)> ListFilesByMountPointAsync(string mountPoint, string? path)
+    {
+        _logger.LogInformation("CLI ls requested for {MountPoint}, path {Path}.", mountPoint, path);
+
+        var vm = Disks.FirstOrDefault(d => string.Equals(d.MountPoint, mountPoint, StringComparison.OrdinalIgnoreCase));
+        if (vm == null)
+        {
+            return Task.FromResult<(bool, string, IReadOnlyList<CliFileEntry>?)>((false, string.Empty, null));
+        }
+
+        var normalizedPath = NormalizeListPath(path);
+        var nodes = vm.Disk.GetAllNodes();
+
+        if (normalizedPath != "\\" && !nodes.Any(n =>
+            string.Equals(n.Key, normalizedPath, StringComparison.OrdinalIgnoreCase) && n.Value.IsDirectory))
+        {
+            return Task.FromResult<(bool, string, IReadOnlyList<CliFileEntry>?)>((false, Loc.Format("Msg.CliPathNotFound", normalizedPath), null));
+        }
+
+        var entries = nodes
+            .Where(n => n.Key != "\\" && string.Equals(GetParentPath(n.Key), normalizedPath, StringComparison.OrdinalIgnoreCase))
+            .Select(n => new CliFileEntry(n.Value.LeafName, n.Value.IsDirectory, n.Value.FileInfo.FileSize))
+            .ToList();
+
+        return Task.FromResult<(bool, string, IReadOnlyList<CliFileEntry>?)>((true, string.Empty, entries));
+    }
+
+    /// <summary>
+    /// Normalizes a CLI-supplied directory path into the backslash-rooted form used by
+    /// <see cref="FileNode.FilePath"/> (e.g. <c>"Folder"</c> or <c>"/Folder"</c> both become
+    /// <c>"\Folder"</c>), for <see cref="ListFilesByMountPointAsync"/>.
+    /// </summary>
+    /// <param name="path">The raw path, or <c>null</c>/empty for the root.</param>
+    /// <returns>The normalized, backslash-rooted path with no trailing separator (except the root itself).</returns>
+    private static string NormalizeListPath(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return "\\";
+        }
+
+        var normalized = path.Replace('/', '\\').Trim();
+        if (!normalized.StartsWith('\\'))
+        {
+            normalized = "\\" + normalized;
+        }
+
+        return normalized.Length > 1 ? normalized.TrimEnd('\\') : normalized;
+    }
+
+    /// <summary>
+    /// Returns the parent directory path of <paramref name="nodePath"/> (e.g. <c>"\Folder\File.txt"</c>
+    /// → <c>"\Folder"</c>), for <see cref="ListFilesByMountPointAsync"/>.
+    /// </summary>
+    /// <param name="nodePath">A full node path as stored in <see cref="FileNode.FilePath"/>.</param>
+    /// <returns>The parent directory path, or <c>"\"</c> for a root-level node.</returns>
+    private static string GetParentPath(string nodePath)
+    {
+        var separatorIndex = nodePath.LastIndexOf('\\');
+        return separatorIndex <= 0 ? "\\" : nodePath[..separatorIndex];
     }
 
     /// <summary>

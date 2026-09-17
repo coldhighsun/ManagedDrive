@@ -16,7 +16,8 @@ namespace ManagedDrive.App.Cli;
 /// <see cref="MainViewModel.ExportByMountPointAsync"/>,
 /// <see cref="MainViewModel.UnmountByMountPointAsync"/>,
 /// <see cref="MainViewModel.ListSnapshotsByMountPointAsync"/>, <see cref="MainViewModel.RestoreSnapshotByMountPointAsync"/>,
-/// and <see cref="MainViewModel.DeleteSnapshotByMountPointAsync"/> (plus the read-only
+/// <see cref="MainViewModel.DeleteSnapshotByMountPointAsync"/>, <see cref="MainViewModel.CreateByOptionsAsync"/>,
+/// and <see cref="MainViewModel.ListFilesByMountPointAsync"/> (plus the read-only
 /// <see cref="MainViewModel.Disks"/> collection for <see cref="ListDisks"/>). Changing any of their
 /// signatures requires updating this adapter in lockstep.
 /// </remarks>
@@ -57,6 +58,12 @@ internal sealed class MainViewModelCliDiskController(MainViewModel mainViewModel
 
     public Task<(bool Success, string Message)> MountImageAsync(string imagePath, string mountPoint, CliMountOverrides overrides) =>
             mainViewModel.MountImageAsync(imagePath, mountPoint, overrides);
+
+    public Task<(bool Success, string Message)> CreateAsync(string mountPoint, ulong capacityBytes, string? volumeLabel, string? imagePath, string? password) =>
+        mainViewModel.CreateByOptionsAsync(mountPoint, capacityBytes, volumeLabel, imagePath, password);
+
+    public Task<(bool Success, string Message, IReadOnlyList<CliFileEntry>? Entries)> ListFilesAsync(string mountPoint, string? path) =>
+        mainViewModel.ListFilesByMountPointAsync(mountPoint, path);
 
     public Task<(bool Success, string Message)> RestoreSnapshotAsync(string mountPoint, int index) =>
         mainViewModel.RestoreSnapshotByMountPointAsync(mountPoint, index);

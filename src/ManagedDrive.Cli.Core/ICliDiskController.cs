@@ -82,6 +82,41 @@ public interface ICliDiskController
     Task<(bool Success, string Message)> MountImageAsync(string imagePath, string mountPoint, CliMountOverrides overrides);
 
     /// <summary>
+    /// Creates a brand-new, empty RAM disk at <paramref name="mountPoint"/>.
+    /// </summary>
+    /// <param name="mountPoint">The drive letter to mount at, e.g. <c>"R:"</c>.</param>
+    /// <param name="capacityBytes">The disk's capacity in bytes.</param>
+    /// <param name="volumeLabel">The volume label, or <c>null</c> to use the built-in default.</param>
+    /// <param name="imagePath">
+    /// Optional path to persist the disk to (created on first save); <c>null</c> for a
+    /// memory-only disk that is discarded on unmount.
+    /// </param>
+    /// <param name="password">Optional password to encrypt <paramref name="imagePath"/> with.</param>
+    /// <returns>
+    /// <c>(true, message)</c> on success; <c>(false, message)</c> with a human-readable reason
+    /// otherwise — including a mount point already in use, an invalid capacity, or an image path
+    /// collision.
+    /// </returns>
+    Task<(bool Success, string Message)> CreateAsync(string mountPoint, ulong capacityBytes, string? volumeLabel, string? imagePath, string? password);
+
+    /// <summary>
+    /// Lists the immediate children of <paramref name="path"/> on the disk currently mounted at
+    /// <paramref name="mountPoint"/>.
+    /// </summary>
+    /// <param name="mountPoint">The mount point to list, e.g. <c>"R:"</c>.</param>
+    /// <param name="path">
+    /// The directory to list, e.g. <c>"\Folder"</c>; <c>null</c> or empty lists the root.
+    /// </param>
+    /// <returns>
+    /// <c>(true, message, entries)</c> on success (an empty list when the directory has no
+    /// children); <c>(false, message, null)</c> with a human-readable reason otherwise —
+    /// including a <paramref name="path"/> that doesn't exist or names a file.
+    /// <paramref name="mountPoint"/> not being mounted is reported as <c>(false, string.Empty, null)</c>
+    /// so the CLI layer can render its own not-mounted message.
+    /// </returns>
+    Task<(bool Success, string Message, IReadOnlyList<CliFileEntry>? Entries)> ListFilesAsync(string mountPoint, string? path);
+
+    /// <summary>
     /// Deletes a single snapshot of the disk currently mounted at <paramref name="mountPoint"/>.
     /// </summary>
     /// <param name="mountPoint">The mount point whose snapshot should be deleted, e.g. <c>"R:"</c>.</param>
@@ -181,3 +216,8 @@ public sealed record CliDiskInfo(string MountPoint, string VolumeLabel, ulong Us
 /// </summary>
 /// <param name="Index">1-based index, newest first (1 = newest).</param>
 public sealed record CliSnapshotInfo(int Index, DateTimeOffset TimestampUtc, ulong SizeBytes);
+
+/// <summary>
+/// One entry of a directory listing, as needed to render the CLI <c>ls</c> table.
+/// </summary>
+public sealed record CliFileEntry(string Name, bool IsDirectory, ulong SizeBytes);
