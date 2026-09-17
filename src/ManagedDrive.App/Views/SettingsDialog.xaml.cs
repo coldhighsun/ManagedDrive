@@ -41,15 +41,13 @@ public partial class SettingsDialog
             ? Loc.Get("Settings.HelperServiceAvailable")
             : Loc.Get("Settings.HelperServiceUnavailable");
 
-        DefaultCompressionLevelBox.Items.Add(new CompressionLevelItem(null, Loc.Get("Settings.DefaultCompressionLevel.System")));
         foreach (var level in CompressionLevels)
         {
             DefaultCompressionLevelBox.Items.Add(new CompressionLevelItem(level, Loc.Get(CompressionLevelKey(level))));
         }
 
-        DefaultCompressionLevelBox.SelectedIndex = config.DefaultCompressionLevel is { } configuredLevel
-            ? CompressionLevels.IndexOf(configuredLevel) + 1
-            : 0;
+        DefaultCompressionLevelBox.SelectedIndex =
+            CompressionLevels.IndexOf(config.DefaultCompressionLevel ?? ImageCompressionLevel.Fastest);
 
         LanguageBox.Items.Add(new ComboBoxItem { Content = Loc.Get("Lang.System"), Tag = "" });
         foreach (var (tag, displayName) in LanguageManager.SupportedLanguages)
@@ -128,7 +126,8 @@ public partial class SettingsDialog
             AutoCheckForUpdates = AutoCheckForUpdatesBox.IsChecked == true,
             LastUpdateCheckUtc = _original.LastUpdateCheckUtc,
             SkippedVersion = _original.SkippedVersion,
-            DefaultCompressionLevel = (DefaultCompressionLevelBox.SelectedItem as CompressionLevelItem)?.Level,
+            DefaultCompressionLevel = (DefaultCompressionLevelBox.SelectedItem as CompressionLevelItem)?.Level
+                ?? ImageCompressionLevel.Fastest,
             DefaultImageDirectory = string.IsNullOrWhiteSpace(DefaultImageDirectoryBox.Text) ? null : DefaultImageDirectoryBox.Text,
         };
 
@@ -160,7 +159,7 @@ public partial class SettingsDialog
         _ => "CompressionLevel.Optimal",
     };
 
-    private sealed record CompressionLevelItem(ImageCompressionLevel? Level, string Display)
+    private sealed record CompressionLevelItem(ImageCompressionLevel Level, string Display)
     {
         public override string ToString() => Display;
     }

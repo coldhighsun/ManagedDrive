@@ -103,6 +103,20 @@ public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
     public event EventHandler<Exception>? SaveFailed;
 
     /// <summary>
+    /// Occurs when a user-initiated image save or snapshot ("Save Image" / "Create Snapshot Now",
+    /// from either the main window or the tray menu) completes successfully. Raised by
+    /// <see cref="MainViewModel"/> so a tray balloon tip can confirm the save even when the main
+    /// window is hidden, unlike the periodic auto-save which stays silent on success.
+    /// </summary>
+    public event EventHandler? SaveCompleted;
+
+    /// <summary>
+    /// Raises <see cref="SaveCompleted"/>. Called by <see cref="MainViewModel"/> after a
+    /// successful user-initiated save.
+    /// </summary>
+    public void NotifySaveCompleted() => SaveCompleted?.Invoke(this, EventArgs.Empty);
+
+    /// <summary>
     /// Gets whether this disk's effective capacity was automatically raised at mount time
     /// because the loaded image's actual content exceeded the configured capacity. This is a
     /// one-time fact determined during mount, not an ongoing event.

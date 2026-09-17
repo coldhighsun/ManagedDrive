@@ -50,6 +50,15 @@ public sealed class TrayTooltipController
             }
         };
 
+        trayIconController.ContextMenuOpening += () =>
+        {
+            _timerShowTrayInfoPopup.Stop();
+            _timerPollCursor.Stop();
+            _trayInfoPopup.IsOpen = false;
+            _tooltipCooldown = true;
+            _timerTooltipCooldown.Start();
+        };
+
         _timerShowTrayInfoPopup.Tick += (_, _) =>
         {
             _timerShowTrayInfoPopup.Stop();

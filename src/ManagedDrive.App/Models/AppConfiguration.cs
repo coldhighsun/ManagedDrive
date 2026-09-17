@@ -101,8 +101,8 @@ public sealed record AppConfiguration
 
     /// <summary>
     /// Gets or sets the compression level preselected for a new disk's image file in
-    /// <c>CreateDiskDialog</c>, or <c>null</c> to use the dialog's own hardcoded default
-    /// (<see cref="ImageCompressionLevel.Fastest"/>).
+    /// <c>CreateDiskDialog</c>, or <c>null</c> (e.g. configs saved before this setting existed)
+    /// to fall back to <see cref="ImageCompressionLevel.Fastest"/>.
     /// </summary>
     public ImageCompressionLevel? DefaultCompressionLevel
     {

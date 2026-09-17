@@ -1,4 +1,5 @@
 using SharpCompress.Archives;
+using SharpCompress.Common;
 
 namespace ManagedDrive.Core.Archive;
 
@@ -40,12 +41,12 @@ public static class ArchiveNodeMapBuilder
         {
             using var archive = ArchiveFactory.OpenArchive(archivePath);
 
-            foreach (var entry in archive.Entries)
+            void ProcessEntry(IEntry entry, Func<Stream> openEntryStream)
             {
                 var path = NormalizeEntryPath(entry.Key);
                 if (path is null)
                 {
-                    continue;
+                    return;
                 }
 
                 var timestamp = entry.LastModifiedTime is { } lastModified
@@ -57,15 +58,42 @@ public static class ArchiveNodeMapBuilder
                 if (entry.IsDirectory)
                 {
                     EnsureDirectory(nodeMap, path, timestamp);
-                    continue;
+                    return;
                 }
 
-                AddFile(nodeMap, path, entry, timestamp);
+                AddFile(nodeMap, path, openEntryStream, entry, timestamp);
 
                 if (reportProgress)
                 {
                     processedBytes += entry.Size;
                     progress?.Report(Math.Clamp((double)processedBytes / totalBytes!.Value, 0.0, 1.0));
+                }
+            }
+
+            // Opening each entry individually via IArchiveEntry.OpenEntryStream (the random-access
+            // Archive API used in the `else` branch below) re-decodes a solid block from its start
+            // every time, since no decoder state carries over between entries — extracting N
+            // entries out of a solid block costs roughly O(N) full block decompressions. 7z is
+            // solid by default and always requires this random-access reopening internally even
+            // when the caller asks for entries in order, so ExtractAllEntries() (a forward-only
+            // IReader that walks the same folder decoder across entries, decoding each byte
+            // exactly once) is required for 7z/solid archives to avoid minutes-long extraction on
+            // a large archive. It's restricted to solid archives and 7z, so non-solid formats
+            // (plain zip, tar, ...) keep using the simpler per-entry API, where random access is
+            // already cheap.
+            if (archive.Type == SharpCompress.Common.ArchiveType.SevenZip || archive.IsSolid)
+            {
+                using var reader = archive.ExtractAllEntries();
+                while (reader.MoveToNextEntry())
+                {
+                    ProcessEntry(reader.Entry, reader.OpenEntryStream);
+                }
+            }
+            else
+            {
+                foreach (var entry in archive.Entries)
+                {
+                    ProcessEntry(entry, entry.OpenEntryStream);
                 }
             }
         }
@@ -114,13 +142,13 @@ public static class ArchiveNodeMapBuilder
         suggestedLabel = Path.GetFileNameWithoutExtension(archivePath);
     }
 
-    private static void AddFile(FileNodeMap nodeMap, string path, IArchiveEntry entry, ulong timestamp)
+    private static void AddFile(FileNodeMap nodeMap, string path, Func<Stream> openEntryStream, IEntry entry, ulong timestamp)
     {
         var size = (ulong)entry.Size;
         var allocationSize = FileNode.AlignToAllocationUnit(size);
         var data = FileContent.CreateZeroed(allocationSize);
 
-        using (var entryStream = entry.OpenEntryStream())
+        using (var entryStream = openEntryStream())
         {
             data.FillFromStream(entryStream, (long)size);
         }

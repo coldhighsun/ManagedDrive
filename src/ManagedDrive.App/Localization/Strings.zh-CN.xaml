@@ -239,7 +239,6 @@
     <sys:String x:Key="Tip.CloseToTray">勾选时，标题栏关闭按钮会将窗口隐藏到托盘；不勾选时，会直接退出程序（等同于托盘菜单的"退出"）。</sys:String>
     <sys:String x:Key="Settings.DefaultCompressionLevel">默认压缩级别：</sys:String>
     <sys:String x:Key="Tip.DefaultCompressionLevel">新建磁盘时预选的压缩级别</sys:String>
-    <sys:String x:Key="Settings.DefaultCompressionLevel.System">对话框默认（快速）</sys:String>
     <sys:String x:Key="Settings.DefaultImageDirectory">默认镜像目录：</sys:String>
     <sys:String x:Key="Tip.DefaultImageDirectory">浏览新磁盘镜像文件路径时预选的文件夹</sys:String>
     <sys:String x:Key="Btn.Browse">浏览...</sys:String>
@@ -266,6 +265,8 @@
     <sys:String x:Key="Tray.HighUsageBody">{0}（{1}）已使用 {2:F0}%。</sys:String>
     <sys:String x:Key="Tray.SaveFailedTitle">保存失败</sys:String>
     <sys:String x:Key="Tray.SaveFailedBody">{0}（{1}）：{2}</sys:String>
+    <sys:String x:Key="Tray.SaveCompletedTitle">保存完成</sys:String>
+    <sys:String x:Key="Tray.SaveCompletedBody">{0}（{1}）镜像已保存。</sys:String>
     <sys:String x:Key="Tray.CapacityAdjustedTitle">容量已自动调整</sys:String>
     <sys:String x:Key="Tray.CapacityAdjustedBody">{0}（{1}）：配置容量 {2} MB 小于已加载镜像的实际占用（{3} MB），已临时提升容量以容纳现有数据。</sys:String>
 

@@ -42,6 +42,7 @@ public sealed class DiskNotificationService
                 {
                     vm.HighUsageWarning += OnDiskHighUsageWarning;
                     vm.SaveFailed += OnDiskSaveFailed;
+                    vm.SaveCompleted += OnDiskSaveCompleted;
                     vm.ActivityObserved += OnDiskActivityObserved;
                     vm.PropertyChanged += OnDiskPropertyChanged;
                     vm.SetActivityTrackingEnabled(_isMainWindowVisible());
@@ -65,6 +66,7 @@ public sealed class DiskNotificationService
                 {
                     vm.HighUsageWarning -= OnDiskHighUsageWarning;
                     vm.SaveFailed -= OnDiskSaveFailed;
+                    vm.SaveCompleted -= OnDiskSaveCompleted;
                     vm.ActivityObserved -= OnDiskActivityObserved;
                     vm.PropertyChanged -= OnDiskPropertyChanged;
 
@@ -140,6 +142,24 @@ public sealed class DiskNotificationService
         }
 
         _trayIconController.SetHighUsageWarningActive(_highUsageDisks.Count > 0);
+    }
+
+    /// <summary>
+    /// Confirms a user-initiated save (e.g. from the tray menu's "Save Image", where the main
+    /// window may be hidden and <see cref="MainViewModel.StatusText"/> not visible to the user)
+    /// with a balloon tip, so the action never completes silently. Skipped when the main window
+    /// is visible, since <see cref="MainViewModel.StatusText"/> already confirms it there.
+    /// </summary>
+    private void OnDiskSaveCompleted(object? sender, EventArgs e)
+    {
+        if (sender is not DiskViewModel vm || _isMainWindowVisible())
+        {
+            return;
+        }
+
+        var title = Loc.Get("Tray.SaveCompletedTitle");
+        var body = Loc.Format("Tray.SaveCompletedBody", vm.VolumeLabel, vm.MountPoint);
+        _trayIconController.ShowBalloonTip(title, body, System.Windows.Forms.ToolTipIcon.Info);
     }
 
     private void OnDiskSaveFailed(object? sender, Exception ex)

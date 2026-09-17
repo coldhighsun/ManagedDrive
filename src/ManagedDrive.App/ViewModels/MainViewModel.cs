@@ -2134,6 +2134,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             await Task.Run(() => vm.Disk.SaveToImageWithSnapshot(progress, cts.Token));
             StatusText = Loc.Format("Status.ImageSaved", vm.MountPoint);
             _logger.LogInformation("{Verb} completed for {MountPoint}.", logVerb, vm.MountPoint);
+            vm.NotifySaveCompleted();
         }
         catch (OperationCanceledException)
         {
