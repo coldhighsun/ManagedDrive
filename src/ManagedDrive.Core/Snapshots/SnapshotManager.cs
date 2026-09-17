@@ -377,18 +377,24 @@ public static partial class SnapshotManager
         var blobDirectory = BlobDirectory(mainImagePath);
         var sizes = new Dictionary<string, long>(StringComparer.OrdinalIgnoreCase);
 
-        if (!Directory.Exists(blobDirectory))
-        {
-            return sizes;
-        }
-
-        foreach (var blobPath in Directory.EnumerateFiles(blobDirectory, "*.blob", SearchOption.AllDirectories))
+        foreach (var blobPath in EnumerateBlobFiles(blobDirectory))
         {
             sizes[Path.GetFileNameWithoutExtension(blobPath)] = new FileInfo(blobPath).Length;
         }
 
         return sizes;
     }
+
+    /// <summary>
+    /// Enumerates every blob file in <paramref name="blobDirectory"/>, or an empty sequence if
+    /// the directory doesn't exist. Shared by <see cref="LoadBlobSizes"/> and
+    /// <see cref="GarbageCollectBlobs"/> so the blob store is only walked once per caller instead
+    /// of each duplicating the same <see cref="Directory.EnumerateFiles"/> call.
+    /// </summary>
+    private static IEnumerable<string> EnumerateBlobFiles(string blobDirectory) =>
+        Directory.Exists(blobDirectory)
+            ? Directory.EnumerateFiles(blobDirectory, "*.blob", SearchOption.AllDirectories)
+            : [];
 
     /// <summary>
     /// Writes <paramref name="nodeMap"/> as a new timestamped snapshot of <paramref name="mainImagePath"/>.
@@ -457,10 +463,6 @@ public static partial class SnapshotManager
     private static void GarbageCollectBlobs(string mainImagePath, IEnumerable<SnapshotStore.SnapshotSummary> summaries)
     {
         var blobDirectory = BlobDirectory(mainImagePath);
-        if (!Directory.Exists(blobDirectory))
-        {
-            return;
-        }
 
         var referenced = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var summary in summaries)
@@ -471,7 +473,7 @@ public static partial class SnapshotManager
             }
         }
 
-        foreach (var blobPath in Directory.EnumerateFiles(blobDirectory, "*.blob", SearchOption.AllDirectories))
+        foreach (var blobPath in EnumerateBlobFiles(blobDirectory))
         {
             var hashHex = Path.GetFileNameWithoutExtension(blobPath);
             if (referenced.Contains(hashHex))
