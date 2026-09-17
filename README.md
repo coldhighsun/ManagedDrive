@@ -44,7 +44,7 @@ Create, mount and manage in-memory volumes that appear as normal drive letters i
 
 **Convenience & safety**
 - Optional Explorer right-click integration: **"Mount as RAM disk (ManagedDrive)"** for zip/7z/rar/tar archives
-- Tray icon with a hover tooltip (per-disk usage + available memory), quick menu, and optional start-minimized mode
+- Tray icon with a hover tooltip (per-disk usage + available memory), quick menu with a per-disk submenu (open in Explorer / save image / unmount), and optional start-minimized mode
 - Live status bar: available system memory and most recently accessed file
 - Per-disk high-usage warning with a configurable threshold
 - Temp directory redirection to a disk's `Temp` folder, with a startup warning if TEMP is left on a RAM disk
@@ -215,7 +215,7 @@ This project bundles [WinFsp](https://winfsp.dev/) and [SharpCompress](https://g
 
 **便利与安全**
 - 可选资源管理器右键集成：**"挂载为内存盘 (ManagedDrive)"**菜单项，用于 zip/7z/rar/tar
-- 托盘图标带悬浮提示（各盘用量+可用内存）、快捷菜单、可选最小化启动
+- 托盘图标带悬浮提示（各盘用量+可用内存）、带每盘子菜单（在资源管理器中打开/保存映像/卸载）的快捷菜单、可选最小化启动
 - 状态栏实时显示可用系统内存和最近访问的文件
 - 每磁盘可配置高用量警告阈值
 - 临时目录重定向到某磁盘的 `Temp` 文件夹，TEMP 遗留在内存盘上时启动提示
