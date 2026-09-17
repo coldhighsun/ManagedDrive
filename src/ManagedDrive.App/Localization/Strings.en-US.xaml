@@ -21,12 +21,10 @@
     <sys:String x:Key="Btn.CloneDisk">Clone / Export Disk...</sys:String>
     <sys:String x:Key="Btn.RestoreSnapshot">Restore Snapshot...</sys:String>
     <sys:String x:Key="Btn.ViewDiskContents">Disk Contents...</sys:String>
-    <sys:String x:Key="Btn.Refresh">Refresh</sys:String>
     <sys:String x:Key="Btn.Settings">Settings</sys:String>
     <sys:String x:Key="Tip.NewDisk">Create and mount a new RAM disk</sys:String>
     <sys:String x:Key="Tip.ImportDisk">Mount an existing .mdr image file</sys:String>
     <sys:String x:Key="Tip.ImportArchive">Mount the contents of an archive file (zip, 7z, rar, tar, ...) as a read-only disk</sys:String>
-    <sys:String x:Key="Tip.Refresh">Refresh usage statistics</sys:String>
     <sys:String x:Key="Tip.Settings">Application settings</sys:String>
     <sys:String x:Key="Tip.ResetTempDirs">Reset Windows Temp Directories to defaults</sys:String>
     <sys:String x:Key="Tip.Minimize">Minimize</sys:String>
@@ -35,12 +33,7 @@
     <sys:String x:Key="Tip.CloseDialog">Close</sys:String>
     <sys:String x:Key="Tip.Import">Import a disk image or archive</sys:String>
     <sys:String x:Key="Tip.More">More options</sys:String>
-    <sys:String x:Key="Col.MountPoint">Mount Point</sys:String>
-    <sys:String x:Key="Col.Label">Label</sys:String>
-    <sys:String x:Key="Col.Capacity">Capacity</sys:String>
-    <sys:String x:Key="Col.Used">Used</sys:String>
     <sys:String x:Key="Col.Free">Free</sys:String>
-    <sys:String x:Key="Col.Usage">Usage</sys:String>
 
     <!-- CreateDiskDialog -->
     <sys:String x:Key="CreateDisk.Title">Create RAM Disk</sys:String>
