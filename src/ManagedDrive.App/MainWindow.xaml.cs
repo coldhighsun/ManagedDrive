@@ -45,6 +45,56 @@ public partial class MainWindow
 
     private void ImportBtn_Click(object sender, RoutedEventArgs e) => OpenAttachedContextMenu(sender);
 
+    /// <summary>
+    /// Shows the "copy" drop cursor only for a single existing file, and only when the view model
+    /// isn't already busy with another operation or exiting; anything else (multiple files,
+    /// non-file data, a directory, a since-deleted path) is rejected so the drop target doesn't
+    /// imply support it doesn't have.
+    /// </summary>
+    private void Window_DragEnter(object sender, DragEventArgs e)
+    {
+        e.Effects = CanAcceptDrop() && TryGetSingleDroppedFilePath(e) is not null ? DragDropEffects.Copy : DragDropEffects.None;
+        e.Handled = true;
+    }
+
+    /// <summary>
+    /// Imports a single file dropped onto the window via <see cref="MainViewModel.ImportDroppedFileAsync"/>,
+    /// which dispatches to the disk-image or archive import flow based on extension. Ignored while
+    /// the view model is already busy with another operation or exiting, so a drop can't start a
+    /// second operation concurrent with one already in flight.
+    /// </summary>
+    private async void Window_Drop(object sender, DragEventArgs e)
+    {
+        if (TryGetSingleDroppedFilePath(e) is not { } path || DataContext is not MainViewModel viewModel || !CanAcceptDrop())
+        {
+            return;
+        }
+
+        e.Handled = true;
+        await viewModel.ImportDroppedFileAsync(path);
+    }
+
+    /// <summary>
+    /// Whether the view model can currently accept a dropped file: not already running another
+    /// busy-overlay operation, and not in the middle of the exit save.
+    /// </summary>
+    private bool CanAcceptDrop() => DataContext is MainViewModel { BusyOverlay.IsBusy: false, IsExiting: false };
+
+    private static string? TryGetSingleDroppedFilePath(DragEventArgs e)
+    {
+        if (!e.Data.GetDataPresent(DataFormats.FileDrop))
+        {
+            return null;
+        }
+
+        if (e.Data.GetData(DataFormats.FileDrop) is not string[] { Length: 1 } files)
+        {
+            return null;
+        }
+
+        return File.Exists(files[0]) ? files[0] : null;
+    }
+
     private void OverflowBtn_Click(object sender, RoutedEventArgs e) => OpenAttachedContextMenu(sender);
 
     private void OpenAttachedContextMenu(object sender)

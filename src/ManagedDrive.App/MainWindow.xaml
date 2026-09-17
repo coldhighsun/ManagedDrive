@@ -21,12 +21,24 @@
         TextElement.FontWeight="Regular"
         TextElement.FontSize="13"
         TextOptions.TextFormattingMode="Ideal"
-        TextOptions.TextRenderingMode="Auto">
+        TextOptions.TextRenderingMode="Auto"
+        AllowDrop="True"
+        DragEnter="Window_DragEnter"
+        Drop="Window_Drop">
 
     <Window.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVis"/>
         <infra:PercentToGridLengthConverter x:Key="PercentToGridLengthConverter"/>
     </Window.Resources>
+
+    <Window.InputBindings>
+        <KeyBinding Modifiers="Control" Key="N" Command="{Binding CreateDiskCommand}"/>
+        <KeyBinding Modifiers="Control" Key="I" Command="{Binding ImportDiskCommand}"/>
+        <KeyBinding Modifiers="Control" Key="S" Command="{Binding SaveImageCommand}"/>
+        <KeyBinding Key="Delete" Command="{Binding UnmountCommand}"/>
+        <KeyBinding Key="F5" Command="{Binding RefreshCommand}"/>
+        <KeyBinding Modifiers="Control" Key="OemComma" Command="{Binding SettingsCommand}"/>
+    </Window.InputBindings>
 
     <WindowChrome.WindowChrome>
         <WindowChrome CaptionHeight="48"
