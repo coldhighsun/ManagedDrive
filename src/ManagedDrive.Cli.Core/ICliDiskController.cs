@@ -186,6 +186,43 @@ public interface ICliDiskController
     Task<(bool Success, string Message)> RestoreSnapshotAsync(string mountPoint, int index);
 
     /// <summary>
+    /// Compares a previously saved snapshot of the disk currently mounted at
+    /// <paramref name="mountPoint"/> against its current live contents.
+    /// </summary>
+    /// <param name="mountPoint">The mount point to diff, e.g. <c>"R:"</c>.</param>
+    /// <param name="index">
+    /// 1-based snapshot index as returned by <see cref="ListSnapshotsAsync"/> (1 = newest).
+    /// </param>
+    /// <returns>
+    /// <c>(true, message, diff)</c> on success; <c>(false, message, null)</c> with a human-readable
+    /// reason otherwise — including an out-of-range <paramref name="index"/>.
+    /// <paramref name="mountPoint"/> not being mounted is reported as <c>(false, string.Empty, null)</c>
+    /// so the CLI layer can render its own not-mounted message.
+    /// </returns>
+    Task<(bool Success, string Message, CliSnapshotDiff? Diff)> DiffSnapshotAsync(string mountPoint, int index);
+
+    /// <summary>
+    /// Applies non-destructive option changes (capacity, volume label, auto-save interval) to the
+    /// disk currently mounted at <paramref name="mountPoint"/>. Drive-letter and read-only changes,
+    /// which require a full remount, are not supported by this method.
+    /// </summary>
+    /// <param name="mountPoint">The mount point to edit, e.g. <c>"R:"</c>.</param>
+    /// <param name="capacityBytes">The new capacity in bytes, or <c>null</c> to keep the current value.</param>
+    /// <param name="volumeLabel">The new volume label, or <c>null</c> to keep the current value.</param>
+    /// <param name="autoSaveIntervalMinutes">
+    /// The new auto-save interval in minutes, or <c>null</c> to keep the current value. Ignored
+    /// when <paramref name="disableAutoSave"/> is <c>true</c>.
+    /// </param>
+    /// <param name="disableAutoSave"><c>true</c> to disable auto-save entirely.</param>
+    /// <returns>
+    /// <c>(true, message)</c> on success; <c>(false, message)</c> with a human-readable reason
+    /// otherwise — including an invalid capacity or a capacity reduction below current usage.
+    /// <paramref name="mountPoint"/> not being mounted is reported as <c>(false, string.Empty)</c>
+    /// so the CLI layer can render its own not-mounted message.
+    /// </returns>
+    Task<(bool Success, string Message)> EditAsync(string mountPoint, ulong? capacityBytes, string? volumeLabel, uint? autoSaveIntervalMinutes, bool disableAutoSave);
+
+    /// <summary>
     /// Requests that the running ManagedDrive application exit. Must not block until the process
     /// has actually shut down — the actual exit should happen after this call returns (e.g. on a
     /// short delay), so the CLI response reporting success can still be written back over the
@@ -247,3 +284,15 @@ public sealed record CliSnapshotInfo(int Index, DateTimeOffset TimestampUtc, ulo
 /// One entry of a directory listing, as needed to render the CLI <c>ls</c> table.
 /// </summary>
 public sealed record CliFileEntry(string Name, bool IsDirectory, ulong SizeBytes);
+
+/// <summary>
+/// Result of comparing a snapshot against a disk's live contents, as needed to render the CLI
+/// <c>snapshot diff</c> output.
+/// </summary>
+public sealed record CliSnapshotDiff(
+    IReadOnlyList<string> AddedFiles,
+    IReadOnlyList<string> RemovedFiles,
+    IReadOnlyList<string> ModifiedFiles,
+    IReadOnlyList<string> AddedDirectories,
+    IReadOnlyList<string> RemovedDirectories,
+    int UnchangedFileCount);

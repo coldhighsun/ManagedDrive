@@ -126,6 +126,12 @@ public class CliCommandProcessorCloneAndSnapshotCreateTests
         public Task<(bool Success, string Message)> CreateAsync(string mountPoint, ulong capacityBytes, string? volumeLabel, string? imagePath, string? password) =>
             Task.FromResult((false, string.Empty));
 
+        public Task<(bool Success, string Message, CliSnapshotDiff? Diff)> DiffSnapshotAsync(string mountPoint, int index) =>
+            Task.FromResult<(bool, string, CliSnapshotDiff?)>((false, string.Empty, null));
+
+        public Task<(bool Success, string Message)> EditAsync(string mountPoint, ulong? capacityBytes, string? volumeLabel, uint? autoSaveIntervalMinutes, bool disableAutoSave) =>
+            Task.FromResult((false, string.Empty));
+
         public Task<(bool Success, string Message, IReadOnlyList<CliFileEntry>? Entries)> ListFilesAsync(string mountPoint, string? path) =>
             Task.FromResult<(bool, string, IReadOnlyList<CliFileEntry>?)>((false, string.Empty, null));
 

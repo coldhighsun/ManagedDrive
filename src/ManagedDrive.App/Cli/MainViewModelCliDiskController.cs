@@ -18,7 +18,8 @@ namespace ManagedDrive.App.Cli;
 /// <see cref="MainViewModel.ListSnapshotsByMountPointAsync"/>, <see cref="MainViewModel.RestoreSnapshotByMountPointAsync"/>,
 /// <see cref="MainViewModel.DeleteSnapshotByMountPointAsync"/>, <see cref="MainViewModel.CreateByOptionsAsync"/>,
 /// <see cref="MainViewModel.ListFilesByMountPointAsync"/>, <see cref="MainViewModel.CloneByMountPointAsync"/>,
-/// and <see cref="MainViewModel.CreateSnapshotByMountPointAsync"/> (plus the read-only
+/// <see cref="MainViewModel.CreateSnapshotByMountPointAsync"/>, <see cref="MainViewModel.DiffSnapshotByMountPointAsync"/>,
+/// and <see cref="MainViewModel.EditByMountPointAsync"/> (plus the read-only
 /// <see cref="MainViewModel.Disks"/> collection for <see cref="ListDisks"/>). Changing any of their
 /// signatures requires updating this adapter in lockstep.
 /// </remarks>
@@ -74,6 +75,20 @@ internal sealed class MainViewModelCliDiskController(MainViewModel mainViewModel
 
     public Task<(bool Success, string Message)> RestoreSnapshotAsync(string mountPoint, int index) =>
         mainViewModel.RestoreSnapshotByMountPointAsync(mountPoint, index);
+
+    public async Task<(bool Success, string Message, CliSnapshotDiff? Diff)> DiffSnapshotAsync(string mountPoint, int index)
+    {
+        var (success, message, diff) = await mainViewModel.DiffSnapshotByMountPointAsync(mountPoint, index);
+        if (!success || diff is not { } d)
+        {
+            return (success, message, null);
+        }
+
+        return (true, message, new CliSnapshotDiff(d.AddedFiles, d.RemovedFiles, d.ModifiedFiles, d.AddedDirectories, d.RemovedDirectories, d.UnchangedFileCount));
+    }
+
+    public Task<(bool Success, string Message)> EditAsync(string mountPoint, ulong? capacityBytes, string? volumeLabel, uint? autoSaveIntervalMinutes, bool disableAutoSave) =>
+        mainViewModel.EditByMountPointAsync(mountPoint, capacityBytes, volumeLabel, autoSaveIntervalMinutes, disableAutoSave);
 
     public Task RequestExitAsync()
     {

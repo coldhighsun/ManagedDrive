@@ -803,6 +803,63 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     }
 
     /// <summary>
+    /// Applies non-destructive option changes (capacity, volume label, auto-save interval) to the
+    /// disk currently mounted at <paramref name="mountPoint"/>, for use by the CLI command
+    /// channel. Mirrors <c>ExecuteEditDisk</c>'s live (non-remounting) path — drive-letter and
+    /// read-only changes, which require a full remount, are out of scope for this method.
+    /// </summary>
+    /// <param name="mountPoint">The mount point to edit, e.g. <c>"R:"</c>.</param>
+    /// <param name="capacityBytes">The new capacity in bytes, or <c>null</c> to keep the current value.</param>
+    /// <param name="volumeLabel">The new volume label, or <c>null</c> to keep the current value.</param>
+    /// <param name="autoSaveIntervalMinutes">
+    /// The new auto-save interval in minutes, or <c>null</c> to keep the current value. Ignored
+    /// when <paramref name="disableAutoSave"/> is <c>true</c>.
+    /// </param>
+    /// <param name="disableAutoSave"><c>true</c> to disable auto-save entirely.</param>
+    /// <returns>
+    /// <c>(true, message)</c> on success; <c>(false, message)</c> with a human-readable reason
+    /// otherwise — including an invalid capacity or a capacity reduction below current usage; or
+    /// <c>(false, string.Empty)</c> if no disk is currently mounted at <paramref name="mountPoint"/>.
+    /// </returns>
+    public async Task<(bool Success, string Message)> EditByMountPointAsync(
+        string mountPoint, ulong? capacityBytes, string? volumeLabel, uint? autoSaveIntervalMinutes, bool disableAutoSave)
+    {
+        _logger.LogInformation("CLI edit requested for {MountPoint}.", mountPoint);
+
+        var vm = Disks.FirstOrDefault(d => string.Equals(d.MountPoint, mountPoint, StringComparison.OrdinalIgnoreCase));
+        if (vm == null)
+        {
+            return (false, string.Empty);
+        }
+
+        if (capacityBytes == 0)
+        {
+            return (false, Loc.Get("Val.CliBadCapacity"));
+        }
+
+        var newOptions = vm.Disk.Options with
+        {
+            CapacityBytes = capacityBytes ?? vm.Disk.Options.CapacityBytes,
+            VolumeLabel = string.IsNullOrWhiteSpace(volumeLabel) ? vm.Disk.Options.VolumeLabel : volumeLabel.Trim(),
+            AutoSaveIntervalMinutes = disableAutoSave ? null : autoSaveIntervalMinutes ?? vm.Disk.Options.AutoSaveIntervalMinutes,
+        };
+
+        string? error = null;
+        var success = await Task.Run(() => vm.Disk.TryApplyOptions(newOptions, out error));
+        if (!success)
+        {
+            _logger.LogWarning("CLI edit failed for {MountPoint}: {Error}", mountPoint, error);
+            return (false, error ?? string.Empty);
+        }
+
+        vm.Refresh();
+        SaveSettings();
+        StatusText = Loc.Format("Status.MountedWithCapacity", vm.MountPoint, newOptions.VolumeLabel, newOptions.CapacityBytes / (1024 * 1024));
+        _logger.LogInformation("CLI edit completed for {MountPoint}.", mountPoint);
+        return (true, StatusText);
+    }
+
+    /// <summary>
     /// Replaces the contents of the disk mounted at <paramref name="targetMountPoint"/> with a
     /// copy of the disk mounted at <paramref name="sourceMountPoint"/>'s current contents, for use
     /// by the CLI command channel. Mirrors <c>ExecuteCloneDisk</c>'s clone-to-mounted-disk branch,
@@ -1218,6 +1275,51 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         StatusText = Loc.Format("Status.SnapshotRestored", mountPoint);
         _logger.LogInformation("CLI restore snapshot completed for {MountPoint}.", mountPoint);
         return (true, StatusText);
+    }
+
+    /// <summary>
+    /// Compares a previously saved snapshot of the disk currently mounted at
+    /// <paramref name="mountPoint"/> against its current live contents, for use by the CLI command
+    /// channel.
+    /// </summary>
+    /// <param name="mountPoint">The mount point to diff, e.g. <c>"R:"</c>.</param>
+    /// <param name="index">
+    /// 1-based snapshot index, newest first (1 = newest), re-resolved against the live snapshot
+    /// directory at call time — it can refer to a different snapshot than the same index did in an
+    /// earlier <see cref="ListSnapshotsByMountPointAsync"/> call if snapshots were added or removed
+    /// in between (e.g. by another concurrent <c>mdrive</c> invocation).
+    /// </param>
+    /// <returns>
+    /// <c>(true, string.Empty, diff)</c> on success; <c>(false, message, null)</c> if no image path
+    /// is configured or <paramref name="index"/> is out of range; or <c>(false, string.Empty, null)</c>
+    /// if no disk is currently mounted at <paramref name="mountPoint"/>.
+    /// </returns>
+    public async Task<(bool Success, string Message, SnapshotManager.SnapshotDiffResult? Diff)> DiffSnapshotByMountPointAsync(string mountPoint, int index)
+    {
+        _logger.LogInformation("CLI snapshot diff requested for {MountPoint}, index {Index}.", mountPoint, index);
+
+        var vm = Disks.FirstOrDefault(d => string.Equals(d.MountPoint, mountPoint, StringComparison.OrdinalIgnoreCase));
+        if (vm == null)
+        {
+            return (false, string.Empty, null);
+        }
+
+        if (vm.Disk.Options.PersistImagePath is not { } imagePath)
+        {
+            return (false, Loc.Get("Msg.SaveImageNoPath"), null);
+        }
+
+        var ordered = await GetOrderedSnapshotsAsync(imagePath);
+        if (index < 1 || index > ordered.Count)
+        {
+            return (false, Loc.Format("Msg.SnapshotIndexOutOfRange", ordered.Count), null);
+        }
+
+        var target = ordered[index - 1];
+        var diff = await Task.Run(() => vm.Disk.DiffAgainstSnapshot(target.Path));
+
+        _logger.LogInformation("CLI snapshot diff completed for {MountPoint}.", mountPoint);
+        return (true, string.Empty, diff);
     }
 
     /// <summary>

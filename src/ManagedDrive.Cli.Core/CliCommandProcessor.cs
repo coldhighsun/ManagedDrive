@@ -396,11 +396,86 @@ public static class CliCommandProcessor
                 diskController,
                 o => outcome = o));
 
+        var snapshotDiffDriveArgument = new Argument<string>("drive-letter")
+        {
+            Description = "Drive letter of a currently mounted disk, e.g. R:",
+        };
+        var snapshotDiffIndexArgument = new Argument<int>("index")
+        {
+            Description = "1-based snapshot index from 'snapshot list' (1 = newest).",
+        };
+        var snapshotDiffCommand = new Command("diff", "Compares a snapshot against a mounted disk's current contents.");
+        snapshotDiffCommand.Arguments.Add(snapshotDiffDriveArgument);
+        snapshotDiffCommand.Arguments.Add(snapshotDiffIndexArgument);
+        snapshotDiffCommand.SetAction(async (parseResult, _) =>
+            await SnapshotDiffAsync(
+                parseResult.GetValue(snapshotDiffDriveArgument)!,
+                parseResult.GetValue(snapshotDiffIndexArgument),
+                diskController,
+                o => outcome = o));
+
         var snapshotCommand = new Command("snapshot", "Manages timestamped snapshots of a mounted disk's backing image.");
         snapshotCommand.Subcommands.Add(snapshotCreateCommand);
         snapshotCommand.Subcommands.Add(snapshotListCommand);
         snapshotCommand.Subcommands.Add(snapshotRestoreCommand);
         snapshotCommand.Subcommands.Add(snapshotDeleteCommand);
+        snapshotCommand.Subcommands.Add(snapshotDiffCommand);
+
+        var editDriveArgument = new Argument<string>("drive-letter")
+        {
+            Description = "Drive letter of a currently mounted disk, e.g. R:",
+        };
+        var editCapacityMbOption = new Option<uint?>("--capacity-mb")
+        {
+            Description = "The disk's new capacity in MB. If omitted, keeps the current value.",
+        };
+        var editLabelOption = new Option<string?>("--label")
+        {
+            Description = "The new volume label. If omitted, keeps the current value.",
+        };
+        var editAutoSaveMinutesOption = new Option<uint?>("--auto-save-minutes")
+        {
+            Description = "The new auto-save interval in minutes. If omitted, keeps the current value. Mutually exclusive with --disable-auto-save.",
+        };
+        var editDisableAutoSaveOption = new Option<bool>("--disable-auto-save")
+        {
+            Description = "Disables auto-save entirely. Mutually exclusive with --auto-save-minutes.",
+        };
+        var editCommand = new Command("edit", "Applies non-destructive option changes (capacity, label, auto-save interval) to a mounted disk.");
+        editCommand.Arguments.Add(editDriveArgument);
+        editCommand.Options.Add(editCapacityMbOption);
+        editCommand.Options.Add(editLabelOption);
+        editCommand.Options.Add(editAutoSaveMinutesOption);
+        editCommand.Options.Add(editDisableAutoSaveOption);
+        editCommand.SetAction(async (parseResult, _) =>
+        {
+            var capacityMb = parseResult.GetValue(editCapacityMbOption);
+            var label = parseResult.GetValue(editLabelOption);
+            var autoSaveMinutes = parseResult.GetValue(editAutoSaveMinutesOption);
+            var disableAutoSave = parseResult.GetValue(editDisableAutoSaveOption);
+
+            if (autoSaveMinutes is not null && disableAutoSave)
+            {
+                outcome = new CliOutcome(false, "--auto-save-minutes and --disable-auto-save cannot both be specified.", null, 1);
+                return 1;
+            }
+
+            if (capacityMb is null && label is null && autoSaveMinutes is null && !disableAutoSave)
+            {
+                outcome = new CliOutcome(false, "Specify at least one of --capacity-mb, --label, --auto-save-minutes, or --disable-auto-save.", null, 1);
+                return 1;
+            }
+
+            var exitCode = await EditAsync(
+                parseResult.GetValue(editDriveArgument)!,
+                capacityMb * 1024UL * 1024UL,
+                label,
+                autoSaveMinutes,
+                disableAutoSave,
+                diskController,
+                o => outcome = o);
+            return exitCode;
+        });
 
         var cloneSourceDriveArgument = new Argument<string>("source-drive-letter")
         {
@@ -514,6 +589,7 @@ public static class CliCommandProcessor
         rootCommand.Subcommands.Add(mountArchiveCommand);
         rootCommand.Subcommands.Add(createCommand);
         rootCommand.Subcommands.Add(cloneCommand);
+        rootCommand.Subcommands.Add(editCommand);
         rootCommand.Subcommands.Add(unmountCommand);
         rootCommand.Subcommands.Add(formatCommand);
         rootCommand.Subcommands.Add(saveCommand);
@@ -561,6 +637,63 @@ public static class CliCommandProcessor
         var (success, message) = await diskController.CloneAsync(sourceDriveLetter, targetDriveLetter);
         setOutcome(new(success, message, null, success ? 0 : 1));
         return success ? 0 : 1;
+    }
+
+    private static async Task<int> EditAsync(
+        string driveLetter, ulong? capacityBytes, string? volumeLabel, uint? autoSaveIntervalMinutes, bool disableAutoSave,
+        ICliDiskController diskController, Action<CliOutcome> setOutcome)
+    {
+        driveLetter = NormalizeDriveLetter(driveLetter);
+
+        var (success, message) = await diskController.EditAsync(driveLetter, capacityBytes, volumeLabel, autoSaveIntervalMinutes, disableAutoSave);
+        setOutcome(new(
+            success,
+            string.IsNullOrEmpty(message) ? $"No disk is currently mounted at {driveLetter}." : message,
+            null,
+            success ? 0 : 1));
+        return success ? 0 : 1;
+    }
+
+    private static async Task<int> SnapshotDiffAsync(string driveLetter, int index, ICliDiskController diskController, Action<CliOutcome> setOutcome)
+    {
+        driveLetter = NormalizeDriveLetter(driveLetter);
+
+        var (success, message, diff) = await diskController.DiffSnapshotAsync(driveLetter, index);
+        if (!success)
+        {
+            setOutcome(new(
+                false,
+                string.IsNullOrEmpty(message) ? $"No disk is currently mounted at {driveLetter}." : message,
+                null,
+                1));
+            return 1;
+        }
+
+        setOutcome(new(true, FormatSnapshotDiff(diff!), null, 0));
+        return 0;
+    }
+
+    /// <summary>
+    /// Renders a <see cref="CliSnapshotDiff"/> into plain text lines for <c>snapshot diff</c>
+    /// output: <c>+</c>-prefixed added paths, <c>-</c>-prefixed removed paths, and
+    /// <c>~</c>-prefixed modified files, plus an unchanged-file summary line.
+    /// </summary>
+    private static string FormatSnapshotDiff(CliSnapshotDiff diff)
+    {
+        var lines = new List<string>();
+        lines.AddRange(diff.AddedDirectories.Select(p => $"+ {p}\\"));
+        lines.AddRange(diff.AddedFiles.Select(p => $"+ {p}"));
+        lines.AddRange(diff.RemovedDirectories.Select(p => $"- {p}\\"));
+        lines.AddRange(diff.RemovedFiles.Select(p => $"- {p}"));
+        lines.AddRange(diff.ModifiedFiles.Select(p => $"~ {p}"));
+
+        if (lines.Count == 0)
+        {
+            lines.Add("No differences.");
+        }
+
+        lines.Add($"{diff.UnchangedFileCount} unchanged file(s).");
+        return string.Join('\n', lines);
     }
 
     private static async Task<int> SnapshotCreateAsync(string driveLetter, ICliDiskController diskController, Action<CliOutcome> setOutcome)
