@@ -176,7 +176,7 @@ jobs:
           if (-not $iscc) {
             throw "ISCC.exe (Inno Setup 7) not found after installing it."
           }
-          & $iscc "/DAppVersion=${{ steps.version.outputs.version }}" installer\ManagedDrive.iss
+          & $iscc "/DAppVersion=${{ steps.version.outputs.version }}" "/DAppVersionTag=${{ steps.version.outputs.tag }}" installer\ManagedDrive.iss
         shell: pwsh
 
       - name: Create GitHub Release
