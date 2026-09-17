@@ -14,6 +14,7 @@
     <sys:String x:Key="Btn.EditDisk">Edit Disk Settings…</sys:String>
     <sys:String x:Key="Btn.Unmount">Unmount...</sys:String>
     <sys:String x:Key="Btn.SaveImage">Save Image</sys:String>
+    <sys:String x:Key="Btn.CreateSnapshotNow">Create Snapshot Now</sys:String>
     <sys:String x:Key="Btn.SetAsTempDir">Set as Temp Directory...</sys:String>
     <sys:String x:Key="Btn.RestoreDefaultTemp">Restore Default Temp Directory</sys:String>
     <sys:String x:Key="Btn.FormatDisk">Format…</sys:String>
@@ -93,6 +94,7 @@
     <sys:String x:Key="Card.NeverAutoSaved">Image not yet saved</sys:String>
     <sys:String x:Key="Card.ReadSpeed">Read speed</sys:String>
     <sys:String x:Key="Card.WriteSpeed">Write speed</sys:String>
+    <sys:String x:Key="Card.TotalReadWritten">Total read/written: </sys:String>
     <sys:String x:Key="Time.JustNow">Just now</sys:String>
     <sys:String x:Key="Time.MinutesAgo">{0} min ago</sys:String>
     <sys:String x:Key="Time.HoursAgo">{0} hours ago</sys:String>
@@ -102,6 +104,7 @@
     <sys:String x:Key="Msg.ExitSaving">Saving disk images, please wait...</sys:String>
     <sys:String x:Key="Msg.ExitSavingDisk">Saving "{0}"...</sys:String>
     <sys:String x:Key="Busy.SavingImage">Saving disk image...</sys:String>
+    <sys:String x:Key="Busy.CreatingSnapshot">Creating snapshot...</sys:String>
     <sys:String x:Key="Busy.LoadingDisks">Loading disk {0} of {1}...</sys:String>
     <sys:String x:Key="Busy.ImportingArchive">Importing archive...</sys:String>
     <sys:String x:Key="Busy.ExportingImage">Exporting disk image...</sys:String>
@@ -225,6 +228,10 @@
     <sys:String x:Key="Tip.ContextMenuEnabled">Add a right-click menu entry to mount zip/7z/rar/tar archives directly as a RAM disk</sys:String>
     <sys:String x:Key="Settings.AutoCheckForUpdates">Automatically check for updates</sys:String>
     <sys:String x:Key="Tip.AutoCheckForUpdates">Check GitHub for a newer version once a day at startup</sys:String>
+    <sys:String x:Key="Settings.OpenLogDirectory">Open Log Directory</sys:String>
+    <sys:String x:Key="Settings.CheckForUpdatesNow">Check for Updates Now</sys:String>
+    <sys:String x:Key="Settings.UpToDate">You're running the latest version.</sys:String>
+    <sys:String x:Key="Settings.UpdateCheckFailed">Couldn't check for updates. Please try again later.</sys:String>
     <sys:String x:Key="ShellMenu.ImportArchive">Mount as RAM disk (ManagedDrive)</sys:String>
 
     <!-- Shared buttons -->

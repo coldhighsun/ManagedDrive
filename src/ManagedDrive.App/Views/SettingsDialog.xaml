@@ -22,6 +22,8 @@
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="24"/>
             <RowDefinition Height="Auto"/>
+            <RowDefinition Height="24"/>
+            <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="80"/>
@@ -74,8 +76,22 @@
                   x:Name="ThemeBox"
                   Style="{StaticResource OutlinedComboBox}"/>
 
-        <!-- OK / Cancel -->
+        <!-- Open log directory / check for updates now -->
         <StackPanel Grid.Row="12" Grid.ColumnSpan="2" Grid.Column="0"
+                    Orientation="Horizontal">
+            <Button x:Name="OpenLogDirectoryButton"
+                    Content="{DynamicResource Settings.OpenLogDirectory}"
+                    Click="OpenLogDirectory_Click"
+                    Style="{StaticResource FlatButton}"
+                    Margin="0,0,8,0"/>
+            <Button x:Name="CheckForUpdatesNowButton"
+                    Content="{DynamicResource Settings.CheckForUpdatesNow}"
+                    Click="CheckForUpdatesNow_Click"
+                    Style="{StaticResource FlatButton}"/>
+        </StackPanel>
+
+        <!-- OK / Cancel -->
+        <StackPanel Grid.Row="14" Grid.ColumnSpan="2" Grid.Column="0"
                     Orientation="Horizontal" HorizontalAlignment="Right">
             <Button Content="{DynamicResource Btn.Cancel}" Width="80" IsCancel="True"
                     Style="{StaticResource FlatButton}"

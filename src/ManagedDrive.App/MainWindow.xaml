@@ -257,6 +257,14 @@
                                                     RelativeSource={RelativeSource AncestorType=ContextMenu}}"
                                           CommandParameter="{Binding PlacementTarget.DataContext,
                                                     RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
+                                <MenuItem Header="{DynamicResource Btn.CreateSnapshotNow}"
+                                          Visibility="{Binding PlacementTarget.DataContext.SnapshotsEnabled,
+                                                        RelativeSource={RelativeSource AncestorType=ContextMenu},
+                                                        Converter={StaticResource BoolToVis}}"
+                                          Command="{Binding PlacementTarget.Tag.CreateSnapshotNowCommand,
+                                                    RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                          CommandParameter="{Binding PlacementTarget.DataContext,
+                                                    RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
                                 <MenuItem Header="{DynamicResource Btn.RestoreSnapshot}"
                                           Visibility="{Binding PlacementTarget.DataContext.SnapshotsEnabled,
                                                         RelativeSource={RelativeSource AncestorType=ContextMenu},
@@ -458,8 +466,17 @@
                                                     BorderThickness="1" CornerRadius="4" Padding="8"
                                                     Tag="{Binding ElementName=SpeedPopup}"
                                                     MouseEnter="SpeedRow_MouseEnter" MouseLeave="SpeedRow_MouseLeave">
-                                                <controls:SpeedHistoryChart ReadHistory="{Binding ReadSpeedHistory}"
-                                                                             WriteHistory="{Binding WriteSpeedHistory}"/>
+                                                <StackPanel>
+                                                    <controls:SpeedHistoryChart ReadHistory="{Binding ReadSpeedHistory}"
+                                                                                 WriteHistory="{Binding WriteSpeedHistory}"/>
+                                                    <TextBlock FontSize="11" Margin="0,6,0,0"
+                                                               Foreground="{DynamicResource AppForegroundLight}">
+                                                        <Run Text="{DynamicResource Card.TotalReadWritten}"/>
+                                                        <Run Text="{Binding TotalReadFormatted}"/>
+                                                        <Run Text="/"/>
+                                                        <Run Text="{Binding TotalWrittenFormatted}"/>
+                                                    </TextBlock>
+                                                </StackPanel>
                                             </Border>
                                         </Popup>
                                     </StackPanel>

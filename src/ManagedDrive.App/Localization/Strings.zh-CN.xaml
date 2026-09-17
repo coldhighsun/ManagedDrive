@@ -14,6 +14,7 @@
     <sys:String x:Key="Btn.EditDisk">修改磁盘设置…</sys:String>
     <sys:String x:Key="Btn.Unmount">卸载...</sys:String>
     <sys:String x:Key="Btn.SaveImage">保存镜像</sys:String>
+    <sys:String x:Key="Btn.CreateSnapshotNow">立即创建快照</sys:String>
     <sys:String x:Key="Btn.SetAsTempDir">设为临时文件夹...</sys:String>
     <sys:String x:Key="Btn.RestoreDefaultTemp">恢复默认临时文件夹</sys:String>
     <sys:String x:Key="Btn.FormatDisk">格式化…</sys:String>
@@ -93,6 +94,7 @@
     <sys:String x:Key="Card.NeverAutoSaved">镜像尚未保存</sys:String>
     <sys:String x:Key="Card.ReadSpeed">读取速度</sys:String>
     <sys:String x:Key="Card.WriteSpeed">写入速度</sys:String>
+    <sys:String x:Key="Card.TotalReadWritten">累计读/写：</sys:String>
     <sys:String x:Key="Time.JustNow">刚才</sys:String>
     <sys:String x:Key="Time.MinutesAgo">{0} 分钟前</sys:String>
     <sys:String x:Key="Time.HoursAgo">{0} 小时前</sys:String>
@@ -102,6 +104,7 @@
     <sys:String x:Key="Msg.ExitSaving">正在保存磁盘镜像，请稍候...</sys:String>
     <sys:String x:Key="Msg.ExitSavingDisk">正在保存 "{0}"...</sys:String>
     <sys:String x:Key="Busy.SavingImage">正在保存磁盘映像…</sys:String>
+    <sys:String x:Key="Busy.CreatingSnapshot">正在创建快照…</sys:String>
     <sys:String x:Key="Busy.LoadingDisks">正在加载磁盘 {0}/{1}…</sys:String>
     <sys:String x:Key="Busy.ImportingArchive">正在导入归档…</sys:String>
     <sys:String x:Key="Busy.ExportingImage">正在导出磁盘映像…</sys:String>
@@ -225,6 +228,10 @@
     <sys:String x:Key="Tip.ContextMenuEnabled">添加右键菜单项，可直接将 zip/7z/rar/tar 压缩包挂载为内存盘</sys:String>
     <sys:String x:Key="Settings.AutoCheckForUpdates">自动检查更新</sys:String>
     <sys:String x:Key="Tip.AutoCheckForUpdates">启动时每天检查一次 GitHub 上是否有新版本</sys:String>
+    <sys:String x:Key="Settings.OpenLogDirectory">打开日志目录</sys:String>
+    <sys:String x:Key="Settings.CheckForUpdatesNow">立即检查更新</sys:String>
+    <sys:String x:Key="Settings.UpToDate">当前已是最新版本。</sys:String>
+    <sys:String x:Key="Settings.UpdateCheckFailed">检查更新失败，请稍后重试。</sys:String>
     <sys:String x:Key="ShellMenu.ImportArchive">挂载为内存盘 (ManagedDrive)</sys:String>
 
     <!-- Shared buttons -->

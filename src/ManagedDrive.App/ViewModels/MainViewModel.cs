@@ -52,6 +52,13 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         SaveImageCommand = new(
             p => ExecuteSaveImage(p as DiskViewModel ?? SelectedDisk),
             p => p is DiskViewModel || SelectedDisk != null);
+        CreateSnapshotNowCommand = new(
+            p => ExecuteCreateSnapshotNow(p as DiskViewModel ?? SelectedDisk),
+            p =>
+            {
+                var vm = p as DiskViewModel ?? SelectedDisk;
+                return vm is { SnapshotsEnabled: true, HasImagePath: true };
+            });
         FormatDiskCommand = new(
             p => ExecuteFormatDisk(p as DiskViewModel ?? SelectedDisk),
             p =>
@@ -306,6 +313,15 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     /// Gets the command that saves the selected disk's image to file.
     /// </summary>
     public RelayCommand SaveImageCommand
+    {
+        get;
+    }
+
+    /// <summary>
+    /// Gets the command that writes a timestamped snapshot for the selected disk right now,
+    /// independent of whether the user was otherwise about to save the image.
+    /// </summary>
+    public RelayCommand CreateSnapshotNowCommand
     {
         get;
     }
@@ -1698,24 +1714,53 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         }
 
         _logger.LogInformation("Save image requested for {MountPoint}.", vm.MountPoint);
+        await SaveImageWithSnapshotAsync(vm, Loc.Get("Busy.SavingImage"), "Save image");
+    }
+
+    /// <summary>
+    /// Writes a timestamped snapshot for <paramref name="vm"/> right now, via the same
+    /// <see cref="RamDisk.SaveToImageWithSnapshot"/> call the regular "Save Image" action uses —
+    /// snapshot creation always piggybacks on a full image save, there's no lighter-weight path.
+    /// </summary>
+    private async void ExecuteCreateSnapshotNow(DiskViewModel? vm)
+    {
+        if (vm is not { SnapshotsEnabled: true, HasImagePath: true })
+        {
+            return;
+        }
+
+        _logger.LogInformation("Create snapshot now requested for {MountPoint}.", vm.MountPoint);
+        await SaveImageWithSnapshotAsync(vm, Loc.Get("Busy.CreatingSnapshot"), "Create snapshot now");
+    }
+
+    /// <summary>
+    /// Shared body for <see cref="ExecuteSaveImage"/> and <see cref="ExecuteCreateSnapshotNow"/>:
+    /// runs <see cref="RamDisk.SaveToImageWithSnapshot"/> under the busy overlay (with
+    /// cancellation), and reports the outcome via <see cref="StatusText"/>/logging.
+    /// </summary>
+    /// <param name="vm">The disk to save.</param>
+    /// <param name="busyText">The busy-overlay status text shown while the save runs.</param>
+    /// <param name="logVerb">The action name used in log messages (e.g. <c>"Save image"</c>).</param>
+    private async Task SaveImageWithSnapshotAsync(DiskViewModel vm, string busyText, string logVerb)
+    {
         vm.IsSaving = true;
         using var cts = new CancellationTokenSource();
-        BusyOverlay.Start(Loc.Get("Busy.SavingImage"), totalBytes: vm.Disk.UsedBytes, cancellationSource: cts);
+        BusyOverlay.Start(busyText, totalBytes: vm.Disk.UsedBytes, cancellationSource: cts);
         try
         {
             var progress = new Progress<double>(BusyOverlay.Report);
             await Task.Run(() => vm.Disk.SaveToImageWithSnapshot(progress, cts.Token));
             StatusText = Loc.Format("Status.ImageSaved", vm.MountPoint);
-            _logger.LogInformation("Save image completed for {MountPoint}.", vm.MountPoint);
+            _logger.LogInformation("{Verb} completed for {MountPoint}.", logVerb, vm.MountPoint);
         }
         catch (OperationCanceledException)
         {
             StatusText = Loc.Get("Status.OperationCancelled");
-            _logger.LogInformation("Save image cancelled for {MountPoint}.", vm.MountPoint);
+            _logger.LogInformation("{Verb} cancelled for {MountPoint}.", logVerb, vm.MountPoint);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Save image failed for {MountPoint}.", vm.MountPoint);
+            _logger.LogError(ex, "{Verb} failed for {MountPoint}.", logVerb, vm.MountPoint);
             ShowError(Loc.Format("Msg.SaveImageFailed", ex.Message));
         }
         finally
@@ -1728,7 +1773,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     private void ExecuteSettings()
     {
         var config = _settingsStore.Load();
-        var dialog = new SettingsDialog(config) { Owner = Application.Current.MainWindow };
+        var dialog = new SettingsDialog(config, UpdateCheckService) { Owner = Application.Current.MainWindow };
 
         if (dialog.ShowDialog() == true)
         {

@@ -8,15 +8,21 @@ namespace ManagedDrive.App.Views;
 public partial class SettingsDialog
 {
     private readonly AppConfiguration _original;
+    private readonly UpdateCheckService? _updateCheckService;
 
     /// <summary>
     /// Initializes the dialog with the current application configuration.
     /// </summary>
     /// <param name="config">The current configuration to display.</param>
-    public SettingsDialog(AppConfiguration config)
+    /// <param name="updateCheckService">
+    /// The update checker backing the "Check for Updates Now" button, or <see langword="null"/>
+    /// to disable that button (mirrors <see cref="AboutDialog"/>'s handling of a missing service).
+    /// </param>
+    public SettingsDialog(AppConfiguration config, UpdateCheckService? updateCheckService = null)
     {
         InitializeComponent();
         _original = config;
+        _updateCheckService = updateCheckService;
         RunAtStartupBox.IsChecked = StartupManager.IsEnabled;
         StartMinimizedBox.IsChecked = config.StartMinimized;
         ContextMenuEnabledBox.IsChecked = ShellContextMenuManager.IsRegistered;
@@ -101,5 +107,46 @@ public partial class SettingsDialog
         };
 
         DialogResult = true;
+    }
+
+    /// <summary>
+    /// Opens the app's log directory (<c>%APPDATA%\ManagedDrive\logs</c>) in Windows Explorer,
+    /// creating it first if logging hasn't written anything yet.
+    /// </summary>
+    private void OpenLogDirectory_Click(object sender, RoutedEventArgs e)
+    {
+        var logDirectory = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "ManagedDrive", "logs");
+        Directory.CreateDirectory(logDirectory);
+        Process.Start("explorer.exe", logDirectory);
+    }
+
+    /// <summary>
+    /// Runs an immediate, user-initiated update check (bypassing the daily throttle, like
+    /// <see cref="AboutDialog"/>'s check) and reports the result via a message box.
+    /// </summary>
+    private async void CheckForUpdatesNow_Click(object sender, RoutedEventArgs e)
+    {
+        if (_updateCheckService == null)
+        {
+            return;
+        }
+
+        CheckForUpdatesNowButton.IsEnabled = false;
+        try
+        {
+            var (result, info) = await _updateCheckService.CheckSilentlyAsync();
+            var message = result switch
+            {
+                UpdateCheckResult.UpdateAvailable when info != null => Loc.Format("About.UpdateAvailable", info.Version),
+                UpdateCheckResult.UpToDate => Loc.Get("Settings.UpToDate"),
+                _ => Loc.Get("Settings.UpdateCheckFailed"),
+            };
+            MessageBox.Show(this, message, Title, MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+        finally
+        {
+            CheckForUpdatesNowButton.IsEnabled = true;
+        }
     }
 }
