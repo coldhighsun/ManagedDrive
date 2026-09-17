@@ -99,7 +99,11 @@ public sealed class TrayIconController : IDisposable
         menu.Items.Add(_menuAbout);
         menu.Items.Add(new System.Windows.Forms.ToolStripSeparator());
         menu.Items.Add(_menuExit);
-        menu.Opening += (_, _) => dispatcher.Invoke(RebuildDiskMenuItems);
+        menu.Opening += (_, _) => dispatcher.Invoke(() =>
+        {
+            RebuildDiskMenuItems();
+            ContextMenuOpening?.Invoke();
+        });
 
         _trayIconNormal = new(iconStream);
         BuildTrayActivityIcons(_trayIconNormal);
@@ -146,6 +150,13 @@ public sealed class TrayIconController : IDisposable
     /// Consumed by <see cref="TrayTooltipController"/> to drive the hover popup.
     /// </summary>
     public event Action<System.Drawing.Point>? MouseMoved;
+
+    /// <summary>
+    /// Raised right before the tray context menu is shown (right-click). Consumed by
+    /// <see cref="TrayTooltipController"/> to dismiss the hover popup so it doesn't sit on top of
+    /// or behind the menu.
+    /// </summary>
+    public event Action? ContextMenuOpening;
 
     /// <summary>
     /// Gets or sets whether the tray icon is visible.

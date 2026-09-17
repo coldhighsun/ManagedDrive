@@ -472,9 +472,9 @@
                                                     <TextBlock FontSize="11" Margin="0,6,0,0"
                                                                Foreground="{DynamicResource AppForegroundLight}">
                                                         <Run Text="{DynamicResource Card.TotalReadWritten}"/>
-                                                        <Run Text="{Binding TotalReadFormatted}"/>
+                                                        <Run Text="{Binding TotalReadFormatted, Mode=OneWay}"/>
                                                         <Run Text="/"/>
-                                                        <Run Text="{Binding TotalWrittenFormatted}"/>
+                                                        <Run Text="{Binding TotalWrittenFormatted, Mode=OneWay}"/>
                                                     </TextBlock>
                                                 </StackPanel>
                                             </Border>

@@ -239,7 +239,6 @@
     <sys:String x:Key="Tip.CloseToTray">When checked, the title bar close button hides the window to the tray. When unchecked, it exits the application (same as the tray "Exit" menu item).</sys:String>
     <sys:String x:Key="Settings.DefaultCompressionLevel">Default compression:</sys:String>
     <sys:String x:Key="Tip.DefaultCompressionLevel">Compression level preselected when creating a new disk</sys:String>
-    <sys:String x:Key="Settings.DefaultCompressionLevel.System">Dialog Default (Fast)</sys:String>
     <sys:String x:Key="Settings.DefaultImageDirectory">Default image directory:</sys:String>
     <sys:String x:Key="Tip.DefaultImageDirectory">Folder preselected when browsing for a new disk's image file path</sys:String>
     <sys:String x:Key="Btn.Browse">Browse...</sys:String>
@@ -266,6 +265,8 @@
     <sys:String x:Key="Tray.HighUsageBody">{0} ({1}) is {2:F0}% full.</sys:String>
     <sys:String x:Key="Tray.SaveFailedTitle">Save Failed</sys:String>
     <sys:String x:Key="Tray.SaveFailedBody">{0} ({1}): {2}</sys:String>
+    <sys:String x:Key="Tray.SaveCompletedTitle">Save Complete</sys:String>
+    <sys:String x:Key="Tray.SaveCompletedBody">{0} ({1}) image has been saved.</sys:String>
     <sys:String x:Key="Tray.CapacityAdjustedTitle">Capacity Adjusted</sys:String>
     <sys:String x:Key="Tray.CapacityAdjustedBody">{0} ({1}): configured capacity {2} MB was smaller than the loaded image ({3} MB); capacity was temporarily raised to fit existing data.</sys:String>
 
