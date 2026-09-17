@@ -342,6 +342,15 @@ public static class CliCommandProcessor
                 diskController,
                 o => outcome = o));
 
+        var snapshotCreateDriveArgument = new Argument<string>("drive-letter")
+        {
+            Description = "Drive letter of a currently mounted disk, e.g. R:",
+        };
+        var snapshotCreateCommand = new Command("create", "Writes a timestamped snapshot of a mounted disk right now.");
+        snapshotCreateCommand.Arguments.Add(snapshotCreateDriveArgument);
+        snapshotCreateCommand.SetAction(async (parseResult, _) =>
+            await SnapshotCreateAsync(parseResult.GetValue(snapshotCreateDriveArgument)!, diskController, o => outcome = o));
+
         var snapshotListDriveArgument = new Argument<string>("drive-letter")
         {
             Description = "Drive letter of a currently mounted disk, e.g. R:",
@@ -388,9 +397,28 @@ public static class CliCommandProcessor
                 o => outcome = o));
 
         var snapshotCommand = new Command("snapshot", "Manages timestamped snapshots of a mounted disk's backing image.");
+        snapshotCommand.Subcommands.Add(snapshotCreateCommand);
         snapshotCommand.Subcommands.Add(snapshotListCommand);
         snapshotCommand.Subcommands.Add(snapshotRestoreCommand);
         snapshotCommand.Subcommands.Add(snapshotDeleteCommand);
+
+        var cloneSourceDriveArgument = new Argument<string>("source-drive-letter")
+        {
+            Description = "Drive letter of the mounted disk to copy content from, e.g. R:",
+        };
+        var cloneTargetDriveArgument = new Argument<string>("target-drive-letter")
+        {
+            Description = "Drive letter of the mounted, writable disk to overwrite, e.g. S:",
+        };
+        var cloneCommand = new Command("clone", "Replaces a mounted disk's contents with a copy of another mounted disk's current contents.");
+        cloneCommand.Arguments.Add(cloneSourceDriveArgument);
+        cloneCommand.Arguments.Add(cloneTargetDriveArgument);
+        cloneCommand.SetAction(async (parseResult, _) =>
+            await CloneAsync(
+                parseResult.GetValue(cloneSourceDriveArgument)!,
+                parseResult.GetValue(cloneTargetDriveArgument)!,
+                diskController,
+                o => outcome = o));
 
         var exportDriveArgument = new Argument<string>("drive-letter")
         {
@@ -485,6 +513,7 @@ public static class CliCommandProcessor
         rootCommand.Subcommands.Add(mountCommand);
         rootCommand.Subcommands.Add(mountArchiveCommand);
         rootCommand.Subcommands.Add(createCommand);
+        rootCommand.Subcommands.Add(cloneCommand);
         rootCommand.Subcommands.Add(unmountCommand);
         rootCommand.Subcommands.Add(formatCommand);
         rootCommand.Subcommands.Add(saveCommand);
@@ -521,6 +550,29 @@ public static class CliCommandProcessor
 
         var (success, message) = await diskController.CreateAsync(driveLetter, capacityBytes, volumeLabel, imagePath, password);
         setOutcome(new(success, message, null, success ? 0 : 1));
+        return success ? 0 : 1;
+    }
+
+    private static async Task<int> CloneAsync(string sourceDriveLetter, string targetDriveLetter, ICliDiskController diskController, Action<CliOutcome> setOutcome)
+    {
+        sourceDriveLetter = NormalizeDriveLetter(sourceDriveLetter);
+        targetDriveLetter = NormalizeDriveLetter(targetDriveLetter);
+
+        var (success, message) = await diskController.CloneAsync(sourceDriveLetter, targetDriveLetter);
+        setOutcome(new(success, message, null, success ? 0 : 1));
+        return success ? 0 : 1;
+    }
+
+    private static async Task<int> SnapshotCreateAsync(string driveLetter, ICliDiskController diskController, Action<CliOutcome> setOutcome)
+    {
+        driveLetter = NormalizeDriveLetter(driveLetter);
+
+        var (success, message) = await diskController.CreateSnapshotAsync(driveLetter);
+        setOutcome(new(
+            success,
+            string.IsNullOrEmpty(message) ? $"No disk is currently mounted at {driveLetter}." : message,
+            null,
+            success ? 0 : 1));
         return success ? 0 : 1;
     }
 

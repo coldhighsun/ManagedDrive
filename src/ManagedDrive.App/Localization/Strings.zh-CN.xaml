@@ -149,6 +149,10 @@
     <sys:String x:Key="Val.CliPasswordIncorrect">提供的密码不正确。</sys:String>
     <sys:String x:Key="Val.CliBadCapacity">容量必须大于 0。</sys:String>
     <sys:String x:Key="Msg.CliPathNotFound">路径不存在：{0}</sys:String>
+    <sys:String x:Key="Msg.CliMountPointNotMounted">{0} 当前没有挂载磁盘。</sys:String>
+    <sys:String x:Key="Val.CliCloneTargetReadOnly">{0} 是只读磁盘，不能作为克隆目标。</sys:String>
+    <sys:String x:Key="Val.CliCloneTargetIsSource">克隆目标不能与源磁盘相同。</sys:String>
+    <sys:String x:Key="Msg.CliSnapshotsNotEnabled">该磁盘未配置快照保留策略，请在挂载或编辑时设置 --max-snapshot-count 或 --max-snapshot-size-mb。</sys:String>
     <sys:String x:Key="PasswordPrompt.Title">请输入密码</sys:String>
     <sys:String x:Key="PasswordPrompt.LabelHeader">卷标</sys:String>
     <sys:String x:Key="PasswordPrompt.DriveHeader">盘符</sys:String>

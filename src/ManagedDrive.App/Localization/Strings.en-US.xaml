@@ -149,6 +149,10 @@
     <sys:String x:Key="Val.CliPasswordIncorrect">The supplied password is incorrect.</sys:String>
     <sys:String x:Key="Val.CliBadCapacity">Capacity must be greater than 0.</sys:String>
     <sys:String x:Key="Msg.CliPathNotFound">Path not found: {0}</sys:String>
+    <sys:String x:Key="Msg.CliMountPointNotMounted">No disk is currently mounted at {0}.</sys:String>
+    <sys:String x:Key="Val.CliCloneTargetReadOnly">{0} is read-only and cannot be a clone target.</sys:String>
+    <sys:String x:Key="Val.CliCloneTargetIsSource">The clone target cannot be the same disk as the source.</sys:String>
+    <sys:String x:Key="Msg.CliSnapshotsNotEnabled">Snapshot retention is not configured for this disk. Set --max-snapshot-count or --max-snapshot-size-mb when mounting or editing it.</sys:String>
     <sys:String x:Key="PasswordPrompt.Title">Enter Password</sys:String>
     <sys:String x:Key="PasswordPrompt.LabelHeader">Label</sys:String>
     <sys:String x:Key="PasswordPrompt.DriveHeader">Drive</sys:String>

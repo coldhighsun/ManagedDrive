@@ -166,6 +166,12 @@ public class CliCommandProcessorCreateAndLsTests
                 LsSuccess ? (true, LsMessage, LsEntries) : (false, LsMessage, null));
         }
 
+        public Task<(bool Success, string Message)> CloneAsync(string sourceMountPoint, string targetMountPoint) =>
+            Task.FromResult((false, string.Empty));
+
+        public Task<(bool Success, string Message)> CreateSnapshotAsync(string mountPoint) =>
+            Task.FromResult((false, string.Empty));
+
         public Task<(bool Success, string Message)> DeleteSnapshotAsync(string mountPoint, int index) =>
             Task.FromResult((false, string.Empty));
 

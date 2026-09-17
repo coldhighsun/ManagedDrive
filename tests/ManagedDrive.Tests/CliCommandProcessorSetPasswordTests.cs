@@ -149,5 +149,11 @@ public class CliCommandProcessorSetPasswordTests
 
         public Task<(bool Success, string Message, IReadOnlyList<CliFileEntry>? Entries)> ListFilesAsync(string mountPoint, string? path) =>
             Task.FromResult<(bool, string, IReadOnlyList<CliFileEntry>?)>((false, string.Empty, null));
+
+        public Task<(bool Success, string Message)> CloneAsync(string sourceMountPoint, string targetMountPoint) =>
+            Task.FromResult((false, string.Empty));
+
+        public Task<(bool Success, string Message)> CreateSnapshotAsync(string mountPoint) =>
+            Task.FromResult((false, string.Empty));
     }
 }
