@@ -528,12 +528,15 @@ public sealed class SnapshotManagerTests : IDisposable
     [Fact]
     public void Prune_BothLimits_EitherExceededTriggersCleanup()
     {
-        WriteSnapshotWithFile(new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), "\\a.txt", new byte[10]);
-        WriteSnapshotWithFile(new(2026, 1, 2, 0, 0, 0, TimeSpan.Zero), "\\b.txt", new byte[10]);
-        WriteSnapshotWithFile(new(2026, 1, 3, 0, 0, 0, TimeSpan.Zero), "\\c.txt", new byte[10]);
+        // Distinct content per snapshot (not all-zero) so each gets its own blob instead of
+        // deduplicating into one shared blob, which would defeat the size limit below.
+        WriteSnapshotWithFile(new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), "\\a.txt", Enumerable.Repeat((byte)1, 10).ToArray());
+        WriteSnapshotWithFile(new(2026, 1, 2, 0, 0, 0, TimeSpan.Zero), "\\b.txt", Enumerable.Repeat((byte)2, 10).ToArray());
+        WriteSnapshotWithFile(new(2026, 1, 3, 0, 0, 0, TimeSpan.Zero), "\\c.txt", Enumerable.Repeat((byte)3, 10).ToArray());
 
-        // Count limit of 5 is not exceeded, but the size limit of 15 is, so pruning must still
-        // occur based on size alone.
+        // Count limit of 5 is not exceeded, but the actual blob-store size limit of 15 is (each
+        // blob is 11 bytes: 1-byte flag header + 10-byte content), so pruning must still occur
+        // based on size alone.
         SnapshotManager.Prune(_mainImagePath, maxCount: 5, maxTotalBytes: 15);
 
         var remaining = SnapshotManager.ListSnapshots(_mainImagePath);
@@ -625,17 +628,38 @@ public sealed class SnapshotManagerTests : IDisposable
     [Fact]
     public void Prune_SizeOnly_DeletesUntilUnderLimit()
     {
-        WriteSnapshotWithFile(new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), "\\a.txt", new byte[100]);
-        WriteSnapshotWithFile(new(2026, 1, 2, 0, 0, 0, TimeSpan.Zero), "\\b.txt", new byte[100]);
-        WriteSnapshotWithFile(new(2026, 1, 3, 0, 0, 0, TimeSpan.Zero), "\\c.txt", new byte[100]);
+        // Distinct content per snapshot (not all-zero) so each gets its own ~101-byte blob
+        // (1-byte flag header + 100-byte content) instead of deduplicating into one shared blob.
+        WriteSnapshotWithFile(new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), "\\a.txt", Enumerable.Repeat((byte)1, 100).ToArray());
+        WriteSnapshotWithFile(new(2026, 1, 2, 0, 0, 0, TimeSpan.Zero), "\\b.txt", Enumerable.Repeat((byte)2, 100).ToArray());
+        WriteSnapshotWithFile(new(2026, 1, 3, 0, 0, 0, TimeSpan.Zero), "\\c.txt", Enumerable.Repeat((byte)3, 100).ToArray());
 
-        // Deleting only the single oldest (100 bytes) still leaves 200 > 150, so a second
-        // deletion is required to get down to 100 <= 150.
+        // Deleting only the single oldest (101 bytes) still leaves 202 > 150, so a second
+        // deletion is required to get down to 101 <= 150.
         SnapshotManager.Prune(_mainImagePath, maxCount: null, maxTotalBytes: 150);
 
         var remaining = SnapshotManager.ListSnapshots(_mainImagePath);
         var single = Assert.Single(remaining);
         Assert.Equal(new(2026, 1, 3, 0, 0, 0, TimeSpan.Zero), single.TimestampUtc);
+    }
+
+    [Fact]
+    public void Prune_SizeLimit_MeasuresActualBlobBytes_NotSummedLogicalSizes()
+    {
+        // Every snapshot references the exact same all-zero content, so they all share one
+        // ~101-byte blob. The summed logical size (3 * 100 = 300) would exceed maxTotalBytes and
+        // trigger pruning, but the real on-disk cost never does, so nothing should be deleted.
+        var shared = new byte[100];
+        WriteSnapshotWithFile(new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), "\\a.txt", shared);
+        WriteSnapshotWithFile(new(2026, 1, 2, 0, 0, 0, TimeSpan.Zero), "\\b.txt", shared);
+        WriteSnapshotWithFile(new(2026, 1, 3, 0, 0, 0, TimeSpan.Zero), "\\c.txt", shared);
+
+        Assert.Equal(1, BlobCount);
+
+        SnapshotManager.Prune(_mainImagePath, maxCount: null, maxTotalBytes: 150);
+
+        Assert.Equal(3, SnapshotManager.ListSnapshots(_mainImagePath).Count);
+        Assert.Equal(1, BlobCount);
     }
 
     [Fact]

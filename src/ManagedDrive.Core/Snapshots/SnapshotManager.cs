@@ -286,11 +286,15 @@ public static partial class SnapshotManager
         SnapshotStore.Load(indexPath, BlobDirectoryFromSnapshotPath(indexPath), out capacityBytes, out volumeLabel, cek);
 
     /// <summary>
-    /// Deletes the oldest snapshots of <paramref name="mainImagePath"/> until both
-    /// <paramref name="maxCount"/> and <paramref name="maxTotalBytes"/> are satisfied (or no
-    /// snapshots remain), then garbage-collects any blob no longer referenced by a remaining
-    /// snapshot. A no-op (including skipping GC) when both limits are <c>null</c>. Failures
-    /// deleting an individual file are skipped rather than retried.
+    /// Deletes the oldest snapshots of <paramref name="mainImagePath"/> until <paramref name="maxCount"/>
+    /// is satisfied and the shared blob store's actual on-disk size satisfies
+    /// <paramref name="maxTotalBytes"/> (or no snapshots remain), then garbage-collects any blob
+    /// no longer referenced by a remaining snapshot. <paramref name="maxTotalBytes"/> is measured
+    /// against the compressed, deduplicated bytes the remaining snapshots would keep alive in
+    /// the blob store — not the sum of their uncompressed logical sizes, which double-counts
+    /// content shared across snapshots and ignores compression. A no-op (including skipping GC)
+    /// when both limits are <c>null</c>. Failures deleting an individual file are skipped rather
+    /// than retried.
     /// </summary>
     public static void Prune(string mainImagePath, uint? maxCount, ulong? maxTotalBytes)
     {
@@ -300,24 +304,41 @@ public static partial class SnapshotManager
         }
 
         var entries = ListSnapshotEntries(mainImagePath);
-        var totalBytes = 0UL;
-        foreach (var entry in entries)
-        {
-            totalBytes += (ulong)entry.Info.SizeBytes;
-        }
-
         var remainingCount = (uint)entries.Count;
+        var blobSizes = maxTotalBytes is null ? null : LoadBlobSizes(mainImagePath);
+
+        ulong ComputeKeptBlobBytes()
+        {
+            var referenced = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var entry in entries)
+            {
+                foreach (var hash in entry.Summary.ReferencedHashesHex)
+                {
+                    referenced.Add(hash);
+                }
+            }
+
+            var total = 0UL;
+            foreach (var hash in referenced)
+            {
+                if (blobSizes!.TryGetValue(hash, out var size))
+                {
+                    total += (ulong)size;
+                }
+            }
+
+            return total;
+        }
 
         var index = 0;
         while (index < entries.Count &&
                ((maxCount is { } mc && remainingCount > mc) ||
-                (maxTotalBytes is { } mb && totalBytes > mb)))
+                (maxTotalBytes is { } mb && ComputeKeptBlobBytes() > mb)))
         {
             var entry = entries[index];
             try
             {
                 File.Delete(entry.Info.Path);
-                totalBytes -= (ulong)entry.Info.SizeBytes;
                 remainingCount--;
 
                 // Deleted successfully: drop it from the "still on disk" list without advancing
@@ -343,6 +364,30 @@ public static partial class SnapshotManager
         }
 
         GarbageCollectBlobs(mainImagePath, entries.Select(e => e.Summary));
+    }
+
+    /// <summary>
+    /// Reads the actual on-disk length of every blob in <paramref name="mainImagePath"/>'s
+    /// shared blob store, keyed by its content hash (the blob's file name, without extension).
+    /// Used by <see cref="Prune"/> to size <c>maxTotalBytes</c> against real compressed bytes
+    /// rather than snapshots' uncompressed logical sizes.
+    /// </summary>
+    private static Dictionary<string, long> LoadBlobSizes(string mainImagePath)
+    {
+        var blobDirectory = BlobDirectory(mainImagePath);
+        var sizes = new Dictionary<string, long>(StringComparer.OrdinalIgnoreCase);
+
+        if (!Directory.Exists(blobDirectory))
+        {
+            return sizes;
+        }
+
+        foreach (var blobPath in Directory.EnumerateFiles(blobDirectory, "*.blob", SearchOption.AllDirectories))
+        {
+            sizes[Path.GetFileNameWithoutExtension(blobPath)] = new FileInfo(blobPath).Length;
+        }
+
+        return sizes;
     }
 
     /// <summary>
