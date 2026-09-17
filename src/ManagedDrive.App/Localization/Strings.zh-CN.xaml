@@ -238,6 +238,18 @@
     <sys:String x:Key="Settings.CheckForUpdatesNow">立即检查更新</sys:String>
     <sys:String x:Key="Settings.UpToDate">当前已是最新版本。</sys:String>
     <sys:String x:Key="Settings.UpdateCheckFailed">检查更新失败，请稍后重试。</sys:String>
+    <sys:String x:Key="Settings.CloseToTray">关闭窗口时最小化到托盘，而不是退出程序</sys:String>
+    <sys:String x:Key="Tip.CloseToTray">勾选时，标题栏关闭按钮会将窗口隐藏到托盘；不勾选时，会直接退出程序（等同于托盘菜单的"退出"）。</sys:String>
+    <sys:String x:Key="Settings.DefaultCompressionLevel">默认压缩级别：</sys:String>
+    <sys:String x:Key="Tip.DefaultCompressionLevel">新建磁盘时预选的压缩级别</sys:String>
+    <sys:String x:Key="Settings.DefaultCompressionLevel.System">对话框默认（快速）</sys:String>
+    <sys:String x:Key="Settings.DefaultImageDirectory">默认镜像目录：</sys:String>
+    <sys:String x:Key="Tip.DefaultImageDirectory">浏览新磁盘镜像文件路径时预选的文件夹</sys:String>
+    <sys:String x:Key="Btn.Browse">浏览...</sys:String>
+    <sys:String x:Key="Settings.HelperServiceStatus">Helper 服务：</sys:String>
+    <sys:String x:Key="Tip.HelperServiceStatus">可选的 SYSTEM 级 Helper 服务，用于让 RAM 磁盘在跨会话场景（例如以 SYSTEM 身份运行的安装程序）中可见。设置方法请参阅 README。</sys:String>
+    <sys:String x:Key="Settings.HelperServiceAvailable">正在运行</sys:String>
+    <sys:String x:Key="Settings.HelperServiceUnavailable">未安装或未运行</sys:String>
     <sys:String x:Key="ShellMenu.ImportArchive">挂载为内存盘 (ManagedDrive)</sys:String>
 
     <!-- Shared buttons -->

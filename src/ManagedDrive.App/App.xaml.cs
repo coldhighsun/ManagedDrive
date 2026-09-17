@@ -325,6 +325,13 @@ public partial class App
             return;
         }
 
+        if (_settings?.Load().CloseToTray == false)
+        {
+            e.Cancel = true;
+            ExitApplication();
+            return;
+        }
+
         e.Cancel = true;
         _mainWindow!.Hide();
         _trayIconController!.Visible = true;

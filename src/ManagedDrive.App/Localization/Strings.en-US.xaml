@@ -238,6 +238,18 @@
     <sys:String x:Key="Settings.CheckForUpdatesNow">Check for Updates Now</sys:String>
     <sys:String x:Key="Settings.UpToDate">You're running the latest version.</sys:String>
     <sys:String x:Key="Settings.UpdateCheckFailed">Couldn't check for updates. Please try again later.</sys:String>
+    <sys:String x:Key="Settings.CloseToTray">Closing the window minimizes to tray instead of exiting</sys:String>
+    <sys:String x:Key="Tip.CloseToTray">When checked, the title bar close button hides the window to the tray. When unchecked, it exits the application (same as the tray "Exit" menu item).</sys:String>
+    <sys:String x:Key="Settings.DefaultCompressionLevel">Default compression:</sys:String>
+    <sys:String x:Key="Tip.DefaultCompressionLevel">Compression level preselected when creating a new disk</sys:String>
+    <sys:String x:Key="Settings.DefaultCompressionLevel.System">Dialog Default (Fast)</sys:String>
+    <sys:String x:Key="Settings.DefaultImageDirectory">Default image directory:</sys:String>
+    <sys:String x:Key="Tip.DefaultImageDirectory">Folder preselected when browsing for a new disk's image file path</sys:String>
+    <sys:String x:Key="Btn.Browse">Browse...</sys:String>
+    <sys:String x:Key="Settings.HelperServiceStatus">Helper service:</sys:String>
+    <sys:String x:Key="Tip.HelperServiceStatus">The optional SYSTEM-level helper service that publishes RAM disks for cross-session visibility (e.g. installers running as SYSTEM). See the README for setup.</sys:String>
+    <sys:String x:Key="Settings.HelperServiceAvailable">Running</sys:String>
+    <sys:String x:Key="Settings.HelperServiceUnavailable">Not installed or not running</sys:String>
     <sys:String x:Key="ShellMenu.ImportArchive">Mount as RAM disk (ManagedDrive)</sys:String>
 
     <!-- Shared buttons -->

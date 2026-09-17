@@ -1614,7 +1614,11 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 
     private async void ExecuteCreateDisk()
     {
-        var dialog = new CreateDiskDialog(GetOtherDiskOptions(excluding: null))
+        var config = _settingsStore.Load();
+        var dialog = new CreateDiskDialog(
+            GetOtherDiskOptions(excluding: null),
+            config.DefaultCompressionLevel,
+            config.DefaultImageDirectory)
         {
             Owner = Application.Current.MainWindow
         };

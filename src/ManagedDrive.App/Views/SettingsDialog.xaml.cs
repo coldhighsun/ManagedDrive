@@ -1,3 +1,4 @@
+using ManagedDrive.HelperProtocol;
 using System.Windows.Controls;
 
 namespace ManagedDrive.App.Views;
@@ -7,6 +8,13 @@ namespace ManagedDrive.App.Views;
 /// </summary>
 public partial class SettingsDialog
 {
+    private static readonly List<ImageCompressionLevel> CompressionLevels = [
+        ImageCompressionLevel.None,
+        ImageCompressionLevel.Fastest,
+        ImageCompressionLevel.Optimal,
+        ImageCompressionLevel.SmallestSize,
+    ];
+
     private readonly AppConfiguration _original;
     private readonly UpdateCheckService? _updateCheckService;
 
@@ -25,8 +33,23 @@ public partial class SettingsDialog
         _updateCheckService = updateCheckService;
         RunAtStartupBox.IsChecked = StartupManager.IsEnabled;
         StartMinimizedBox.IsChecked = config.StartMinimized;
+        CloseToTrayBox.IsChecked = config.CloseToTray;
         ContextMenuEnabledBox.IsChecked = ShellContextMenuManager.IsRegistered;
         AutoCheckForUpdatesBox.IsChecked = config.AutoCheckForUpdates;
+        DefaultImageDirectoryBox.Text = config.DefaultImageDirectory ?? string.Empty;
+        HelperServiceStatusText.Text = HelperPipeClient.IsServiceAvailable()
+            ? Loc.Get("Settings.HelperServiceAvailable")
+            : Loc.Get("Settings.HelperServiceUnavailable");
+
+        DefaultCompressionLevelBox.Items.Add(new CompressionLevelItem(null, Loc.Get("Settings.DefaultCompressionLevel.System")));
+        foreach (var level in CompressionLevels)
+        {
+            DefaultCompressionLevelBox.Items.Add(new CompressionLevelItem(level, Loc.Get(CompressionLevelKey(level))));
+        }
+
+        DefaultCompressionLevelBox.SelectedIndex = config.DefaultCompressionLevel is { } configuredLevel
+            ? CompressionLevels.IndexOf(configuredLevel) + 1
+            : 0;
 
         LanguageBox.Items.Add(new ComboBoxItem { Content = Loc.Get("Lang.System"), Tag = "" });
         foreach (var (tag, displayName) in LanguageManager.SupportedLanguages)
@@ -96,6 +119,7 @@ public partial class SettingsDialog
         {
             RunAtStartup = runAtStartup,
             StartMinimized = StartMinimizedBox.IsChecked == true,
+            CloseToTray = CloseToTrayBox.IsChecked == true,
             Language = selectedTag,
             Theme = selectedTheme,
             Disks = _original.Disks,
@@ -104,9 +128,41 @@ public partial class SettingsDialog
             AutoCheckForUpdates = AutoCheckForUpdatesBox.IsChecked == true,
             LastUpdateCheckUtc = _original.LastUpdateCheckUtc,
             SkippedVersion = _original.SkippedVersion,
+            DefaultCompressionLevel = (DefaultCompressionLevelBox.SelectedItem as CompressionLevelItem)?.Level,
+            DefaultImageDirectory = string.IsNullOrWhiteSpace(DefaultImageDirectoryBox.Text) ? null : DefaultImageDirectoryBox.Text,
         };
 
         DialogResult = true;
+    }
+
+    /// <summary>
+    /// Opens a folder picker to choose <see cref="AppConfiguration.DefaultImageDirectory"/>.
+    /// </summary>
+    private void BrowseDefaultImageDirectory_Click(object sender, RoutedEventArgs e)
+    {
+        var dlg = new OpenFolderDialog
+        {
+            Title = Loc.Get("Settings.DefaultImageDirectory"),
+            InitialDirectory = DefaultImageDirectoryBox.Text,
+        };
+
+        if (dlg.ShowDialog() == true)
+        {
+            DefaultImageDirectoryBox.Text = dlg.FolderName;
+        }
+    }
+
+    private static string CompressionLevelKey(ImageCompressionLevel level) => level switch
+    {
+        ImageCompressionLevel.None => "CompressionLevel.None",
+        ImageCompressionLevel.Fastest => "CompressionLevel.Fastest",
+        ImageCompressionLevel.SmallestSize => "CompressionLevel.SmallestSize",
+        _ => "CompressionLevel.Optimal",
+    };
+
+    private sealed record CompressionLevelItem(ImageCompressionLevel? Level, string Display)
+    {
+        public override string ToString() => Display;
     }
 
     /// <summary>
