@@ -1185,20 +1185,27 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         else if (dialog.ExportPath is { } exportPath)
         {
             _logger.LogInformation("Disk export requested: {Source} -> {ExportPath}.", vm.MountPoint, exportPath);
-            BusyOverlay.Start(Loc.Get("Busy.ExportingImage"), totalBytes: vm.Disk.UsedBytes);
+            using var cts = new CancellationTokenSource();
+            BusyOverlay.Start(Loc.Get("Busy.ExportingImage"), totalBytes: vm.Disk.UsedBytes, cancellationSource: cts);
             try
             {
                 var progress = new Progress<double>(BusyOverlay.Report);
                 if (dialog.ExportArchiveFormat is { } archiveFormat)
                 {
-                    await Task.Run(() => vm.Disk.ExportToArchive(exportPath, archiveFormat, dialog.ExportCompressionLevel, progress));
+                    await Task.Run(() => vm.Disk.ExportToArchive(exportPath, archiveFormat, dialog.ExportCompressionLevel, progress, cts.Token));
                 }
                 else
                 {
-                    await Task.Run(() => vm.Disk.ExportToImage(exportPath, dialog.ExportCompressionLevel, progress: progress));
+                    await Task.Run(() => vm.Disk.ExportToImage(exportPath, dialog.ExportCompressionLevel, progress: progress, cancellationToken: cts.Token));
                 }
                 StatusText = Loc.Format("Status.DiskExported", vm.MountPoint, exportPath);
                 _logger.LogInformation("Disk export completed: {Source} -> {ExportPath}.", vm.MountPoint, exportPath);
+            }
+            catch (OperationCanceledException)
+            {
+                StatusText = Loc.Get("Status.OperationCancelled");
+                _logger.LogInformation("Disk export cancelled: {Source} -> {ExportPath}.", vm.MountPoint, exportPath);
+                DeletePartialExport(exportPath);
             }
             catch (Exception ex)
             {
@@ -1209,6 +1216,25 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             {
                 BusyOverlay.Stop();
             }
+        }
+    }
+
+    /// <summary>
+    /// Deletes a partially written export file left behind by a cancelled
+    /// <see cref="Core.Mounting.RamDisk.ExportToImage"/>/<see cref="Core.Mounting.RamDisk.ExportToArchive"/>
+    /// call. Best-effort: a failure here (e.g. the file is still briefly locked) is logged, not
+    /// surfaced to the user.
+    /// </summary>
+    /// <param name="exportPath">The export destination path to clean up.</param>
+    private void DeletePartialExport(string exportPath)
+    {
+        try
+        {
+            File.Delete(exportPath);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to delete partially written export file {ExportPath} after cancellation.", exportPath);
         }
     }
 
@@ -1476,11 +1502,12 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         }
 
         _logger.LogInformation("Import archive requested: {ArchivePath} -> {MountPoint}.", openDialog.FileName, dialog.Result!.MountPoint);
-        BusyOverlay.Start(Loc.Get("Busy.ImportingArchive"), indeterminate: totalBytes == 0, totalBytes: totalBytes > 0 ? totalBytes : null);
+        using var cts = new CancellationTokenSource();
+        BusyOverlay.Start(Loc.Get("Busy.ImportingArchive"), indeterminate: totalBytes == 0, totalBytes: totalBytes > 0 ? totalBytes : null, cancellationSource: cts);
         try
         {
             var progress = new Progress<double>(BusyOverlay.Report);
-            await MountAndAddAsync(dialog.Result!, progress: progress);
+            await MountAndAddAsync(dialog.Result!, progress: progress, cancellationToken: cts.Token);
         }
         finally
         {
@@ -1534,11 +1561,12 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         _logger.LogInformation("Import disk image requested: {ImagePath} -> {MountPoint}.", openDialog.FileName, dialog.Result!.MountPoint);
 
         var fileSizeBytes = (ulong)new FileInfo(openDialog.FileName).Length;
-        BusyOverlay.Start(Loc.Get("Busy.ImportingImage"), totalBytes: fileSizeBytes);
+        using var cts = new CancellationTokenSource();
+        BusyOverlay.Start(Loc.Get("Busy.ImportingImage"), totalBytes: fileSizeBytes, cancellationSource: cts);
         try
         {
             var progress = new Progress<double>(BusyOverlay.Report);
-            await MountAndAddAsync(dialog.Result!, progress: progress);
+            await MountAndAddAsync(dialog.Result!, progress: progress, cancellationToken: cts.Token);
         }
         finally
         {
@@ -1658,13 +1686,19 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 
         _logger.LogInformation("Save image requested for {MountPoint}.", vm.MountPoint);
         vm.IsSaving = true;
-        BusyOverlay.Start(Loc.Get("Busy.SavingImage"), totalBytes: vm.Disk.UsedBytes);
+        using var cts = new CancellationTokenSource();
+        BusyOverlay.Start(Loc.Get("Busy.SavingImage"), totalBytes: vm.Disk.UsedBytes, cancellationSource: cts);
         try
         {
             var progress = new Progress<double>(BusyOverlay.Report);
-            await Task.Run(() => vm.Disk.SaveToImageWithSnapshot(progress));
+            await Task.Run(() => vm.Disk.SaveToImageWithSnapshot(progress, cts.Token));
             StatusText = Loc.Format("Status.ImageSaved", vm.MountPoint);
             _logger.LogInformation("Save image completed for {MountPoint}.", vm.MountPoint);
+        }
+        catch (OperationCanceledException)
+        {
+            StatusText = Loc.Get("Status.OperationCancelled");
+            _logger.LogInformation("Save image cancelled for {MountPoint}.", vm.MountPoint);
         }
         catch (Exception ex)
         {
@@ -1825,11 +1859,11 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     private IReadOnlyList<DiskOptions> GetOtherDiskOptions(DiskViewModel? excluding) =>
         Disks.Where(d => d != excluding).Select(d => d.Disk.Options).ToList();
 
-    private async Task MountAndAddAsync(DiskOptions options, string? password = null, IProgress<double>? progress = null)
+    private async Task MountAndAddAsync(DiskOptions options, string? password = null, IProgress<double>? progress = null, CancellationToken cancellationToken = default)
     {
         try
         {
-            var disk = await MountWithPasswordRetryAsync(options, password, progress);
+            var disk = await MountWithPasswordRetryAsync(options, password, progress, cancellationToken);
             if (disk is null)
             {
                 StatusText = Loc.Get("Status.MountFailed");
@@ -1840,6 +1874,11 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             SaveSettings();
             StatusText = Loc.Format("Status.MountedWithCapacity", disk.MountPoint, options.VolumeLabel, options.CapacityBytes / (1024 * 1024));
             _logger.LogInformation("Disk mounted: {MountPoint}, label {VolumeLabel}.", disk.MountPoint, options.VolumeLabel);
+        }
+        catch (OperationCanceledException)
+        {
+            StatusText = Loc.Get("Status.OperationCancelled");
+            _logger.LogInformation("Mount cancelled for {MountPoint}.", options.MountPoint);
         }
         catch (Exception ex)
         {
@@ -1855,14 +1894,14 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     /// </summary>
     /// <returns>The mounted disk, or <c>null</c> if the user cancelled the password prompt.</returns>
     /// <exception cref="Exception">Any mount failure other than a password issue propagates to the caller.</exception>
-    private async Task<RamDisk?> MountWithPasswordRetryAsync(DiskOptions options, string? password = null, IProgress<double>? progress = null)
+    private async Task<RamDisk?> MountWithPasswordRetryAsync(DiskOptions options, string? password = null, IProgress<double>? progress = null, CancellationToken cancellationToken = default)
     {
         while (true)
         {
             string? errorMessage;
             try
             {
-                return await Task.Run(() => _mountManager.Mount(options, password, progress));
+                return await Task.Run(() => _mountManager.Mount(options, password, progress, cancellationToken));
             }
             catch (ImagePasswordRequiredException)
             {

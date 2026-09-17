@@ -264,6 +264,7 @@
     <sys:String x:Key="Status.TempDirSet">临时文件夹已设置为 {0}</sys:String>
     <sys:String x:Key="Status.DiskRead">{0} 正在读取 "{1}"...</sys:String>
     <sys:String x:Key="Status.DiskWrite">{0} 正在写入 "{1}"...</sys:String>
+    <sys:String x:Key="Status.OperationCancelled">已取消</sys:String>
 
     <!-- MessageBox bodies -->
     <sys:String x:Key="Msg.AlreadyRunning">ManagedDrive 已在运行。</sys:String>
