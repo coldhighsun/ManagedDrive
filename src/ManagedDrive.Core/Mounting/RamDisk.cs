@@ -16,9 +16,24 @@ public sealed class RamDisk : IDisposable
     private const uint FlagFlush = 0x1000;
     private const uint FlagPath = 0x0005;
     private static readonly ILogger<RamDisk> Logger = AppLog.CreateLogger<RamDisk>();
+
+    /// <summary>
+    /// Source of unique, monotonically increasing <see cref="_instanceId"/> values, used to give
+    /// every <see cref="RamDisk"/> a stable lock-acquisition order.
+    /// </summary>
+    private static long _nextInstanceId;
+
     private readonly Lock _autoSaveLock = new();
     private readonly MemoryFileSystem _fs;
     private readonly FileSystemHost _host;
+
+    /// <summary>
+    /// Unique id assigned at construction, used only to order <see cref="_autoSaveLock"/>
+    /// acquisition across two disks (see <see cref="TryCloneFrom"/>) so that cloning in opposite
+    /// directions between the same two disks concurrently can't deadlock.
+    /// </summary>
+    private readonly long _instanceId = Interlocked.Increment(ref _nextInstanceId);
+
     private Timer? _autoSaveTimer;
     private byte[]? _cek;
     private int _disposed;
@@ -239,13 +254,7 @@ public sealed class RamDisk : IDisposable
         var status = host.Mount(options.MountPoint);
         if (status != FileSystemBase.STATUS_SUCCESS)
         {
-            host.Dispose();
-            fs.NodeMap.Dispose();
-            if (cek is not null)
-            {
-                System.Security.Cryptography.CryptographicOperations.ZeroMemory(cek);
-            }
-
+            DisposeFailedMount(host, fs, cek);
             throw new InvalidOperationException(
                 $"WinFsp Mount failed for '{options.MountPoint}'. NTSTATUS: 0x{(uint)status:X8}");
         }
@@ -255,13 +264,7 @@ public sealed class RamDisk : IDisposable
         // that thread has completed the FspVolumeMount IOCTL.  Poll until it appears.
         if (IsDriveLetter(options.MountPoint) && !WaitForDriveVisible(options.MountPoint))
         {
-            host.Dispose();
-            fs.NodeMap.Dispose();
-            if (cek is not null)
-            {
-                System.Security.Cryptography.CryptographicOperations.ZeroMemory(cek);
-            }
-
+            DisposeFailedMount(host, fs, cek);
             throw new InvalidOperationException(
                 $"WinFsp did not expose drive '{options.MountPoint}' within 2.5 s. " +
                 "Verify that the WinFsp kernel driver is loaded and that the drive letter is not already in use.");
@@ -304,6 +307,24 @@ public sealed class RamDisk : IDisposable
 
         disk.ConfigureAutoSaveTimer();
         return disk;
+    }
+
+    /// <summary>
+    /// Releases the host, node map, and content-encryption key created so far by
+    /// <see cref="Create"/> when mounting fails after <paramref name="host"/> was constructed,
+    /// before a <see cref="RamDisk"/> instance exists to own them.
+    /// </summary>
+    /// <param name="host">The WinFsp host to dispose.</param>
+    /// <param name="fs">The file system whose node map should be disposed.</param>
+    /// <param name="cek">The loaded content-encryption key to zero, if any.</param>
+    private static void DisposeFailedMount(FileSystemHost host, MemoryFileSystem fs, byte[]? cek)
+    {
+        host.Dispose();
+        fs.NodeMap.Dispose();
+        if (cek is not null)
+        {
+            System.Security.Cryptography.CryptographicOperations.ZeroMemory(cek);
+        }
     }
 
     /// <summary>
@@ -688,11 +709,20 @@ public sealed class RamDisk : IDisposable
     /// </returns>
     public bool TryCloneFrom(RamDisk source, out string? error)
     {
-        lock (_autoSaveLock)
+        // Locks both disks' _autoSaveLock, in a stable order by _instanceId, so source can't be
+        // concurrently mutated by its own auto-save/format/etc. while its node map is copied, and
+        // so a clone running the other way between the same two disks at the same time can't
+        // deadlock on the two locks.
+        var (first, second) = _instanceId < source._instanceId ? (this, source) : (source, this);
+
+        lock (first._autoSaveLock)
         {
-            if (!_fs.TryReplaceContents(source._fs.NodeMap, out error))
+            lock (second._autoSaveLock)
             {
-                return false;
+                if (!_fs.TryReplaceContents(source._fs.NodeMap, out error))
+                {
+                    return false;
+                }
             }
         }
 

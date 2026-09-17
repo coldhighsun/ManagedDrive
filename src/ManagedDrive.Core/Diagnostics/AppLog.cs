@@ -49,9 +49,19 @@ public static class AppLog
     {
         /// <summary>
         /// The category type this logger reports as, passed to <see cref="ILoggerFactory.CreateLogger(string)"/>
-        /// (via the <c>Type</c> overload) on every call.
+        /// (via the <c>Type</c> overload) the first time it's needed after <see cref="_factory"/> changes.
         /// </summary>
         private readonly Type _type;
+
+        /// <summary>
+        /// The most recently resolved (factory, logger) pair, reused by <see cref="Resolve"/> as
+        /// long as <see cref="_factory"/> hasn't changed since — so a single call (or a natural
+        /// pairing like <see cref="IsEnabled"/> followed immediately by <see cref="Log"/>) sees a
+        /// consistent logger instead of each independently re-resolving <see cref="_factory"/> and
+        /// risking a torn view if <see cref="Configure"/> runs in between. Assigned as a whole
+        /// object reference so a concurrent reader never observes a mismatched factory/logger pair.
+        /// </summary>
+        private ResolvedLogger? _resolved;
 
         /// <summary>
         /// Initializes a new deferred logger for the given category <paramref name="type"/>.
@@ -60,24 +70,23 @@ public static class AppLog
         internal DeferredLogger(Type type) => _type = type;
 
         /// <summary>
-        /// Begins a logging scope on the current factory's logger for <see cref="_type"/>.
+        /// Begins a logging scope on the resolved logger for <see cref="_type"/>.
         /// </summary>
         /// <typeparam name="TState">The type of the scope state.</typeparam>
         /// <param name="state">The scope state.</param>
         /// <returns>A disposable that ends the scope, or <see langword="null"/>.</returns>
-        public IDisposable? BeginScope<TState>(TState state) where TState : notnull =>
-            Volatile.Read(ref _factory).CreateLogger(_type).BeginScope(state);
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => Resolve().BeginScope(state);
 
         /// <summary>
-        /// Checks whether <paramref name="logLevel"/> is enabled on the current factory's logger
-        /// for <see cref="_type"/>.
+        /// Checks whether <paramref name="logLevel"/> is enabled on the resolved logger for
+        /// <see cref="_type"/>.
         /// </summary>
         /// <param name="logLevel">The log level to check.</param>
         /// <returns><see langword="true"/> if the level is enabled; otherwise <see langword="false"/>.</returns>
-        public bool IsEnabled(LogLevel logLevel) => Volatile.Read(ref _factory).CreateLogger(_type).IsEnabled(logLevel);
+        public bool IsEnabled(LogLevel logLevel) => Resolve().IsEnabled(logLevel);
 
         /// <summary>
-        /// Writes a log entry through the current factory's logger for <see cref="_type"/>.
+        /// Writes a log entry through the resolved logger for <see cref="_type"/>.
         /// </summary>
         /// <typeparam name="TState">The type of the log entry's state.</typeparam>
         /// <param name="logLevel">The severity of the entry.</param>
@@ -86,7 +95,32 @@ public static class AppLog
         /// <param name="exception">The exception related to the entry, if any.</param>
         /// <param name="formatter">Formats the state and exception into a message string.</param>
         public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter) =>
-            Volatile.Read(ref _factory).CreateLogger(_type).Log(logLevel, eventId, state, exception, formatter);
+            Resolve().Log(logLevel, eventId, state, exception, formatter);
+
+        /// <summary>
+        /// Returns the logger for <see cref="_type"/> from the currently installed factory,
+        /// reusing the cached one from <see cref="_resolved"/> when the factory is unchanged.
+        /// </summary>
+        private ILogger Resolve()
+        {
+            var factory = Volatile.Read(ref _factory);
+            var cached = Volatile.Read(ref _resolved);
+            if (cached is not null && ReferenceEquals(cached.Factory, factory))
+            {
+                return cached.Logger;
+            }
+
+            var resolved = new ResolvedLogger(factory, factory.CreateLogger(_type));
+            Volatile.Write(ref _resolved, resolved);
+            return resolved.Logger;
+        }
+
+        /// <summary>
+        /// An immutable (factory, logger) pair cached by <see cref="Resolve"/>.
+        /// </summary>
+        /// <param name="Factory">The factory the logger was created from.</param>
+        /// <param name="Logger">The logger created from <paramref name="Factory"/>.</param>
+        private sealed record ResolvedLogger(ILoggerFactory Factory, ILogger Logger);
     }
 
     /// <summary>
