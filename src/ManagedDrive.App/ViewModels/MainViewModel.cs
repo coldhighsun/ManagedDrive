@@ -17,21 +17,18 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     private readonly DispatcherTimer _memoryRefreshTimer;
     private readonly MountManager _mountManager;
     private readonly SettingsStore _settingsStore;
-    private bool _tempDirCompatWarningShown;
 
     /// <summary>
     /// Initializes a new <see cref="MainViewModel"/> using the supplied mount manager and settings store.
     /// </summary>
     /// <param name="mountManager">The application-wide mount manager.</param>
     /// <param name="settingsStore">The settings store used by the Settings dialog.</param>
-    /// <param name="initialConfig">The configuration loaded at startup.</param>
     /// <param name="logger">Logger resolved from the DI container built in <see cref="App"/>.</param>
-    public MainViewModel(MountManager mountManager, SettingsStore settingsStore, AppConfiguration initialConfig, ILogger<MainViewModel> logger)
+    public MainViewModel(MountManager mountManager, SettingsStore settingsStore, ILogger<MainViewModel> logger)
     {
         _mountManager = mountManager;
         _settingsStore = settingsStore;
         _logger = logger;
-        _tempDirCompatWarningShown = initialConfig.TempDirCompatWarningShown;
 
         StatusText = Loc.Get("Status.Ready");
 
@@ -1417,7 +1414,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             Language = LanguageManager.Instance.SavedLanguage,
             Theme = ThemeManager.Instance.SavedTheme,
             Disks = GetProfiles().ToList(),
-            TempDirCompatWarningShown = _tempDirCompatWarningShown,
+            TempDirCompatWarningShown = current.TempDirCompatWarningShown,
             ContextMenuEnabled = current.ContextMenuEnabled,
             AutoCheckForUpdates = current.AutoCheckForUpdates,
             LastUpdateCheckUtc = current.LastUpdateCheckUtc,
@@ -2196,7 +2193,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         }
         else
         {
-            if (!_tempDirCompatWarningShown)
+            if (!_settingsStore.Load().TempDirCompatWarningShown)
             {
                 var warn = new ConfirmDialog(
                     Loc.Get("Msg.SetTempDirWarningTitle"),
@@ -2209,8 +2206,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
                     return;
                 }
 
-                _tempDirCompatWarningShown = true;
-                SaveSettings();
+                _settingsStore.Save(_settingsStore.Load() with { TempDirCompatWarningShown = true });
             }
 
             var tempPath = Path.Combine(vm.MountPoint, "Temp");
