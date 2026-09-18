@@ -115,12 +115,12 @@ public static class ArchiveNodeMapWriter
 
     private static IWriter OpenWriter(Stream stream, ArchiveExportFormat format, ImageCompressionLevel level) => format switch
     {
-        ArchiveExportFormat.SevenZip => SevenZipWriter.OpenWriter(stream, new SevenZipWriterOptions
+        ArchiveExportFormat.SevenZip => SevenZipWriter.OpenWriter(stream, new()
         {
             CompressionType = level == ImageCompressionLevel.None ? CompressionType.None : CompressionType.LZMA,
             CompressionLevel = ToSharpCompressLevel(level),
         }),
-        _ => new ZipWriter(stream, new ZipWriterOptions(
+        _ => new ZipWriter(stream, new(
             level == ImageCompressionLevel.None ? CompressionType.None : CompressionType.Deflate)
         {
             CompressionLevel = ToSharpCompressLevel(level),

@@ -21,7 +21,7 @@ public sealed class BusyOverlayViewModel : INotifyPropertyChanged
     /// <summary>
     /// Initializes the overlay's <see cref="CancelCommand"/>.
     /// </summary>
-    public BusyOverlayViewModel() => CancelCommand = new RelayCommand(_ => Cancel(), _ => CanCancel && !IsCancellationRequested);
+    public BusyOverlayViewModel() => CancelCommand = new(_ => Cancel(), _ => CanCancel && !IsCancellationRequested);
 
     /// <inheritdoc />
     public event PropertyChangedEventHandler? PropertyChanged;

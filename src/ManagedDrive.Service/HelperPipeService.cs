@@ -56,17 +56,17 @@ public sealed class HelperPipeService(GlobalMountManager mountManager, ILogger<H
     {
         var security = new PipeSecurity();
 
-        security.AddAccessRule(new PipeAccessRule(
+        security.AddAccessRule(new(
             new SecurityIdentifier(WellKnownSidType.AuthenticatedUserSid, null),
             PipeAccessRights.ReadWrite,
             AccessControlType.Allow));
 
-        security.AddAccessRule(new PipeAccessRule(
+        security.AddAccessRule(new(
             new SecurityIdentifier(WellKnownSidType.LocalSystemSid, null),
             PipeAccessRights.FullControl,
             AccessControlType.Allow));
 
-        security.AddAccessRule(new PipeAccessRule(
+        security.AddAccessRule(new(
             new SecurityIdentifier(WellKnownSidType.BuiltinAdministratorsSid, null),
             PipeAccessRights.FullControl,
             AccessControlType.Allow));
@@ -87,28 +87,28 @@ public sealed class HelperPipeService(GlobalMountManager mountManager, ILogger<H
         switch (request.Op)
         {
             case HelperPipeProtocol.OpPing:
-                return new HelperResponse(true, "pong");
+                return new(true, "pong");
 
             case HelperPipeProtocol.OpPublish:
                 if (request.Letter == null || request.DevicePath == null)
                 {
-                    return new HelperResponse(false, "publish requires Letter and DevicePath.");
+                    return new(false, "publish requires Letter and DevicePath.");
                 }
 
                 var (pubOk, pubMsg) = mountManager.Publish(request.Letter, request.DevicePath);
-                return new HelperResponse(pubOk, pubMsg);
+                return new(pubOk, pubMsg);
 
             case HelperPipeProtocol.OpUnpublish:
                 if (request.Letter == null)
                 {
-                    return new HelperResponse(false, "unpublish requires Letter.");
+                    return new(false, "unpublish requires Letter.");
                 }
 
                 var (unpubOk, unpubMsg) = mountManager.Unpublish(request.Letter);
-                return new HelperResponse(unpubOk, unpubMsg);
+                return new(unpubOk, unpubMsg);
 
             default:
-                return new HelperResponse(false, $"Unknown op '{request.Op}'.");
+                return new(false, $"Unknown op '{request.Op}'.");
         }
     }
 

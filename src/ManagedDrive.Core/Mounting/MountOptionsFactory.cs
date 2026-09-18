@@ -72,7 +72,7 @@ public static class MountOptionsFactory
                 CapacityBytes = capacityBytes,
                 VolumeLabel = volumeLabel,
             }
-            : new DiskOptions
+            : new()
             {
                 MountPoint = mountPoint,
                 CapacityBytes = capacityBytes,
@@ -125,7 +125,7 @@ public static class MountOptionsFactory
                 CapacityBytes = capacityBytes,
                 VolumeLabel = volumeLabel,
             }
-            : new DiskOptions
+            : new()
             {
                 MountPoint = mountPoint,
                 CapacityBytes = capacityBytes,

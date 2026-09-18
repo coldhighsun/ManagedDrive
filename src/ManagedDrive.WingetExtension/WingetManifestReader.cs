@@ -51,7 +51,7 @@ internal static class WingetManifestReader
             ? silentWithProgress
             : DefaultSilentWithProgressSwitches(installerType);
 
-        return new InstallerInfo(installerType, silentSwitches, silentWithProgressSwitches);
+        return new(installerType, silentSwitches, silentWithProgressSwitches);
     }
 
     private static object? GetValue(Dictionary<object, object> map, string key) =>

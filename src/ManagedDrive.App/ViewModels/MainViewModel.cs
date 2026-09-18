@@ -681,7 +681,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         var options = MountOptionsFactory.BuildImageOptions(
             savedProfile != null ? ProfileToOptions(savedProfile) : null,
             mountPoint, imagePath, capacityBytes, volumeLabel,
-            new MountOverrides
+            new()
             {
                 ReadOnly = overrides.ReadOnly,
                 AutoMount = overrides.AutoMount,

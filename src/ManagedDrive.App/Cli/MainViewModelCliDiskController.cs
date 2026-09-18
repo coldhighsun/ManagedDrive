@@ -84,7 +84,7 @@ internal sealed class MainViewModelCliDiskController(MainViewModel mainViewModel
             return (success, message, null);
         }
 
-        return (true, message, new CliSnapshotDiff(d.AddedFiles, d.RemovedFiles, d.ModifiedFiles, d.AddedDirectories, d.RemovedDirectories, d.UnchangedFileCount));
+        return (true, message, new(d.AddedFiles, d.RemovedFiles, d.ModifiedFiles, d.AddedDirectories, d.RemovedDirectories, d.UnchangedFileCount));
     }
 
     public Task<(bool Success, string Message)> EditAsync(string mountPoint, ulong? capacityBytes, string? volumeLabel, uint? autoSaveIntervalMinutes, bool disableAutoSave) =>

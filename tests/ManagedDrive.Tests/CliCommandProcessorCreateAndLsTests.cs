@@ -75,7 +75,7 @@ public class CliCommandProcessorCreateAndLsTests
         var controller = new FakeCliDiskController
         {
             LsSuccess = true,
-            LsEntries = [new CliFileEntry("Sub", true, 0), new CliFileEntry("file.txt", false, 42)],
+            LsEntries = [new("Sub", true, 0), new("file.txt", false, 42)],
         };
 
         var outcome = await CliCommandProcessor.ExecuteAsync(["ls", "r", "\\Folder"], controller);

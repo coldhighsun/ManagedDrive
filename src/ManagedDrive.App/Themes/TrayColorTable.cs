@@ -82,7 +82,7 @@ public sealed class TrayMenuRenderer(bool isDark) : ToolStripProfessionalRendere
         if (e.Item.Selected || e.Item.Pressed)
         {
             using var brush = new SolidBrush(_hoverBackground);
-            e.Graphics.FillRectangle(brush, new Rectangle(System.Drawing.Point.Empty, e.Item.Size));
+            e.Graphics.FillRectangle(brush, new(System.Drawing.Point.Empty, e.Item.Size));
             return;
         }
 

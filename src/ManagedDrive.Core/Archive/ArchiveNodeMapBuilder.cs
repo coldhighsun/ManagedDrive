@@ -81,7 +81,7 @@ public static class ArchiveNodeMapBuilder
             // a large archive. It's restricted to solid archives and 7z, so non-solid formats
             // (plain zip, tar, ...) keep using the simpler per-entry API, where random access is
             // already cheap.
-            if (archive.Type == SharpCompress.Common.ArchiveType.SevenZip || archive.IsSolid)
+            if (archive.Type == ArchiveType.SevenZip || archive.IsSolid)
             {
                 using var reader = archive.ExtractAllEntries();
                 while (reader.MoveToNextEntry())

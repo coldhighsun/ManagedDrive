@@ -15,12 +15,12 @@ public partial class SpeedHistoryChart
     /// <summary>Identifies the <see cref="ReadHistory"/> dependency property.</summary>
     public static readonly DependencyProperty ReadHistoryProperty = DependencyProperty.Register(
         nameof(ReadHistory), typeof(IReadOnlyList<double>), typeof(SpeedHistoryChart),
-        new PropertyMetadata(null, OnHistoryChanged));
+        new(null, OnHistoryChanged));
 
     /// <summary>Identifies the <see cref="WriteHistory"/> dependency property.</summary>
     public static readonly DependencyProperty WriteHistoryProperty = DependencyProperty.Register(
         nameof(WriteHistory), typeof(IReadOnlyList<double>), typeof(SpeedHistoryChart),
-        new PropertyMetadata(null, OnHistoryChanged));
+        new(null, OnHistoryChanged));
 
     /// <summary>
     /// Initializes a new instance of <see cref="SpeedHistoryChart"/>.

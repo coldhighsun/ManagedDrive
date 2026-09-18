@@ -71,7 +71,7 @@ public sealed class MountManager : IDisposable
     /// </summary>
     public MountManager()
     {
-        _activityPollTimer = new Timer(_ => PollActivity(), null, ActivityPollInterval, ActivityPollInterval);
+        _activityPollTimer = new(_ => PollActivity(), null, ActivityPollInterval, ActivityPollInterval);
     }
 
     /// <summary>
@@ -146,7 +146,7 @@ public sealed class MountManager : IDisposable
         // are only saved a few at a time (not fully unbounded) to avoid oversubscribing the CPU.
         var parallelism = Math.Max(1, Environment.ProcessorCount / 2);
 
-        Parallel.For(0, count, new ParallelOptions { MaxDegreeOfParallelism = parallelism }, i =>
+        Parallel.For(0, count, new() { MaxDegreeOfParallelism = parallelism }, i =>
         {
             ReportOverall(i, 0.0);
 

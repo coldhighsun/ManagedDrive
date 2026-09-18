@@ -435,7 +435,7 @@ public sealed class FileNodeMapTests
     public void DrainRemovedSincePersist_AfterRemove_ContainsRemovedPath()
     {
         var map = new FileNodeMap();
-        map.Add("\\file.txt", new FileNode());
+        map.Add("\\file.txt", new());
         map.Remove("\\file.txt");
 
         var removed = map.DrainRemovedSincePersist();
@@ -447,7 +447,7 @@ public sealed class FileNodeMapTests
     public void DrainRemovedSincePersist_ClearsAfterDrain()
     {
         var map = new FileNodeMap();
-        map.Add("\\file.txt", new FileNode());
+        map.Add("\\file.txt", new());
         map.Remove("\\file.txt");
         map.DrainRemovedSincePersist();
 
@@ -460,9 +460,9 @@ public sealed class FileNodeMapTests
     public void DrainRemovedSincePersist_PathReaddedAfterRemove_NotReportedAsRemoved()
     {
         var map = new FileNodeMap();
-        map.Add("\\file.txt", new FileNode());
+        map.Add("\\file.txt", new());
         map.Remove("\\file.txt");
-        map.Add("\\file.txt", new FileNode());
+        map.Add("\\file.txt", new());
 
         var removed = map.DrainRemovedSincePersist();
 
@@ -473,7 +473,7 @@ public sealed class FileNodeMapTests
     public void DrainRemovedSincePersist_NoRemovals_ReturnsEmpty()
     {
         var map = new FileNodeMap();
-        map.Add("\\file.txt", new FileNode());
+        map.Add("\\file.txt", new());
 
         var removed = map.DrainRemovedSincePersist();
 

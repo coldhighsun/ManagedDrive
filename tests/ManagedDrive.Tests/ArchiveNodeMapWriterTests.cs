@@ -39,7 +39,7 @@ public sealed class ArchiveNodeMapWriterTests
 
         var nodeMap = new FileNodeMap();
         var now = (ulong)DateTimeOffset.UtcNow.ToFileTime();
-        nodeMap.Add("\\", new FileNode
+        nodeMap.Add("\\", new()
         {
             FileSecurity = FileNode.DefaultSecurityDescriptorBytes,
             FileInfo =
@@ -52,7 +52,7 @@ public sealed class ArchiveNodeMapWriterTests
                 IndexNumber = FileNode.NewIndexNumber(),
             },
         });
-        nodeMap.Add("\\Big.bin", new FileNode
+        nodeMap.Add("\\Big.bin", new()
         {
             FileData = FileContent.CreateZeroed(alignedSize),
             FileSecurity = FileNode.DefaultSecurityDescriptorBytes,

@@ -66,7 +66,7 @@ public class CliCommandProcessorMountTests
     {
         var controller = new FakeCliDiskController
         {
-            Disks = [new CliDiskInfo("R:", "MyDisk", 1024, 4096)],
+            Disks = [new("R:", "MyDisk", 1024, 4096)],
         };
 
         var outcome = await CliCommandProcessor.ExecuteAsync(["list"], controller);
@@ -90,8 +90,8 @@ public class CliCommandProcessorMountTests
         Assert.Equal(0, outcome.ExitCode);
         Assert.Equal("R:", controller.LastMountPoint);
         Assert.Equal("out.zip", controller.LastExportOutputPath);
-        Assert.Equal(ManagedDrive.Cli.Core.ArchiveExportFormat.Zip, controller.LastExportFormat);
-        Assert.Equal(ManagedDrive.Cli.Core.ImageCompressionLevel.SmallestSize, controller.LastExportCompressionLevel);
+        Assert.Equal(Cli.Core.ArchiveExportFormat.Zip, controller.LastExportFormat);
+        Assert.Equal(Cli.Core.ImageCompressionLevel.SmallestSize, controller.LastExportCompressionLevel);
         Assert.Null(controller.LastExportPassword);
     }
 
@@ -154,7 +154,7 @@ public class CliCommandProcessorMountTests
     {
         var controller = new FakeCliDiskController
         {
-            Disks = [new CliDiskInfo("R:", "MyDisk", 1024, 4096)],
+            Disks = [new("R:", "MyDisk", 1024, 4096)],
         };
 
         var outcome = await CliCommandProcessor.ExecuteAsync(["list", "--json"], controller);

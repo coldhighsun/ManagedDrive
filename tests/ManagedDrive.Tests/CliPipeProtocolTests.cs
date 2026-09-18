@@ -30,9 +30,9 @@ public class CliPipeProtocolTests
         var response = new CliResponse(
             true,
             "Mounted R:.",
-            [new CliDiskInfo("R:", "MyDisk", 1024, 4096)],
+            [new("R:", "MyDisk", 1024, 4096)],
             0,
-            [new CliSnapshotInfo(1, DateTimeOffset.UtcNow, 2048)]);
+            [new(1, DateTimeOffset.UtcNow, 2048)]);
 
         var json = CliPipeProtocol.SerializeResponse(response);
         var roundTripped = CliPipeProtocol.DeserializeResponse(json);

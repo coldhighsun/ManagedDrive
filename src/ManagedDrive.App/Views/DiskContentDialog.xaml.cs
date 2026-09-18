@@ -130,7 +130,7 @@ public partial class DiskContentDialog
                 var segment = segments[i];
                 if (!current.Children.TryGetValue(segment, out var child))
                 {
-                    child = new TreeBuilder(segment, isDirectory: true);
+                    child = new(segment, isDirectory: true);
                     current.Children[segment] = child;
                 }
 
@@ -637,7 +637,7 @@ public partial class DiskContentDialog
 
             foreach (var node in matches)
             {
-                _rows.Add(new DiskContentRow(node, depth: 0, showFullPath: true));
+                _rows.Add(new(node, depth: 0, showFullPath: true));
             }
         }
 
@@ -727,7 +727,7 @@ public partial class DiskContentDialog
             RotateTransform.AngleProperty,
             new DoubleAnimation(0, 360, TimeSpan.FromSeconds(1)) { RepeatBehavior = RepeatBehavior.Forever });
 
-        _busyCts = new CancellationTokenSource();
+        _busyCts = new();
         return _busyCts.Token;
     }
 

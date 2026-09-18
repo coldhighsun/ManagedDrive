@@ -53,7 +53,7 @@ public sealed class HelperPipeProtocolTests
     {
         var result = HelperPipeProtocol.DeserializeRequest("null");
 
-        Assert.Equal(new HelperRequest(string.Empty, null, null), result);
+        Assert.Equal(new(string.Empty, null, null), result);
     }
 
     [Fact]
@@ -61,7 +61,7 @@ public sealed class HelperPipeProtocolTests
     {
         var result = HelperPipeProtocol.DeserializeResponse("null");
 
-        Assert.Equal(new HelperResponse(false, string.Empty), result);
+        Assert.Equal(new(false, string.Empty), result);
     }
 
     [Fact]

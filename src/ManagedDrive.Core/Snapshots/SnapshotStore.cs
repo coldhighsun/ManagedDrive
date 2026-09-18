@@ -298,7 +298,7 @@ internal static class SnapshotStore
                 {
                     var baseNonce = RandomNumberGenerator.GetBytes(BlobNonceSize);
                     stream.Write(baseNonce);
-                    chunkedStream = new ChunkedGcm.WriteStream(stream, cek, baseNonce, ChunkedGcm.ChunkSize);
+                    chunkedStream = new(stream, cek, baseNonce, ChunkedGcm.ChunkSize);
                     target = chunkedStream;
                 }
 

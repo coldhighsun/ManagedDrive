@@ -80,7 +80,7 @@ public class CliCommandProcessorEditAndSnapshotDiffTests
         var controller = new FakeCliDiskController
         {
             DiffSuccess = true,
-            Diff = new CliSnapshotDiff(["\\new.txt"], ["\\old.txt"], ["\\changed.txt"], [], [], 3),
+            Diff = new(["\\new.txt"], ["\\old.txt"], ["\\changed.txt"], [], [], 3),
         };
 
         var outcome = await CliCommandProcessor.ExecuteAsync(["snapshot", "diff", "r", "2"], controller);
@@ -101,7 +101,7 @@ public class CliCommandProcessorEditAndSnapshotDiffTests
         var controller = new FakeCliDiskController
         {
             DiffSuccess = true,
-            Diff = new CliSnapshotDiff([], [], [], [], [], 5),
+            Diff = new([], [], [], [], [], 5),
         };
 
         var outcome = await CliCommandProcessor.ExecuteAsync(["snapshot", "diff", "R:", "1"], controller);
