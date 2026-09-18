@@ -1,4 +1,5 @@
 using System.IO.Compression;
+using System.Runtime.ExceptionServices;
 using System.Security.Cryptography;
 
 namespace ManagedDrive.Core.Persistence;
@@ -517,6 +518,45 @@ public static class DiskImageSerializer
     }
 
     /// <summary>
+    /// Reports <paramref name="fraction"/> through <paramref name="progress"/> only if it's
+    /// strictly greater than the last value reported, so concurrent callers racing on a shared
+    /// <see cref="Parallel.For(int,int,Action{int})"/> loop can't make the reported progress jump
+    /// backward relative to what was reported before it.
+    /// </summary>
+    private static void ReportMonotonic(IProgress<double>? progress, double fraction, Lock progressLock, ref double lastReportedFraction)
+    {
+        if (progress is null)
+        {
+            return;
+        }
+
+        lock (progressLock)
+        {
+            if (fraction > lastReportedFraction)
+            {
+                lastReportedFraction = fraction;
+                progress.Report(fraction);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Unwraps an <see cref="AggregateException"/> thrown out of a <see cref="Parallel.For(int,int,Action{int})"/>
+    /// segment-compression loop back down to the single original exception a caller of the old,
+    /// sequential per-segment loop would have seen, preserving its original stack trace.
+    /// </summary>
+    private static Exception Unwrap(AggregateException ex)
+    {
+        var flattened = ex.Flatten();
+        if (flattened.InnerExceptions.Count == 1)
+        {
+            ExceptionDispatchInfo.Capture(flattened.InnerExceptions[0]).Throw();
+        }
+
+        return flattened;
+    }
+
+    /// <summary>
     /// Version 4/5's chunked encrypted node region: each chunk was independently AES-256-GCM
     /// encrypted on save, so decryption streams chunk-by-chunk via <see cref="ChunkedGcm.ReadStream"/>
     /// rather than requiring the whole region in memory at once. <paramref name="useZstd"/>
@@ -897,7 +937,6 @@ public static class DiskImageSerializer
 
         var nodes = nodeMap.GetAllNodes();
         var totalBytes = nodeMap.GetTotalAllocated();
-        var segments = new List<(int NodeCount, byte[] Payload, byte[] ContentHash, byte[]? Nonce, byte[]? Tag)>();
 
         // Captured per node before writing, so the post-save version bookkeeping below reflects
         // exactly the state that was actually persisted, not whatever a concurrent WinFsp write
@@ -906,12 +945,15 @@ public static class DiskImageSerializer
         var capturedMetadataVersion = new ulong[nodes.Count];
         var nodeSegmentIndex = new int[nodes.Count];
 
+        // Pass 1: decide segment boundaries by AllocationSize only (pure in-memory bookkeeping,
+        // no compression yet) so segment count/order stays identical to the old sequential
+        // behavior regardless of how pass 2 below is parallelized.
+        var chunks = new List<List<KeyValuePair<string, FileNode>>>();
         var cursor = 0;
-        ulong writtenBytes = 0;
 
         while (cursor < nodes.Count)
         {
-            var segmentIndex = segments.Count;
+            var segmentIndex = chunks.Count;
             var chunk = new List<KeyValuePair<string, FileNode>>();
             long segmentBytes = 0;
 
@@ -927,16 +969,40 @@ public static class DiskImageSerializer
             }
             while (cursor < nodes.Count && segmentBytes < segmentTargetBytes);
 
-            var (finalPayload, contentHash, nonce, tag) = BuildSegmentPayload(
-                chunk,
-                level,
-                customZstdLevel,
-                encryption,
-                node => writtenBytes += node.FileInfo.AllocationSize);
-            progress?.Report(totalBytes == 0 ? 1.0 : (double)writtenBytes / totalBytes);
-
-            segments.Add((chunk.Count, finalPayload, contentHash, nonce, tag));
+            chunks.Add(chunk);
         }
+
+        // Pass 2: compress/encrypt each segment independently and in parallel — each segment's
+        // BuildSegmentPayload call is otherwise single-threaded internally (a segment is sized to
+        // produce exactly one ParallelZstd chunk), so parallelism has to come from running
+        // multiple segments concurrently rather than from within one.
+        var segmentResults = new (int NodeCount, byte[] Payload, byte[] ContentHash, byte[]? Nonce, byte[]? Tag)[chunks.Count];
+        ulong writtenBytes = 0;
+        var progressLock = new Lock();
+        var lastReportedFraction = -1.0;
+
+        try
+        {
+            Parallel.For(0, chunks.Count, i =>
+            {
+                var chunk = chunks[i];
+                var (finalPayload, contentHash, nonce, tag) = BuildSegmentPayload(
+                    chunk,
+                    level,
+                    customZstdLevel,
+                    encryption,
+                    node => Interlocked.Add(ref writtenBytes, node.FileInfo.AllocationSize));
+
+                segmentResults[i] = (chunk.Count, finalPayload, contentHash, nonce, tag);
+                ReportMonotonic(progress, totalBytes == 0 ? 1.0 : (double)Interlocked.Read(ref writtenBytes) / totalBytes, progressLock, ref lastReportedFraction);
+            });
+        }
+        catch (AggregateException ex)
+        {
+            throw Unwrap(ex);
+        }
+
+        var segments = segmentResults.ToList();
 
         var tempPath = imagePath + ".tmp";
         try
@@ -1027,6 +1093,10 @@ public static class DiskImageSerializer
         }
 
         nodeMap.DrainRemovedSincePersist();
+
+        // Guaranteed final report: an empty disk (chunks.Count == 0) never enters the Parallel.For
+        // body above, so nothing else would report 1.0.
+        ReportMonotonic(progress, 1.0, progressLock, ref lastReportedFraction);
     }
 
     private static void SaveSegmentedIncremental(
@@ -1129,11 +1199,19 @@ public static class DiskImageSerializer
                 }
             }
 
+            var totalBytes = nodeMap.GetTotalAllocated();
+            ulong writtenBytes = 0;
+            var progressLock = new Lock();
+            var lastReportedFraction = -1.0;
+
             // Single sequential pass over the old image's segment payload region: copy the bytes of
             // reusable segments, seek past (never buffer) the rest. Segment order in the file
             // matches oldSegments' order, so no random access is needed. Guarded by try/finally so
             // a corrupted/truncated old image (bad PayloadLength, premature EOF) still closes the
-            // handle instead of leaking it on the way out.
+            // handle instead of leaking it on the way out. Reused segments are typically the bulk
+            // of a large image's bytes, so progress is reported here too — otherwise a save where
+            // most/everything is reused would sit at 0% through this whole pass and then jump
+            // straight to done.
             var reusedSegments = new List<(int OldIndex, SegmentIndexEntry Entry, byte[] Payload)>();
             try
             {
@@ -1143,6 +1221,13 @@ public static class DiskImageSerializer
                     if (reusable[i])
                     {
                         reusedSegments.Add((i, entry, oldReader.ReadBytes(checked((int)entry.PayloadLength))));
+
+                        foreach (var pos in byOldSegment[i])
+                        {
+                            writtenBytes += nodes[pos].Value.FileInfo.AllocationSize;
+                        }
+
+                        ReportMonotonic(progress, totalBytes == 0 ? 1.0 : (double)writtenBytes / totalBytes, progressLock, ref lastReportedFraction);
                     }
                     else
                     {
@@ -1162,21 +1247,14 @@ public static class DiskImageSerializer
 
             poolPositions.Sort();
 
-            var totalBytes = nodeMap.GetTotalAllocated();
-            ulong writtenBytes = 0;
-            foreach (var (oldIndex, _, _) in reusedSegments)
-            {
-                foreach (var pos in byOldSegment[oldIndex])
-                {
-                    writtenBytes += nodes[pos].Value.FileInfo.AllocationSize;
-                }
-            }
-
-            var newSegments = new List<(List<int> Positions, byte[] Payload, byte[] ContentHash, byte[]? Nonce, byte[]? Tag)>();
             var capturedContentVersion = new ulong[nodes.Count];
             var capturedMetadataVersion = new ulong[nodes.Count];
 
+            // Pass 1: decide rewrite-pool segment boundaries only (pure in-memory bookkeeping),
+            // same rationale as SaveSegmented above.
+            var poolChunks = new List<List<int>>();
             var cursor = 0;
+
             while (cursor < poolPositions.Count)
             {
                 var chunkPositions = new List<int>();
@@ -1194,16 +1272,35 @@ public static class DiskImageSerializer
                 }
                 while (cursor < poolPositions.Count && segmentBytes < segmentTargetBytes);
 
-                var (finalPayload, contentHash, nonce, tag) = BuildSegmentPayload(
-                    chunkPositions.Select(pos => nodes[pos]),
-                    level,
-                    customZstdLevel,
-                    encryption,
-                    node => writtenBytes += node.FileInfo.AllocationSize);
-                progress?.Report(totalBytes == 0 ? 1.0 : (double)writtenBytes / totalBytes);
-
-                newSegments.Add((chunkPositions, finalPayload, contentHash, nonce, tag));
+                poolChunks.Add(chunkPositions);
             }
+
+            // Pass 2: compress/encrypt each rewrite-pool segment independently and in parallel —
+            // see SaveSegmented for why parallelism must be at segment granularity.
+            var newSegmentResults = new (List<int> Positions, byte[] Payload, byte[] ContentHash, byte[]? Nonce, byte[]? Tag)[poolChunks.Count];
+
+            try
+            {
+                Parallel.For(0, poolChunks.Count, i =>
+                {
+                    var chunkPositions = poolChunks[i];
+                    var (finalPayload, contentHash, nonce, tag) = BuildSegmentPayload(
+                        chunkPositions.Select(pos => nodes[pos]),
+                        level,
+                        customZstdLevel,
+                        encryption,
+                        node => Interlocked.Add(ref writtenBytes, node.FileInfo.AllocationSize));
+
+                    newSegmentResults[i] = (chunkPositions, finalPayload, contentHash, nonce, tag);
+                    ReportMonotonic(progress, totalBytes == 0 ? 1.0 : (double)Interlocked.Read(ref writtenBytes) / totalBytes, progressLock, ref lastReportedFraction);
+                });
+            }
+            catch (AggregateException ex)
+            {
+                throw Unwrap(ex);
+            }
+
+            var newSegments = newSegmentResults.ToList();
 
             var tempPath = imagePath + ".tmp";
             try
@@ -1329,6 +1426,10 @@ public static class DiskImageSerializer
             }
 
             nodeMap.DrainRemovedSincePersist();
+
+            // Guaranteed final report: if every segment was reused (poolChunks empty) or the image
+            // is empty (totalBytes == 0), nothing above may have reported 1.0 yet.
+            ReportMonotonic(progress, 1.0, progressLock, ref lastReportedFraction);
         }
     }
 
