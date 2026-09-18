@@ -188,4 +188,4 @@ jobs:
           prerelease: ${{ steps.version.outputs.is_prerelease }}
           files: |
             ManagedDrive-${{ steps.version.outputs.tag }}-win-x64-portable.zip
-            installer/Output/ManagedDrive-Setup-${{ steps.version.outputs.version }}.exe
+            installer/Output/ManagedDrive-Setup-${{ steps.version.outputs.tag }}.exe
