@@ -190,11 +190,11 @@ public partial class SettingsDialog
         CheckForUpdatesNowButton.IsEnabled = false;
         try
         {
-            var (result, info) = await _updateCheckService.CheckSilentlyAsync();
-            var message = result switch
+            var (success, info) = await _updateCheckService.CheckSilentlyAsync();
+            var message = (success, info) switch
             {
-                UpdateCheckResult.UpdateAvailable when info != null => Loc.Format("About.UpdateAvailable", info.Version),
-                UpdateCheckResult.UpToDate => Loc.Get("Settings.UpToDate"),
+                (true, not null) => Loc.Format("About.UpdateAvailable", info.Version),
+                (true, null) => Loc.Get("Settings.UpToDate"),
                 _ => Loc.Get("Settings.UpdateCheckFailed"),
             };
             MessageBox.Show(this, message, Title, MessageBoxButton.OK, MessageBoxImage.Information);
