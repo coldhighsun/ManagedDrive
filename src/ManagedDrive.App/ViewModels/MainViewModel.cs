@@ -1413,13 +1413,17 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         {
             RunAtStartup = StartupManager.IsEnabled,
             StartMinimized = current.StartMinimized,
+            CloseToTray = current.CloseToTray,
             Language = LanguageManager.Instance.SavedLanguage,
             Theme = ThemeManager.Instance.SavedTheme,
             Disks = GetProfiles().ToList(),
             TempDirCompatWarningShown = _tempDirCompatWarningShown,
+            ContextMenuEnabled = current.ContextMenuEnabled,
             AutoCheckForUpdates = current.AutoCheckForUpdates,
             LastUpdateCheckUtc = current.LastUpdateCheckUtc,
             SkippedVersion = current.SkippedVersion,
+            DefaultCompressionLevel = current.DefaultCompressionLevel,
+            DefaultImageDirectory = current.DefaultImageDirectory,
         });
     }
 
