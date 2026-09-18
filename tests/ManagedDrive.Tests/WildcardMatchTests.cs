@@ -60,3 +60,27 @@ public sealed class WildcardMatchTests
         Assert.Equal(expected, WildcardMatcher.Match(pattern, name));
     }
 }
+
+public sealed class WildcardMatchesTests
+{
+    [Theory]
+    [InlineData(null, "anything")]
+    [InlineData("", "anything")]
+    [InlineData("*", "anything")]
+    [InlineData(null, "")]
+    public void NullEmptyOrStarPattern_MatchesEverything(string? pattern, string name)
+    {
+        Assert.True(WildcardMatcher.Matches(pattern, name));
+    }
+
+    [Theory]
+    [InlineData("foo.txt", "foo.txt", true)]
+    [InlineData("foo.txt", "bar.txt", false)]
+    [InlineData("*.txt", "foo.txt", true)]
+    [InlineData("*.txt", "foo.doc", false)]
+    [InlineData("f?o.txt", "foo.txt", true)]
+    public void DelegatesToMatch(string pattern, string name, bool expected)
+    {
+        Assert.Equal(expected, WildcardMatcher.Matches(pattern, name));
+    }
+}
