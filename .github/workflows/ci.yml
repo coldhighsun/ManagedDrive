@@ -51,7 +51,7 @@ jobs:
         shell: pwsh
 
       - name: Test
-        run: dotnet test --no-build -c Release -- --report-xunit-trx --report-xunit-trx-filename results.trx
+        run: dotnet test --no-build -c Release --collect:"XPlat Code Coverage" -- --report-xunit-trx --report-xunit-trx-filename results.trx
 
       - name: Upload test results
         if: always()
@@ -59,6 +59,13 @@ jobs:
         with:
           name: test-results
           path: '**/results.trx'
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@ad3126e916f78f00edff4ed0317cf185271ccc2 # v5.4.2
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: '**/coverage.cobertura.xml'
+          fail_ci_if_error: false
 
   # ── Release ──────────────────────────────────────────────────────────────────
   release:

@@ -1,13 +1,17 @@
 # ManagedDrive
 
 [![CI / Release](https://github.com/coldhighsun/ManagedDrive/actions/workflows/ci.yml/badge.svg)](https://github.com/coldhighsun/ManagedDrive/actions/workflows/ci.yml)
+[![Coverage](https://codecov.io/gh/coldhighsun/ManagedDrive/branch/main/graph/badge.svg)](https://codecov.io/gh/coldhighsun/ManagedDrive)
 [![Latest Release](https://img.shields.io/github/v/release/coldhighsun/ManagedDrive)](https://github.com/coldhighsun/ManagedDrive/releases/latest)
+[![Latest Pre-release](https://img.shields.io/github/v/release/coldhighsun/ManagedDrive?include_prereleases&label=pre-release)](https://github.com/coldhighsun/ManagedDrive/releases)
 [![GitHub All Releases](https://img.shields.io/github/downloads/coldhighsun/ManagedDrive/total)](https://github.com/coldhighsun/ManagedDrive/releases)
+[![Open Issues](https://img.shields.io/github/issues/coldhighsun/ManagedDrive)](https://github.com/coldhighsun/ManagedDrive/issues)
+[![Open PRs](https://img.shields.io/github/issues-pr/coldhighsun/ManagedDrive)](https://github.com/coldhighsun/ManagedDrive/pulls)
+[![Last Commit](https://img.shields.io/github/last-commit/coldhighsun/ManagedDrive)](https://github.com/coldhighsun/ManagedDrive/commits/main)
+[![GitHub Stars](https://img.shields.io/github/stars/coldhighsun/ManagedDrive?style=flat)](https://github.com/coldhighsun/ManagedDrive/stargazers)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![.NET](https://img.shields.io/badge/.NET-10-512BD4?logo=dotnet)](https://dotnet.microsoft.com/)
 [![Platform: Windows](https://img.shields.io/badge/platform-Windows-0078D6?logo=windows)](https://github.com/coldhighsun/ManagedDrive)
-[![GitHub Stars](https://img.shields.io/github/stars/coldhighsun/ManagedDrive?style=flat)](https://github.com/coldhighsun/ManagedDrive/stargazers)
-[![Last Commit](https://img.shields.io/github/last-commit/coldhighsun/ManagedDrive)](https://github.com/coldhighsun/ManagedDrive/commits/main)
 
 [English](#english) | [中文](#中文)
 
