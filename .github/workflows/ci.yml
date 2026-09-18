@@ -64,7 +64,7 @@ jobs:
         uses: codecov/codecov-action@5975040f7f7d40edaff8d784b576fd65ae95c073 # v5.5.5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
-          files: '**/coverage.cobertura.xml'
+          files: '**/*.cobertura.xml'
           fail_ci_if_error: false
 
   # ── Release ──────────────────────────────────────────────────────────────────
