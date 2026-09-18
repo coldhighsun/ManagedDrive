@@ -11,7 +11,7 @@ ManagedDrive uses the following open-source software.
 
 ## SharpCompress
 
-- **Package:** `SharpCompress` 0.50.3
+- **Package:** `SharpCompress` 0.50.4
 - **Copyright:** Copyright (c) 2025 Adam Hathcock
 - **License:** [MIT License](https://github.com/adamhathcock/sharpcompress/blob/master/LICENSE)
 
@@ -23,13 +23,19 @@ ManagedDrive uses the following open-source software.
 
 ## ThrottledLogging
 
-- **Package:** `ThrottledLogging` 1.0.10
+- **Package:** `ThrottledLogging` 1.1.0
 - **Copyright:** Copyright (c) coldhighsun
 - **License:** [MIT License](https://github.com/coldhighsun/ThrottledLogging/blob/master/LICENSE)
 
+## GitHubReleaseUpdater
+
+- **Package:** `GitHubReleaseUpdater` 0.1.0
+- **Copyright:** Copyright (c) coldhighsun
+- **License:** [MIT License](https://github.com/coldhighsun/GitHubReleaseUpdater/blob/main/LICENSE)
+
 ## System.CommandLine
 
-- **Package:** `System.CommandLine` 2.0.10
+- **Package:** `System.CommandLine` 2.0.12
 - **Copyright:** © Microsoft Corporation
 - **License:** [MIT License](https://github.com/dotnet/command-line-api/blob/main/LICENSE.md)
 
@@ -47,7 +53,7 @@ ManagedDrive uses the following open-source software.
 
 ## Microsoft.Extensions.* (Hosting.WindowsServices, Logging, Logging.Abstractions, DependencyInjection)
 
-- **Packages:** `Microsoft.Extensions.Hosting.WindowsServices`, `Microsoft.Extensions.Logging`, `Microsoft.Extensions.Logging.Abstractions`, `Microsoft.Extensions.DependencyInjection` 10.0.10
+- **Packages:** `Microsoft.Extensions.Hosting.WindowsServices`, `Microsoft.Extensions.Logging`, `Microsoft.Extensions.Logging.Abstractions`, `Microsoft.Extensions.DependencyInjection` 10.0.12
 - **Copyright:** © Microsoft Corporation
 - **License:** [MIT License](https://github.com/dotnet/runtime/blob/main/LICENSE.TXT)
 

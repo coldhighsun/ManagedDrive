@@ -30,8 +30,8 @@ public partial class AboutDialog
             return;
         }
 
-        var (result, info) = await _updateCheckService.CheckSilentlyAsync();
-        if (result != UpdateCheckResult.UpdateAvailable || info == null)
+        var (success, info) = await _updateCheckService.CheckSilentlyAsync();
+        if (!success || info == null)
         {
             return;
         }
