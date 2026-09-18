@@ -99,6 +99,7 @@ public sealed class TrayIconController : IDisposable
         menu.Items.Add(_menuAbout);
         menu.Items.Add(new System.Windows.Forms.ToolStripSeparator());
         menu.Items.Add(_menuExit);
+        menu.HandleCreated += (_, _) => ApplyPopupDarkMode(menu);
         menu.Opening += (_, _) => dispatcher.Invoke(() =>
         {
             RebuildDiskMenuItems();
@@ -274,6 +275,36 @@ public sealed class TrayIconController : IDisposable
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool DestroyIcon(IntPtr hIcon);
 
+    [DllImport("dwmapi.dll")]
+    private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attribute, ref int value, int valueSize);
+
+    /// <summary>
+    /// <c>DWMWA_USE_IMMERSIVE_DARK_MODE</c>: tells DWM to draw a popup window's own chrome (border,
+    /// rounded-corner backdrop) in dark colors. Without this, a dark-themed
+    /// <see cref="System.Windows.Forms.ContextMenuStrip"/> keeps a light-colored surface around its
+    /// owner-drawn content on Windows 11, which washes out white menu text against it.
+    /// </summary>
+    private const int DwmwaUseImmersiveDarkMode = 20;
+
+    /// <summary>
+    /// Applies (or clears) <see cref="DwmwaUseImmersiveDarkMode"/> on the popup's native window so
+    /// its DWM-drawn chrome matches <see cref="ApplyTrayMenuTheme"/>'s owner-drawn colors. Requires
+    /// <paramref name="menu"/>'s handle to already exist; called from its
+    /// <see cref="System.Windows.Forms.Control.HandleCreated"/> event and again whenever the theme
+    /// changes while the handle is already live.
+    /// </summary>
+    private static void ApplyPopupDarkMode(System.Windows.Forms.ToolStrip popup)
+    {
+        if (!popup.IsHandleCreated)
+        {
+            return;
+        }
+
+        var isDark = ThemeManager.Instance.CurrentTheme == "dark";
+        var value = isDark ? 1 : 0;
+        DwmSetWindowAttribute(popup.Handle, DwmwaUseImmersiveDarkMode, ref value, sizeof(int));
+    }
+
     private void ApplyTrayMenuTheme()
     {
         if (_trayIcon.ContextMenuStrip is not { } menu)
@@ -288,7 +319,7 @@ public sealed class TrayIconController : IDisposable
         var foreground = isDark ? Color.White : Color.Black;
 
         menu.ShowImageMargin = false;
-        menu.Renderer = new System.Windows.Forms.ToolStripProfessionalRenderer(new TrayColorTable(isDark));
+        menu.Renderer = new TrayMenuRenderer(isDark);
         menu.BackColor = background;
         menu.ForeColor = foreground;
         foreach (System.Windows.Forms.ToolStripItem item in menu.Items)
@@ -302,6 +333,8 @@ public sealed class TrayIconController : IDisposable
                 }
             }
         }
+
+        ApplyPopupDarkMode(menu);
     }
 
     /// <summary>
@@ -437,6 +470,7 @@ public sealed class TrayIconController : IDisposable
             diskItem.DropDownItems.Add(Loc.Get("Btn.OpenInExplorer"), null, (_, _) => _dispatcher.Invoke(() => vm.OpenInExplorerCommand.Execute(null)));
             diskItem.DropDownItems.Add(Loc.Get("Btn.SaveImage"), null, (_, _) => _dispatcher.Invoke(() => _mainViewModel.SaveImageCommand.Execute(vm)));
             diskItem.DropDownItems.Add(Loc.Get("Btn.Unmount"), null, (_, _) => _dispatcher.Invoke(() => _mainViewModel.UnmountCommand.Execute(vm)));
+            diskItem.DropDown.HandleCreated += (_, _) => ApplyPopupDarkMode(diskItem.DropDown);
 
             menu.Items.Insert(insertIndex, diskItem);
             _diskMenuItems.Add(diskItem);
