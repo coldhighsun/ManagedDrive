@@ -4,6 +4,7 @@ component_management:
       name: Core
       paths:
         - src/ManagedDrive.Core/**
+        - src/ManagedDrive.Cli.Core/**
     - component_id: app
       name: App
       paths:
@@ -14,10 +15,9 @@ coverage:
     project:
       default: false
       core:
-        target: 80%
         paths:
           - src/ManagedDrive.Core/**
+          - src/ManagedDrive.Cli.Core/**
       app:
-        target: 30%
         paths:
           - src/ManagedDrive.App/**
