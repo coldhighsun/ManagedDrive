@@ -61,7 +61,7 @@ jobs:
           path: '**/results.trx'
 
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@ad3126e916f78f00edff4ed0317cf185271ccc2 # v5.4.2
+        uses: codecov/codecov-action@5975040f7f7d40edaff8d784b576fd65ae95c073 # v5.5.5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: '**/coverage.cobertura.xml'
