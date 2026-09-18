@@ -124,7 +124,7 @@ public partial class App
             () => _mainWindowHandle,
             _serviceProvider!.GetRequiredService<ILogger<SessionEndingSaveHandler>>());
         SystemEvents.SessionEnding += _sessionEndingSaveHandler.OnSessionEnding;
-        _mainViewModel = new(_mountManager, _settings, config, _serviceProvider!.GetRequiredService<ILogger<MainViewModel>>());
+        _mainViewModel = new(_mountManager, _settings, _serviceProvider!.GetRequiredService<ILogger<MainViewModel>>());
         _mainViewModel.ExitRequested += async (_, _) => await ShutdownAsync();
         _mainWindow = new(_mainViewModel);
         _mainWindow.Closing += MainWindow_Closing;
