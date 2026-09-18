@@ -51,7 +51,7 @@ jobs:
         shell: pwsh
 
       - name: Test
-        run: dotnet test --no-build -c Release --collect:"XPlat Code Coverage" -- --report-xunit-trx --report-xunit-trx-filename results.trx
+        run: dotnet test --no-build -c Release -- --report-xunit-trx --report-xunit-trx-filename results.trx --coverage --coverage-output-format cobertura
 
       - name: Upload test results
         if: always()
