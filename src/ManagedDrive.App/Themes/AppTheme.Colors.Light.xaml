@@ -4,11 +4,11 @@
     <SolidColorBrush x:Key="AppPrimary" Color="#3F51B5"/>
     <SolidColorBrush x:Key="AppPrimaryDark" Color="#303F9F"/>
     <SolidColorBrush x:Key="AppPrimaryForeground" Color="White"/>
-    <SolidColorBrush x:Key="AppForeground" Color="#DD000000"/>
-    <SolidColorBrush x:Key="AppForegroundLight" Color="#89000000"/>
+    <SolidColorBrush x:Key="AppForeground" Color="#FF000000"/>
+    <SolidColorBrush x:Key="AppForegroundLight" Color="#99000000"/>
     <SolidColorBrush x:Key="AppBackground" Color="#FFFFFF"/>
     <SolidColorBrush x:Key="AppSurface" Color="#FFFFFF"/>
-    <SolidColorBrush x:Key="AppDivider" Color="#1F000000"/>
+    <SolidColorBrush x:Key="AppDivider" Color="#33000000"/>
     <SolidColorBrush x:Key="AppProgressTrack" Color="#FFDADADA"/>
     <SolidColorBrush x:Key="AppToolBarBackground" Color="#F5F5F5"/>
     <SolidColorBrush x:Key="AppWarning" Color="#FF9800"/>

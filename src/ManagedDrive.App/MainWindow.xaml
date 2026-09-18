@@ -21,7 +21,7 @@
         TextElement.FontWeight="Regular"
         TextElement.FontSize="13"
         TextOptions.TextFormattingMode="Ideal"
-        TextOptions.TextRenderingMode="Auto"
+        TextOptions.TextRenderingMode="ClearType"
         AllowDrop="True"
         DragEnter="Window_DragEnter"
         Drop="Window_Drop">
