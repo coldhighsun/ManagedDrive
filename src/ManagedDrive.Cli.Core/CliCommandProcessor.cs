@@ -90,19 +90,19 @@ public static class CliCommandProcessor
 
             if (customZstdLevel is < 1 or > 22)
             {
-                outcome = new CliOutcome(false, "--custom-zstd-level must be between 1 and 22.", null, 1);
+                outcome = new(false, "--custom-zstd-level must be between 1 and 22.", null, 1);
                 return 1;
             }
 
             if (password is not null && passwordFile is not null)
             {
-                outcome = new CliOutcome(false, "--password and --password-file cannot both be specified.", null, 1);
+                outcome = new(false, "--password and --password-file cannot both be specified.", null, 1);
                 return 1;
             }
 
             if (passwordFile is not null && !TryReadPasswordFile(passwordFile, out password, out var readError))
             {
-                outcome = new CliOutcome(false, readError!, null, 1);
+                outcome = new(false, readError!, null, 1);
                 return 1;
             }
 
@@ -237,13 +237,13 @@ public static class CliCommandProcessor
             var specifiedCount = (password is not null ? 1 : 0) + (passwordFile is not null ? 1 : 0) + (remove ? 1 : 0);
             if (specifiedCount != 1)
             {
-                outcome = new CliOutcome(false, "Specify exactly one of --password, --password-file, or --remove.", null, 1);
+                outcome = new(false, "Specify exactly one of --password, --password-file, or --remove.", null, 1);
                 return 1;
             }
 
             if (passwordFile is not null && !TryReadPasswordFile(passwordFile, out password, out var readError))
             {
-                outcome = new CliOutcome(false, readError!, null, 1);
+                outcome = new(false, readError!, null, 1);
                 return 1;
             }
 
@@ -295,20 +295,20 @@ public static class CliCommandProcessor
 
             if (password is not null && passwordFile is not null)
             {
-                outcome = new CliOutcome(false, "--password and --password-file cannot both be specified.", null, 1);
+                outcome = new(false, "--password and --password-file cannot both be specified.", null, 1);
                 return 1;
             }
 
             if (passwordFile is not null && !TryReadPasswordFile(passwordFile, out password, out var readError))
             {
-                outcome = new CliOutcome(false, readError!, null, 1);
+                outcome = new(false, readError!, null, 1);
                 return 1;
             }
 
             var imagePath = parseResult.GetValue(createImageOption);
             if (password is not null && imagePath is null)
             {
-                outcome = new CliOutcome(false, "--password/--password-file requires --image.", null, 1);
+                outcome = new(false, "--password/--password-file requires --image.", null, 1);
                 return 1;
             }
 
@@ -456,13 +456,13 @@ public static class CliCommandProcessor
 
             if (autoSaveMinutes is not null && disableAutoSave)
             {
-                outcome = new CliOutcome(false, "--auto-save-minutes and --disable-auto-save cannot both be specified.", null, 1);
+                outcome = new(false, "--auto-save-minutes and --disable-auto-save cannot both be specified.", null, 1);
                 return 1;
             }
 
             if (capacityMb is null && label is null && autoSaveMinutes is null && !disableAutoSave)
             {
-                outcome = new CliOutcome(false, "Specify at least one of --capacity-mb, --label, --auto-save-minutes, or --disable-auto-save.", null, 1);
+                outcome = new(false, "Specify at least one of --capacity-mb, --label, --auto-save-minutes, or --disable-auto-save.", null, 1);
                 return 1;
             }
 
@@ -536,19 +536,19 @@ public static class CliCommandProcessor
 
             if (password is not null && passwordFile is not null)
             {
-                outcome = new CliOutcome(false, "--password and --password-file cannot both be specified.", null, 1);
+                outcome = new(false, "--password and --password-file cannot both be specified.", null, 1);
                 return 1;
             }
 
             if ((password is not null || passwordFile is not null) && format is not null)
             {
-                outcome = new CliOutcome(false, "--password/--password-file cannot be used together with --format.", null, 1);
+                outcome = new(false, "--password/--password-file cannot be used together with --format.", null, 1);
                 return 1;
             }
 
             if (passwordFile is not null && !TryReadPasswordFile(passwordFile, out password, out var readError))
             {
-                outcome = new CliOutcome(false, readError!, null, 1);
+                outcome = new(false, readError!, null, 1);
                 return 1;
             }
 

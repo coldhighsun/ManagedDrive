@@ -11,8 +11,8 @@ public class CliCommandProcessorSnapshotTests
         {
             Snapshots =
             [
-                new CliSnapshotInfo(1, DateTimeOffset.UtcNow, 1024),
-                new CliSnapshotInfo(2, DateTimeOffset.UtcNow.AddDays(-1), 2048),
+                new(1, DateTimeOffset.UtcNow, 1024),
+                new(2, DateTimeOffset.UtcNow.AddDays(-1), 2048),
             ],
         };
 

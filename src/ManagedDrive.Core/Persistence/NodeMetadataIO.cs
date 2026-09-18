@@ -50,6 +50,6 @@ internal static class NodeMetadataIO
         var secLen = reader.ReadInt32();
         var security = secLen > 0 ? reader.ReadBytes(secLen) : null;
 
-        return new NodeMetadata(path, fileInfo, security);
+        return new(path, fileInfo, security);
     }
 }

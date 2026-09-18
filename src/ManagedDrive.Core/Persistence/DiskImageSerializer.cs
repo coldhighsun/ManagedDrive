@@ -759,7 +759,7 @@ public static class DiskImageSerializer
                 tag = reader.ReadBytes(TagSize);
             }
 
-            segments[i] = new SegmentIndexEntry(nodeCount, payloadLength, contentHash, nonce, tag);
+            segments[i] = new(nodeCount, payloadLength, contentHash, nonce, tag);
         }
 
         var nodeMap = new FileNodeMap();
@@ -833,7 +833,7 @@ public static class DiskImageSerializer
     {
         var compressed = version == 2 && level != ImageCompressionLevel.None;
         return compressed
-            ? new BinaryReader(new GZipStream(stream, CompressionMode.Decompress, leaveOpen: true), System.Text.Encoding.UTF8)
+            ? new(new GZipStream(stream, CompressionMode.Decompress, leaveOpen: true), System.Text.Encoding.UTF8)
             : reader;
     }
 
@@ -1471,7 +1471,7 @@ public static class DiskImageSerializer
         FileStream? candidateStream = null;
         try
         {
-            candidateStream = new FileStream(imagePath, FileMode.Open, FileAccess.Read, FileShare.Read);
+            candidateStream = new(imagePath, FileMode.Open, FileAccess.Read, FileShare.Read);
             var candidateReader = new BinaryReader(candidateStream, System.Text.Encoding.UTF8, leaveOpen: true);
 
             var magic = candidateReader.ReadBytes(4);
@@ -1529,7 +1529,7 @@ public static class DiskImageSerializer
                     tag = candidateReader.ReadBytes(TagSize);
                 }
 
-                entries[i] = new SegmentIndexEntry(nodeCount, payloadLength, contentHash, nonce, tag);
+                entries[i] = new(nodeCount, payloadLength, contentHash, nonce, tag);
             }
 
             stream = candidateStream;

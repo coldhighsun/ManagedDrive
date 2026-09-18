@@ -368,7 +368,7 @@ public sealed class TrayIconController : IDisposable
             using var bitmap = new Bitmap(size.Width, size.Height);
             using (var graphics = Graphics.FromImage(bitmap))
             {
-                graphics.DrawIcon(baseIcon, new Rectangle(0, 0, size.Width, size.Height));
+                graphics.DrawIcon(baseIcon, new(0, 0, size.Width, size.Height));
                 if (state == 3)
                 {
                     DrawWarningBadge(graphics, badgeRect);

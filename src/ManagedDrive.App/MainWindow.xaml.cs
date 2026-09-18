@@ -134,7 +134,7 @@ public partial class MainWindow
         }
 
         _speedPopupOpenTimer?.Stop();
-        _speedPopupOpenTimer = new DispatcherTimer { Interval = SpeedPopupOpenDelay };
+        _speedPopupOpenTimer = new() { Interval = SpeedPopupOpenDelay };
         _speedPopupOpenTimer.Tick += (_, _) =>
         {
             _speedPopupOpenTimer?.Stop();
@@ -165,7 +165,7 @@ public partial class MainWindow
 
         _speedPopupCloseTimer?.Stop();
         _pendingCloseSpeedPopup = popup;
-        _speedPopupCloseTimer = new DispatcherTimer { Interval = SpeedPopupCloseDelay };
+        _speedPopupCloseTimer = new() { Interval = SpeedPopupCloseDelay };
         _speedPopupCloseTimer.Tick += (_, _) =>
         {
             _speedPopupCloseTimer?.Stop();

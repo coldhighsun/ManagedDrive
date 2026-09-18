@@ -446,7 +446,7 @@ public partial class App
         TeardownBeforeMountManagerDispose();
 
         await Task.Run(() => _mountManager?.Dispose((disk, diskFraction, overallFraction, totalBytes) =>
-            Application.Current.Dispatcher.BeginInvoke(() =>
+            Current.Dispatcher.BeginInvoke(() =>
                 _mainViewModel?.ReportExitSaveProgress(disk.Options.MountPoint, overallFraction, diskFraction, totalBytes))));
 
         _logger.LogInformation("ShutdownAsync completed; shutting down application.");

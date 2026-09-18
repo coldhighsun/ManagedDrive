@@ -521,7 +521,7 @@ public sealed class RamDisk : IDisposable
         try
         {
             _host.Notify([
-                new NotifyInfo
+                new()
                 {
                     FileName = "\\",
                     Action = NotifyAction.Modified,

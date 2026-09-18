@@ -67,7 +67,7 @@ public partial class SnapshotDiffDialog
             {
                 if (!level.TryGetValue(segment, out var node))
                 {
-                    node = new TreeBuilder(segment);
+                    node = new(segment);
                     level[segment] = node;
                 }
 
