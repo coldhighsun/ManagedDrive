@@ -1,0 +1,23 @@
+component_management:
+  individual_components:
+    - component_id: core
+      name: Core
+      paths:
+        - src/ManagedDrive.Core/**
+    - component_id: app
+      name: App
+      paths:
+        - src/ManagedDrive.App/**
+
+coverage:
+  status:
+    project:
+      default: false
+      core:
+        target: 80%
+        paths:
+          - src/ManagedDrive.Core/**
+      app:
+        target: 30%
+        paths:
+          - src/ManagedDrive.App/**
