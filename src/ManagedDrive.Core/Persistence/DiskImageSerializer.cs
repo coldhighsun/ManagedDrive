@@ -763,6 +763,7 @@ public static class DiskImageSerializer
         }
 
         var nodeMap = new FileNodeMap();
+        var segmentIndex = 0;
 
         foreach (var segment in segments)
         {
@@ -795,6 +796,15 @@ public static class DiskImageSerializer
                 for (var i = 0; i < segment.NodeCount; i++)
                 {
                     var (path, node) = ReadNode(payloadReader);
+
+                    // Stamp the freshly-loaded node as already saved in this segment, so a
+                    // subsequent incremental save recognizes it as clean and reuses the segment
+                    // verbatim instead of treating every node as "never saved" (SavedSegmentIndex
+                    // defaults to -1) and rewriting the whole image on the very next save.
+                    node.SavedContentVersion = node.ContentVersion;
+                    node.SavedMetadataVersion = node.MetadataVersion;
+                    node.SavedSegmentIndex = segmentIndex;
+
                     nodeMap.Add(path, node);
                     reportTick?.Invoke();
                 }
@@ -806,6 +816,8 @@ public static class DiskImageSerializer
                     nodeStream.Dispose();
                 }
             }
+
+            segmentIndex++;
         }
 
         return nodeMap;
