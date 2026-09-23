@@ -405,18 +405,21 @@ public sealed class FileContent
         var chunkIndex = 0;
         var destOffset = 0;
 
-        while (remaining > 0)
+        lock (_lock)
         {
-            var n = (int)Math.Min(remaining, ChunkSize);
-            var chunk = _chunks[chunkIndex];
-            if (chunk != null)
+            while (remaining > 0)
             {
-                Buffer.BlockCopy(chunk, 0, result, destOffset, n);
-            }
+                var n = (int)Math.Min(remaining, ChunkSize);
+                var chunk = _chunks[chunkIndex];
+                if (chunk != null)
+                {
+                    Buffer.BlockCopy(chunk, 0, result, destOffset, n);
+                }
 
-            remaining -= n;
-            destOffset += n;
-            chunkIndex++;
+                remaining -= n;
+                destOffset += n;
+                chunkIndex++;
+            }
         }
 
         return result;
@@ -431,28 +434,31 @@ public sealed class FileContent
     /// </returns>
     public FileContent Clone()
     {
-        var clone = CreateZeroed((ulong)_length);
-
-        var remaining = _length;
-        var chunkIndex = 0;
-        while (remaining > 0)
+        lock (_lock)
         {
-            // Copy only the used portion of each chunk; capacities may differ between the two
-            // instances (a shrink can leave a larger terminal capacity behind), but the logical
-            // bytes match.
-            var n = (int)Math.Min(remaining, ChunkSize);
-            var chunk = _chunks[chunkIndex];
-            if (chunk != null)
+            var clone = CreateZeroed((ulong)_length);
+
+            var remaining = _length;
+            var chunkIndex = 0;
+            while (remaining > 0)
             {
-                var cloneChunk = clone._chunks[chunkIndex] ??= clone.AllocateChunk(chunkIndex);
-                Buffer.BlockCopy(chunk, 0, cloneChunk, 0, n);
+                // Copy only the used portion of each chunk; capacities may differ between the two
+                // instances (a shrink can leave a larger terminal capacity behind), but the logical
+                // bytes match.
+                var n = (int)Math.Min(remaining, ChunkSize);
+                var chunk = _chunks[chunkIndex];
+                if (chunk != null)
+                {
+                    var cloneChunk = clone._chunks[chunkIndex] ??= clone.AllocateChunk(chunkIndex);
+                    Buffer.BlockCopy(chunk, 0, cloneChunk, 0, n);
+                }
+
+                remaining -= n;
+                chunkIndex++;
             }
 
-            remaining -= n;
-            chunkIndex++;
+            return clone;
         }
-
-        return clone;
     }
 
     private static int ChunkCountFor(long length) => (int)((length + ChunkSize - 1) / ChunkSize);
