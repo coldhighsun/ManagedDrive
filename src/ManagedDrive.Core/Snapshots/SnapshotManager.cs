@@ -153,15 +153,16 @@ public static partial class SnapshotManager
                 continue;
             }
 
-            var currentIsEmpty = node.FileData is null || node.FileInfo.FileSize == 0;
+            // Read FileData once: it can be swapped or nulled concurrently by a live write.
+            var data = node.FileData;
             bool matches;
-            if (currentIsEmpty)
+            if (data is null || node.FileInfo.FileSize == 0)
             {
                 matches = snapshotEntry.FileSize == 0;
             }
             else
             {
-                var currentHash = ComputeHash(node);
+                var currentHash = ComputeHash(node, data);
                 matches = snapshotEntry.Hash is not null && currentHash.AsSpan().SequenceEqual(snapshotEntry.Hash);
             }
 
@@ -437,16 +438,16 @@ public static partial class SnapshotManager
     /// when content actually changes — this avoids rehashing every file on every dirty
     /// auto-save tick when only a subset of files changed since the last snapshot.
     /// </summary>
-    private static byte[] ComputeHash(FileNode node)
+    private static byte[] ComputeHash(FileNode node, FileContent data)
     {
         if (node.CachedContentHash is { } cached && node.CachedContentHashVersion == node.ContentVersion)
         {
             return cached;
         }
 
-        var fileSize = (int)Math.Min(node.FileInfo.FileSize, (ulong)node.FileData!.Length);
+        var fileSize = (long)Math.Min(node.FileInfo.FileSize, (ulong)data.Length);
         using var incrementalHash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
-        node.FileData.HashInto(incrementalHash, fileSize);
+        data.HashInto(incrementalHash, fileSize);
         var hash = incrementalHash.GetHashAndReset();
 
         node.CachedContentHash = hash;

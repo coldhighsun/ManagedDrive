@@ -252,6 +252,81 @@ public class FileContentTests
         Assert.Equal(data, copy.ToArray());
     }
 
+    // The members below are handed a byte count computed from the node's FileSize before they
+    // take the content lock, so a concurrent truncation can leave the count past Length. They
+    // must still produce exactly that many bytes (zero-padded) rather than throw, or a save
+    // racing a truncate fails outright and the image's length prefix no longer matches its data.
+
+    [Fact]
+    public void CopyTo_CountBeyondShrunkLength_PadsWithZeros()
+    {
+        var content = FileContent.FromSpan(Filled(FileContent.ChunkSize * 2, 7), FileContent.ChunkSize * 2);
+        content.Resize(512);
+        using var ms = new MemoryStream();
+
+        content.CopyTo(ms, FileContent.ChunkSize * 2);
+
+        var expected = new byte[FileContent.ChunkSize * 2];
+        Array.Fill(expected, (byte)7, 0, 512);
+        Assert.Equal(expected, ms.ToArray());
+    }
+
+    [Fact]
+    public void HashInto_CountBeyondShrunkLength_HashesZeroPaddedBytes()
+    {
+        var content = FileContent.FromSpan(Filled(FileContent.ChunkSize * 2, 7), FileContent.ChunkSize * 2);
+        content.Resize(512);
+
+        using var incremental = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+        content.HashInto(incremental, FileContent.ChunkSize * 2);
+
+        var expected = new byte[FileContent.ChunkSize * 2];
+        Array.Fill(expected, (byte)7, 0, 512);
+        Assert.Equal(SHA256.HashData(expected), incremental.GetHashAndReset());
+    }
+
+    [Fact]
+    public void AsReadOnlyStream_ContentShrunkMidRead_PadsWithZeros()
+    {
+        var content = FileContent.FromSpan(Filled(FileContent.ChunkSize * 2, 7), FileContent.ChunkSize * 2);
+        using var stream = content.AsReadOnlyStream(FileContent.ChunkSize * 2);
+        var buffer = new byte[FileContent.ChunkSize * 2];
+
+        var first = stream.Read(buffer, 0, 1024);
+        content.Resize(512);
+        var rest = 0;
+        int read;
+        while ((read = stream.Read(buffer, first + rest, buffer.Length - first - rest)) > 0)
+        {
+            rest += read;
+        }
+
+        var expected = new byte[FileContent.ChunkSize * 2];
+        Array.Fill(expected, (byte)7, 0, 1024);
+        Assert.Equal(expected.Length, first + rest);
+        Assert.Equal(expected, buffer);
+    }
+
+    [Fact]
+    public void ToArray_CountBeyondShrunkLength_PadsWithZeros()
+    {
+        var content = FileContent.FromSpan(Filled(FileContent.ChunkSize * 2, 7), FileContent.ChunkSize * 2);
+        content.Resize(512);
+
+        var bytes = content.ToArray(FileContent.ChunkSize * 2);
+
+        var expected = new byte[FileContent.ChunkSize * 2];
+        Array.Fill(expected, (byte)7, 0, 512);
+        Assert.Equal(expected, bytes);
+    }
+
+    private static byte[] Filled(int length, byte value)
+    {
+        var data = new byte[length];
+        Array.Fill(data, value);
+        return data;
+    }
+
     private static void WriteBytes(FileContent content, long offset, byte[] data)
     {
         var ptr = Marshal.AllocHGlobal(data.Length);

@@ -298,6 +298,8 @@ public sealed class FileContent
 
     /// <summary>
     /// Writes the first <paramref name="count"/> bytes of the content to <paramref name="destination"/>.
+    /// Always writes exactly <paramref name="count"/> bytes: any past <see cref="Length"/> (the
+    /// content shrank after the caller computed the count) are written as zero.
     /// </summary>
     /// <param name="destination">The stream to write to.</param>
     /// <param name="count">Number of leading bytes to write.</param>
@@ -305,15 +307,11 @@ public sealed class FileContent
     {
         lock (_lock)
         {
-            var remaining = count;
-            var chunkIndex = 0;
-
-            while (remaining > 0)
+            for (var pos = 0L; pos < count;)
             {
-                var n = (int)Math.Min(remaining, ChunkSize);
-                destination.Write(_chunks[chunkIndex] ?? ZeroChunk, 0, n);
-                remaining -= n;
-                chunkIndex++;
+                var run = ReadableRun(pos, count - pos);
+                destination.Write(run);
+                pos += run.Length;
             }
         }
     }
@@ -362,7 +360,8 @@ public sealed class FileContent
 
     /// <summary>
     /// Feeds the first <paramref name="count"/> bytes of the content into an incremental hash,
-    /// without materializing a contiguous copy.
+    /// without materializing a contiguous copy. Bytes past <see cref="Length"/> hash as zero,
+    /// matching <see cref="CopyTo"/>.
     /// </summary>
     /// <param name="hash">The incremental hash to append to.</param>
     /// <param name="count">Number of leading bytes to hash.</param>
@@ -370,15 +369,11 @@ public sealed class FileContent
     {
         lock (_lock)
         {
-            var remaining = count;
-            var chunkIndex = 0;
-
-            while (remaining > 0)
+            for (var pos = 0L; pos < count;)
             {
-                var n = (int)Math.Min(remaining, ChunkSize);
-                hash.AppendData((_chunks[chunkIndex] ?? ZeroChunk).AsSpan(0, n));
-                remaining -= n;
-                chunkIndex++;
+                var run = ReadableRun(pos, count - pos);
+                hash.AppendData(run);
+                pos += run.Length;
             }
         }
     }
@@ -396,6 +391,7 @@ public sealed class FileContent
     /// <summary>
     /// Materializes the first <paramref name="count"/> bytes into a contiguous array. Prefer the
     /// streaming members where possible; this allocates a single (potentially large) array.
+    /// Bytes past <see cref="Length"/> come back as zero, matching <see cref="CopyTo"/>.
     /// </summary>
     /// <param name="count">Number of leading bytes to copy out.</param>
     /// <returns>
@@ -404,24 +400,16 @@ public sealed class FileContent
     public byte[] ToArray(long count)
     {
         var result = new byte[count];
-        var remaining = count;
-        var chunkIndex = 0;
-        var destOffset = 0;
 
         lock (_lock)
         {
-            while (remaining > 0)
+            // The array starts zeroed, so only the part still inside Length needs copying.
+            var end = Math.Min(count, _length);
+            for (var pos = 0L; pos < end;)
             {
-                var n = (int)Math.Min(remaining, ChunkSize);
-                var chunk = _chunks[chunkIndex];
-                if (chunk != null)
-                {
-                    Buffer.BlockCopy(chunk, 0, result, destOffset, n);
-                }
-
-                remaining -= n;
-                destOffset += n;
-                chunkIndex++;
+                var run = ReadableRun(pos, end - pos);
+                run.CopyTo(result.AsSpan((int)pos));
+                pos += run.Length;
             }
         }
 
@@ -465,6 +453,30 @@ public sealed class FileContent
     }
 
     private static int ChunkCountFor(long length) => (int)((length + ChunkSize - 1) / ChunkSize);
+
+    /// <summary>
+    /// Returns the logical bytes starting at <paramref name="position"/>, up to
+    /// <paramref name="maxCount"/> of them, as one span that never crosses a chunk boundary or
+    /// the <see cref="_length"/> boundary. Positions at or past <see cref="_length"/> read as zero
+    /// — the export paths take their byte count from the node's <c>FileSize</c> before they take
+    /// <see cref="_lock"/>, so a truncation racing them can leave that count past the current
+    /// length, and bytes a shrink left behind in a kept chunk's slack must not leak out as data.
+    /// Caller must hold <see cref="_lock"/>.
+    /// </summary>
+    private ReadOnlySpan<byte> ReadableRun(long position, long maxCount)
+    {
+        var chunkOffset = (int)(position % ChunkSize);
+        var n = (int)Math.Min(maxCount, ChunkSize - chunkOffset);
+
+        if (position >= _length)
+        {
+            return ZeroChunk.AsSpan(chunkOffset, n);
+        }
+
+        n = (int)Math.Min(n, _length - position);
+        var chunk = _chunks[(int)(position / ChunkSize)] ?? ZeroChunk;
+        return chunk.AsSpan(chunkOffset, n);
+    }
 
     /// <summary>
     /// Computes the backing-array capacity for a terminal chunk holding <paramref name="usedBytes"/>
@@ -592,14 +604,11 @@ public sealed class FileContent
 
                 while (read < toRead)
                 {
-                    var chunkIndex = (int)(_position / ChunkSize);
-                    var chunkOffset = (int)(_position % ChunkSize);
-                    var n = Math.Min(toRead - read, ChunkSize - chunkOffset);
+                    var run = content.ReadableRun(_position, toRead - read);
+                    run.CopyTo(buffer.AsSpan(offset + read));
 
-                    Buffer.BlockCopy(content._chunks[chunkIndex] ?? ZeroChunk, chunkOffset, buffer, offset + read, n);
-
-                    _position += n;
-                    read += n;
+                    _position += run.Length;
+                    read += run.Length;
                 }
 
                 return read;
