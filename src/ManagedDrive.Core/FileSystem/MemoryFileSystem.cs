@@ -203,10 +203,16 @@ public sealed class MemoryFileSystem : FileSystemBase
             MarkDirty();
         }
 
-        if ((flags & CleanupSetAllocationSize) != 0 && !node.IsDirectory)
+        if ((flags & CleanupSetAllocationSize) != 0 && !node.IsDirectory && !_readOnly)
         {
-            SetFileSizeCore(node, node.FileInfo.FileSize, setAllocationSize: false);
-            MarkDirty();
+            // WinFsp asks for the allocation to be trimmed to the file size on close, releasing
+            // space preallocated but never written. Only a real change marks the disk dirty.
+            var versionBefore = node.ContentVersion;
+            SetFileSizeCore(node, node.FileInfo.FileSize, setAllocationSize: true);
+            if (node.ContentVersion != versionBefore)
+            {
+                MarkDirty();
+            }
         }
     }
 
@@ -676,6 +682,7 @@ public sealed class MemoryFileSystem : FileSystemBase
         }
 
         var node = (FileNode)fileNode;
+        var before = node.FileInfo;
 
         if (fileAttributes != InvalidFileAttributes)
         {
@@ -699,8 +706,18 @@ public sealed class MemoryFileSystem : FileSystemBase
             node.FileInfo.ChangeTime = changeTime;
         }
 
-        node.MetadataVersion++;
-        MarkDirty();
+        // Only a real change marks the disk dirty: a request that leaves every field as it was
+        // (nothing requested, or the current values re-asserted) must not trigger an auto-save.
+        if (node.FileInfo.FileAttributes != before.FileAttributes ||
+            node.FileInfo.CreationTime != before.CreationTime ||
+            node.FileInfo.LastAccessTime != before.LastAccessTime ||
+            node.FileInfo.LastWriteTime != before.LastWriteTime ||
+            node.FileInfo.ChangeTime != before.ChangeTime)
+        {
+            node.MetadataVersion++;
+            MarkDirty();
+        }
+
         fileInfo = node.FileInfo;
         return STATUS_SUCCESS;
     }
@@ -728,8 +745,16 @@ public sealed class MemoryFileSystem : FileSystemBase
         }
 
         var node = (FileNode)fileNode;
+        var versionBefore = node.ContentVersion;
         var result = SetFileSizeCore(node, newSize, setAllocationSize);
-        MarkDirty();
+
+        // SetFileSizeCore bumps ContentVersion exactly when it changes something; a no-op resize
+        // (common: callers re-assert the current size) must not trigger an auto-save.
+        if (node.ContentVersion != versionBefore)
+        {
+            MarkDirty();
+        }
+
         fileInfo = node.FileInfo;
         return result;
     }
