@@ -120,6 +120,92 @@ public sealed class FileNodeMapTests
     }
 
     [Fact]
+    public void GetChildren_SiblingsSortingAroundSeparator_AllReturnedDescendantsExcluded()
+    {
+        // ' ' and '-' sort before '\', ']' and '_' sort after it (OrdinalIgnoreCase), so these
+        // siblings interleave with the "\A\..." subtree in _sortedKeys.
+        var map = new FileNodeMap();
+        map.Add("\\", MakeDir());
+        map.Add("\\A", MakeDir());
+        map.Add("\\A B", MakeFile());
+        map.Add("\\A-1", MakeFile());
+        map.Add("\\A\\x", MakeFile());
+        map.Add("\\A\\Deep", MakeDir());
+        map.Add("\\A\\Deep\\y", MakeFile());
+        map.Add("\\A]", MakeFile());
+        map.Add("\\A_", MakeFile());
+        map.Add("\\a2", MakeDir());
+        map.Add("\\a2\\z", MakeFile());
+        map.Add("\\B", MakeFile());
+
+        var keys = map.GetChildren("\\", null).Select(kvp => kvp.Key).ToList();
+
+        Assert.Equal(["\\A", "\\A B", "\\A-1", "\\a2", "\\A]", "\\A_", "\\B"], keys);
+    }
+
+    [Fact]
+    public void GetChildren_PagedWithMarkers_VisitsEveryChildExactlyOnce()
+    {
+        var map = new FileNodeMap();
+        map.Add("\\", MakeDir());
+        map.Add("\\Dir", MakeDir());
+        var expected = new List<string>();
+        for (var i = 0; i < 20; i++)
+        {
+            var child = $"\\Dir\\c{i:D2}";
+            expected.Add(child);
+            map.Add(child, MakeDir());
+            map.Add(child + "\\inner", MakeDir());
+            map.Add(child + "\\inner\\leaf.txt", MakeFile());
+        }
+
+        var visited = new List<string>();
+        string? marker = null;
+        while (true)
+        {
+            var page = map.GetChildren("\\Dir", marker).Take(3).ToList();
+            if (page.Count == 0)
+            {
+                break;
+            }
+
+            visited.AddRange(page.Select(kvp => kvp.Key));
+            marker = page[^1].Value.LeafName;
+        }
+
+        Assert.Equal(expected, visited);
+    }
+
+    [Fact]
+    public void GetChildren_MarkerIsDirectoryWithSubtree_SkipsItsDescendants()
+    {
+        var map = new FileNodeMap();
+        map.Add("\\", MakeDir());
+        map.Add("\\A", MakeDir());
+        map.Add("\\A\\x", MakeFile());
+        map.Add("\\A\\y", MakeFile());
+        map.Add("\\B", MakeFile());
+
+        var keys = map.GetChildren("\\", "a").Select(kvp => kvp.Key).ToList();
+
+        Assert.Equal(["\\B"], keys);
+    }
+
+    [Fact]
+    public void HasChildren_OnlyDeepDescendantsBeforeDirectChild_ReturnsTrue()
+    {
+        var map = new FileNodeMap();
+        map.Add("\\Sub", MakeDir());
+        map.Add("\\Sub\\A", MakeDir());
+        map.Add("\\Sub\\A\\B", MakeDir());
+        map.Add("\\Sub\\A\\B\\C", MakeFile());
+
+        Assert.True(map.HasChildren("\\Sub"));
+        Assert.True(map.HasChildren("\\Sub\\A"));
+        Assert.False(map.HasChildren("\\Sub\\A\\B\\C"));
+    }
+
+    [Fact]
     public void HasChildren_EmptyDirectory_ReturnsFalse()
     {
         var map = new FileNodeMap();
