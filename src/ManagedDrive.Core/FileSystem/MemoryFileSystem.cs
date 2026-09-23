@@ -15,24 +15,7 @@ public sealed class MemoryFileSystem : FileSystemBase
 {
     private const uint InvalidFileAttributes = FileNode.InvalidFileAttributes;
 
-    /// <summary>
-    /// Safety margin of physical memory, in bytes, that must remain available after a growing
-    /// write for it to be allowed. Growth allocates plain managed <c>byte[]</c> chunks (see
-    /// <see cref="FileContent"/>), so nothing else in the system is warned as free memory runs
-    /// out; without this reserve, a large enough RAM disk write could push the whole machine
-    /// into swapping or an out-of-memory condition before the write itself ever fails.
-    /// </summary>
-    private const ulong LowMemoryReserveBytes = 256UL * 1024 * 1024;
-
-    /// <summary>
-    /// How long a reading from <see cref="_availableMemoryProvider"/> may be reused, in
-    /// milliseconds. Querying it (<c>GlobalMemoryStatusEx</c>) costs ~0.7 µs, which on a
-    /// small-block streaming append — where nearly every write extends the allocation — was
-    /// most of the write's cost. See <see cref="WouldExceedSystemMemory"/>.
-    /// </summary>
-    private const long MemoryHeadroomRefreshMs = 100;
-
-    private readonly Func<ulong> _availableMemoryProvider;
+    private readonly MemoryHeadroomBudget _memoryBudget;
     private readonly bool _readOnly;
 
     /// <summary>
@@ -50,19 +33,6 @@ public sealed class MemoryFileSystem : FileSystemBase
     private string? _lastContentReadPath;
     private string? _lastContentWritePath;
     private long _lastContentWriteTicks;
-
-    /// <summary>
-    /// Bytes this file system may still allocate before dipping into
-    /// <see cref="LowMemoryReserveBytes"/>, as of the last provider reading minus everything
-    /// granted since. Negative once exhausted. Only trusted until <see cref="_memoryHeadroomExpiresAt"/>.
-    /// </summary>
-    private long _memoryHeadroom;
-
-    /// <summary>
-    /// <see cref="Environment.TickCount64"/> value after which <see cref="_memoryHeadroom"/> is
-    /// stale and must be re-read. Starts at 0 so the first check always queries.
-    /// </summary>
-    private long _memoryHeadroomExpiresAt;
     private ulong _maxCapacity;
     private long _totalBytesRead;
     private long _totalBytesWritten;
@@ -76,14 +46,16 @@ public sealed class MemoryFileSystem : FileSystemBase
     /// <param name="readOnly">When <c>true</c>, all mutating operations return <c>STATUS_MEDIA_WRITE_PROTECTED</c>.</param>
     /// <param name="availableMemoryProvider">
     /// Overrides the source of "currently available physical memory" used by the low-memory
-    /// write guard, for test injection. Defaults to <see cref="SystemMemoryInfo.GetAvailablePhysicalBytes"/>.
+    /// write guard, for test injection; such a file system gets its own private budget. Defaults to
+    /// <see cref="SystemMemoryInfo.GetAvailablePhysicalBytes"/> via the process-wide
+    /// <see cref="MemoryHeadroomBudget.Shared"/>.
     /// </param>
     public MemoryFileSystem(ulong maxCapacity, string volumeLabel, bool readOnly = false, Func<ulong>? availableMemoryProvider = null)
     {
         _readOnly = readOnly;
         _maxCapacity = maxCapacity;
         _volumeLabel = volumeLabel;
-        _availableMemoryProvider = availableMemoryProvider ?? SystemMemoryInfo.GetAvailablePhysicalBytes;
+        _memoryBudget = availableMemoryProvider == null ? MemoryHeadroomBudget.Shared : new(availableMemoryProvider);
         NodeMap = new();
     }
 
@@ -97,14 +69,16 @@ public sealed class MemoryFileSystem : FileSystemBase
     /// <param name="readOnly">When <c>true</c>, all mutating operations return <c>STATUS_MEDIA_WRITE_PROTECTED</c>.</param>
     /// <param name="availableMemoryProvider">
     /// Overrides the source of "currently available physical memory" used by the low-memory
-    /// write guard, for test injection. Defaults to <see cref="SystemMemoryInfo.GetAvailablePhysicalBytes"/>.
+    /// write guard, for test injection; such a file system gets its own private budget. Defaults to
+    /// <see cref="SystemMemoryInfo.GetAvailablePhysicalBytes"/> via the process-wide
+    /// <see cref="MemoryHeadroomBudget.Shared"/>.
     /// </param>
     public MemoryFileSystem(ulong maxCapacity, string volumeLabel, FileNodeMap existingNodeMap, bool readOnly = false, Func<ulong>? availableMemoryProvider = null)
     {
         _readOnly = readOnly;
         _maxCapacity = maxCapacity;
         _volumeLabel = volumeLabel;
-        _availableMemoryProvider = availableMemoryProvider ?? SystemMemoryInfo.GetAvailablePhysicalBytes;
+        _memoryBudget = availableMemoryProvider == null ? MemoryHeadroomBudget.Shared : new(availableMemoryProvider);
         NodeMap = existingNodeMap;
     }
 
@@ -1153,44 +1127,9 @@ public sealed class MemoryFileSystem : FileSystemBase
 
     /// <summary>
     /// Returns <c>true</c> when allocating <paramref name="extra"/> more bytes would leave less
-    /// than <see cref="LowMemoryReserveBytes"/> of physical memory available system-wide. This is
-    /// independent of <see cref="WouldExceedCapacity"/> — a disk can still have configured
-    /// capacity headroom while the host machine itself is nearly out of RAM.
+    /// than <see cref="MemoryHeadroomBudget.ReserveBytes"/> of physical memory available
+    /// system-wide. This is independent of <see cref="WouldExceedCapacity"/> — a disk can still
+    /// have configured capacity headroom while the host machine itself is nearly out of RAM.
     /// </summary>
-    /// <remarks>
-    /// Rather than querying the provider on every growing write, a reading is turned into a
-    /// headroom budget that each granted allocation is atomically charged against, and reused for
-    /// up to <see cref="MemoryHeadroomRefreshMs"/>. A request the cached budget can't cover always
-    /// falls through to a fresh reading, so a denial is never based on stale data; staleness can
-    /// only let through memory another process consumed within the refresh window. Two threads
-    /// refreshing at once may each overwrite the other's charge — at most one allocation per
-    /// refresh goes unaccounted, which the next refresh corrects anyway. Freed memory is not
-    /// credited back; the next refresh picks it up.
-    /// </remarks>
-    private bool WouldExceedSystemMemory(ulong extra)
-    {
-        if (extra == 0)
-        {
-            return false;
-        }
-
-        var charge = (long)Math.Min(extra, long.MaxValue);
-        var now = Environment.TickCount64;
-
-        if (now < Volatile.Read(ref _memoryHeadroomExpiresAt) &&
-            Interlocked.Add(ref _memoryHeadroom, -charge) >= 0)
-        {
-            return false;
-        }
-
-        var available = _availableMemoryProvider();
-        var headroom = available > LowMemoryReserveBytes
-            ? (long)Math.Min(available - LowMemoryReserveBytes, long.MaxValue)
-            : 0;
-        var exceeds = headroom < charge;
-
-        Volatile.Write(ref _memoryHeadroom, exceeds ? headroom : headroom - charge);
-        Volatile.Write(ref _memoryHeadroomExpiresAt, now + MemoryHeadroomRefreshMs);
-        return exceeds;
-    }
+    private bool WouldExceedSystemMemory(ulong extra) => _memoryBudget.WouldExceed(extra);
 }
