@@ -258,15 +258,22 @@ public sealed class FileContent
     /// The size of every still-sparse chunk the range touches. The range must lie within
     /// <see cref="Length"/>. Caller must hold <see cref="_lock"/>.
     /// </summary>
-    private long WriteCostCore(ulong offset, uint length)
+    private long WriteCostCore(ulong offset, uint length) => SparseCost((long)offset, length);
+
+    /// <summary>
+    /// The allocation size of every still-sparse chunk overlapping
+    /// <c>[<paramref name="start"/>, <paramref name="start"/> + <paramref name="count"/>)</c>,
+    /// which must lie within <see cref="Length"/>.
+    /// </summary>
+    private long SparseCost(long start, long count)
     {
-        if (length == 0)
+        if (count <= 0)
         {
             return 0;
         }
 
-        var first = (int)(offset / ChunkSize);
-        var last = (int)((offset + length - 1) / ChunkSize);
+        var first = (int)(start / ChunkSize);
+        var last = (int)((start + count - 1) / ChunkSize);
         var cost = 0L;
 
         for (var i = first; i <= last; i++)
@@ -467,8 +474,27 @@ public sealed class FileContent
     /// <param name="source">The stream to read from.</param>
     /// <param name="count">Maximum number of bytes to read.</param>
     /// <returns>The number of bytes actually filled, which is less than <paramref name="count"/> if <paramref name="source"/> ended early.</returns>
-    public long FillFromStream(Stream source, long count)
+    /// <exception cref="InsufficientMemoryException">
+    /// The chunks the fill would materialize don't fit the low-memory guard's budget; thrown
+    /// before anything is allocated or read.
+    /// </exception>
+    public long FillFromStream(Stream source, long count) => FillFromStream(source, count, MemoryHeadroomBudget.Shared);
+
+    /// <summary>
+    /// <see cref="FillFromStream(Stream, long)"/> charged against <paramref name="budget"/>
+    /// instead of the process-wide one. Loading (an image, snapshot or archive) is where a disk's
+    /// content is materialized all at once, so it goes through the same low-memory guard as
+    /// writes rather than being able to push the machine out of memory while mounting.
+    /// </summary>
+    internal long FillFromStream(Stream source, long count, MemoryHeadroomBudget budget)
     {
+        var cost = SparseCost(0, Math.Min(count, _length));
+        if (budget.WouldExceed((ulong)cost))
+        {
+            throw new InsufficientMemoryException(
+                $"Not enough free memory to load {cost:N0} more bytes of file content.");
+        }
+
         var remaining = count;
         var chunkIndex = 0;
         var totalFilled = 0L;
