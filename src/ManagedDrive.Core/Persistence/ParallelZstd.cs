@@ -220,9 +220,16 @@ internal static class ParallelZstd
 
         public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
 
-        private static DecodedChunk Decompress(byte[] compressed, int compressedLength, byte[] destination, int decompressedLength)
+        private static DecodedChunk Decompress(byte[] compressed, int compressedLength, byte[]? destination, int decompressedLength)
         {
             var decompressor = t_decompressor ??= new ZstdSharp.Decompressor();
+
+            if (destination is null)
+            {
+                var unwrapped = decompressor.Unwrap(compressed.AsSpan(0, compressedLength)).ToArray();
+                return new(compressed, unwrapped, unwrapped.Length);
+            }
+
             var written = decompressor.Unwrap(compressed.AsSpan(0, compressedLength), destination.AsSpan(0, decompressedLength));
             return new(compressed, destination, written);
         }
@@ -305,9 +312,21 @@ internal static class ParallelZstd
             }
 
             var decompressedLength = (int)decompressedSize;
-            var destination = RentBuffer(_freeDecompressed, decompressedLength, ref _decompressedCapacity);
 
-            _pending.Enqueue(Task.Run(() => Decompress(compressed, length, destination, decompressedLength)));
+            // A zero size means the frame header carries no content size (nothing this writer
+            // produces, but a foreign payload may): there's no way to size a destination up front,
+            // so the worker allocates one itself.
+            var destination = decompressedLength == 0
+                ? null
+                : RentBuffer(_freeDecompressed, decompressedLength, ref _decompressedCapacity);
+
+            // With no parallelism to gain, decompress inline rather than hop to the thread pool
+            // and block on it. Besides saving the hop, this is what makes it safe to read from
+            // inside a thread-pool work item (as a parallel segment load does) without blocking
+            // that worker on another work item queued behind it.
+            _pending.Enqueue(_maxDegreeOfParallelism == 1
+                ? Task.FromResult(Decompress(compressed, length, destination, decompressedLength))
+                : Task.Run(() => Decompress(compressed, length, destination, decompressedLength)));
             return true;
         }
 

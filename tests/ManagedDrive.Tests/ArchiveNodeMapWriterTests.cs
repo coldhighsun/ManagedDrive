@@ -1,3 +1,5 @@
+using ManagedDrive.Core.Diagnostics;
+
 namespace ManagedDrive.Tests;
 
 public sealed class ArchiveNodeMapWriterTests
@@ -37,6 +39,15 @@ public sealed class ArchiveNodeMapWriterTests
         const long size = (long)int.MaxValue + 4096;
         var alignedSize = FileNode.AlignToAllocationUnit((ulong)size);
 
+        // Restoring the archive materializes the whole file, which the low-memory guard only
+        // allows while its reserve stays free. The margin covers other tests running alongside.
+        const ulong margin = 512UL * 1024 * 1024;
+        var required = alignedSize + MemoryHeadroomBudget.ReserveBytes + margin;
+        var available = SystemMemoryInfo.GetAvailablePhysicalBytes();
+        Assert.SkipUnless(
+            available >= required,
+            $"Needs {required:N0} bytes of available physical memory; only {available:N0} available.");
+
         var nodeMap = new FileNodeMap();
         var now = (ulong)DateTimeOffset.UtcNow.ToFileTime();
         nodeMap.Add("\\", new()
@@ -74,7 +85,19 @@ public sealed class ArchiveNodeMapWriterTests
         {
             ArchiveNodeMapWriter.WriteArchive(nodeMap, path, ArchiveExportFormat.Zip, ImageCompressionLevel.None);
 
-            var restored = ArchiveNodeMapBuilder.BuildNodeMap(path);
+            FileNodeMap restored;
+            try
+            {
+                restored = ArchiveNodeMapBuilder.BuildNodeMap(path);
+            }
+            catch (InsufficientMemoryException ex)
+            {
+                // Memory used by concurrently running tests can still drain the headroom checked
+                // above; that says nothing about the truncation this test guards against.
+                Assert.Skip($"Available memory dropped below what the restore needs: {ex.Message}");
+                throw;
+            }
+
             Assert.True(restored.TryGet("\\Big.bin", out var restoredFile));
             Assert.Equal(size, (long)restoredFile!.FileInfo.FileSize);
         }

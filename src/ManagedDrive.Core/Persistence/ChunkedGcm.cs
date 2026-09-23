@@ -149,6 +149,10 @@ internal static class ChunkedGcm
         private void FlushChunk()
         {
             WriteChunk(_buffer.AsSpan(0, _bufferLength));
+
+            // In-place encryption only overwrote the first _bufferLength bytes, so anything a
+            // previous, larger chunk left beyond them is still plaintext in this long-lived buffer.
+            CryptographicOperations.ZeroMemory(_buffer.AsSpan(_bufferLength));
             _bufferLength = 0;
         }
 

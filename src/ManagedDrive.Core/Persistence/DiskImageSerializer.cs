@@ -726,8 +726,9 @@ public static class DiskImageSerializer
     /// <summary>
     /// Reads a version 6 (segmented) image: after the plaintext capacity/label and, when
     /// encrypted, the same key-wrap fields as version 3+, reads the segment index and then each
-    /// segment's payload in turn, decrypting (if encrypted) and decompressing (if compressed)
-    /// each one independently before parsing its nodes. See the class remarks for the on-disk
+    /// segment's payload in turn, decrypting (if encrypted), decompressing (if compressed) and
+    /// parsing the segments concurrently, since each is independent, while adding their nodes to
+    /// the map in file order. See the class remarks for the on-disk
     /// layout. Segment sizes are bounded by the writer to a few MB, so — unlike version 3's
     /// whole-image encrypted blob — decrypting a segment's ciphertext with the single-shot
     /// <see cref="AesGcm"/> API here never risks its ~2 GB ceiling.
@@ -778,65 +779,139 @@ public static class DiskImageSerializer
             segments[i] = new(nodeCount, payloadLength, contentHash, nonce, tag);
         }
 
+        // Segments are independent, so they're decoded (decrypted, decompressed and parsed) on the
+        // thread pool, while this thread keeps reading payloads off the file in order and adds the
+        // decoded nodes to the map in that same order. At most `window` segments are in flight,
+        // bounding the extra memory to that many raw payloads rather than the whole image.
+        var window = Math.Max(1, Environment.ProcessorCount);
+        var pending = new Queue<Task<List<(string Path, FileNode Node)>>>();
         var nodeMap = new FileNodeMap();
-        var segmentIndex = 0;
+        var nextSegmentToAdd = 0;
 
-        foreach (var segment in segments)
+        void AddDecodedSegment(List<(string Path, FileNode Node)> nodes)
         {
-            var raw = reader.ReadBytes(checked((int)segment.PayloadLength));
-            byte[] payload;
-
-            if (isEncrypted)
+            foreach (var (path, node) in nodes)
             {
-                payload = new byte[raw.Length];
+                // Stamp the freshly-loaded node as already saved in this segment, so a subsequent
+                // incremental save recognizes it as clean and reuses the segment verbatim instead
+                // of treating every node as "never saved" (SavedSegmentIndex defaults to -1) and
+                // rewriting the whole image on the very next save.
+                node.SavedContentVersion = node.ContentVersion;
+                node.SavedMetadataVersion = node.MetadataVersion;
+                node.SavedSegmentIndex = nextSegmentToAdd;
+
+                nodeMap.Add(path, node);
+                reportTick?.Invoke();
+            }
+
+            nextSegmentToAdd++;
+        }
+
+        void DrainOne() => AddDecodedSegment(pending.Dequeue().GetAwaiter().GetResult());
+
+        try
+        {
+            foreach (var segment in segments)
+            {
+                var payload = reader.ReadBytes(checked((int)segment.PayloadLength));
+                if (payload.Length != segment.PayloadLength)
+                {
+                    throw new EndOfStreamException("The image ends before its last segment.");
+                }
+
+                // A payload spanning several Zstd chunks (typically one large file on its own)
+                // gains more from decompressing its chunks in parallel than from overlapping with
+                // neighbouring segments, so it's decoded here on its own with full parallelism,
+                // after everything queued before it has been added.
+                if (compressed && payload.Length >= ParallelZstd.ChunkSize)
+                {
+                    while (pending.Count > 0)
+                    {
+                        DrainOne();
+                    }
+
+                    AddDecodedSegment(DecodeSegment(payload, segment, resolvedCek, compressed, zstdParallelism: null));
+                    continue;
+                }
+
+                if (pending.Count >= window)
+                {
+                    DrainOne();
+                }
+
+                // Decompresses inline (parallelism 1): this already runs on a pool thread, and
+                // blocking it on further pool work items could starve the pool.
+                pending.Enqueue(Task.Run(() => DecodeSegment(payload, segment, resolvedCek, compressed, zstdParallelism: 1)));
+            }
+
+            while (pending.Count > 0)
+            {
+                DrainOne();
+            }
+        }
+        catch
+        {
+            // Let decodes already in flight finish before surfacing the failure, rather than
+            // leaving them allocating content in the background for a load that has failed.
+            foreach (var task in pending)
+            {
                 try
                 {
-                    using var aesGcm = new AesGcm(resolvedCek!, TagSize);
-                    aesGcm.Decrypt(segment.Nonce!, raw, segment.Tag!, payload);
+                    task.GetAwaiter().GetResult();
                 }
-                catch (CryptographicException)
+                catch
                 {
-                    throw new ImagePasswordIncorrectException();
-                }
-            }
-            else
-            {
-                payload = raw;
-            }
-
-            using var payloadStream = new MemoryStream(payload, writable: false);
-            Stream nodeStream = compressed ? new ParallelZstd.ReadStream(payloadStream) : payloadStream;
-            try
-            {
-                using var payloadReader = new BinaryReader(nodeStream, System.Text.Encoding.UTF8, leaveOpen: true);
-                for (var i = 0; i < segment.NodeCount; i++)
-                {
-                    var (path, node) = ReadNode(payloadReader);
-
-                    // Stamp the freshly-loaded node as already saved in this segment, so a
-                    // subsequent incremental save recognizes it as clean and reuses the segment
-                    // verbatim instead of treating every node as "never saved" (SavedSegmentIndex
-                    // defaults to -1) and rewriting the whole image on the very next save.
-                    node.SavedContentVersion = node.ContentVersion;
-                    node.SavedMetadataVersion = node.MetadataVersion;
-                    node.SavedSegmentIndex = segmentIndex;
-
-                    nodeMap.Add(path, node);
-                    reportTick?.Invoke();
-                }
-            }
-            finally
-            {
-                if (compressed)
-                {
-                    nodeStream.Dispose();
+                    // The first failure is the one being reported.
                 }
             }
 
-            segmentIndex++;
+            throw;
         }
 
         return nodeMap;
+    }
+
+    /// <summary>
+    /// Decrypts (in place, when <paramref name="cek"/> is given), decompresses (when
+    /// <paramref name="compressed"/>) and parses one version 6 segment's payload into its nodes,
+    /// in file order. Safe to run concurrently for different segments.
+    /// </summary>
+    /// <param name="zstdParallelism">
+    /// Degree of parallelism for decompressing the segment's Zstd chunks; <c>null</c> for the
+    /// default (processor count).
+    /// </param>
+    private static List<(string Path, FileNode Node)> DecodeSegment(
+        byte[] payload,
+        SegmentIndexEntry segment,
+        byte[]? cek,
+        bool compressed,
+        int? zstdParallelism)
+    {
+        if (cek is not null)
+        {
+            try
+            {
+                using var aesGcm = new AesGcm(cek, TagSize);
+                aesGcm.Decrypt(segment.Nonce!, payload, segment.Tag!, payload);
+            }
+            catch (CryptographicException)
+            {
+                throw new ImagePasswordIncorrectException();
+            }
+        }
+
+        using var payloadStream = new MemoryStream(payload, writable: false);
+        using var nodeStream = compressed ? new ParallelZstd.ReadStream(payloadStream, zstdParallelism) : null;
+        using var payloadReader = new BinaryReader(nodeStream ?? (Stream)payloadStream, System.Text.Encoding.UTF8, leaveOpen: true);
+
+        // NodeCount comes from the file, so it only caps the initial capacity.
+        var nodes = new List<(string Path, FileNode Node)>(Math.Clamp(segment.NodeCount, 0, 4096));
+        for (var i = 0; i < segment.NodeCount; i++)
+        {
+            nodes.Add(ReadNode(payloadReader));
+        }
+
+        return nodes;
     }
 
     /// <summary>
