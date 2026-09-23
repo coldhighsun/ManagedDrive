@@ -43,7 +43,18 @@ internal static class ChunkedGcm
     /// </summary>
     internal static byte[] DeriveChunkNonce(byte[] baseNonce, int chunkIndex)
     {
-        var nonce = (byte[])baseNonce.Clone();
+        var nonce = new byte[NonceSize];
+        DeriveChunkNonce(baseNonce, chunkIndex, nonce);
+        return nonce;
+    }
+
+    /// <summary>
+    /// <see cref="DeriveChunkNonce(byte[], int)"/> into a caller-supplied buffer, so the per-chunk
+    /// stream paths can derive into a stack buffer instead of allocating.
+    /// </summary>
+    private static void DeriveChunkNonce(ReadOnlySpan<byte> baseNonce, int chunkIndex, Span<byte> nonce)
+    {
+        baseNonce[..NonceSize].CopyTo(nonce);
         Span<byte> indexBytes = stackalloc byte[4];
         BinaryPrimitives.WriteUInt32BigEndian(indexBytes, (uint)chunkIndex);
 
@@ -51,8 +62,6 @@ internal static class ChunkedGcm
         {
             nonce[NonceSize - indexBytes.Length + i] ^= indexBytes[i];
         }
-
-        return nonce;
     }
 
     /// <summary>
@@ -63,6 +72,9 @@ internal static class ChunkedGcm
     /// </summary>
     internal sealed class WriteStream(Stream output, byte[] key, byte[] baseNonce, int chunkSize) : Stream
     {
+        // One cipher instance for the whole stream rather than one per chunk, so the key
+        // schedule is computed once.
+        private readonly AesGcm _aesGcm = new(key, TagSize);
         private readonly byte[] _buffer = new byte[chunkSize];
         private int _bufferLength;
         private int _chunkIndex;
@@ -120,35 +132,46 @@ internal static class ChunkedGcm
                 FlushChunk();
             }
 
-            WriteChunk(ReadOnlySpan<byte>.Empty);
+            WriteChunk(Span<byte>.Empty);
             _completed = true;
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+            {
+                _aesGcm.Dispose();
+            }
+
+            base.Dispose(disposing);
         }
 
         private void FlushChunk()
         {
             WriteChunk(_buffer.AsSpan(0, _bufferLength));
-            CryptographicOperations.ZeroMemory(_buffer.AsSpan(0, _bufferLength));
             _bufferLength = 0;
         }
 
-        private void WriteChunk(ReadOnlySpan<byte> plaintext)
+        /// <summary>
+        /// Encrypts <paramref name="chunk"/> in place and writes it out. Encrypting in place (rather
+        /// than into a fresh chunk-sized ciphertext array) also overwrites the plaintext, so the
+        /// buffer never keeps it around once the chunk has been written.
+        /// </summary>
+        private void WriteChunk(Span<byte> chunk)
         {
-            var nonce = DeriveChunkNonce(baseNonce, _chunkIndex);
-            var ciphertext = plaintext.Length == 0 ? [] : new byte[plaintext.Length];
-            var tag = new byte[TagSize];
+            Span<byte> nonce = stackalloc byte[NonceSize];
+            DeriveChunkNonce(baseNonce, _chunkIndex, nonce);
+            Span<byte> tag = stackalloc byte[TagSize];
 
-            using (var aesGcm = new AesGcm(key, TagSize))
-            {
-                aesGcm.Encrypt(nonce, plaintext, ciphertext, tag);
-            }
+            _aesGcm.Encrypt(nonce, chunk, chunk, tag);
 
             Span<byte> lengthBytes = stackalloc byte[4];
-            BinaryPrimitives.WriteInt32LittleEndian(lengthBytes, ciphertext.Length);
+            BinaryPrimitives.WriteInt32LittleEndian(lengthBytes, chunk.Length);
             output.Write(lengthBytes);
             output.Write(tag);
-            if (ciphertext.Length > 0)
+            if (!chunk.IsEmpty)
             {
-                output.Write(ciphertext);
+                output.Write(chunk);
             }
 
             _chunkIndex++;
@@ -171,6 +194,13 @@ internal static class ChunkedGcm
     /// </summary>
     internal sealed class ReadStream(Stream source, byte[] key, byte[] baseNonce) : Stream
     {
+        private readonly AesGcm _aesGcm = new(key, TagSize);
+
+        /// <summary>
+        /// Reused across chunks: each chunk's ciphertext is read into it and decrypted in place,
+        /// so a stream of equal-sized chunks allocates this buffer once instead of a ciphertext
+        /// and a plaintext array per chunk.
+        /// </summary>
         private byte[] _currentChunk = [];
         private int _currentChunkLength;
         private int _positionInChunk;
@@ -188,11 +218,15 @@ internal static class ChunkedGcm
             set => throw new NotSupportedException();
         }
 
-        public override int Read(byte[] buffer, int offset, int count)
+        public override int Read(byte[] buffer, int offset, int count) => Read(buffer.AsSpan(offset, count));
+
+        // Overridden (rather than left to Stream's default, which rents a pooled array and copies
+        // through it) because BinaryReader reads every primitive field through this overload.
+        public override int Read(Span<byte> buffer)
         {
             var totalRead = 0;
 
-            while (count > 0)
+            while (!buffer.IsEmpty)
             {
                 if (_positionInChunk == _currentChunkLength)
                 {
@@ -202,15 +236,36 @@ internal static class ChunkedGcm
                     }
                 }
 
-                var toCopy = Math.Min(count, _currentChunkLength - _positionInChunk);
-                Array.Copy(_currentChunk, _positionInChunk, buffer, offset, toCopy);
+                var toCopy = Math.Min(buffer.Length, _currentChunkLength - _positionInChunk);
+                _currentChunk.AsSpan(_positionInChunk, toCopy).CopyTo(buffer);
                 _positionInChunk += toCopy;
-                offset += toCopy;
-                count -= toCopy;
+                buffer = buffer[toCopy..];
                 totalRead += toCopy;
             }
 
             return totalRead;
+        }
+
+        // Overridden because Stream's default allocates a one-byte array per call, and
+        // BinaryReader.ReadString reads its length prefix a byte at a time.
+        public override int ReadByte()
+        {
+            if (_positionInChunk == _currentChunkLength && (_endOfStream || !TryReadNextChunk()))
+            {
+                return -1;
+            }
+
+            return _currentChunk[_positionInChunk++];
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+            {
+                _aesGcm.Dispose();
+            }
+
+            base.Dispose(disposing);
         }
 
         private bool TryReadNextChunk()
@@ -218,24 +273,29 @@ internal static class ChunkedGcm
             Span<byte> lengthBytes = stackalloc byte[4];
             source.ReadExactly(lengthBytes);
             var ciphertextLength = BinaryPrimitives.ReadInt32LittleEndian(lengthBytes);
+            if (ciphertextLength < 0)
+            {
+                throw new InvalidDataException($"Invalid encrypted chunk length: {ciphertextLength}.");
+            }
 
-            var tag = new byte[TagSize];
+            Span<byte> tag = stackalloc byte[TagSize];
             source.ReadExactly(tag);
 
-            var ciphertext = ciphertextLength == 0 ? [] : new byte[ciphertextLength];
-            if (ciphertextLength > 0)
+            if (_currentChunk.Length < ciphertextLength)
             {
-                source.ReadExactly(ciphertext);
+                _currentChunk = new byte[ciphertextLength];
             }
 
-            var nonce = DeriveChunkNonce(baseNonce, _chunkIndex);
-            var plaintext = ciphertextLength == 0 ? [] : new byte[ciphertextLength];
-            using (var aesGcm = new AesGcm(key, TagSize))
-            {
-                aesGcm.Decrypt(nonce, ciphertext, tag, plaintext);
-            }
+            var chunk = _currentChunk.AsSpan(0, ciphertextLength);
+            source.ReadExactly(chunk);
+
+            Span<byte> nonce = stackalloc byte[NonceSize];
+            DeriveChunkNonce(baseNonce, _chunkIndex, nonce);
+            _aesGcm.Decrypt(nonce, chunk, tag, chunk);
 
             _chunkIndex++;
+            _positionInChunk = 0;
+            _currentChunkLength = ciphertextLength;
 
             if (ciphertextLength == 0)
             {
@@ -243,9 +303,6 @@ internal static class ChunkedGcm
                 return false;
             }
 
-            _currentChunk = plaintext;
-            _currentChunkLength = plaintext.Length;
-            _positionInChunk = 0;
             return true;
         }
 

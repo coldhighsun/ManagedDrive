@@ -109,6 +109,64 @@ public sealed class ChunkedGcmTests : IDisposable
     }
 
     [Fact]
+    public void Write_MatchesPerChunkReferenceEncryption()
+    {
+        // The stream encrypts in place with one reused cipher; the wire format must stay exactly
+        // what a fresh cipher and separate ciphertext array per chunk would produce.
+        var key = RandomNumberGenerator.GetBytes(32);
+        var nonce = RandomNumberGenerator.GetBytes(ChunkedGcm.NonceSize);
+        var plaintext = RandomNumberGenerator.GetBytes((ChunkedGcm.ChunkSize * 3) + 5);
+        using var buffer = new MemoryStream();
+
+        using (var write = new ChunkedGcm.WriteStream(buffer, key, nonce, ChunkedGcm.ChunkSize))
+        {
+            write.Write(plaintext, 0, plaintext.Length);
+            write.Complete();
+        }
+
+        using var expected = new MemoryStream();
+        using (var writer = new BinaryWriter(expected, System.Text.Encoding.UTF8, leaveOpen: true))
+        {
+            var chunkIndex = 0;
+            for (var offset = 0; offset < plaintext.Length; offset += ChunkedGcm.ChunkSize)
+            {
+                var chunk = plaintext.AsSpan(offset, Math.Min(ChunkedGcm.ChunkSize, plaintext.Length - offset));
+                WriteReferenceChunk(writer, key, nonce, chunkIndex++, chunk);
+            }
+
+            // Zero-length terminator chunk.
+            WriteReferenceChunk(writer, key, nonce, chunkIndex, []);
+        }
+
+        Assert.Equal(expected.ToArray(), buffer.ToArray());
+    }
+
+    [Fact]
+    public void Read_BinaryReaderPrimitivesAcrossChunkBoundaries_RoundTrip()
+    {
+        var key = RandomNumberGenerator.GetBytes(32);
+        var nonce = RandomNumberGenerator.GetBytes(ChunkedGcm.NonceSize);
+        using var buffer = new MemoryStream();
+
+        using (var write = new ChunkedGcm.WriteStream(buffer, key, nonce, ChunkedGcm.ChunkSize))
+        {
+            using (var writer = new BinaryWriter(write, System.Text.Encoding.UTF8, leaveOpen: true))
+            {
+                BinaryPrimitivesSample.Write(writer);
+            }
+
+            write.Complete();
+        }
+
+        buffer.Position = 0;
+        using var read = new ChunkedGcm.ReadStream(buffer, key, nonce);
+        using var reader = new BinaryReader(read, System.Text.Encoding.UTF8, leaveOpen: true);
+
+        BinaryPrimitivesSample.ReadAndAssert(reader);
+        Assert.Equal(-1, read.ReadByte());
+    }
+
+    [Fact]
     public void DeriveChunkNonce_DifferentChunkIndices_ProduceDifferentNonces()
     {
         var baseNonce = RandomNumberGenerator.GetBytes(ChunkedGcm.NonceSize);
@@ -128,6 +186,20 @@ public sealed class ChunkedGcmTests : IDisposable
         var second = ChunkedGcm.DeriveChunkNonce(baseNonce, 7);
 
         Assert.Equal(first, second);
+    }
+
+    private static void WriteReferenceChunk(BinaryWriter writer, byte[] key, byte[] baseNonce, int chunkIndex, ReadOnlySpan<byte> plaintext)
+    {
+        var ciphertext = new byte[plaintext.Length];
+        var tag = new byte[ChunkedGcm.TagSize];
+        using (var aes = new AesGcm(key, ChunkedGcm.TagSize))
+        {
+            aes.Encrypt(ChunkedGcm.DeriveChunkNonce(baseNonce, chunkIndex), plaintext, ciphertext, tag);
+        }
+
+        writer.Write(ciphertext.Length);
+        writer.Write(tag);
+        writer.Write(ciphertext);
     }
 
     private static byte[] RoundTrip(byte[] plaintext)
