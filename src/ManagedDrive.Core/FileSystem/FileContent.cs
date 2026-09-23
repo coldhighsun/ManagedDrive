@@ -48,7 +48,10 @@ public sealed class FileContent
     // last chunk is right-sized (a power of two, capped at ChunkSize) to just cover the file's
     // remaining bytes, so a small file doesn't pay a full 64 KiB chunk. Only its capacity may
     // exceed its used portion; a shrink leaves the last chunk's capacity in place rather than
-    // reallocating it.
+    // reallocating it. Growing an already-materialized terminal chunk doubles its capacity only
+    // while it's chunk 0; past that the file is evidently being appended to, so it jumps straight
+    // to ChunkSize — otherwise every chunk of a streaming append would be reallocated and copied
+    // through each power of two on its way to 64 KiB, allocating roughly twice the file's size.
     //
     // A chunk entry is null until the first write lands inside it — growth (CreateZeroed/Resize)
     // never allocates a backing array up front, since the whole point of growing is to expose
@@ -191,7 +194,7 @@ public sealed class FileContent
                 if (terminal != null)
                 {
                     var terminalUsed = newLength - (long)(neededChunks - 1) * ChunkSize;
-                    var wantCapacity = TerminalCapacity(terminalUsed);
+                    var wantCapacity = neededChunks == 1 ? TerminalCapacity(terminalUsed) : ChunkSize;
                     if (terminal.Length < wantCapacity)
                     {
                         var bigger = new byte[wantCapacity];
