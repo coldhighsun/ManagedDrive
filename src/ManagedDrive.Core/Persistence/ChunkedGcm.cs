@@ -79,15 +79,18 @@ internal static class ChunkedGcm
             set => throw new NotSupportedException();
         }
 
-        public override void Write(byte[] buffer, int offset, int count)
+        public override void Write(byte[] buffer, int offset, int count) => Write(buffer.AsSpan(offset, count));
+
+        // Overridden (rather than left to Stream's default, which rents a pooled array and copies
+        // the span into it first) because FileContent.CopyTo writes spans straight from its chunks.
+        public override void Write(ReadOnlySpan<byte> buffer)
         {
-            while (count > 0)
+            while (!buffer.IsEmpty)
             {
-                var toCopy = Math.Min(count, _buffer.Length - _bufferLength);
-                Array.Copy(buffer, offset, _buffer, _bufferLength, toCopy);
+                var toCopy = Math.Min(buffer.Length, _buffer.Length - _bufferLength);
+                buffer[..toCopy].CopyTo(_buffer.AsSpan(_bufferLength));
                 _bufferLength += toCopy;
-                offset += toCopy;
-                count -= toCopy;
+                buffer = buffer[toCopy..];
 
                 if (_bufferLength == _buffer.Length)
                 {
