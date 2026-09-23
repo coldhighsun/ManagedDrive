@@ -117,18 +117,11 @@ public static class HelperPipeClient
             // on top of this already-closed pipe and swallows the resulting exceptions.
             pipe.Dispose();
 
-            // Wait for the read to actually finish before returning — otherwise a caller reusing
-            // the (already-disposed) pipe/reader could race the still-in-flight read completion.
-            // Any exception here (cancellation, broken pipe, disposed) is irrelevant: we're
-            // already returning false.
-            try
-            {
-                readTask.Wait();
-            }
-            catch (Exception)
-            {
-            }
-
+            // Deliberately not waiting for readTask: its completion is delivered through the
+            // ThreadPool, so under pool starvation a wait here blocked for seconds past
+            // ReadTimeout — the very hang this path exists to bound. Nothing reads the abandoned
+            // task's result; just observe its fault so it isn't reported as unobserved.
+            ObserveAbandonedRead(readTask);
             return false;
         }
 
@@ -142,4 +135,11 @@ public static class HelperPipeClient
         response = HelperPipeProtocol.DeserializeResponse(responseJson);
         return true;
     }
+
+    private static void ObserveAbandonedRead(Task readTask) =>
+        readTask.ContinueWith(
+            static t => _ = t.Exception,
+            CancellationToken.None,
+            TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
+            TaskScheduler.Default);
 }

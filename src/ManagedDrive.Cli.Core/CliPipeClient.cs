@@ -62,10 +62,26 @@ public static class CliPipeClient
             return false;
         }
 
-        using var reader = new StreamReader(pipe, leaveOpen: true);
-        using var writer = new StreamWriter(pipe, leaveOpen: true);
-        writer.AutoFlush = true;
+        var reader = new StreamReader(pipe, leaveOpen: true);
+        var writer = new StreamWriter(pipe, leaveOpen: true) { AutoFlush = true };
 
+        // Disposed manually (not via `using`) because the timeout path below force-closes the
+        // underlying pipe to unblock a stuck read; disposing reader/writer afterwards would throw
+        // trying to flush/close a stream on top of an already-closed pipe.
+        try
+        {
+            return TrySendCore(pipe, reader, writer, args, ref response);
+        }
+        finally
+        {
+            try { reader.Dispose(); } catch (Exception) { }
+            try { writer.Dispose(); } catch (Exception) { }
+        }
+    }
+
+    private static bool TrySendCore(
+        NamedPipeClientStream pipe, StreamReader reader, StreamWriter writer, string[] args, ref CliResponse response)
+    {
         writer.WriteLine(CliPipeProtocol.SerializeRequest(args));
 
         // Deliberately not `new CancellationTokenSource(ReadTimeout)`: that schedules its Cancel()
@@ -80,18 +96,16 @@ public static class CliPipeClient
         {
             readCts.Cancel();
 
-            // Wait for the cancelled read to actually finish before the `using` declarations
-            // above dispose reader/pipe — otherwise disposal could race the still-in-flight read.
-            // Any exception here (cancellation, broken pipe) is irrelevant: we're already
-            // returning false.
-            try
-            {
-                readTask.Wait();
-            }
-            catch (Exception)
-            {
-            }
+            // Cancelling the token alone isn't enough: a pending overlapped read on a named pipe
+            // can stay stuck past the CancellationToken if the server never writes or closes its
+            // end, so force it to unblock by closing the pipe out from under it.
+            pipe.Dispose();
 
+            // Deliberately not waiting for readTask: its completion is delivered through the
+            // ThreadPool, so under pool starvation a wait here blocked for seconds past
+            // ReadTimeout — the very hang this path exists to bound. Nothing reads the abandoned
+            // task's result; just observe its fault so it isn't reported as unobserved.
+            ObserveAbandonedRead(readTask);
             return false;
         }
 
@@ -105,4 +119,11 @@ public static class CliPipeClient
         response = CliPipeProtocol.DeserializeResponse(responseJson);
         return true;
     }
+
+    private static void ObserveAbandonedRead(Task readTask) =>
+        readTask.ContinueWith(
+            static t => _ = t.Exception,
+            CancellationToken.None,
+            TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
+            TaskScheduler.Default);
 }
