@@ -36,6 +36,70 @@ internal static class ParallelZstd
     internal static int ChunkSize => TestChunkSizeOverride ?? DefaultChunkSize;
 
     /// <summary>
+    /// One-shot equivalent of writing <paramref name="length"/> bytes of <paramref name="data"/>
+    /// through a <see cref="WriteStream"/>: produces the identical <c>[length][compressed bytes]
+    /// ... [0]</c> chunk sequence, but compresses each chunk straight out of
+    /// <paramref name="data"/> instead of first copying it into a staging buffer, and returns an
+    /// exactly-sized array rather than one that went through a growable
+    /// <see cref="MemoryStream"/>. A single-chunk input (the common case for a v6 image segment)
+    /// is compressed inline on the calling thread; multiple chunks are compressed in parallel.
+    /// </summary>
+    /// <param name="data">Buffer holding the bytes to compress.</param>
+    /// <param name="length">Number of leading bytes of <paramref name="data"/> to compress.</param>
+    /// <param name="level">Zstd compression level.</param>
+    /// <param name="chunkSize">Chunk size override for tests; defaults to <see cref="ChunkSize"/>.</param>
+    /// <returns>The framed compressed payload.</returns>
+    internal static byte[] CompressFramed(byte[] data, int length, int level, int? chunkSize = null)
+    {
+        var size = chunkSize ?? ChunkSize;
+        var chunkCount = (int)(((long)length + size - 1) / size);
+        var compressed = new (byte[] Buffer, int Length)[chunkCount];
+
+        if (chunkCount == 1)
+        {
+            // Kept at compress-bound size: it's copied into the exact-size result below right away,
+            // so there's no point trimming it first.
+            compressed[0] = CompressToBound(data.AsSpan(0, length), level);
+        }
+        else if (chunkCount > 1)
+        {
+            Parallel.For(0, chunkCount, i =>
+            {
+                var offset = i * size;
+                var (buffer, written) = CompressToBound(data.AsSpan(offset, Math.Min(size, length - offset)), level);
+
+                // Trim now so all chunks' compress-bound buffers aren't alive at once.
+                compressed[i] = (buffer.AsSpan(0, written).ToArray(), written);
+            });
+        }
+
+        long total = sizeof(int);
+        foreach (var (_, written) in compressed)
+        {
+            total += sizeof(int) + written;
+        }
+
+        var result = new byte[checked((int)total)];
+        var position = 0;
+        foreach (var (buffer, written) in compressed)
+        {
+            BinaryPrimitives.WriteInt32LittleEndian(result.AsSpan(position), written);
+            buffer.AsSpan(0, written).CopyTo(result.AsSpan(position + sizeof(int)));
+            position += sizeof(int) + written;
+        }
+
+        BinaryPrimitives.WriteInt32LittleEndian(result.AsSpan(position), 0);
+        return result;
+    }
+
+    private static (byte[] Buffer, int Length) CompressToBound(ReadOnlySpan<byte> source, int level)
+    {
+        using var compressor = new ZstdSharp.Compressor(level);
+        var buffer = new byte[ZstdSharp.Compressor.GetCompressBound(source.Length)];
+        return (buffer, compressor.Wrap(source, buffer));
+    }
+
+    /// <summary>
     /// Read-only counterpart to <see cref="WriteStream"/>: reads the
     /// <c>[length][compressed bytes]</c> chunk sequence written by it, decompressing chunks on a
     /// bounded worker pool while yielding decompressed bytes in original order. Chunk headers are
