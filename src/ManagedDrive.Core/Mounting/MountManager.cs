@@ -266,17 +266,15 @@ public sealed class MountManager : IDisposable
 
     /// <summary>
     /// Handler for every mounted disk's <see cref="RamDisk.ContentAccessed"/>. Runs on WinFsp
-    /// driver threads, so it only sets a flag — see <see cref="_pendingRead"/>.
+    /// driver threads, so it only sets a flag — see <see cref="_pendingRead"/>. Checks before
+    /// storing so a burst of I/O writes the flag's cache line once per poll tick, not per call.
     /// </summary>
     private void OnDiskContentAccessed(bool isWrite)
     {
-        if (isWrite)
+        ref var flag = ref isWrite ? ref _pendingWrite : ref _pendingRead;
+        if (Volatile.Read(ref flag) == 0)
         {
-            Volatile.Write(ref _pendingWrite, 1);
-        }
-        else
-        {
-            Volatile.Write(ref _pendingRead, 1);
+            Volatile.Write(ref flag, 1);
         }
     }
 

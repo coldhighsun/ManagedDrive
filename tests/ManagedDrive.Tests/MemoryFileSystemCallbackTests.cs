@@ -388,12 +388,11 @@ public sealed class MemoryFileSystemCallbackTests
         WriteBytes(fs, fileNode!, data, offset: 0);
 
         Assert.True(node.ContentVersion > versionBefore);
-        Assert.NotNull(fs.LastContentWriteAccess);
-        Assert.Equal("\\file.bin", fs.LastContentWriteAccess!.Path);
+        Assert.Equal("\\file.bin", fs.LastContentWritePath);
 
         var readBack = ReadBytes(fs, fileNode!, data.Length, offset: 0);
         Assert.Equal(data, readBack);
-        Assert.NotNull(fs.LastContentReadAccess);
+        Assert.Equal("\\file.bin", fs.LastContentReadPath);
         Assert.Equal(data.Length, fs.TotalBytesRead);
         Assert.Equal(data.Length, fs.TotalBytesWritten);
     }
