@@ -61,7 +61,7 @@ Snapshots use a separate format (magic `MDRS`) with content-addressed blob store
 
 ### Threading model
 
-- `FileNodeMap`, `MountManager`, `RamDisk._autoSaveLock` use C# 13 `Lock` type.
+- `MountManager` and `RamDisk._autoSaveLock` use the C# 13 `Lock` type. `FileNodeMap` uses a `ReaderWriterLockSlim` (`_syncRoot`): lookups/enumerations take the read lock, structural mutations the write lock.
 - WinFsp callbacks fire on driver threads; state access through `FileNodeMap`'s lock.
 - Auto-save timer: periodic path uses `Lock.TryEnter()` (skip if busy); `Dispose()` uses blocking `lock` (wait then final save).
 - `FileNodeMap.GetTotalAllocated()` is O(1) via incremental `_totalAllocated`. Only mutate `AllocationSize` through `UpdateAllocationSize()` — direct assignment drifts the cached total.
