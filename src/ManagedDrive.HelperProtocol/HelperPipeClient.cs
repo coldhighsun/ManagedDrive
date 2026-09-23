@@ -13,6 +13,14 @@ public static class HelperPipeClient
     private static readonly TimeSpan ConnectTimeout = TimeSpan.FromMilliseconds(500);
 
     /// <summary>
+    /// Upper bound on waiting for the service's response line. The service only performs a quick
+    /// DOS-device symlink publish/remove, so this is purely a deadlock guard against a wedged or
+    /// unresponsive service — without it, a connected-but-silent service would block the caller
+    /// forever even though every call is documented as best-effort.
+    /// </summary>
+    private static readonly TimeSpan ReadTimeout = TimeSpan.FromSeconds(5);
+
+    /// <summary>
     /// Asks the service to publish a global symlink <paramref name="letter"/> →
     /// <paramref name="devicePath"/>.
     /// </summary>
@@ -36,7 +44,7 @@ public static class HelperPipeClient
     {
         response = new(false, string.Empty);
 
-        using var pipe = new NamedPipeClientStream(".", HelperPipeProtocol.PipeName, PipeDirection.InOut);
+        using var pipe = new NamedPipeClientStream(".", HelperPipeProtocol.PipeName, PipeDirection.InOut, PipeOptions.Asynchronous);
 
         try
         {
@@ -53,7 +61,17 @@ public static class HelperPipeClient
 
         writer.WriteLine(HelperPipeProtocol.SerializeRequest(request));
 
-        var responseJson = reader.ReadLine();
+        using var readCts = new CancellationTokenSource(ReadTimeout);
+        string? responseJson;
+        try
+        {
+            responseJson = reader.ReadLineAsync(readCts.Token).AsTask().GetAwaiter().GetResult();
+        }
+        catch (OperationCanceledException)
+        {
+            return false;
+        }
+
         if (responseJson == null)
         {
             return false;
