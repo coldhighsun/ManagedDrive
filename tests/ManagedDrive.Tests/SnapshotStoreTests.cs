@@ -1,7 +1,95 @@
+using System.Runtime.InteropServices;
+using System.Security.Cryptography;
+
 namespace ManagedDrive.Tests;
 
-public sealed class SnapshotStoreTests
+public sealed class SnapshotStoreTests : IDisposable
 {
+    private readonly string _dir = Path.Combine(Path.GetTempPath(), "ManagedDrive.Tests." + Guid.NewGuid());
+
+    public SnapshotStoreTests() => Directory.CreateDirectory(_dir);
+
+    public void Dispose()
+    {
+        try
+        {
+            Directory.Delete(_dir, recursive: true);
+        }
+        catch
+        {
+            // Best-effort cleanup.
+        }
+    }
+
+    [Fact]
+    public void WriteBlob_ContentChangesAfterHashing_FilesBlobUnderHashOfWrittenBytes()
+    {
+        var blobDirectory = Path.Combine(_dir, "blobs");
+        byte[] original = [1, 2, 3, 4];
+        byte[] changed = [9, 9, 9, 9];
+        var content = FileContent.FromSpan(original, 512);
+
+        var hash = SnapshotStore.WriteBlob(
+            blobDirectory, content, original.Length, ImageCompressionLevel.None, cek: null, customZstdLevel: null,
+            beforeBlobWrite: () => WriteBytes(content, 0, changed));
+
+        Assert.Equal(SHA256.HashData(changed), hash);
+        Assert.False(File.Exists(SnapshotStore.HashToBlobPath(blobDirectory, SHA256.HashData(original))));
+        var blob = File.ReadAllBytes(SnapshotStore.HashToBlobPath(blobDirectory, hash));
+        Assert.Equal(changed, blob[1..]); // after the flag byte
+    }
+
+    [Fact]
+    public void WriteBlob_ContentUnchanged_FilesBlobUnderHashOfContent()
+    {
+        var blobDirectory = Path.Combine(_dir, "blobs");
+        byte[] data = [1, 2, 3, 4];
+        var content = FileContent.FromSpan(data, 512);
+
+        var hash = SnapshotStore.WriteBlob(blobDirectory, content, data.Length, ImageCompressionLevel.Optimal, cek: null, customZstdLevel: null);
+
+        Assert.Equal(SHA256.HashData(data), hash);
+        Assert.True(File.Exists(SnapshotStore.HashToBlobPath(blobDirectory, hash)));
+        Assert.Single(Directory.EnumerateFiles(blobDirectory, "*", SearchOption.AllDirectories));
+    }
+
+    [Fact]
+    public void Write_FileSizeAheadOfContentLength_RecordsSizeMatchingStoredBytes()
+    {
+        // Mirrors a node caught mid-resize: FileSize already past the content's current length.
+        var map = new FileNodeMap();
+        map.Add("\\", new() { FileInfo = { FileAttributes = (uint)FileAttributes.Directory } });
+        var data = Enumerable.Range(0, 512).Select(i => (byte)i).ToArray();
+        map.Add("\\a.bin", new()
+        {
+            FileData = FileContent.FromSpan(data, 512),
+            FileInfo = { FileAttributes = (uint)FileAttributes.Normal, FileSize = 4096, AllocationSize = 4096 },
+        });
+        var indexPath = Path.Combine(_dir, "snap.mdr");
+        var blobDirectory = Path.Combine(_dir, "blobs");
+
+        SnapshotStore.Write(map, 1 << 20, "label", indexPath, blobDirectory, ImageCompressionLevel.Optimal, cek: null);
+        var loaded = SnapshotStore.Load(indexPath, blobDirectory, out _, out _, cek: null);
+
+        Assert.True(loaded.TryGet("\\a.bin", out var node));
+        Assert.Equal(512UL, node!.FileInfo.FileSize);
+        Assert.Equal(data, node.FileData!.ToArray(512));
+    }
+
+    private static void WriteBytes(FileContent content, long offset, byte[] data)
+    {
+        var ptr = Marshal.AllocHGlobal(data.Length);
+        try
+        {
+            Marshal.Copy(data, 0, ptr, data.Length);
+            content.WriteFrom(ptr, (ulong)offset, (uint)data.Length);
+        }
+        finally
+        {
+            Marshal.FreeHGlobal(ptr);
+        }
+    }
+
     [Theory]
     [InlineData(@"C:\disks\disk.mdr", @"C:\disks\disk.snapblobs")]
     [InlineData(@"C:\disks\my.image.mdr", @"C:\disks\my.image.snapblobs")]

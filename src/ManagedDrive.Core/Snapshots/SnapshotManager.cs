@@ -445,13 +445,17 @@ public static partial class SnapshotManager
             return cached;
         }
 
+        // Capture the version before hashing: a write landing mid-hash then leaves the cache keyed
+        // to the older version, so it's recomputed next time instead of passing off a hash of
+        // mixed content as the newer version's.
+        var version = node.ContentVersion;
         var fileSize = (long)Math.Min(node.FileInfo.FileSize, (ulong)data.Length);
         using var incrementalHash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
         data.HashInto(incrementalHash, fileSize);
         var hash = incrementalHash.GetHashAndReset();
 
         node.CachedContentHash = hash;
-        node.CachedContentHashVersion = node.ContentVersion;
+        node.CachedContentHashVersion = version;
         return hash;
     }
 
