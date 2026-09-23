@@ -264,6 +264,84 @@ public sealed class DiskImageSerializerV6Tests
         }
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Save_NodeCaughtMidResize_LoadsWithSizesMatchingStoredBytes(bool incremental)
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid()}.mdr");
+        try
+        {
+            // Mirrors a file growing while it is saved: the content and FileSize have already
+            // grown past the AllocationSize the save would otherwise record for it.
+            var data = Enumerable.Range(0, 4000).Select(i => (byte)i).ToArray();
+            var map = new FileNodeMap();
+            map.Add("\\", MakeDir());
+            map.Add("\\Growing.bin", new()
+            {
+                FileInfo = { FileAttributes = (uint)FileAttributes.Normal, FileSize = 4000, AllocationSize = 512 },
+                FileData = FileContent.FromSpan(data, 4096),
+            });
+
+            if (incremental)
+            {
+                DiskImageSerializer.SaveIncremental(map, capacityBytes: 1024 * 1024, "Label", path, ImageCompressionLevel.Fastest);
+            }
+            else
+            {
+                DiskImageSerializer.Save(map, capacityBytes: 1024 * 1024, "Label", path, ImageCompressionLevel.Fastest);
+            }
+
+            var loaded = DiskImageSerializer.Load(path, out _, out _, password: null, out _);
+
+            Assert.True(loaded.TryGet("\\Growing.bin", out var node));
+            Assert.Equal(4000UL, node!.FileInfo.FileSize);
+            Assert.True(node.FileInfo.AllocationSize >= 4000);
+            Assert.Equal(data, node.FileData!.ToArray(4000));
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void Load_ImageRecordingAllocationSmallerThanItsData_GrowsContentToFit()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid()}.mdr");
+        try
+        {
+            var data = Enumerable.Range(0, 4000).Select(i => (byte)i).ToArray();
+            var map = new FileNodeMap();
+            map.Add("\\", MakeDir());
+            map.Add("\\Grown.bin", MakeFile(data));
+            DiskImageSerializer.Save(map, capacityBytes: 1024 * 1024, "Label", path, ImageCompressionLevel.None);
+
+            // Rewrite the node's recorded AllocationSize to 512, as an image saved mid-resize by
+            // an older build could hold: it sits right after the length-prefixed path and the
+            // 4-byte attributes field.
+            var bytes = File.ReadAllBytes(path);
+            var pathBytes = System.Text.Encoding.UTF8.GetBytes("\\Grown.bin");
+            var pathStart = bytes.AsSpan().IndexOf(pathBytes);
+            Assert.True(pathStart > 0);
+            var allocationOffset = pathStart + pathBytes.Length + sizeof(uint);
+            Assert.Equal(4096UL, BitConverter.ToUInt64(bytes, allocationOffset));
+            BitConverter.TryWriteBytes(bytes.AsSpan(allocationOffset), 512UL);
+            File.WriteAllBytes(path, bytes);
+
+            var loaded = DiskImageSerializer.Load(path, out _, out _, password: null, out _);
+
+            Assert.True(loaded.TryGet("\\Grown.bin", out var node));
+            Assert.Equal(4000UL, node!.FileInfo.FileSize);
+            Assert.True(node.FileInfo.AllocationSize >= 4000);
+            Assert.Equal(data, node.FileData!.ToArray(4000));
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
     private static FileNode MakeDir() => new()
     {
         FileInfo = { FileAttributes = (uint)FileAttributes.Directory },

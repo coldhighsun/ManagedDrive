@@ -889,7 +889,12 @@ public static class DiskImageSerializer
         var dataLen = reader.ReadInt64();
         if (dataLen > 0 && !node.IsDirectory)
         {
-            var aligned = FileNode.AlignToAllocationUnit(node.FileInfo.AllocationSize);
+            // Older builds could save a file caught growing with an AllocationSize (and FileSize)
+            // out of step with its data. Size the content to cover all of them rather than fail
+            // the whole load, keeping FileSize <= AllocationSize == content length as reads assume.
+            var aligned = FileNode.AlignToAllocationUnit(
+                Math.Max(node.FileInfo.AllocationSize, Math.Max((ulong)dataLen, node.FileInfo.FileSize)));
+            node.FileInfo.AllocationSize = aligned;
             node.FileData = FileContent.CreateZeroed(aligned);
             node.FileData.FillFromStream(reader.BaseStream, dataLen);
         }
@@ -1615,19 +1620,27 @@ public static class DiskImageSerializer
 
     private static void WriteNode(BinaryWriter writer, string path, FileNode node)
     {
-        NodeMetadataIO.WriteMetadata(writer, path, node);
+        // The disk stays mounted while it's saved, so capture the node's metadata and content
+        // reference once (Overwrite can swap FileData, a write can resize it) and record sizes
+        // describing exactly the bytes stored below. Otherwise a file growing mid-save records an
+        // AllocationSize smaller than its data, and the image fails to load. CopyTo writes exactly
+        // the prefixed length even if the content shrinks meanwhile.
+        var info = node.FileInfo;
+        var data = node.IsDirectory ? null : node.FileData;
+        var length = data is null ? 0UL : Math.Min(info.FileSize, (ulong)data.Length);
 
-        // Read FileData once: Overwrite can swap in a new instance mid-save. CopyTo writes exactly
-        // fileSize bytes even if the content shrinks after the length prefix is written.
-        if (node is { IsDirectory: false, FileData: { } data, FileInfo.FileSize: > 0 })
+        if (!node.IsDirectory)
         {
-            var fileSize = Math.Min(node.FileInfo.FileSize, (ulong)data.Length);
-            writer.Write((long)fileSize);
-            data.CopyTo(writer.BaseStream, (long)fileSize);
+            info.FileSize = length;
+            info.AllocationSize = Math.Max(info.AllocationSize, FileNode.AlignToAllocationUnit(length));
         }
-        else
+
+        NodeMetadataIO.WriteMetadata(writer, path, info, node.FileSecurity);
+        writer.Write((long)length);
+
+        if (length > 0)
         {
-            writer.Write(0L);
+            data!.CopyTo(writer.BaseStream, (long)length);
         }
     }
 
