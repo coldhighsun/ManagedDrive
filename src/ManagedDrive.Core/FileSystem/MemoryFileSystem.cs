@@ -15,6 +15,16 @@ public sealed class MemoryFileSystem : FileSystemBase
 {
     private const uint InvalidFileAttributes = FileNode.InvalidFileAttributes;
 
+    /// <summary>
+    /// Low-memory write guard: refuses an operation that would leave less than
+    /// <see cref="MemoryHeadroomBudget.ReserveBytes"/> of physical memory available system-wide,
+    /// independent of the volume's capacity (a disk can have capacity headroom while the machine
+    /// is nearly out of RAM). It is charged inside <see cref="FileContent.TryWriteFrom"/> and
+    /// <see cref="FileContent.TryResize"/> with the backing arrays an operation really allocates,
+    /// not its growth in allocation size: that growth is sparse, so charging it would both deny
+    /// preallocations that cost nothing and let later writes into the preallocated range go
+    /// unguarded.
+    /// </summary>
     private readonly MemoryHeadroomBudget _memoryBudget;
     private readonly bool _readOnly;
 
@@ -212,7 +222,7 @@ public sealed class MemoryFileSystem : FileSystemBase
     /// Creates a new file or directory node.
     /// </summary>
     /// <returns>
-    /// STATUS_SUCCESS, STATUS_OBJECT_NAME_COLLISION, STATUS_DISK_FULL, or STATUS_INSUFFICIENT_RESOURCES.
+    /// STATUS_SUCCESS, STATUS_OBJECT_NAME_COLLISION, or STATUS_DISK_FULL.
     /// </returns>
     public override int Create(
         string fileName,
@@ -246,11 +256,6 @@ public sealed class MemoryFileSystem : FileSystemBase
         if (WouldExceedCapacity(aligned))
         {
             return STATUS_DISK_FULL;
-        }
-
-        if (WouldExceedSystemMemory(aligned))
-        {
-            return STATUS_INSUFFICIENT_RESOURCES;
         }
 
         var now = FileTimeNow();
@@ -468,7 +473,7 @@ public sealed class MemoryFileSystem : FileSystemBase
     /// then resets its content to zero length.
     /// </summary>
     /// <returns>
-    /// STATUS_SUCCESS, STATUS_DISK_FULL, or STATUS_INSUFFICIENT_RESOURCES.
+    /// STATUS_SUCCESS or STATUS_DISK_FULL.
     /// </returns>
     public override int Overwrite(
         object fileNode,
@@ -493,12 +498,6 @@ public sealed class MemoryFileSystem : FileSystemBase
         {
             fileInfo = node.FileInfo;
             return STATUS_DISK_FULL;
-        }
-
-        if (WouldExceedSystemMemory(extra))
-        {
-            fileInfo = node.FileInfo;
-            return STATUS_INSUFFICIENT_RESOURCES;
         }
 
         if (replaceFileAttributes)
@@ -837,8 +836,9 @@ public sealed class MemoryFileSystem : FileSystemBase
         }
 
         var writeEnd = writeOffset + length;
+        var originalFileSize = node.FileInfo.FileSize;
 
-        if (writeEnd > node.FileInfo.FileSize)
+        if (writeEnd > originalFileSize)
         {
             var result = SetFileSizeCore(node, writeEnd, setAllocationSize: false);
             if (result != STATUS_SUCCESS)
@@ -849,7 +849,22 @@ public sealed class MemoryFileSystem : FileSystemBase
 
         if (length > 0 && node.FileData != null)
         {
-            node.FileData.WriteFrom(buffer, writeOffset, length);
+            // Growth above only reserves sparse space; this is where memory is actually
+            // allocated, so it's where the low-memory guard is charged. On denial, undo the size
+            // extension so the failed write leaves the file's visible size as it was (the grown
+            // allocation stays, but is sparse and costs nothing).
+            if (!node.FileData.TryWriteFrom(buffer, writeOffset, length, _memoryBudget))
+            {
+                if (node.FileInfo.FileSize != originalFileSize)
+                {
+                    node.FileInfo.FileSize = originalFileSize;
+                    MarkDirty();
+                }
+
+                fileInfo = node.FileInfo;
+                return STATUS_INSUFFICIENT_RESOURCES;
+            }
+
             node.ContentVersion++;
         }
 
@@ -1066,18 +1081,18 @@ public sealed class MemoryFileSystem : FileSystemBase
                 {
                     return STATUS_DISK_FULL;
                 }
-
-                if (WouldExceedSystemMemory(extra))
-                {
-                    return STATUS_INSUFFICIENT_RESOURCES;
-                }
             }
 
             if (aligned > 0)
             {
                 if (node.FileData != null)
                 {
-                    node.FileData.Resize(aligned);
+                    // Growing is sparse and free, except for reallocating a tail chunk that already
+                    // holds data; only that is charged against the low-memory guard.
+                    if (!node.FileData.TryResize(aligned, _memoryBudget))
+                    {
+                        return STATUS_INSUFFICIENT_RESOURCES;
+                    }
                 }
                 else
                 {
@@ -1124,12 +1139,4 @@ public sealed class MemoryFileSystem : FileSystemBase
     /// currently allocated total would exceed the volume's capacity ceiling.
     /// </summary>
     private bool WouldExceedCapacity(ulong extra) => NodeMap.GetTotalAllocated() + extra > _maxCapacity;
-
-    /// <summary>
-    /// Returns <c>true</c> when allocating <paramref name="extra"/> more bytes would leave less
-    /// than <see cref="MemoryHeadroomBudget.ReserveBytes"/> of physical memory available
-    /// system-wide. This is independent of <see cref="WouldExceedCapacity"/> — a disk can still
-    /// have configured capacity headroom while the host machine itself is nearly out of RAM.
-    /// </summary>
-    private bool WouldExceedSystemMemory(ulong extra) => _memoryBudget.WouldExceed(extra);
 }

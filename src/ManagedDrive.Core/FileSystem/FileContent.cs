@@ -145,6 +145,119 @@ public sealed class FileContent
         }
     }
 
+    /// <summary>
+    /// <see cref="Resize"/>, but first charges the backing memory the resize would really
+    /// allocate (<see cref="ResizeCost"/>) against <paramref name="budget"/>, under the same lock
+    /// acquisition. Leaves the content untouched when the budget refuses.
+    /// </summary>
+    /// <returns><c>false</c> if <paramref name="budget"/> refused the allocation.</returns>
+    internal bool TryResize(ulong alignedLength, MemoryHeadroomBudget budget)
+    {
+        lock (_lock)
+        {
+            if (budget.WouldExceed((ulong)ResizeCostCore(alignedLength)))
+            {
+                return false;
+            }
+
+            ResizeCore(alignedLength);
+            return true;
+        }
+    }
+
+    /// <summary>
+    /// <see cref="WriteFrom"/>, but first charges the backing memory the write would really
+    /// allocate (<see cref="WriteCost"/>) against <paramref name="budget"/>, under the same lock
+    /// acquisition. Leaves the content untouched when the budget refuses.
+    /// </summary>
+    /// <returns><c>false</c> if <paramref name="budget"/> refused the allocation.</returns>
+    internal bool TryWriteFrom(IntPtr source, ulong offset, uint length, MemoryHeadroomBudget budget)
+    {
+        lock (_lock)
+        {
+            if (budget.WouldExceed((ulong)WriteCostCore(offset, length)))
+            {
+                return false;
+            }
+
+            WriteFromCore(source, offset, length);
+            return true;
+        }
+    }
+
+    /// <summary>
+    /// Returns how many bytes of new backing arrays <see cref="Resize"/> to
+    /// <paramref name="alignedLength"/> would allocate.
+    /// </summary>
+    internal long ResizeCost(ulong alignedLength)
+    {
+        lock (_lock)
+        {
+            return ResizeCostCore(alignedLength);
+        }
+    }
+
+    /// <summary>
+    /// Returns how many bytes of new backing arrays <see cref="WriteFrom"/> over
+    /// <paramref name="length"/> bytes at <paramref name="offset"/> would allocate.
+    /// </summary>
+    internal long WriteCost(ulong offset, uint length)
+    {
+        lock (_lock)
+        {
+            return WriteCostCore(offset, length);
+        }
+    }
+
+    /// <summary>
+    /// Growth past a sparse terminal chunk only appends sparse placeholders and costs nothing;
+    /// only a materialized terminal chunk is ever reallocated (promoted to a full chunk, or grown
+    /// in place). Mirrors <see cref="ResizeCore"/>. Caller must hold <see cref="_lock"/>.
+    /// </summary>
+    private long ResizeCostCore(ulong alignedLength)
+    {
+        var newLength = (long)alignedLength;
+        if (newLength <= _length || _chunks.Count == 0 || _chunks[^1] is not { } terminal)
+        {
+            return 0;
+        }
+
+        var neededChunks = ChunkCountFor(newLength);
+        if (neededChunks > _chunks.Count)
+        {
+            return terminal.Length < ChunkSize ? ChunkSize : 0;
+        }
+
+        var wantCapacity = neededChunks == 1 ? TerminalCapacity(newLength) : ChunkSize;
+        return terminal.Length < wantCapacity ? wantCapacity : 0;
+    }
+
+    /// <summary>
+    /// The size of every still-sparse chunk the range touches. The range must lie within
+    /// <see cref="Length"/>. Caller must hold <see cref="_lock"/>.
+    /// </summary>
+    private long WriteCostCore(ulong offset, uint length)
+    {
+        if (length == 0)
+        {
+            return 0;
+        }
+
+        var first = (int)(offset / ChunkSize);
+        var last = (int)((offset + length - 1) / ChunkSize);
+        var cost = 0L;
+
+        for (var i = first; i <= last; i++)
+        {
+            if (_chunks[i] == null)
+            {
+                cost += ChunkAllocationSize(i);
+            }
+        }
+
+        return cost;
+    }
+
     private void ResizeCore(ulong alignedLength)
     {
         var newLength = (long)alignedLength;
@@ -276,23 +389,28 @@ public sealed class FileContent
     {
         lock (_lock)
         {
-            var pos = (long)offset;
-            var srcOffset = 0;
-            var remaining = (long)length;
+            WriteFromCore(source, offset, length);
+        }
+    }
 
-            while (remaining > 0)
-            {
-                var chunkIndex = (int)(pos / ChunkSize);
-                var chunkOffset = (int)(pos % ChunkSize);
-                var n = (int)Math.Min(remaining, ChunkSize - chunkOffset);
-                var chunk = _chunks[chunkIndex] ??= AllocateChunk(chunkIndex);
+    private void WriteFromCore(IntPtr source, ulong offset, uint length)
+    {
+        var pos = (long)offset;
+        var srcOffset = 0;
+        var remaining = (long)length;
 
-                Marshal.Copy(IntPtr.Add(source, srcOffset), chunk, chunkOffset, n);
+        while (remaining > 0)
+        {
+            var chunkIndex = (int)(pos / ChunkSize);
+            var chunkOffset = (int)(pos % ChunkSize);
+            var n = (int)Math.Min(remaining, ChunkSize - chunkOffset);
+            var chunk = _chunks[chunkIndex] ??= AllocateChunk(chunkIndex);
 
-                pos += n;
-                srcOffset += n;
-                remaining -= n;
-            }
+            Marshal.Copy(IntPtr.Add(source, srcOffset), chunk, chunkOffset, n);
+
+            pos += n;
+            srcOffset += n;
+            remaining -= n;
         }
     }
 
@@ -552,16 +670,16 @@ public sealed class FileContent
     /// </summary>
     /// <param name="chunkIndex">Index of the chunk to materialize, within the current <see cref="_chunks"/> bounds.</param>
     /// <returns>A newly allocated, zero-filled backing array for that chunk.</returns>
-    private byte[] AllocateChunk(int chunkIndex)
-    {
-        if (chunkIndex == _chunks.Count - 1)
-        {
-            var terminalUsed = _length - (long)chunkIndex * ChunkSize;
-            return new byte[TerminalCapacity(terminalUsed)];
-        }
+    private byte[] AllocateChunk(int chunkIndex) => new byte[ChunkAllocationSize(chunkIndex)];
 
-        return new byte[ChunkSize];
-    }
+    /// <summary>
+    /// The size <see cref="AllocateChunk"/> gives the chunk at <paramref name="chunkIndex"/>;
+    /// shared with <see cref="WriteCostCore"/> so the cost estimate can't drift from the allocation.
+    /// </summary>
+    private int ChunkAllocationSize(int chunkIndex) =>
+        chunkIndex == _chunks.Count - 1
+            ? TerminalCapacity(_length - (long)chunkIndex * ChunkSize)
+            : ChunkSize;
 
     /// <summary>
     /// Read-only, seekable view over a <see cref="FileContent"/>'s leading bytes that reads

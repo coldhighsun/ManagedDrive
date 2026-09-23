@@ -320,6 +320,60 @@ public class FileContentTests
         Assert.Equal(expected, bytes);
     }
 
+    [Fact]
+    public void WriteCost_MatchesBytesTheWriteMaterializes()
+    {
+        var content = FileContent.CreateZeroed(FileContent.ChunkSize * 3 + 1024);
+        var data = new byte[FileContent.ChunkSize + 100];
+
+        var cost = content.WriteCost(FileContent.ChunkSize - 50, (uint)data.Length);
+        WriteBytes(content, FileContent.ChunkSize - 50, data);
+
+        Assert.Equal(content.BackingByteCount, cost);
+        Assert.Equal(0, content.WriteCost(FileContent.ChunkSize - 50, (uint)data.Length));
+    }
+
+    [Fact]
+    public void WriteCost_TerminalChunk_UsesRightSizedCapacity()
+    {
+        var content = FileContent.CreateZeroed(FileContent.ChunkSize + 1024);
+
+        var cost = content.WriteCost(FileContent.ChunkSize, 10);
+        WriteBytes(content, FileContent.ChunkSize, new byte[10]);
+
+        Assert.Equal(1024, cost);
+        Assert.Equal(1024, content.BackingByteCount);
+    }
+
+    [Fact]
+    public void ResizeCost_SparseContent_IsZero()
+    {
+        var content = FileContent.CreateZeroed(512);
+
+        Assert.Equal(0, content.ResizeCost(64UL * 1024 * 1024));
+    }
+
+    [Fact]
+    public void ResizeCost_GrowingWrittenTerminalChunk_MatchesNewCapacity()
+    {
+        var content = FileContent.FromSpan(new byte[100], 512);
+
+        var cost = content.ResizeCost(4096);
+        content.Resize(4096);
+
+        Assert.Equal(4096, cost);
+        Assert.Equal(4096, content.BackingByteCount);
+    }
+
+    [Fact]
+    public void ResizeCost_PromotingWrittenTerminalChunk_CountsFullChunk()
+    {
+        var content = FileContent.FromSpan(new byte[100], 512);
+
+        Assert.Equal(FileContent.ChunkSize, content.ResizeCost(FileContent.ChunkSize * 2));
+        Assert.Equal(0, content.ResizeCost(256));
+    }
+
     private static byte[] Filled(int length, byte value)
     {
         var data = new byte[length];
