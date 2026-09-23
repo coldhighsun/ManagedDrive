@@ -75,10 +75,26 @@ public static class HelperPipeClient
             return false;
         }
 
-        using var reader = new StreamReader(pipe, leaveOpen: true);
-        using var writer = new StreamWriter(pipe, leaveOpen: true);
-        writer.AutoFlush = true;
+        var reader = new StreamReader(pipe, leaveOpen: true);
+        var writer = new StreamWriter(pipe, leaveOpen: true) { AutoFlush = true };
 
+        // Disposed manually (not via `using`) because the timeout path below force-closes the
+        // underlying pipe to unblock a stuck read; disposing reader/writer afterwards would throw
+        // trying to flush/close a stream on top of an already-closed pipe.
+        try
+        {
+            return TrySendCore(pipe, reader, writer, request, ref response);
+        }
+        finally
+        {
+            try { reader.Dispose(); } catch (Exception) { }
+            try { writer.Dispose(); } catch (Exception) { }
+        }
+    }
+
+    private static bool TrySendCore(
+        NamedPipeClientStream pipe, StreamReader reader, StreamWriter writer, HelperRequest request, ref HelperResponse response)
+    {
         writer.WriteLine(HelperPipeProtocol.SerializeRequest(request));
 
         // Deliberately not `new CancellationTokenSource(ReadTimeout)`: that schedules its Cancel()
@@ -93,10 +109,18 @@ public static class HelperPipeClient
         {
             readCts.Cancel();
 
-            // Wait for the cancelled read to actually finish before the `using` declarations
-            // above dispose reader/pipe — otherwise disposal could race the still-in-flight read.
-            // Any exception here (cancellation, broken pipe) is irrelevant: we're already
-            // returning false.
+            // Cancelling the token alone isn't enough: a pending overlapped read on a named pipe
+            // can stay stuck past the CancellationToken if the server never writes or closes its
+            // end, so force it to unblock by closing the pipe out from under it. That's what
+            // actually aborts the OS-level read; the token cancellation above is only enough when
+            // the read hasn't yet reached the OS. TrySend's finally block disposes reader/writer
+            // on top of this already-closed pipe and swallows the resulting exceptions.
+            pipe.Dispose();
+
+            // Wait for the read to actually finish before returning — otherwise a caller reusing
+            // the (already-disposed) pipe/reader could race the still-in-flight read completion.
+            // Any exception here (cancellation, broken pipe, disposed) is irrelevant: we're
+            // already returning false.
             try
             {
                 readTask.Wait();
