@@ -260,7 +260,9 @@ internal static class SnapshotStore
     }
 
     /// <summary>
-    /// Writes the blob for <paramref name="hash"/> if it doesn't already exist. Streams
+    /// Stores the first <paramref name="length"/> bytes of <paramref name="data"/> as a
+    /// content-addressed blob, unless a blob with that content already exists, and returns the
+    /// SHA-256 hash the blob is stored under. Streams
     /// <paramref name="data"/> straight from <see cref="FileContent"/> through Zstd compression
     /// and (when <paramref name="cek"/> is set) chunked AES-256-GCM encryption directly into the
     /// destination file — no whole-file buffer is ever materialized, so a single blob's size is
@@ -270,21 +272,38 @@ internal static class SnapshotStore
     /// blobs are always flagged <see cref="BlobFlagZstd"/> — nothing writes gzip anymore, but blobs
     /// written before this flag existed stay gzip forever since content-addressed blobs already on
     /// disk are never rewritten.
+    /// <para>
+    /// The file may still be written to while this runs, so the content is read twice: once to
+    /// hash it and check whether the blob already exists, then again to write a new blob. The
+    /// blob is named after a hash taken of the bytes actually written, not the first pass's, so a
+    /// write landing between the two passes can't leave a blob whose bytes differ from its name,
+    /// which dedup would then hand to every later snapshot of that content.
+    /// </para>
     /// </summary>
-    private static void EnsureBlobWritten(string blobDirectory, byte[] hash, FileContent data, long length, ImageCompressionLevel level, byte[]? cek, int? customZstdLevel)
+    /// <param name="beforeBlobWrite">Test seam invoked between the two passes.</param>
+    internal static byte[] WriteBlob(string blobDirectory, FileContent data, long length, ImageCompressionLevel level, byte[]? cek, int? customZstdLevel, Action? beforeBlobWrite = null)
     {
+        byte[] hash;
+        using (var incrementalHash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256))
+        {
+            data.HashInto(incrementalHash, length);
+            hash = incrementalHash.GetHashAndReset();
+        }
+
         var blobPath = HashToBlobPath(blobDirectory, hash);
         if (File.Exists(blobPath))
         {
-            return;
+            return hash;
         }
 
+        beforeBlobWrite?.Invoke();
         Directory.CreateDirectory(Path.GetDirectoryName(blobPath)!);
 
         var compress = level != ImageCompressionLevel.None;
         var flag = (compress ? BlobFlagCompressed | BlobFlagZstd : 0) | (cek is not null ? BlobFlagEncrypted | BlobFlagChunked : 0);
 
         var tempPath = blobPath + "." + Guid.NewGuid().ToString("N") + ".tmp";
+        using var writtenHash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
 
         try
         {
@@ -307,7 +326,7 @@ internal static class SnapshotStore
                     var zstd = new ParallelZstd.WriteStream(target, level.ToZstdLevel(customZstdLevel));
                     try
                     {
-                        data.CopyTo(zstd, length);
+                        data.CopyTo(new HashingWriteStream(zstd, writtenHash), length);
                     }
                     finally
                     {
@@ -319,34 +338,57 @@ internal static class SnapshotStore
                 }
                 else
                 {
-                    data.CopyTo(target, length);
+                    data.CopyTo(new HashingWriteStream(target, writtenHash), length);
                 }
 
                 chunkedStream?.Complete();
                 stream.Flush(flushToDisk: true);
             }
 
+            var actualHash = writtenHash.GetHashAndReset();
+            if (!actualHash.AsSpan().SequenceEqual(hash))
+            {
+                // The content changed since the first pass; file the blob under what was written.
+                hash = actualHash;
+                blobPath = HashToBlobPath(blobDirectory, hash);
+                Directory.CreateDirectory(Path.GetDirectoryName(blobPath)!);
+            }
+
             File.Move(tempPath, blobPath, overwrite: false);
         }
-        catch (IOException)
+        catch (IOException) when (File.Exists(blobPath))
         {
             // Another writer already created this content-addressed blob; its bytes are
             // equivalent modulo compression, so no correctness issue. Clean up our temp file.
-            try
-            {
-                File.Delete(tempPath);
-            }
-            catch
-            {
-                // Best-effort cleanup.
-            }
+            TryDelete(tempPath);
+        }
+        catch
+        {
+            // Anything else (e.g. disk full) means no blob exists under this hash; surface it
+            // rather than record a hash that points at nothing.
+            TryDelete(tempPath);
+            throw;
+        }
+
+        return hash;
+    }
+
+    private static void TryDelete(string path)
+    {
+        try
+        {
+            File.Delete(path);
+        }
+        catch
+        {
+            // Best-effort cleanup.
         }
     }
 
     /// <summary>
     /// Reads the blob for <paramref name="hash"/> straight into a <see cref="FileContent"/> via
     /// <see cref="FileContent.FillFromStream"/>, decrypting (chunked or legacy whole-blob, see
-    /// <see cref="EnsureBlobWritten"/>) and decompressing on the fly rather than materializing the
+    /// <see cref="WriteBlob"/>) and decompressing on the fly rather than materializing the
     /// ciphertext, plaintext, and decompressed bytes as three separate whole-file buffers.
     /// </summary>
     private static FileContent ReadBlob(string blobDirectory, byte[] hash, string nodePath, ulong fileSize, ulong allocationSize, byte[]? cek)
@@ -520,32 +562,71 @@ internal static class SnapshotStore
 
     private static void WriteNode(BinaryWriter writer, string path, FileNode node, string blobDirectory, ImageCompressionLevel level, byte[]? cek, int? customZstdLevel)
     {
-        NodeMetadataIO.WriteMetadata(writer, path, node);
+        // The disk stays mounted while a snapshot is written, so capture the node's metadata and
+        // content reference once (Overwrite can swap FileData, a write can resize it) and record
+        // sizes describing exactly the bytes stored below. Otherwise a file resized mid-snapshot
+        // records a FileSize its blob doesn't match, and restoring the snapshot fails.
+        var info = node.FileInfo;
+        var security = node.FileSecurity;
 
         if (node.IsDirectory)
         {
+            NodeMetadataIO.WriteMetadata(writer, path, info, security);
             return;
         }
 
-        // Read FileData once: Overwrite can swap in a new instance mid-snapshot.
-        if (node.FileInfo.FileSize == 0 || node.FileData is not { } data)
+        var data = node.FileData;
+        var length = data is null ? 0L : (long)Math.Min(info.FileSize, (ulong)data.Length);
+        info.FileSize = (ulong)length;
+        info.AllocationSize = Math.Max(info.AllocationSize, FileNode.AlignToAllocationUnit((ulong)length));
+        NodeMetadataIO.WriteMetadata(writer, path, info, security);
+
+        if (length == 0)
         {
             writer.Write((byte)0); // EmptyFile marker
             return;
         }
 
-        var fileSize = (long)Math.Min(node.FileInfo.FileSize, (ulong)data.Length);
-
-        byte[] hash;
-        using (var incrementalHash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256))
-        {
-            data.HashInto(incrementalHash, fileSize);
-            hash = incrementalHash.GetHashAndReset();
-        }
-
-        EnsureBlobWritten(blobDirectory, hash, data, fileSize, level, cek, customZstdLevel);
+        var hash = WriteBlob(blobDirectory, data!, length, level, cek, customZstdLevel);
 
         writer.Write((byte)1); // HasBlob marker
         writer.Write(hash);
+    }
+
+    /// <summary>
+    /// Write-only pass-through stream that feeds every byte written to it into an incremental
+    /// hash, so a blob's name can be derived from exactly the bytes that went into it.
+    /// </summary>
+    private sealed class HashingWriteStream(Stream inner, IncrementalHash hash) : Stream
+    {
+        public override bool CanRead => false;
+
+        public override bool CanSeek => false;
+
+        public override bool CanWrite => true;
+
+        public override long Length => throw new NotSupportedException();
+
+        public override long Position
+        {
+            get => throw new NotSupportedException();
+            set => throw new NotSupportedException();
+        }
+
+        public override void Flush() => inner.Flush();
+
+        public override void Write(byte[] buffer, int offset, int count) => Write(buffer.AsSpan(offset, count));
+
+        public override void Write(ReadOnlySpan<byte> buffer)
+        {
+            hash.AppendData(buffer);
+            inner.Write(buffer);
+        }
+
+        public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+
+        public override void SetLength(long value) => throw new NotSupportedException();
     }
 }

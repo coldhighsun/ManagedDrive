@@ -12,20 +12,28 @@ internal static class NodeMetadataIO
 {
     public readonly record struct NodeMetadata(string Path, Fsp.Interop.FileInfo FileInfo, byte[]? Security);
 
-    public static void WriteMetadata(BinaryWriter writer, string path, FileNode node)
+    public static void WriteMetadata(BinaryWriter writer, string path, FileNode node) =>
+        WriteMetadata(writer, path, node.FileInfo, node.FileSecurity);
+
+    /// <summary>
+    /// Writes a metadata record from an already-captured <paramref name="fileInfo"/>, for callers
+    /// that must record sizes matching the exact bytes they go on to store rather than whatever
+    /// the live node reports by the time the record is written.
+    /// </summary>
+    public static void WriteMetadata(BinaryWriter writer, string path, in Fsp.Interop.FileInfo fileInfo, byte[]? security)
     {
         writer.Write(path);
-        writer.Write(node.FileInfo.FileAttributes);
-        writer.Write(node.FileInfo.AllocationSize);
-        writer.Write(node.FileInfo.FileSize);
-        writer.Write(node.FileInfo.CreationTime);
-        writer.Write(node.FileInfo.LastAccessTime);
-        writer.Write(node.FileInfo.LastWriteTime);
-        writer.Write(node.FileInfo.ChangeTime);
-        writer.Write(node.FileInfo.IndexNumber);
-        writer.Write(node.FileInfo.HardLinks);
+        writer.Write(fileInfo.FileAttributes);
+        writer.Write(fileInfo.AllocationSize);
+        writer.Write(fileInfo.FileSize);
+        writer.Write(fileInfo.CreationTime);
+        writer.Write(fileInfo.LastAccessTime);
+        writer.Write(fileInfo.LastWriteTime);
+        writer.Write(fileInfo.ChangeTime);
+        writer.Write(fileInfo.IndexNumber);
+        writer.Write(fileInfo.HardLinks);
 
-        var security = node.FileSecurity ?? [];
+        security ??= [];
         writer.Write(security.Length);
         writer.Write(security);
     }
