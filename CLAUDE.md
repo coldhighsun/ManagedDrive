@@ -65,6 +65,7 @@ Snapshots use a separate format (magic `MDRS`) with content-addressed blob store
 - WinFsp callbacks fire on driver threads; state access through `FileNodeMap`'s lock.
 - Auto-save timer: periodic path uses `Lock.TryEnter()` (skip if busy); `Dispose()` uses blocking `lock` (wait then final save).
 - `FileNodeMap.GetTotalAllocated()` is O(1) via incremental `_totalAllocated`. Only mutate `AllocationSize` through `UpdateAllocationSize()` — direct assignment drifts the cached total.
+- The low-memory guard (`MemoryHeadroomBudget`) charges memory actually materialized, not allocation-size growth (growth is sparse: a chunk gets a backing array only when written). New paths that allocate content must go through `FileContent.TryWriteFrom`/`TryResize`/`FillFromStream`, or charge a precomputed cost (e.g. `CloneCost`) first — calling `WriteFrom`/`Resize` directly bypasses the guard.
 
 ### App layer patterns
 
