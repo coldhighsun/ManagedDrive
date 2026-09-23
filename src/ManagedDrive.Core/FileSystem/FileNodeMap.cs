@@ -170,44 +170,11 @@ public sealed class FileNodeMap : IDisposable
     /// </returns>
     public IReadOnlyList<KeyValuePair<string, FileNode>> GetChildren(string dirPath, string? marker)
     {
-        // For root "\" (length 1) the prefix equals dirPath itself; for others append "\"
-        var prefix = dirPath.Length == 1 ? dirPath : (dirPath + "\\");
-
-        // All keys sharing this prefix form a contiguous run in _sortedKeys (OrdinalIgnoreCase
-        // order). GetViewBetween seeks directly to that range in O(log n) instead of scanning
-        // the whole namespace from the start looking for where the run begins — the upper bound
-        // uses '￿', a value greater than any character used in a real path, so the view
-        // covers exactly "prefix" plus everything that starts with it.
-        var upperBound = prefix + '￿';
-
         List<KeyValuePair<string, FileNode>> matches = [];
         _syncRoot.EnterReadLock();
         try
         {
-            foreach (var path in _sortedKeys.GetViewBetween(prefix, upperBound))
-            {
-                if (string.Equals(path, dirPath, StringComparison.OrdinalIgnoreCase))
-                {
-                    continue;
-                }
-
-                // Only immediate children: no additional backslash after the prefix. Compare via
-                // span so the common marker == null case never allocates a substring just to
-                // test for a separator.
-                var childSpan = path.AsSpan(prefix.Length);
-                if (childSpan.Contains('\\'))
-                {
-                    continue;
-                }
-
-                if (marker != null &&
-                    childSpan.CompareTo(marker, StringComparison.OrdinalIgnoreCase) <= 0)
-                {
-                    continue;
-                }
-
-                matches.Add(new(path, _map[path]));
-            }
+            ScanImmediateChildren(dirPath, marker, matches);
         }
         finally
         {
@@ -225,33 +192,88 @@ public sealed class FileNodeMap : IDisposable
     /// <param name="dirPath">Absolute path of the directory to check.</param>
     public bool HasChildren(string dirPath)
     {
-        var prefix = dirPath.Length == 1 ? dirPath : (dirPath + "\\");
-        var upperBound = prefix + '￿';
-
         _syncRoot.EnterReadLock();
         try
         {
-            foreach (var path in _sortedKeys.GetViewBetween(prefix, upperBound))
+            return ScanImmediateChildren(dirPath, marker: null, matches: null);
+        }
+        finally
+        {
+            _syncRoot.ExitReadLock();
+        }
+    }
+
+    /// <summary>
+    /// Walks the immediate children of <paramref name="dirPath"/> in <see cref="_sortedKeys"/>
+    /// order, jumping over each child directory's subtree rather than stepping through it, so the
+    /// cost scales with the number of immediate children (times O(log n) per subtree jump) instead
+    /// of the size of the whole subtree below <paramref name="dirPath"/>. Caller must hold the
+    /// read (or write) lock.
+    /// </summary>
+    /// <param name="dirPath">Absolute path of the directory to enumerate.</param>
+    /// <param name="marker">When non-<c>null</c>, children whose name is &lt;= this value are skipped.</param>
+    /// <param name="matches">
+    /// Receives every matching child; when <c>null</c>, the scan stops at the first match.
+    /// </param>
+    /// <returns><c>true</c> if at least one matching child was found.</returns>
+    private bool ScanImmediateChildren(string dirPath, string? marker, List<KeyValuePair<string, FileNode>>? matches)
+    {
+        // For root "\" (length 1) the prefix equals dirPath itself; for others append "\"
+        var prefix = dirPath.Length == 1 ? dirPath : (dirPath + "\\");
+
+        // All keys sharing this prefix form a contiguous run in _sortedKeys (OrdinalIgnoreCase
+        // order); the upper bound uses '￿', greater than any character in a real path. With a
+        // marker, the scan seeks straight to it instead of walking every earlier child.
+        var upperBound = prefix + '￿';
+        var lowerBound = marker == null ? prefix : prefix + marker;
+        var comparer = StringComparer.OrdinalIgnoreCase;
+        var found = false;
+
+        while (comparer.Compare(lowerBound, upperBound) <= 0)
+        {
+            string? resumeAt = null;
+            foreach (var path in _sortedKeys.GetViewBetween(lowerBound, upperBound))
             {
                 if (string.Equals(path, dirPath, StringComparison.OrdinalIgnoreCase))
                 {
                     continue;
                 }
 
-                if (path.AsSpan(prefix.Length).Contains('\\'))
+                // A separator after the prefix means this key is inside some child directory's
+                // subtree. Keys starting with "prefix\child\" are contiguous and all sort before
+                // "prefix\child]" (']' is the character right after '\'), so resume there.
+                var childSpan = path.AsSpan(prefix.Length);
+                var separator = childSpan.IndexOf('\\');
+                if (separator >= 0)
+                {
+                    resumeAt = string.Concat(path.AsSpan(0, prefix.Length + separator), "]");
+                    break;
+                }
+
+                if (marker != null &&
+                    childSpan.CompareTo(marker, StringComparison.OrdinalIgnoreCase) <= 0)
                 {
                     continue;
                 }
 
-                return true;
+                found = true;
+                if (matches == null)
+                {
+                    return true;
+                }
+
+                matches.Add(new(path, _map[path]));
             }
 
-            return false;
+            if (resumeAt == null)
+            {
+                break;
+            }
+
+            lowerBound = resumeAt;
         }
-        finally
-        {
-            _syncRoot.ExitReadLock();
-        }
+
+        return found;
     }
 
     /// <summary>
