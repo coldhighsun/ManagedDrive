@@ -24,6 +24,14 @@ public sealed class MemoryFileSystem : FileSystemBase
     /// </summary>
     private const ulong LowMemoryReserveBytes = 256UL * 1024 * 1024;
 
+    /// <summary>
+    /// How long a reading from <see cref="_availableMemoryProvider"/> may be reused, in
+    /// milliseconds. Querying it (<c>GlobalMemoryStatusEx</c>) costs ~0.7 µs, which on a
+    /// small-block streaming append — where nearly every write extends the allocation — was
+    /// most of the write's cost. See <see cref="WouldExceedSystemMemory"/>.
+    /// </summary>
+    private const long MemoryHeadroomRefreshMs = 100;
+
     private readonly Func<ulong> _availableMemoryProvider;
     private readonly bool _readOnly;
 
@@ -42,6 +50,19 @@ public sealed class MemoryFileSystem : FileSystemBase
     private string? _lastContentReadPath;
     private string? _lastContentWritePath;
     private long _lastContentWriteTicks;
+
+    /// <summary>
+    /// Bytes this file system may still allocate before dipping into
+    /// <see cref="LowMemoryReserveBytes"/>, as of the last provider reading minus everything
+    /// granted since. Negative once exhausted. Only trusted until <see cref="_memoryHeadroomExpiresAt"/>.
+    /// </summary>
+    private long _memoryHeadroom;
+
+    /// <summary>
+    /// <see cref="Environment.TickCount64"/> value after which <see cref="_memoryHeadroom"/> is
+    /// stale and must be re-read. Starts at 0 so the first check always queries.
+    /// </summary>
+    private long _memoryHeadroomExpiresAt;
     private ulong _maxCapacity;
     private long _totalBytesRead;
     private long _totalBytesWritten;
@@ -1136,5 +1157,40 @@ public sealed class MemoryFileSystem : FileSystemBase
     /// independent of <see cref="WouldExceedCapacity"/> — a disk can still have configured
     /// capacity headroom while the host machine itself is nearly out of RAM.
     /// </summary>
-    private bool WouldExceedSystemMemory(ulong extra) => extra > 0 && _availableMemoryProvider() < extra + LowMemoryReserveBytes;
+    /// <remarks>
+    /// Rather than querying the provider on every growing write, a reading is turned into a
+    /// headroom budget that each granted allocation is atomically charged against, and reused for
+    /// up to <see cref="MemoryHeadroomRefreshMs"/>. A request the cached budget can't cover always
+    /// falls through to a fresh reading, so a denial is never based on stale data; staleness can
+    /// only let through memory another process consumed within the refresh window. Two threads
+    /// refreshing at once may each overwrite the other's charge — at most one allocation per
+    /// refresh goes unaccounted, which the next refresh corrects anyway. Freed memory is not
+    /// credited back; the next refresh picks it up.
+    /// </remarks>
+    private bool WouldExceedSystemMemory(ulong extra)
+    {
+        if (extra == 0)
+        {
+            return false;
+        }
+
+        var charge = (long)Math.Min(extra, long.MaxValue);
+        var now = Environment.TickCount64;
+
+        if (now < Volatile.Read(ref _memoryHeadroomExpiresAt) &&
+            Interlocked.Add(ref _memoryHeadroom, -charge) >= 0)
+        {
+            return false;
+        }
+
+        var available = _availableMemoryProvider();
+        var headroom = available > LowMemoryReserveBytes
+            ? (long)Math.Min(available - LowMemoryReserveBytes, long.MaxValue)
+            : 0;
+        var exceeds = headroom < charge;
+
+        Volatile.Write(ref _memoryHeadroom, exceeds ? headroom : headroom - charge);
+        Volatile.Write(ref _memoryHeadroomExpiresAt, now + MemoryHeadroomRefreshMs);
+        return exceeds;
+    }
 }
