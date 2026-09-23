@@ -189,7 +189,8 @@ public sealed class MemoryFileSystem : FileSystemBase
         var node = (FileNode)fileNode;
         var now = FileTimeNow();
 
-        if ((flags & CleanupDelete) != 0 && !_readOnly)
+        var deleted = (flags & CleanupDelete) != 0 && !_readOnly;
+        if (deleted)
         {
             NodeMap.Remove(fileName);
             MarkDirty();
@@ -203,7 +204,9 @@ public sealed class MemoryFileSystem : FileSystemBase
             MarkDirty();
         }
 
-        if ((flags & CleanupSetAllocationSize) != 0 && !node.IsDirectory && !_readOnly)
+        // Skipped for a node deleted above: it's no longer in the map, so trimming it would
+        // subtract its allocation from the map's cached total a second time.
+        if ((flags & CleanupSetAllocationSize) != 0 && !node.IsDirectory && !_readOnly && !deleted)
         {
             // WinFsp asks for the allocation to be trimmed to the file size on close, releasing
             // space preallocated but never written. Only a real change marks the disk dirty.

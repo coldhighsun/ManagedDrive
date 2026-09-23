@@ -447,6 +447,23 @@ public sealed class MemoryFileSystemCallbackTests
     }
 
     [Fact]
+    public void Cleanup_DeleteTogetherWithSetAllocationSize_KeepsAllocatedTotalExact()
+    {
+        // A preallocated file deleted on close gets both flags in one Cleanup. The node is already
+        // out of the map, so trimming it must not subtract its allocation from the total again.
+        var fs = new MemoryFileSystem(1024 * 1024, "Label");
+        fs.Create("\\temp.bin", 0, 0, (uint)FileAttributes.Normal, [], 64 * 1024,
+            out var fileNode, out _, out _, out _);
+        fs.SetFileSize(fileNode!, null!, 100, setAllocationSize: false, out _);
+
+        fs.Cleanup(fileNode!, null!, "\\temp.bin",
+            MemoryFileSystem.CleanupDelete | MemoryFileSystem.CleanupSetAllocationSize);
+
+        Assert.False(fs.NodeMap.TryGet("\\temp.bin", out _));
+        Assert.Equal(0UL, fs.NodeMap.GetTotalAllocated());
+    }
+
+    [Fact]
     public void Write_OnReadOnlyFileSystem_ReturnsWriteProtectedAndLeavesContentUnchanged()
     {
         var fs = new MemoryFileSystem(1024 * 1024, "Label", readOnly: true);
