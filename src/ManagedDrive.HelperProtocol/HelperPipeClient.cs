@@ -16,9 +16,29 @@ public static class HelperPipeClient
     /// Upper bound on waiting for the service's response line. The service only performs a quick
     /// DOS-device symlink publish/remove, so this is purely a deadlock guard against a wedged or
     /// unresponsive service — without it, a connected-but-silent service would block the caller
-    /// forever even though every call is documented as best-effort.
+    /// forever even though every call is documented as best-effort. Overridable by tests via
+    /// <see cref="TestReadTimeoutOverride"/> to exercise the timeout path without a real 5-second
+    /// wait.
     /// </summary>
-    private static readonly TimeSpan ReadTimeout = TimeSpan.FromSeconds(5);
+    private static readonly TimeSpan DefaultReadTimeout = TimeSpan.FromSeconds(5);
+
+    /// <summary>
+    /// Test-only override for <see cref="DefaultReadTimeout"/>; <see langword="null"/> means use
+    /// the production default. Set via <c>InternalsVisibleTo("ManagedDrive.Tests")</c>.
+    /// </summary>
+    internal static TimeSpan? TestReadTimeoutOverride;
+
+    private static TimeSpan ReadTimeout => TestReadTimeoutOverride ?? DefaultReadTimeout;
+
+    /// <summary>
+    /// Test-only override for the pipe name <see cref="TrySend"/> connects to; <see langword="null"/>
+    /// means use <see cref="HelperPipeProtocol.PipeName"/>. Lets tests stand up a fake service
+    /// without colliding with a real running SYSTEM service's pipe. Set via
+    /// <c>InternalsVisibleTo("ManagedDrive.Tests")</c>.
+    /// </summary>
+    internal static string? TestPipeNameOverride;
+
+    private static string PipeName => TestPipeNameOverride ?? HelperPipeProtocol.PipeName;
 
     /// <summary>
     /// Asks the service to publish a global symlink <paramref name="letter"/> →
@@ -44,7 +64,7 @@ public static class HelperPipeClient
     {
         response = new(false, string.Empty);
 
-        using var pipe = new NamedPipeClientStream(".", HelperPipeProtocol.PipeName, PipeDirection.InOut, PipeOptions.Asynchronous);
+        using var pipe = new NamedPipeClientStream(".", PipeName, PipeDirection.InOut, PipeOptions.Asynchronous);
 
         try
         {
