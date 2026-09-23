@@ -280,6 +280,111 @@ public sealed class DiskImageSerializerIncrementalTests
         }
     }
 
+    [Theory]
+    [InlineData(ImageCompressionLevel.None, false)]
+    [InlineData(ImageCompressionLevel.Fastest, false)]
+    [InlineData(ImageCompressionLevel.None, true)]
+    [InlineData(ImageCompressionLevel.Fastest, true)]
+    public void Load_ManySegments_DecodedInParallel_RoundTripsInOrder(ImageCompressionLevel level, bool encrypted)
+    {
+        // Far more segments than processors, so the load keeps a full window of segments in
+        // flight and has to reassemble them in file order.
+        var contents = Enumerable.Range(0, 200)
+            .Select(i => System.Text.Encoding.UTF8.GetBytes($"content of file {i} " + new string((char)('a' + i % 26), i)))
+            .ToArray();
+
+        AssertSegmentedRoundTrip(contents, level, encrypted);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Load_LargeSegmentsBetweenSmallOnes_RoundTripsInOrder(bool encrypted)
+    {
+        // With a 4 KB Zstd chunk, the random (incompressible) 20 KB files make segments whose
+        // payload spans several chunks, which the load decodes on its own with full parallelism
+        // after draining the small segments queued before it.
+        ParallelZstd.TestChunkSizeOverride = 4096;
+        try
+        {
+            var random = new Random(42);
+            var contents = Enumerable.Range(0, 40)
+                .Select(i =>
+                {
+                    if (i % 5 != 0)
+                    {
+                        return System.Text.Encoding.UTF8.GetBytes($"small file {i}");
+                    }
+
+                    var bytes = new byte[20_000 + i];
+                    random.NextBytes(bytes);
+                    return bytes;
+                })
+                .ToArray();
+
+            AssertSegmentedRoundTrip(contents, ImageCompressionLevel.Fastest, encrypted);
+        }
+        finally
+        {
+            ParallelZstd.TestChunkSizeOverride = null;
+        }
+    }
+
+    /// <summary>
+    /// Saves one file per segment, loads the image, and checks every file's content plus that the
+    /// loaded nodes were stamped with their segments in order: an incremental save straight after
+    /// the load must find every segment clean and reproduce the image byte for byte.
+    /// </summary>
+    private static void AssertSegmentedRoundTrip(byte[][] contents, ImageCompressionLevel level, bool encrypted)
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid()}.mdr");
+        try
+        {
+            var map = new FileNodeMap();
+            map.Add("\\", MakeDir());
+            for (var i = 0; i < contents.Length; i++)
+            {
+                map.Add($"\\File{i:D4}.bin", MakeFile(contents[i]));
+            }
+
+            const string password = "s3cret";
+            var encryption = encrypted ? new ImageEncryptionInfo(password, DiskImageSerializer.GenerateCek()) : (ImageEncryptionInfo?)null;
+
+            DiskImageSerializer.SaveSegmentedIncrementalForTest(map, 16 * 1024 * 1024, "Label", path,
+                level, encryption, segmentTargetBytes: 1);
+            var saved = File.ReadAllBytes(path);
+
+            var loaded = DiskImageSerializer.Load(path, out _, out _, encrypted ? password : null, out var cek);
+
+            Assert.Equal(contents.Length + 1, loaded.Count);
+            for (var i = 0; i < contents.Length; i++)
+            {
+                Assert.True(loaded.TryGet($"\\File{i:D4}.bin", out var node));
+                Assert.Equal(contents[i], node!.FileData!.ToArray((long)node.FileInfo.FileSize));
+            }
+
+            var segmentIndices = loaded.GetAllNodes().Select(kvp => kvp.Value.SavedSegmentIndex).ToArray();
+            Assert.Equal(segmentIndices.Order(), segmentIndices);
+            Assert.True(segmentIndices[^1] >= contents.Length - 1);
+
+            var reloadEncryption = encrypted ? new ImageEncryptionInfo(password, cek!) : (ImageEncryptionInfo?)null;
+            DiskImageSerializer.SaveSegmentedIncrementalForTest(loaded, 16 * 1024 * 1024, "Label", path,
+                level, reloadEncryption, segmentTargetBytes: 1);
+            var resaved = File.ReadAllBytes(path);
+
+            // Every save re-wraps the CEK under a fresh salt and nonce, so for an encrypted image
+            // compare from the segment index onward: magic(4) version(4) level(1) encrypted(1)
+            // capacity(8) label(1 + 5), then salt(16) iterations(4) nonce(12) tag(16) wrapped CEK(32).
+            var skip = encrypted ? 24 + 80 : 0;
+            Assert.Equal(saved.Length, resaved.Length);
+            Assert.Equal(saved.AsSpan(skip).ToArray(), resaved.AsSpan(skip).ToArray());
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
     private static FileNode MakeDir() => new()
     {
         FileInfo = { FileAttributes = (uint)FileAttributes.Directory },

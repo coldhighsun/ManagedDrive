@@ -7,7 +7,7 @@ namespace ManagedDrive.Core.Diagnostics;
 /// Task Manager reports (unlike <see cref="GC.GetGCMemoryInfo()"/>, which reflects the
 /// .NET GC's own memory limit rather than true system-wide available RAM).
 /// </summary>
-public static class SystemMemoryInfo
+public static partial class SystemMemoryInfo
 {
     /// <summary>
     /// Gets the amount of physical memory currently available, in bytes.
@@ -19,8 +19,11 @@ public static class SystemMemoryInfo
         return GlobalMemoryStatusEx(ref status) ? status.ullAvailPhys : 0;
     }
 
-    [DllImport("kernel32.dll", SetLastError = true)]
-    private static extern bool GlobalMemoryStatusEx(ref MEMORYSTATUSEX lpBuffer);
+    // Source-generated marshaling (LibraryImport) instead of DllImport: no reflection-based stub
+    // built at first call, and the marshaling code is checked at compile time.
+    [LibraryImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool GlobalMemoryStatusEx(ref MEMORYSTATUSEX lpBuffer);
 
     /// <summary>
     /// Native <c>MEMORYSTATUSEX</c> structure passed to <see cref="GlobalMemoryStatusEx"/>.
