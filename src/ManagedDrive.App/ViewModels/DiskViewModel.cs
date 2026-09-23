@@ -38,9 +38,11 @@ public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
     private readonly ThroughputTracker _writeThroughput = new();
 
     private bool _activityTrackingEnabled;
+    private int _activityDrainScheduled;
     private ulong _freeBytes;
     private bool _isCurrentTempDir;
-    private DiskActivityEventArgs? _pendingActivity;
+    private int _pendingRead;
+    private int _pendingWrite;
     private double _readBytesPerSecond;
     private int _speedHistoryHead;
     private ulong _usedBytes;
@@ -468,13 +470,14 @@ public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
         _activityTrackingEnabled = enabled;
         if (enabled)
         {
+            ResetActivityState();
             Disk.ContentAccessed += OnContentAccessed;
         }
         else
         {
             Disk.ContentAccessed -= OnContentAccessed;
             _activityThrottleTimer.Stop();
-            _pendingActivity = null;
+            ResetActivityState();
         }
     }
 
@@ -497,25 +500,68 @@ public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
         return string.Equals(userTemp, diskTemp, StringComparison.OrdinalIgnoreCase);
     }
 
-    private void OnActivityThrottleTick(object? sender, EventArgs e)
+    /// <summary>
+    /// Runs on the UI thread, either dispatched by the first access of a burst or from each
+    /// throttle-timer tick while the burst lasts. Reports at most one access per call, preferring
+    /// writes; once a tick finds nothing pending the timer stops and the next access dispatches
+    /// again.
+    /// </summary>
+    private void DrainActivity()
     {
-        _activityThrottleTimer.Stop();
-
-        if (_pendingActivity is not { } pending)
+        if (!_activityTrackingEnabled)
         {
             return;
         }
 
-        _pendingActivity = null;
-        ActivityObserved?.Invoke(this, pending);
+        var hadWrite = Interlocked.Exchange(ref _pendingWrite, 0) != 0;
+        var hadRead = Interlocked.Exchange(ref _pendingRead, 0) != 0;
+        if (!hadWrite && !hadRead)
+        {
+            _activityThrottleTimer.Stop();
+            Interlocked.Exchange(ref _activityDrainScheduled, 0);
+
+            // An access that raced the reset saw the drain as still scheduled and didn't dispatch.
+            if ((Volatile.Read(ref _pendingWrite) | Volatile.Read(ref _pendingRead)) != 0
+                && Interlocked.Exchange(ref _activityDrainScheduled, 1) == 0)
+            {
+                _activityThrottleTimer.Start();
+            }
+            return;
+        }
+
+        if (!_activityThrottleTimer.IsEnabled)
+        {
+            _activityThrottleTimer.Start();
+        }
+
+        var path = hadWrite ? Disk.LastContentWritePath : Disk.LastContentReadPath;
+        if (path is not null)
+        {
+            ActivityObserved?.Invoke(this, new(hadWrite, path));
+        }
     }
 
+    private void OnActivityThrottleTick(object? sender, EventArgs e) => DrainActivity();
+
     /// <summary>
-    /// Handler for <see cref="RamDisk.ContentAccessed"/>. May run on any WinFsp driver thread,
-    /// so the actual throttling/reporting work is dispatched to the UI thread.
+    /// Handler for <see cref="RamDisk.ContentAccessed"/>. Runs on WinFsp driver threads for every
+    /// read/write, so it only sets a flag and dispatches to the UI thread once per burst; the
+    /// throttle timer drains the rest (see <see cref="DrainActivity"/>).
     /// </summary>
-    private void OnContentAccessed(bool isWrite) =>
-        Application.Current?.Dispatcher.BeginInvoke(() => ReportActivity(isWrite));
+    private void OnContentAccessed(bool isWrite)
+    {
+        ref var flag = ref isWrite ? ref _pendingWrite : ref _pendingRead;
+        if (Volatile.Read(ref flag) == 0)
+        {
+            Interlocked.Exchange(ref flag, 1);
+        }
+
+        if (Volatile.Read(ref _activityDrainScheduled) == 0
+            && Interlocked.Exchange(ref _activityDrainScheduled, 1) == 0)
+        {
+            Application.Current?.Dispatcher.InvokeAsync(DrainActivity);
+        }
+    }
 
     private void OnDiskSaveFailed(object? sender, Exception ex) =>
         Application.Current?.Dispatcher.Invoke(() => SaveFailed?.Invoke(this, ex));
@@ -525,34 +571,11 @@ public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
 
     private void OnRefreshTick(object? sender, EventArgs e) => Refresh();
 
-    /// <summary>
-    /// Runs on the UI thread. Implements the leading + trailing throttle: if no report is
-    /// in-flight, raises <see cref="ActivityObserved"/> immediately and starts the throttle
-    /// window; otherwise just records the latest access, which is reported once the window
-    /// elapses (see <see cref="OnActivityThrottleTick"/>). Writes take priority over reads when
-    /// both occur within the same window, matching the previous polling behavior.
-    /// </summary>
-    private void ReportActivity(bool isWrite)
+    private void ResetActivityState()
     {
-        var access = isWrite ? Disk.LastContentWriteAccess : Disk.LastContentReadAccess;
-        if (access is null)
-        {
-            return;
-        }
-
-        var args = new DiskActivityEventArgs(isWrite, access.Path);
-
-        if (!_activityThrottleTimer.IsEnabled)
-        {
-            _activityThrottleTimer.Start();
-            ActivityObserved?.Invoke(this, args);
-            return;
-        }
-
-        if (isWrite || _pendingActivity is not { IsWrite: true })
-        {
-            _pendingActivity = args;
-        }
+        Interlocked.Exchange(ref _pendingRead, 0);
+        Interlocked.Exchange(ref _pendingWrite, 0);
+        Interlocked.Exchange(ref _activityDrainScheduled, 0);
     }
 
     /// <summary>

@@ -39,45 +39,8 @@ public sealed class MemoryFileSystem : FileSystemBase
     /// </summary>
     private long _savedVersion;
 
-    /// <summary>
-    /// Path of the file most recently read via <see cref="Read"/>. Always updated together with
-    /// <see cref="_lastContentReadTicks"/> under <see cref="_lastContentReadAccessLock"/> so the
-    /// pair exposed by <see cref="LastContentReadAccess"/> is never torn.
-    /// </summary>
     private string? _lastContentReadPath;
-
-    /// <summary>
-    /// UTC ticks of the most recent successful <see cref="Read"/> of file content, or <c>0</c> if
-    /// the disk has never been read from since mount.
-    /// </summary>
-    private long _lastContentReadTicks;
-
-    /// <summary>
-    /// Guards atomic read/update of the <see cref="_lastContentReadPath"/> and
-    /// <see cref="_lastContentReadTicks"/> pair.
-    /// </summary>
-    private readonly Lock _lastContentReadAccessLock = new();
-
-    /// <summary>
-    /// Path of the file most recently written via <see cref="Write"/>. Always updated together
-    /// with <see cref="_lastContentWriteAccessTicks"/> under
-    /// <see cref="_lastContentWriteAccessLock"/> so the pair exposed by
-    /// <see cref="LastContentWriteAccess"/> is never torn.
-    /// </summary>
-    private string? _lastContentWriteAccessPath;
-
-    /// <summary>
-    /// UTC ticks of the most recent successful <see cref="Write"/> of file content, or <c>0</c>
-    /// if the disk has never been written to since mount.
-    /// </summary>
-    private long _lastContentWriteAccessTicks;
-
-    /// <summary>
-    /// Guards atomic read/update of the <see cref="_lastContentWriteAccessPath"/> and
-    /// <see cref="_lastContentWriteAccessTicks"/> pair.
-    /// </summary>
-    private readonly Lock _lastContentWriteAccessLock = new();
-
+    private string? _lastContentWritePath;
     private long _lastContentWriteTicks;
     private ulong _maxCapacity;
     private long _totalBytesRead;
@@ -139,49 +102,16 @@ public sealed class MemoryFileSystem : FileSystemBase
     internal bool IsDirty => Interlocked.Read(ref _mutationVersion) != Interlocked.Read(ref _savedVersion);
 
     /// <summary>
-    /// Gets an atomic snapshot of the most recent successful <see cref="Read"/> of file content
-    /// (time + path), or <c>null</c> if the disk has never been read from since mount.
+    /// Gets the path of the file most recently read via <see cref="Read"/>, or <c>null</c> if the
+    /// disk has never been read from since mount. Best-effort, for UI display only.
     /// </summary>
-    internal ContentAccessInfo? LastContentReadAccess
-    {
-        get
-        {
-            lock (_lastContentReadAccessLock)
-            {
-                return _lastContentReadPath is null ? null : new(new DateTimeOffset(_lastContentReadTicks, TimeSpan.Zero), _lastContentReadPath);
-            }
-        }
-    }
+    internal string? LastContentReadPath => Volatile.Read(ref _lastContentReadPath);
 
     /// <summary>
-    /// Gets the UTC timestamp of the most recent successful <see cref="Read"/> of file content,
-    /// or <c>null</c> if the disk has never been read from since mount.
+    /// Gets the path of the file most recently written via <see cref="Write"/>, or <c>null</c> if
+    /// the disk has never been written to since mount. Best-effort, for UI display only.
     /// </summary>
-    internal DateTimeOffset? LastContentReadTimeUtc
-    {
-        get
-        {
-            var ticks = Interlocked.Read(ref _lastContentReadTicks);
-            return ticks == 0 ? null : new DateTimeOffset(ticks, TimeSpan.Zero);
-        }
-    }
-
-    /// <summary>
-    /// Gets an atomic snapshot of the most recent successful <see cref="Write"/> of file content
-    /// (time + path), or <c>null</c> if the disk has never been written to since mount. Unlike
-    /// <see cref="LastContentWriteTimeUtc"/>, this only reflects actual content writes, not other
-    /// mutations (rename/delete/attribute changes/etc.) that also call <see cref="MarkDirty"/>.
-    /// </summary>
-    internal ContentAccessInfo? LastContentWriteAccess
-    {
-        get
-        {
-            lock (_lastContentWriteAccessLock)
-            {
-                return _lastContentWriteAccessPath is null ? null : new(new DateTimeOffset(_lastContentWriteAccessTicks, TimeSpan.Zero), _lastContentWriteAccessPath);
-            }
-        }
-    }
+    internal string? LastContentWritePath => Volatile.Read(ref _lastContentWritePath);
 
     /// <summary>
     /// Gets the UTC timestamp of the most recent content mutation (create/write/rename/delete/etc.),
@@ -630,12 +560,7 @@ public sealed class MemoryFileSystem : FileSystemBase
             node.FileData.ReadTo(offset, buffer, toRead);
             bytesTransferred = toRead;
             Interlocked.Add(ref _totalBytesRead, toRead);
-            var readNow = DateTimeOffset.UtcNow;
-            lock (_lastContentReadAccessLock)
-            {
-                Interlocked.Exchange(ref _lastContentReadTicks, readNow.UtcTicks);
-                _lastContentReadPath = node.FilePath;
-            }
+            RecordLastPath(ref _lastContentReadPath, node.FilePath);
             ContentAccessed?.Invoke(false);
         }
 
@@ -943,11 +868,7 @@ public sealed class MemoryFileSystem : FileSystemBase
         node.FileInfo.ChangeTime = now;
 
         MarkDirty(nowOffset);
-        lock (_lastContentWriteAccessLock)
-        {
-            _lastContentWriteAccessTicks = nowOffset.UtcTicks;
-            _lastContentWriteAccessPath = node.FilePath;
-        }
+        RecordLastPath(ref _lastContentWritePath, node.FilePath);
         fileInfo = node.FileInfo;
         return STATUS_SUCCESS;
     }
@@ -1099,6 +1020,16 @@ public sealed class MemoryFileSystem : FileSystemBase
             && groupOffset is > 0 and < int.MaxValue
             && ownerOffset < (uint)sd.Length
             && groupOffset < (uint)sd.Length;
+    }
+
+    /// <summary>
+    /// Skips the store when the path is unchanged so repeated I/O to the same file keeps the
+    /// field's cache line shared across cores instead of bouncing it on every call.
+    /// </summary>
+    private static void RecordLastPath(ref string? field, string path)
+    {
+        if (!ReferenceEquals(Volatile.Read(ref field), path))
+            Volatile.Write(ref field, path);
     }
 
     /// <summary>

@@ -85,24 +85,16 @@ public sealed class RamDisk : IDisposable
     public bool IsPasswordProtected => _password is not null;
 
     /// <summary>
-    /// Gets an atomic snapshot (time + path) of the most recent file content read, or
-    /// <c>null</c> if the disk has never been read from since mount.
+    /// Gets the path of the file most recently read, or <c>null</c> if the disk has never been
+    /// read from since mount. Best-effort, for UI display only.
     /// </summary>
-    public ContentAccessInfo? LastContentReadAccess => _fs.LastContentReadAccess;
+    public string? LastContentReadPath => _fs.LastContentReadPath;
 
     /// <summary>
-    /// Gets the UTC timestamp of the most recent file content read, or <c>null</c> if the disk
-    /// has never been read from since mount.
+    /// Gets the path of the file most recently written, or <c>null</c> if the disk has never had
+    /// content written to it since mount. Best-effort, for UI display only.
     /// </summary>
-    public DateTimeOffset? LastContentReadTime => _fs.LastContentReadTimeUtc;
-
-    /// <summary>
-    /// Gets an atomic snapshot (time + path) of the most recent file content write, or
-    /// <c>null</c> if the disk has never had content written to it since mount. Unlike
-    /// <see cref="LastContentWriteTime"/>, this only reflects actual content writes, not other
-    /// mutations (rename/delete/attribute changes/etc.).
-    /// </summary>
-    public ContentAccessInfo? LastContentWriteAccess => _fs.LastContentWriteAccess;
+    public string? LastContentWritePath => _fs.LastContentWritePath;
 
     /// <summary>
     /// Gets the UTC timestamp of the most recent content mutation (create/write/rename/delete/etc.),
