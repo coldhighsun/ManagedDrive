@@ -358,6 +358,94 @@ public sealed class MemoryFileSystemCallbackTests
         Assert.True(fs.IsDirty);
     }
 
+    // Callbacks that end up changing nothing must not mark the disk dirty, or they trigger an
+    // auto-save (and snapshot check) for a disk whose content is unchanged.
+
+    [Fact]
+    public void SetBasicInfo_NothingRequested_LeavesDiskClean()
+    {
+        var fs = new MemoryFileSystem(1024 * 1024, "Label");
+        fs.Create("\\file.bin", 0, 0, (uint)FileAttributes.Normal, [], 0,
+            out var fileNode, out _, out _, out _);
+        var node = (FileNode)fileNode!;
+        var versionBefore = node.MetadataVersion;
+        fs.ClearDirty();
+
+        var status = fs.SetBasicInfo(fileNode!, null!, FileNode.InvalidFileAttributes, 0, 0, 0, 0, out _);
+
+        Assert.Equal(0, status);
+        Assert.Equal(versionBefore, node.MetadataVersion);
+        Assert.False(fs.IsDirty);
+    }
+
+    [Fact]
+    public void SetBasicInfo_SameValues_LeavesDiskClean()
+    {
+        var fs = new MemoryFileSystem(1024 * 1024, "Label");
+        fs.Create("\\file.bin", 0, 0, (uint)FileAttributes.Normal, [], 0,
+            out var fileNode, out _, out _, out _);
+        var node = (FileNode)fileNode!;
+        var info = node.FileInfo;
+        var versionBefore = node.MetadataVersion;
+        fs.ClearDirty();
+
+        fs.SetBasicInfo(fileNode!, null!, info.FileAttributes, info.CreationTime, info.LastAccessTime,
+            info.LastWriteTime, info.ChangeTime, out _);
+
+        Assert.Equal(versionBefore, node.MetadataVersion);
+        Assert.False(fs.IsDirty);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void SetFileSize_Unchanged_LeavesDiskClean(bool setAllocationSize)
+    {
+        var fs = new MemoryFileSystem(1024 * 1024, "Label");
+        fs.Create("\\file.bin", 0, 0, (uint)FileAttributes.Normal, [], 0,
+            out var fileNode, out _, out _, out _);
+        fs.SetFileSize(fileNode!, null!, 512, setAllocationSize: false, out _);
+        fs.ClearDirty();
+
+        var status = fs.SetFileSize(fileNode!, null!, 512, setAllocationSize, out _);
+
+        Assert.Equal(0, status);
+        Assert.False(fs.IsDirty);
+    }
+
+    [Fact]
+    public void Cleanup_SetAllocationSizeWhenAllocationAlreadyFits_LeavesDiskClean()
+    {
+        var fs = new MemoryFileSystem(1024 * 1024, "Label");
+        fs.Create("\\file.bin", 0, 0, (uint)FileAttributes.Normal, [], 0,
+            out var fileNode, out _, out _, out _);
+        fs.SetFileSize(fileNode!, null!, 100, setAllocationSize: false, out _);
+        fs.ClearDirty();
+
+        fs.Cleanup(fileNode!, null!, "\\file.bin", MemoryFileSystem.CleanupSetAllocationSize);
+
+        Assert.False(fs.IsDirty);
+    }
+
+    [Fact]
+    public void Cleanup_SetAllocationSize_TrimsOverAllocationToFileSize()
+    {
+        // WinFsp asks for this on close so space preallocated but never used is given back.
+        var fs = new MemoryFileSystem(1024 * 1024, "Label");
+        fs.Create("\\file.bin", 0, 0, (uint)FileAttributes.Normal, [], 64 * 1024,
+            out var fileNode, out _, out _, out _);
+        fs.SetFileSize(fileNode!, null!, 100, setAllocationSize: false, out _);
+        var node = (FileNode)fileNode!;
+        fs.ClearDirty();
+
+        fs.Cleanup(fileNode!, null!, "\\file.bin", MemoryFileSystem.CleanupSetAllocationSize);
+
+        Assert.Equal(512UL, node.FileInfo.AllocationSize);
+        Assert.Equal(100UL, node.FileInfo.FileSize);
+        Assert.Equal(512UL, fs.NodeMap.GetTotalAllocated());
+        Assert.True(fs.IsDirty);
+    }
+
     [Fact]
     public void Write_OnReadOnlyFileSystem_ReturnsWriteProtectedAndLeavesContentUnchanged()
     {
