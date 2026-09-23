@@ -10,12 +10,6 @@ public sealed class FileNodeMap : IDisposable
     private readonly Dictionary<string, FileNode> _map = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
-    /// Paths removed since the last successful image save, for incremental image save to emit tombstones for.
-    /// Cleared by DrainRemovedSincePersist() once a save has picked them up.
-    /// </summary>
-    private readonly HashSet<string> _removedSincePersist = new(StringComparer.OrdinalIgnoreCase);
-
-    /// <summary>
     /// Parallel key index so directory enumeration (GetChildren) can seek directly to a path
     /// prefix's range in O(log n) via GetViewBetween, instead of scanning the whole namespace
     /// from the start looking for where the prefix run begins. _map itself is a plain Dictionary
@@ -87,7 +81,6 @@ public sealed class FileNodeMap : IDisposable
             node.LeafName = ComputeLeafName(filePath);
             _map[filePath] = node;
             Interlocked.Add(ref _totalAllocated, (long)node.FileInfo.AllocationSize);
-            _removedSincePersist.Remove(filePath);
         }
         finally
         {
@@ -107,7 +100,6 @@ public sealed class FileNodeMap : IDisposable
             _map.Clear();
             _sortedKeys.Clear();
             Interlocked.Exchange(ref _totalAllocated, 0);
-            _removedSincePersist.Clear();
 
             if (hasRoot)
             {
@@ -297,7 +289,6 @@ public sealed class FileNodeMap : IDisposable
             {
                 _sortedKeys.Remove(filePath);
                 Interlocked.Add(ref _totalAllocated, -(long)removed.FileInfo.AllocationSize);
-                _removedSincePersist.Add(filePath);
             }
         }
         finally
@@ -321,7 +312,6 @@ public sealed class FileNodeMap : IDisposable
             {
                 _sortedKeys.Remove(dirPath);
                 Interlocked.Add(ref _totalAllocated, -(long)removed.FileInfo.AllocationSize);
-                _removedSincePersist.Add(dirPath);
             }
 
             var prefix = dirPath + "\\";
@@ -334,7 +324,6 @@ public sealed class FileNodeMap : IDisposable
                 {
                     _sortedKeys.Remove(key);
                     Interlocked.Add(ref _totalAllocated, -(long)descendant.FileInfo.AllocationSize);
-                    _removedSincePersist.Add(key);
                 }
             }
         }
@@ -370,8 +359,6 @@ public sealed class FileNodeMap : IDisposable
                 descendant.MetadataVersion++;
                 _map[newKey] = descendant;
                 _sortedKeys.Add(newKey);
-                _removedSincePersist.Add(key);
-                _removedSincePersist.Remove(newKey);
             }
         }
         finally
@@ -433,37 +420,6 @@ public sealed class FileNodeMap : IDisposable
         finally
         {
             _syncRoot.ExitReadLock();
-        }
-    }
-
-    /// <summary>
-    /// Returns the set of paths removed since the last call to this method, and clears it. Today's
-    /// incremental image save (<c>DiskImageSerializer.SaveSegmentedIncremental</c>) detects removed
-    /// nodes indirectly instead — a segment's member count no longer matching what was recorded for
-    /// it is enough to force a rewrite — so it calls this purely to reset <see cref="_removedSincePersist"/>
-    /// after each successful save and does not use the returned paths. They're returned (rather
-    /// than this being a void <c>Reset()</c>) for a possible future save format that writes explicit
-    /// per-path tombstones; if a save that would consume the result fails, the caller is responsible
-    /// for not losing track of it.
-    /// </summary>
-    /// <returns>The paths removed since the previous drain.</returns>
-    internal IReadOnlySet<string> DrainRemovedSincePersist()
-    {
-        _syncRoot.EnterWriteLock();
-        try
-        {
-            if (_removedSincePersist.Count == 0)
-            {
-                return new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            }
-
-            var result = new HashSet<string>(_removedSincePersist, StringComparer.OrdinalIgnoreCase);
-            _removedSincePersist.Clear();
-            return result;
-        }
-        finally
-        {
-            _syncRoot.ExitWriteLock();
         }
     }
 
