@@ -39,9 +39,45 @@ public sealed class MemoryFileSystem : FileSystemBase
     /// </summary>
     private long _savedVersion;
 
-    private ContentAccessInfo? _lastContentReadAccess;
+    /// <summary>
+    /// Path of the file most recently read via <see cref="Read"/>. Always updated together with
+    /// <see cref="_lastContentReadTicks"/> under <see cref="_lastContentReadAccessLock"/> so the
+    /// pair exposed by <see cref="LastContentReadAccess"/> is never torn.
+    /// </summary>
+    private string? _lastContentReadPath;
+
+    /// <summary>
+    /// UTC ticks of the most recent successful <see cref="Read"/> of file content, or <c>0</c> if
+    /// the disk has never been read from since mount.
+    /// </summary>
     private long _lastContentReadTicks;
-    private ContentAccessInfo? _lastContentWriteAccess;
+
+    /// <summary>
+    /// Guards atomic read/update of the <see cref="_lastContentReadPath"/> and
+    /// <see cref="_lastContentReadTicks"/> pair.
+    /// </summary>
+    private readonly Lock _lastContentReadAccessLock = new();
+
+    /// <summary>
+    /// Path of the file most recently written via <see cref="Write"/>. Always updated together
+    /// with <see cref="_lastContentWriteAccessTicks"/> under
+    /// <see cref="_lastContentWriteAccessLock"/> so the pair exposed by
+    /// <see cref="LastContentWriteAccess"/> is never torn.
+    /// </summary>
+    private string? _lastContentWriteAccessPath;
+
+    /// <summary>
+    /// UTC ticks of the most recent successful <see cref="Write"/> of file content, or <c>0</c>
+    /// if the disk has never been written to since mount.
+    /// </summary>
+    private long _lastContentWriteAccessTicks;
+
+    /// <summary>
+    /// Guards atomic read/update of the <see cref="_lastContentWriteAccessPath"/> and
+    /// <see cref="_lastContentWriteAccessTicks"/> pair.
+    /// </summary>
+    private readonly Lock _lastContentWriteAccessLock = new();
+
     private long _lastContentWriteTicks;
     private ulong _maxCapacity;
     private long _totalBytesRead;
@@ -106,7 +142,16 @@ public sealed class MemoryFileSystem : FileSystemBase
     /// Gets an atomic snapshot of the most recent successful <see cref="Read"/> of file content
     /// (time + path), or <c>null</c> if the disk has never been read from since mount.
     /// </summary>
-    internal ContentAccessInfo? LastContentReadAccess => Volatile.Read(ref _lastContentReadAccess);
+    internal ContentAccessInfo? LastContentReadAccess
+    {
+        get
+        {
+            lock (_lastContentReadAccessLock)
+            {
+                return _lastContentReadPath is null ? null : new(new DateTimeOffset(_lastContentReadTicks, TimeSpan.Zero), _lastContentReadPath);
+            }
+        }
+    }
 
     /// <summary>
     /// Gets the UTC timestamp of the most recent successful <see cref="Read"/> of file content,
@@ -127,7 +172,16 @@ public sealed class MemoryFileSystem : FileSystemBase
     /// <see cref="LastContentWriteTimeUtc"/>, this only reflects actual content writes, not other
     /// mutations (rename/delete/attribute changes/etc.) that also call <see cref="MarkDirty"/>.
     /// </summary>
-    internal ContentAccessInfo? LastContentWriteAccess => Volatile.Read(ref _lastContentWriteAccess);
+    internal ContentAccessInfo? LastContentWriteAccess
+    {
+        get
+        {
+            lock (_lastContentWriteAccessLock)
+            {
+                return _lastContentWriteAccessPath is null ? null : new(new DateTimeOffset(_lastContentWriteAccessTicks, TimeSpan.Zero), _lastContentWriteAccessPath);
+            }
+        }
+    }
 
     /// <summary>
     /// Gets the UTC timestamp of the most recent content mutation (create/write/rename/delete/etc.),
@@ -577,8 +631,11 @@ public sealed class MemoryFileSystem : FileSystemBase
             bytesTransferred = toRead;
             Interlocked.Add(ref _totalBytesRead, toRead);
             var readNow = DateTimeOffset.UtcNow;
-            Interlocked.Exchange(ref _lastContentReadTicks, readNow.UtcTicks);
-            Interlocked.Exchange(ref _lastContentReadAccess, new(readNow, node.FilePath));
+            lock (_lastContentReadAccessLock)
+            {
+                Interlocked.Exchange(ref _lastContentReadTicks, readNow.UtcTicks);
+                _lastContentReadPath = node.FilePath;
+            }
             ContentAccessed?.Invoke(false);
         }
 
@@ -886,7 +943,11 @@ public sealed class MemoryFileSystem : FileSystemBase
         node.FileInfo.ChangeTime = now;
 
         MarkDirty(nowOffset);
-        Interlocked.Exchange(ref _lastContentWriteAccess, new(nowOffset, node.FilePath));
+        lock (_lastContentWriteAccessLock)
+        {
+            _lastContentWriteAccessTicks = nowOffset.UtcTicks;
+            _lastContentWriteAccessPath = node.FilePath;
+        }
         fileInfo = node.FileInfo;
         return STATUS_SUCCESS;
     }
