@@ -97,7 +97,9 @@ public static class ArchiveNodeMapBuilder
                 }
             }
         }
-        catch (Exception ex) when (ex is not InvalidDataException)
+        // Cancellation (raised through progress) and the low-memory guard aren't signs of an
+        // unreadable archive; let them through so callers report them as what they are.
+        catch (Exception ex) when (ex is not (InvalidDataException or OperationCanceledException or InsufficientMemoryException))
         {
             throw new InvalidDataException($"Not a supported archive file: {archivePath}", ex);
         }

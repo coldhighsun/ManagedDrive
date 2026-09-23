@@ -130,6 +130,29 @@ public sealed class ArchiveNodeMapBuilderTests
     }
 
     [Fact]
+    public void BuildNodeMap_CancelledMidExtraction_PropagatesCancellationUnwrapped()
+    {
+        // Cancellation surfaces through the progress reporter; it must not be mistaken for (and
+        // reported to the user as) an unreadable archive.
+        var path = CreateZip(entries => entries.Add("A.txt", new byte[100]));
+
+        try
+        {
+            Assert.Throws<OperationCanceledException>(() =>
+                ArchiveNodeMapBuilder.BuildNodeMap(path, 100, new CancellingProgress()));
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    private sealed class CancellingProgress : IProgress<double>
+    {
+        public void Report(double value) => throw new OperationCanceledException();
+    }
+
+    [Fact]
     public void PeekArchive_InvalidFile_ThrowsInvalidDataException()
     {
         var path = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid()}.zip");

@@ -388,6 +388,36 @@ public class FileContentTests
         Assert.Equal(FileContent.ChunkSize + 1024, cost);
     }
 
+    [Fact]
+    public void FillFromStream_BelowLowMemoryReserve_ThrowsBeforeAllocating()
+    {
+        var content = FileContent.CreateZeroed(FileContent.ChunkSize * 4);
+        using var source = new MemoryStream(new byte[FileContent.ChunkSize * 4]);
+
+        Assert.Throws<InsufficientMemoryException>(() =>
+            content.FillFromStream(source, FileContent.ChunkSize * 4, new MemoryHeadroomBudget(() => 0)));
+
+        Assert.Equal(0, content.BackingByteCount);
+        Assert.Equal(0, source.Position);
+    }
+
+    [Fact]
+    public void FillFromStream_ChargesBudgetForTheChunksItMaterializes()
+    {
+        const ulong reserve = MemoryHeadroomBudget.ReserveBytes;
+        var available = reserve + FileContent.ChunkSize + 1024;
+        var budget = new MemoryHeadroomBudget(() => available, refreshMs: int.MaxValue);
+        var content = FileContent.CreateZeroed(FileContent.ChunkSize + 1024);
+        using var source = new MemoryStream(new byte[FileContent.ChunkSize + 1024]);
+
+        content.FillFromStream(source, FileContent.ChunkSize + 1024, budget);
+
+        // The fill used up exactly the cached headroom, so any further charge is refused.
+        available = 0;
+        Assert.Equal(FileContent.ChunkSize + 1024, content.BackingByteCount);
+        Assert.True(budget.WouldExceed(1));
+    }
+
     private static byte[] Filled(int length, byte value)
     {
         var data = new byte[length];
