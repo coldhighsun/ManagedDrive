@@ -527,22 +527,23 @@ internal static class SnapshotStore
             return;
         }
 
-        if (node.FileInfo.FileSize == 0 || node.FileData is null)
+        // Read FileData once: Overwrite can swap in a new instance mid-snapshot.
+        if (node.FileInfo.FileSize == 0 || node.FileData is not { } data)
         {
             writer.Write((byte)0); // EmptyFile marker
             return;
         }
 
-        var fileSize = (long)Math.Min(node.FileInfo.FileSize, (ulong)node.FileData.Length);
+        var fileSize = (long)Math.Min(node.FileInfo.FileSize, (ulong)data.Length);
 
         byte[] hash;
         using (var incrementalHash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256))
         {
-            node.FileData.HashInto(incrementalHash, fileSize);
+            data.HashInto(incrementalHash, fileSize);
             hash = incrementalHash.GetHashAndReset();
         }
 
-        EnsureBlobWritten(blobDirectory, hash, node.FileData, fileSize, level, cek, customZstdLevel);
+        EnsureBlobWritten(blobDirectory, hash, data, fileSize, level, cek, customZstdLevel);
 
         writer.Write((byte)1); // HasBlob marker
         writer.Write(hash);

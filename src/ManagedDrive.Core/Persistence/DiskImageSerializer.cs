@@ -1617,11 +1617,13 @@ public static class DiskImageSerializer
     {
         NodeMetadataIO.WriteMetadata(writer, path, node);
 
-        if (node is { IsDirectory: false, FileData: not null, FileInfo.FileSize: > 0 })
+        // Read FileData once: Overwrite can swap in a new instance mid-save. CopyTo writes exactly
+        // fileSize bytes even if the content shrinks after the length prefix is written.
+        if (node is { IsDirectory: false, FileData: { } data, FileInfo.FileSize: > 0 })
         {
-            var fileSize = Math.Min(node.FileInfo.FileSize, (ulong)node.FileData.Length);
+            var fileSize = Math.Min(node.FileInfo.FileSize, (ulong)data.Length);
             writer.Write((long)fileSize);
-            node.FileData.CopyTo(writer.BaseStream, (long)fileSize);
+            data.CopyTo(writer.BaseStream, (long)fileSize);
         }
         else
         {
