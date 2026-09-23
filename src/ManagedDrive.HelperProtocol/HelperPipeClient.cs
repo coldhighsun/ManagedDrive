@@ -92,6 +92,19 @@ public static class HelperPipeClient
         if (Task.WaitAny([readTask], ReadTimeout) == -1)
         {
             readCts.Cancel();
+
+            // Wait for the cancelled read to actually finish before the `using` declarations
+            // above dispose reader/pipe — otherwise disposal could race the still-in-flight read.
+            // Any exception here (cancellation, broken pipe) is irrelevant: we're already
+            // returning false.
+            try
+            {
+                readTask.Wait();
+            }
+            catch (Exception)
+            {
+            }
+
             return false;
         }
 
