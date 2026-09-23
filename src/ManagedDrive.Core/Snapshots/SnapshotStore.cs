@@ -342,6 +342,7 @@ internal static class SnapshotStore
                 }
 
                 chunkedStream?.Complete();
+                chunkedStream?.Dispose();
                 stream.Flush(flushToDisk: true);
             }
 
