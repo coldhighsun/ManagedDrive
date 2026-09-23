@@ -719,7 +719,7 @@ public static class DiskImageSerializer
         }
         finally
         {
-            CryptographicOperations.ZeroMemory(plaintext);
+            SecureZero.All(plaintext);
         }
     }
 
@@ -820,9 +820,14 @@ public static class DiskImageSerializer
                 }
 
                 // A payload spanning several Zstd chunks (typically one large file on its own)
-                // gains more from decompressing its chunks in parallel than from overlapping with
-                // neighbouring segments, so it's decoded here on its own with full parallelism,
-                // after everything queued before it has been added.
+                // gains more from decompressing its own chunks in parallel than from a lone worker
+                // thread, so it gets full parallelism instead of the parallelism=1 given to smaller
+                // segments below. Its own chunk tasks (up to Environment.ProcessorCount of them)
+                // would multiply with the window's worth of other in-flight segments otherwise, so
+                // everything queued so far is drained first to keep at most one full-parallelism
+                // decode in flight at a time — but it's still queued via Task.Run rather than run
+                // inline here, so this thread keeps reading ahead instead of blocking on it (which
+                // would tie up a pool thread while later work queues behind it).
                 if (compressed && payload.Length >= ParallelZstd.ChunkSize)
                 {
                     while (pending.Count > 0)
@@ -830,7 +835,7 @@ public static class DiskImageSerializer
                         DrainOne();
                     }
 
-                    AddDecodedSegment(DecodeSegment(payload, segment, resolvedCek, compressed, zstdParallelism: null));
+                    pending.Enqueue(Task.Run(() => DecodeSegment(payload, segment, resolvedCek, compressed, zstdParallelism: null)));
                     continue;
                 }
 
@@ -839,8 +844,6 @@ public static class DiskImageSerializer
                     DrainOne();
                 }
 
-                // Decompresses inline (parallelism 1): this already runs on a pool thread, and
-                // blocking it on further pool work items could starve the pool.
                 pending.Enqueue(Task.Run(() => DecodeSegment(payload, segment, resolvedCek, compressed, zstdParallelism: 1)));
             }
 
@@ -887,19 +890,36 @@ public static class DiskImageSerializer
         bool compressed,
         int? zstdParallelism)
     {
-        if (cek is not null)
+        if (cek is null)
         {
-            try
-            {
-                using var aesGcm = new AesGcm(cek, TagSize);
-                aesGcm.Decrypt(segment.Nonce!, payload, segment.Tag!, payload);
-            }
-            catch (CryptographicException)
-            {
-                throw new ImagePasswordIncorrectException();
-            }
+            return ParseNodes(payload, segment, compressed, zstdParallelism);
         }
 
+        try
+        {
+            using var aesGcm = new AesGcm(cek, TagSize);
+            aesGcm.Decrypt(segment.Nonce!, payload, segment.Tag!, payload);
+        }
+        catch (CryptographicException)
+        {
+            throw new ImagePasswordIncorrectException();
+        }
+
+        try
+        {
+            return ParseNodes(payload, segment, compressed, zstdParallelism);
+        }
+        finally
+        {
+            // payload now holds this segment's decrypted plaintext (compressed node bytes, or the
+            // node bytes themselves) — zeroed once it's been fully read, the same reasoning as the
+            // chunk-buffer zeroing in ChunkedGcm/ParallelZstd.
+            SecureZero.All(payload);
+        }
+    }
+
+    private static List<(string Path, FileNode Node)> ParseNodes(byte[] payload, SegmentIndexEntry segment, bool compressed, int? zstdParallelism)
+    {
         using var payloadStream = new MemoryStream(payload, writable: false);
         using var nodeStream = compressed ? new ParallelZstd.ReadStream(payloadStream, zstdParallelism) : null;
         using var payloadReader = new BinaryReader(nodeStream ?? (Stream)payloadStream, System.Text.Encoding.UTF8, leaveOpen: true);
@@ -990,14 +1010,15 @@ public static class DiskImageSerializer
     /// </summary>
     private static FileNodeMap ReadNodeRegion(Stream source, bool compressed, bool useZstd, Action? reportTick = null)
     {
-        using var payloadReader = new BinaryReader(
-            compressed
-                ? useZstd
-                    ? new ParallelZstd.ReadStream(source)
-                    : new GZipStream(source, CompressionMode.Decompress, leaveOpen: true)
-                : source,
-            System.Text.Encoding.UTF8,
-            leaveOpen: true);
+        // leaveOpen is false for the compressed branches so disposing payloadReader disposes the
+        // locally-constructed decompressing wrapper too — it owns no other references, and
+        // ParallelZstd.ReadStream now owns native decompressor state that must be released.
+        // source itself is always left open: it's owned by the caller, not this method.
+        using var payloadReader = compressed
+            ? useZstd
+                ? new BinaryReader(new ParallelZstd.ReadStream(source), System.Text.Encoding.UTF8, leaveOpen: false)
+                : new BinaryReader(new GZipStream(source, CompressionMode.Decompress, leaveOpen: true), System.Text.Encoding.UTF8, leaveOpen: false)
+            : new BinaryReader(source, System.Text.Encoding.UTF8, leaveOpen: true);
 
         return ReadNodes(payloadReader, reportTick);
     }

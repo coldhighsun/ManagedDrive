@@ -321,28 +321,37 @@ internal static class SnapshotStore
                     target = chunkedStream;
                 }
 
-                if (compress)
+                try
                 {
-                    var zstd = new ParallelZstd.WriteStream(target, level.ToZstdLevel(customZstdLevel));
-                    try
+                    if (compress)
                     {
-                        data.CopyTo(new HashingWriteStream(zstd, writtenHash), length);
+                        var zstd = new ParallelZstd.WriteStream(target, level.ToZstdLevel(customZstdLevel));
+                        try
+                        {
+                            data.CopyTo(new HashingWriteStream(zstd, writtenHash), length);
+                        }
+                        finally
+                        {
+                            // Explicitly disposed (rather than relying on leaveOpen semantics further
+                            // up the chain) so every outstanding chunk is compressed and flushed before
+                            // the chunked encryption below is completed.
+                            zstd.Dispose();
+                        }
                     }
-                    finally
+                    else
                     {
-                        // Explicitly disposed (rather than relying on leaveOpen semantics further
-                        // up the chain) so every outstanding chunk is compressed and flushed before
-                        // the chunked encryption below is completed.
-                        zstd.Dispose();
+                        data.CopyTo(new HashingWriteStream(target, writtenHash), length);
                     }
+
+                    chunkedStream?.Complete();
                 }
-                else
+                finally
                 {
-                    data.CopyTo(new HashingWriteStream(target, writtenHash), length);
+                    // Disposed unconditionally (not just on the success path) so a failure partway
+                    // through the copy above still releases the AesGcm handle chunkedStream owns.
+                    chunkedStream?.Dispose();
                 }
 
-                chunkedStream?.Complete();
-                chunkedStream?.Dispose();
                 stream.Flush(flushToDisk: true);
             }
 
@@ -409,6 +418,12 @@ internal static class SnapshotStore
         var useZstd = (flag & BlobFlagZstd) != 0;
 
         Stream plaintextStream;
+
+        // Set only when plaintextStream is a wrapper this method constructed (ChunkedGcm.ReadStream
+        // or the legacy MemoryStream) and so must dispose itself — tracked at construction time
+        // rather than reconstructed later from reference-equality checks, so ownership is
+        // unambiguous by construction instead of by bookkeeping.
+        IDisposable? ownedPlaintextStream = null;
         byte[]? legacyPlaintext = null;
 
         if (!encrypted)
@@ -426,7 +441,9 @@ internal static class SnapshotStore
             {
                 var baseNonce = new byte[BlobNonceSize];
                 stream.ReadExactly(baseNonce);
-                plaintextStream = new ChunkedGcm.ReadStream(stream, cek, baseNonce);
+                var chunkedStream = new ChunkedGcm.ReadStream(stream, cek, baseNonce);
+                plaintextStream = chunkedStream;
+                ownedPlaintextStream = chunkedStream;
             }
             else
             {
@@ -453,15 +470,27 @@ internal static class SnapshotStore
                 }
 
                 legacyPlaintext = plaintext;
-                plaintextStream = new MemoryStream(plaintext, writable: false);
+                var legacyStream = new MemoryStream(plaintext, writable: false);
+                plaintextStream = legacyStream;
+                ownedPlaintextStream = legacyStream;
             }
         }
 
-        var sourceStream = compressed
-            ? useZstd
+        // leaveOpen: true so disposing sourceStream never cascades into plaintextStream — its
+        // disposal is handled unambiguously below via ownedPlaintextStream instead.
+        Stream sourceStream;
+        IDisposable? ownedSourceStream = null;
+        if (compressed)
+        {
+            sourceStream = useZstd
                 ? new ParallelZstd.ReadStream(plaintextStream)
-                : new GZipStream(plaintextStream, CompressionMode.Decompress)
-            : plaintextStream;
+                : new GZipStream(plaintextStream, CompressionMode.Decompress, leaveOpen: true);
+            ownedSourceStream = sourceStream;
+        }
+        else
+        {
+            sourceStream = plaintextStream;
+        }
 
         var aligned = FileNode.AlignToAllocationUnit(allocationSize);
         var content = FileContent.CreateZeroed(aligned);
@@ -477,14 +506,12 @@ internal static class SnapshotStore
         }
         finally
         {
-            if (compressed)
-            {
-                sourceStream.Dispose();
-            }
+            ownedSourceStream?.Dispose();
+            ownedPlaintextStream?.Dispose();
 
             if (legacyPlaintext is not null)
             {
-                CryptographicOperations.ZeroMemory(legacyPlaintext);
+                SecureZero.All(legacyPlaintext);
             }
         }
 
