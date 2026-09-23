@@ -374,6 +374,20 @@ public class FileContentTests
         Assert.Equal(0, content.ResizeCost(256));
     }
 
+    [Fact]
+    public void CloneCost_MatchesBytesTheCloneMaterializes()
+    {
+        var content = FileContent.CreateZeroed(FileContent.ChunkSize * 3 + 1024);
+        WriteBytes(content, 10, new byte[10]);                             // chunk 0 (full)
+        WriteBytes(content, FileContent.ChunkSize * 3 + 5, new byte[10]); // terminal (right-sized)
+
+        var cost = content.CloneCost();
+        var clone = content.Clone();
+
+        Assert.Equal(clone.BackingByteCount, cost);
+        Assert.Equal(FileContent.ChunkSize + 1024, cost);
+    }
+
     private static byte[] Filled(int length, byte value)
     {
         var data = new byte[length];

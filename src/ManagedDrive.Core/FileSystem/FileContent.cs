@@ -186,6 +186,28 @@ public sealed class FileContent
     }
 
     /// <summary>
+    /// Returns how many bytes of new backing arrays <see cref="Clone"/> would allocate: the clone
+    /// materializes exactly the chunks this instance has, each sized for its role, so sparse
+    /// chunks cost nothing.
+    /// </summary>
+    internal long CloneCost()
+    {
+        lock (_lock)
+        {
+            var cost = 0L;
+            for (var i = 0; i < _chunks.Count; i++)
+            {
+                if (_chunks[i] != null)
+                {
+                    cost += ChunkAllocationSize(i);
+                }
+            }
+
+            return cost;
+        }
+    }
+
+    /// <summary>
     /// Returns how many bytes of new backing arrays <see cref="Resize"/> to
     /// <paramref name="alignedLength"/> would allocate.
     /// </summary>

@@ -951,17 +951,25 @@ public sealed class MemoryFileSystem : FileSystemBase
     internal void MarkDirty() => MarkDirty(DateTimeOffset.UtcNow);
 
     /// <summary>
-    /// Replaces this file system's entire contents with a deep copy of <paramref name="sourceMap"/>.
-    /// Used to clone one mounted disk's contents onto another. Fails without modifying this
-    /// file system when it is read-only or when the source's allocated bytes exceed this
-    /// file system's capacity.
+    /// Replaces this file system's entire contents with those of <paramref name="sourceMap"/>.
+    /// Fails without modifying this file system when it is read-only, when the source's
+    /// allocated bytes exceed this file system's capacity, or (when copying) when the copy's
+    /// backing memory would trip the low-memory guard.
     /// </summary>
-    /// <param name="sourceMap">The node map to copy from.</param>
+    /// <param name="sourceMap">The node map to take contents from.</param>
     /// <param name="error">Set to a human-readable message when the method returns <c>false</c>.</param>
+    /// <param name="adoptNodes">
+    /// <c>false</c> (cloning another mounted disk) deep-copies every node, since the source stays
+    /// in use. <c>true</c> moves <paramref name="sourceMap"/>'s nodes in as-is, for a map nobody
+    /// else holds (e.g. a snapshot just loaded to restore from): copying it would briefly double
+    /// the memory its content already occupies, for a map about to be discarded anyway. The
+    /// caller must not use <paramref name="sourceMap"/> afterwards.
+    /// </param>
     /// <returns>
-    /// <c>true</c> on success; <c>false</c> when the disk is read-only or too small.
+    /// <c>true</c> on success; <c>false</c> when the disk is read-only, too small, or the host is
+    /// too low on memory for the copy.
     /// </returns>
-    internal bool TryReplaceContents(FileNodeMap sourceMap, out string? error)
+    internal bool TryReplaceContents(FileNodeMap sourceMap, out string? error, bool adoptNodes = false)
     {
         if (_readOnly)
         {
@@ -976,10 +984,30 @@ public sealed class MemoryFileSystem : FileSystemBase
             return false;
         }
 
-        NodeMap.ClearAll();
-        foreach (var kvp in sourceMap.GetAllNodes())
+        var nodes = sourceMap.GetAllNodes();
+
+        if (!adoptNodes)
         {
-            NodeMap.Add(kvp.Key, kvp.Value.Clone());
+            // The copy materializes every chunk the source has written, all at once, so it goes
+            // through the same low-memory guard as writes do. The target's current contents are
+            // freed only after this, so aren't credited against the copy.
+            var copyBytes = 0L;
+            foreach (var kvp in nodes)
+            {
+                copyBytes += kvp.Value.FileData?.CloneCost() ?? 0;
+            }
+
+            if (_memoryBudget.WouldExceed((ulong)copyBytes))
+            {
+                error = $"Not enough free memory to copy {copyBytes:N0} bytes of file content onto this disk.";
+                return false;
+            }
+        }
+
+        NodeMap.ClearAll();
+        foreach (var kvp in nodes)
+        {
+            NodeMap.Add(kvp.Key, adoptNodes ? kvp.Value : kvp.Value.Clone());
         }
 
         MarkDirty();
