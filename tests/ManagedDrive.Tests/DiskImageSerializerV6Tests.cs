@@ -264,34 +264,6 @@ public sealed class DiskImageSerializerV6Tests
         }
     }
 
-    [Fact]
-    public void SaveIncremental_DrainsRemovedSincePersist()
-    {
-        var path = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid()}.mdr");
-        try
-        {
-            var map = new FileNodeMap();
-            map.Add("\\", MakeDir());
-            map.Add("\\File.txt", MakeFile("hello world"u8.ToArray()));
-            map.Remove("\\File.txt");
-
-            Assert.NotEmpty(map.DrainRemovedSincePersist());
-
-            map.Remove("\\File.txt"); // no-op, path already gone
-            map.Add("\\File.txt", MakeFile("hello again"u8.ToArray()));
-            map.Remove("\\File.txt");
-
-            DiskImageSerializer.SaveIncremental(map, capacityBytes: 1024 * 1024, "Label", path,
-                ImageCompressionLevel.Fastest);
-
-            Assert.Empty(map.DrainRemovedSincePersist());
-        }
-        finally
-        {
-            File.Delete(path);
-        }
-    }
-
     private static FileNode MakeDir() => new()
     {
         FileInfo = { FileAttributes = (uint)FileAttributes.Directory },

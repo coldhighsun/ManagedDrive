@@ -1102,8 +1102,7 @@ public static class DiskImageSerializer
         // Only reached once the image has actually landed at imagePath. Record what was saved so
         // a future incremental save can tell which nodes are unchanged since this point, without
         // clobbering versions bumped by a WinFsp write that raced with this save (the CAS check
-        // below) or losing track of paths removed while this save was in flight (only safe to
-        // drain now that their absence from `nodes` has actually been persisted).
+        // below).
         for (var i = 0; i < nodes.Count; i++)
         {
             var node = nodes[i].Value;
@@ -1119,8 +1118,6 @@ public static class DiskImageSerializer
 
             node.SavedSegmentIndex = nodeSegmentIndex[i];
         }
-
-        nodeMap.DrainRemovedSincePersist();
 
         // Guaranteed final report: an empty disk (chunks.Count == 0) never enters the Parallel.For
         // body above, so nothing else would report 1.0.
@@ -1452,8 +1449,6 @@ public static class DiskImageSerializer
 
                 finalSegmentIndex++;
             }
-
-            nodeMap.DrainRemovedSincePersist();
 
             // Guaranteed final report: if every segment was reused (poolChunks empty) or the image
             // is empty (totalBytes == 0), nothing above may have reported 1.0 yet.
