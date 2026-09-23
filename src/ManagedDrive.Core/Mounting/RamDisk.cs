@@ -833,8 +833,9 @@ public sealed class RamDisk : IDisposable
         {
             try
             {
+                // The loaded map is ours alone, so its nodes are adopted rather than copied again.
                 var nodeMap = SnapshotManager.LoadSnapshot(snapshotPath, out _, out _, _cek);
-                if (!_fs.TryReplaceContents(nodeMap, out error))
+                if (!_fs.TryReplaceContents(nodeMap, out error, adoptNodes: true))
                 {
                     return false;
                 }
