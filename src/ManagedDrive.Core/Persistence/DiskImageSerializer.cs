@@ -130,6 +130,12 @@ public static class DiskImageSerializer
     /// </summary>
     private const long SegmentTargetBytes = 4L * 1024 * 1024;
 
+    /// <summary>
+    /// Rough per-node size of the fixed metadata fields <see cref="WriteNode"/> emits, excluding
+    /// the path. Only used to pre-size a segment's plaintext buffer.
+    /// </summary>
+    private const int EstimatedNodeMetadataBytes = 128;
+
     private const int Sha256Size = 32;
     private const int TagSize = 16;
     private const int Version = 5;
@@ -461,7 +467,16 @@ public static class DiskImageSerializer
         ImageEncryptionInfo? encryption,
         Action<FileNode>? onNodeWritten = null)
     {
-        using var plainStream = new MemoryStream();
+        // Pre-size the plaintext buffer so it isn't grown by repeated doubling (each step a fresh
+        // large-object-heap array plus a copy). Only an estimate: sizes may change concurrently
+        // and the per-node metadata overhead is approximate, so the stream still grows if needed.
+        long estimatedBytes = 0;
+        foreach (var kvp in chunkNodes)
+        {
+            estimatedBytes += (long)kvp.Value.FileInfo.FileSize + EstimatedNodeMetadataBytes + kvp.Key.Length * 3;
+        }
+
+        using var plainStream = new MemoryStream((int)Math.Min(estimatedBytes, Array.MaxLength));
         using (var plainWriter = new BinaryWriter(plainStream, System.Text.Encoding.UTF8, leaveOpen: true))
         {
             foreach (var kvp in chunkNodes)
@@ -473,48 +488,49 @@ public static class DiskImageSerializer
             plainWriter.Flush();
         }
 
-        var plainBytes = plainStream.ToArray();
-        var contentHash = SHA256.HashData(plainBytes);
+        // Work on the stream's own buffer instead of a ToArray() copy of it; everything past
+        // plainLength is unused capacity.
+        var plainBuffer = plainStream.GetBuffer();
+        var plainLength = (int)plainStream.Length;
+        var contentHash = SHA256.HashData(plainBuffer.AsSpan(0, plainLength));
 
-        byte[] compressedBytes;
-        if (level != ImageCompressionLevel.None)
+        // The payload is retained until the whole image is written, so it must be exactly sized.
+        // Compression already produces an exact-size array; uncompressed output needs a trimmed
+        // copy of the plaintext buffer (unless it happens to be exactly full already).
+        var compressed = level != ImageCompressionLevel.None;
+        byte[] payload;
+        if (compressed)
         {
-            using var compressedStream = new MemoryStream();
-            using (var zstdWriter = new ParallelZstd.WriteStream(compressedStream, level.ToZstdLevel(customZstdLevel)))
-            {
-                zstdWriter.Write(plainBytes, 0, plainBytes.Length);
-            }
-
-            compressedBytes = compressedStream.ToArray();
+            payload = ParallelZstd.CompressFramed(plainBuffer, plainLength, level.ToZstdLevel(customZstdLevel));
+        }
+        else if (encryption is null && plainBuffer.Length != plainLength)
+        {
+            payload = plainBuffer.AsSpan(0, plainLength).ToArray();
         }
         else
         {
-            compressedBytes = plainBytes;
+            payload = plainBuffer;
         }
 
-        byte[]? nonce = null;
-        byte[]? tag = null;
-        byte[] finalPayload;
-
-        if (encryption is { } enc)
+        if (encryption is not { } enc)
         {
-            nonce = RandomNumberGenerator.GetBytes(NonceSize);
-            var ciphertext = new byte[compressedBytes.Length];
-            var localTag = new byte[TagSize];
-            using (var aesGcm = new AesGcm(enc.Cek, TagSize))
-            {
-                aesGcm.Encrypt(nonce, compressedBytes, ciphertext, localTag);
-            }
-
-            tag = localTag;
-            finalPayload = ciphertext;
+            return (payload, contentHash, null, null);
         }
-        else
+
+        var nonce = RandomNumberGenerator.GetBytes(NonceSize);
+        var tag = new byte[TagSize];
+        using var aesGcm = new AesGcm(enc.Cek, TagSize);
+        if (compressed)
         {
-            finalPayload = compressedBytes;
+            // The compressed payload is a private, exactly-sized array: encrypt it in place.
+            aesGcm.Encrypt(nonce, payload, payload, tag);
+            return (payload, contentHash, nonce, tag);
         }
 
-        return (finalPayload, contentHash, nonce, tag);
+        // Uncompressed: encrypting into a fresh exact-size array doubles as the trim.
+        var ciphertext = new byte[plainLength];
+        aesGcm.Encrypt(nonce, plainBuffer.AsSpan(0, plainLength), ciphertext, tag);
+        return (ciphertext, contentHash, nonce, tag);
     }
 
     /// <summary>
