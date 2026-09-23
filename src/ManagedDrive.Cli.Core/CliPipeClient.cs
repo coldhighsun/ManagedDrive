@@ -68,16 +68,21 @@ public static class CliPipeClient
 
         writer.WriteLine(CliPipeProtocol.SerializeRequest(args));
 
-        using var readCts = new CancellationTokenSource(ReadTimeout);
-        string? responseJson;
-        try
+        // Deliberately not `new CancellationTokenSource(ReadTimeout)`: that schedules its Cancel()
+        // call on the ThreadPool, whose timer callback can be delayed well past ReadTimeout if the
+        // pool is briefly starved (e.g. many parallel tests each blocked in a sync-over-async call
+        // like this one). Task.WaitAny blocks this thread with a real kernel-level timeout instead,
+        // so the deadline is enforced even under ThreadPool contention.
+        using var readCts = new CancellationTokenSource();
+        var readTask = reader.ReadLineAsync(readCts.Token).AsTask();
+
+        if (Task.WaitAny([readTask], ReadTimeout) == -1)
         {
-            responseJson = reader.ReadLineAsync(readCts.Token).AsTask().GetAwaiter().GetResult();
-        }
-        catch (OperationCanceledException)
-        {
+            readCts.Cancel();
             return false;
         }
+
+        var responseJson = readTask.GetAwaiter().GetResult();
 
         if (responseJson == null)
         {
