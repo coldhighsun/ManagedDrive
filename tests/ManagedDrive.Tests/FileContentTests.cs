@@ -77,6 +77,35 @@ public class FileContentTests
     }
 
     [Fact]
+    public void GrowMaterializedTailPastFirstChunk_JumpsStraightToFullChunk()
+    {
+        var content = FileContent.CreateZeroed(FileContent.ChunkSize + 512);
+        WriteBytes(content, FileContent.ChunkSize, [1, 2, 3]);
+
+        // A fresh tail chunk is still right-sized to its first write.
+        Assert.Equal(512, content.BackingByteCount);
+
+        content.Resize(FileContent.ChunkSize + 1024);
+
+        // Growing it again means the file is being appended to: go straight to a full chunk
+        // instead of doubling (512 -> 1024 -> ... -> 64 KiB) and copying at every step.
+        Assert.Equal(FileContent.ChunkSize, content.BackingByteCount);
+        Assert.Equal(new byte[] { 1, 2, 3 }, ReadBytes(content, FileContent.ChunkSize, 3));
+    }
+
+    [Fact]
+    public void GrowMaterializedFirstChunk_StillDoublesCapacity()
+    {
+        var content = FileContent.CreateZeroed(512);
+        WriteBytes(content, 0, [1, 2, 3]);
+
+        content.Resize(1024);
+
+        // A small single-chunk file keeps power-of-two growth so it doesn't pay a whole 64 KiB.
+        Assert.Equal(1024, content.BackingByteCount);
+    }
+
+    [Fact]
     public void ReadTo_SparseRegion_ReturnsZeroWithoutMaterializing()
     {
         var content = FileContent.CreateZeroed(FileContent.ChunkSize * 2);
