@@ -140,6 +140,11 @@ internal static class ChunkedGcm
         {
             if (disposing)
             {
+                // Complete() isn't called from here — unlike ParallelZstd.WriteStream, this class
+                // has no chunk-splitting to finish, just a single buffer — so early disposal (e.g.
+                // an exception thrown by the caller between Write calls, before Complete()) can
+                // leave up to _bufferLength bytes of never-flushed plaintext in _buffer.
+                SecureZero.All(_buffer);
                 _aesGcm.Dispose();
             }
 
@@ -152,7 +157,7 @@ internal static class ChunkedGcm
 
             // In-place encryption only overwrote the first _bufferLength bytes, so anything a
             // previous, larger chunk left beyond them is still plaintext in this long-lived buffer.
-            CryptographicOperations.ZeroMemory(_buffer.AsSpan(_bufferLength));
+            SecureZero.From(_buffer, _bufferLength);
             _bufferLength = 0;
         }
 
@@ -266,6 +271,10 @@ internal static class ChunkedGcm
         {
             if (disposing)
             {
+                // The tail beyond the current chunk's length is zeroed on every subsequent read
+                // (see TryReadNextChunk), so only the live [0, _currentChunkLength) range — the
+                // last chunk ever read — still needs zeroing here, once nothing will read it again.
+                SecureZero.Range(_currentChunk, 0, _currentChunkLength);
                 _aesGcm.Dispose();
             }
 
@@ -296,6 +305,10 @@ internal static class ChunkedGcm
             Span<byte> nonce = stackalloc byte[NonceSize];
             DeriveChunkNonce(baseNonce, _chunkIndex, nonce);
             _aesGcm.Decrypt(nonce, chunk, tag, chunk);
+
+            // In-place decryption only overwrote the first ciphertextLength bytes, so anything a
+            // previous, larger chunk left beyond them is still plaintext in this long-lived buffer.
+            SecureZero.From(_currentChunk, ciphertextLength);
 
             _chunkIndex++;
             _positionInChunk = 0;

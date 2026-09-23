@@ -116,14 +116,37 @@ internal static class ParallelZstd
     /// </summary>
     private static byte[] RentBuffer(Stack<byte[]> pool, int size, ref int capacity)
     {
-        if (pool.TryPop(out var pooled) && pooled.Length >= size)
+        if (pool.TryPop(out var pooled))
         {
-            return pooled;
+            if (pooled.Length >= size)
+            {
+                return pooled;
+            }
+
+            // Too small for this request, but still a perfectly good buffer for a future,
+            // smaller one — put it back rather than discarding it.
+            pool.Push(pooled);
         }
 
         capacity = Math.Max(capacity, size);
         return new byte[capacity];
     }
+
+    /// <summary>
+    /// Pops an entry off <paramref name="pool"/>, or creates one via <paramref name="factory"/> if
+    /// it's empty. Fixed-size counterpart to <see cref="RentBuffer"/> for pools (compressors,
+    /// decompressors, fixed-size byte arrays) that don't need <see cref="RentBuffer"/>'s
+    /// grow-to-largest-request tracking.
+    /// </summary>
+    private static T RentOrCreate<T>(Stack<T> pool, Func<T> factory) => pool.TryPop(out var pooled) ? pooled : factory();
+
+    /// <summary>
+    /// <see cref="RentOrCreate{T}(Stack{T}, Func{T})"/> overload for a factory that needs a value
+    /// from the caller (e.g. a compression level or size) without allocating a closure to capture
+    /// it — <paramref name="factory"/> can be a <see langword="static"/> lambda, so nothing is
+    /// allocated on the (common) path where the pool already has an entry to hand back.
+    /// </summary>
+    private static T RentOrCreate<TState, T>(Stack<T> pool, TState state, Func<TState, T> factory) => pool.TryPop(out var pooled) ? pooled : factory(state);
 
     /// <summary>
     /// Read-only counterpart to <see cref="WriteStream"/>: reads the
@@ -136,21 +159,21 @@ internal static class ParallelZstd
     /// </summary>
     internal sealed class ReadStream(Stream source, int? maxDegreeOfParallelism = null) : Stream
     {
-        /// <summary>
-        /// Per-thread decompression context, reused across chunks and streams instead of creating
-        /// one per chunk. Decompressing a whole frame into a flat buffer needs no window buffer,
-        /// so each context stays small.
-        /// </summary>
-        [ThreadStatic]
-        private static ZstdSharp.Decompressor? t_decompressor;
-
         private readonly int _maxDegreeOfParallelism = Math.Max(1, maxDegreeOfParallelism ?? Environment.ProcessorCount);
-        private readonly Queue<Task<DecodedChunk>> _pending = new();
 
-        // Buffers handed back once their chunk has been consumed, for reuse by later chunks. Only
-        // ever touched on the reading thread; workers just receive a buffer to fill.
+        // The decompressor is tracked alongside its task (rather than only inside the task's
+        // result) so cleanup can dispose it even for a chunk whose decompression faulted — a
+        // faulted task never produces a DecodedChunk to recover it from.
+        private readonly Queue<(Task<DecodedChunk> Task, ZstdSharp.Decompressor Decompressor)> _pending = new();
+
+        // Buffers and decompression contexts handed back once their chunk has been consumed, for
+        // reuse by later chunks. Only ever touched on the reading thread; workers just receive a
+        // buffer/context to fill/use, mirroring WriteStream's per-instance compressor pool rather
+        // than a [ThreadStatic] context that would live (and hold native state) for the lifetime of
+        // whichever thread-pool worker thread happened to run a chunk.
         private readonly Stack<byte[]> _freeCompressed = new();
         private readonly Stack<byte[]> _freeDecompressed = new();
+        private readonly Stack<ZstdSharp.Decompressor> _freeDecompressors = new();
         private int _compressedCapacity;
         private int _decompressedCapacity;
 
@@ -220,10 +243,8 @@ internal static class ParallelZstd
 
         public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
 
-        private static DecodedChunk Decompress(byte[] compressed, int compressedLength, byte[]? destination, int decompressedLength)
+        private static DecodedChunk Decompress(ZstdSharp.Decompressor decompressor, byte[] compressed, int compressedLength, byte[]? destination, int decompressedLength)
         {
-            var decompressor = t_decompressor ??= new ZstdSharp.Decompressor();
-
             if (destination is null)
             {
                 var unwrapped = decompressor.Unwrap(compressed.AsSpan(0, compressedLength)).ToArray();
@@ -248,8 +269,12 @@ internal static class ParallelZstd
         private bool TryAdvanceChunk()
         {
             // The current chunk has been fully consumed, so its buffer is free for a later chunk.
+            // Zeroed before returning to the pool: it held this chunk's decompressed plaintext, and
+            // an oversized buffer kept around from an earlier, larger chunk would otherwise leave
+            // that plaintext resident beyond the current chunk's own length.
             if (_currentChunk.Length > 0)
             {
+                SecureZero.All(_currentChunk);
                 _freeDecompressed.Push(_currentChunk);
                 _currentChunk = [];
                 _currentChunkLength = 0;
@@ -264,8 +289,22 @@ internal static class ParallelZstd
                 return false;
             }
 
-            var decoded = _pending.Dequeue().GetAwaiter().GetResult();
+            var (task, decompressor) = _pending.Dequeue();
+            DecodedChunk decoded;
+            try
+            {
+                decoded = task.GetAwaiter().GetResult();
+            }
+            catch
+            {
+                // The task never produced a DecodedChunk to recover the decompressor from, so
+                // it has to be disposed directly here instead of via the usual pool-push below.
+                decompressor.Dispose();
+                throw;
+            }
+
             _freeCompressed.Push(decoded.Compressed);
+            _freeDecompressors.Push(decompressor);
             _currentChunk = decoded.Decompressed;
             _currentChunkLength = decoded.Length;
             _positionInChunk = 0;
@@ -319,15 +358,72 @@ internal static class ParallelZstd
             var destination = decompressedLength == 0
                 ? null
                 : RentBuffer(_freeDecompressed, decompressedLength, ref _decompressedCapacity);
+            var decompressor = RentOrCreate(_freeDecompressors, static () => new ZstdSharp.Decompressor());
 
-            // With no parallelism to gain, decompress inline rather than hop to the thread pool
-            // and block on it. Besides saving the hop, this is what makes it safe to read from
-            // inside a thread-pool work item (as a parallel segment load does) without blocking
-            // that worker on another work item queued behind it.
-            _pending.Enqueue(_maxDegreeOfParallelism == 1
-                ? Task.FromResult(Decompress(compressed, length, destination, decompressedLength))
-                : Task.Run(() => Decompress(compressed, length, destination, decompressedLength)));
+            Task<DecodedChunk> task;
+            try
+            {
+                // With no parallelism to gain, decompress inline rather than hop to the thread
+                // pool and block on it. Besides saving the hop, this is what makes it safe to read
+                // from inside a thread-pool work item (as a parallel segment load does) without
+                // blocking that worker on another work item queued behind it.
+                task = _maxDegreeOfParallelism == 1
+                    ? Task.FromResult(Decompress(decompressor, compressed, length, destination, decompressedLength))
+                    : Task.Run(() => Decompress(decompressor, compressed, length, destination, decompressedLength));
+            }
+            catch
+            {
+                // The parallelism == 1 branch above runs Decompress() eagerly; if it throws, no
+                // task was ever created to carry decompressor to _pending, so it has to be
+                // disposed here instead of by the usual TryAdvanceChunk/Dispose cleanup paths.
+                decompressor.Dispose();
+                throw;
+            }
+
+            _pending.Enqueue((task, decompressor));
             return true;
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+            {
+                // The chunk currently buffered for reading is only zeroed here if the stream is
+                // disposed before it's fully consumed — TryAdvanceChunk zeroes it once Read/ReadByte
+                // has drained it, which never happens for whatever chunk is live at early disposal.
+                SecureZero.All(_currentChunk);
+
+                // Normal completion already drained _pending (TryAdvanceChunk only reports
+                // end-of-stream once it's empty), so this only has anything to do when the stream
+                // is disposed early (e.g. an exception partway through reading). The decompressor
+                // is disposed unconditionally, outside the try/catch: it was rented/created before
+                // the task ran (in TryQueueNextChunk), so it's a live object to release even for a
+                // chunk whose decompression faulted, not just for one that produced a result.
+                while (_pending.TryDequeue(out var pending))
+                {
+                    try
+                    {
+                        // Zeroed rather than pooled: this chunk's plaintext was never handed to a
+                        // caller (the stream is being disposed early), but it still shouldn't
+                        // linger in memory any longer than a chunk that was actually read.
+                        SecureZero.All(pending.Task.GetAwaiter().GetResult().Decompressed);
+                    }
+                    catch
+                    {
+                        // The chunk's own failure is what the caller already observed (this stream
+                        // is being disposed after that propagated) or will observe shortly.
+                    }
+
+                    pending.Decompressor.Dispose();
+                }
+
+                while (_freeDecompressors.TryPop(out var decompressor))
+                {
+                    decompressor.Dispose();
+                }
+            }
+
+            base.Dispose(disposing);
         }
 
         private readonly record struct DecodedChunk(byte[] Compressed, byte[] Decompressed, int Length);
@@ -346,7 +442,11 @@ internal static class ParallelZstd
     {
         private readonly int _maxDegreeOfParallelism = Math.Max(1, maxDegreeOfParallelism ?? Environment.ProcessorCount);
         private readonly int _chunkSize = chunkSize ?? ChunkSize;
-        private readonly Queue<Task<EncodedChunk>> _pending = new();
+
+        // The compressor and buffers are tracked alongside their task (rather than only inside the
+        // task's result) so DrainOne can recover and dispose/scrub them even for a chunk whose
+        // compression faulted — a faulted task never produces an EncodedChunk to recover them from.
+        private readonly Queue<(Task<EncodedChunk> Task, ZstdSharp.Compressor Compressor, byte[] Input, byte[] Output)> _pending = new();
 
         // Input buffers, compress-bound output buffers and compression contexts are recycled once
         // their chunk has been written out, instead of allocating a fresh (large-object-heap) input
@@ -426,7 +526,7 @@ internal static class ParallelZstd
             {
                 if (_buffer.Length == 0)
                 {
-                    _buffer = _freeInputs.TryPop(out var pooled) ? pooled : new byte[_chunkSize];
+                    _buffer = RentOrCreate(_freeInputs, _chunkSize, static size => new byte[size]);
                 }
 
                 var toCopy = Math.Min(buffer.Length, _buffer.Length - _bufferLength);
@@ -454,18 +554,39 @@ internal static class ParallelZstd
         private static EncodedChunk Compress(ZstdSharp.Compressor compressor, byte[] input, int length, byte[] output)
         {
             var written = compressor.Wrap(input.AsSpan(0, length), output);
-            return new(compressor, input, output, written);
+            return new(written);
         }
 
         private void DrainOne()
         {
-            var encoded = _pending.Dequeue().GetAwaiter().GetResult();
-            WriteChunkHeader(encoded.Length);
-            target.Write(encoded.Output, 0, encoded.Length);
+            var (task, compressor, input, output) = _pending.Dequeue();
+            int length;
+            try
+            {
+                length = task.GetAwaiter().GetResult().Length;
+            }
+            catch
+            {
+                // The task never produced an EncodedChunk to recover the compressor/buffers from.
+                // input still holds this chunk's plaintext regardless of whether compression
+                // itself succeeded, so it's scrubbed here the same as on the success path below;
+                // output is dropped rather than pooled since nothing ever read it.
+                SecureZero.All(input);
+                compressor.Dispose();
+                throw;
+            }
 
-            _freeCompressors.Push(encoded.Compressor);
-            _freeInputs.Push(encoded.Input);
-            _freeOutputs.Push(encoded.Output);
+            WriteChunkHeader(length);
+            target.Write(output, 0, length);
+
+            // The input buffer held this chunk's plaintext; zeroed before returning it to the pool
+            // so a later, shorter chunk doesn't leave stale plaintext resident beyond its own
+            // length (the same reasoning as ChunkedGcm.WriteStream.FlushChunk's ZeroMemory call).
+            SecureZero.All(input);
+
+            _freeCompressors.Push(compressor);
+            _freeInputs.Push(input);
+            _freeOutputs.Push(output);
         }
 
         private void FlushChunk()
@@ -485,12 +606,11 @@ internal static class ParallelZstd
             _buffer = [];
             _bufferLength = 0;
 
-            var compressor = _freeCompressors.TryPop(out var pooledCompressor) ? pooledCompressor : new(level);
-            var output = _freeOutputs.TryPop(out var pooledOutput)
-                ? pooledOutput
-                : new byte[ZstdSharp.Compressor.GetCompressBound(_chunkSize)];
+            var compressor = RentOrCreate(_freeCompressors, level, static lvl => new ZstdSharp.Compressor(lvl));
+            var output = RentOrCreate(_freeOutputs, _chunkSize, static size => new byte[ZstdSharp.Compressor.GetCompressBound(size)]);
 
-            _pending.Enqueue(Task.Run(() => Compress(compressor, chunk, length, output)));
+            var task = Task.Run(() => Compress(compressor, chunk, length, output));
+            _pending.Enqueue((task, compressor, chunk, output));
         }
 
         private void WriteChunkHeader(int length)
@@ -500,6 +620,6 @@ internal static class ParallelZstd
             target.Write(lengthBytes);
         }
 
-        private readonly record struct EncodedChunk(ZstdSharp.Compressor Compressor, byte[] Input, byte[] Output, int Length);
+        private readonly record struct EncodedChunk(int Length);
     }
 }
