@@ -15,9 +15,29 @@ public static class CliPipeClient
     /// not a throttle on legitimately slow commands (e.g. exporting a large disk) — the server
     /// dispatches the command onto the UI thread and awaits it there before writing back, so a
     /// generous ceiling avoids cutting off a real (if slow) response while still bounding how long
-    /// a wedged instance can hang the CLI.
+    /// a wedged instance can hang the CLI. Overridable by tests via
+    /// <see cref="TestReadTimeoutOverride"/> to exercise the timeout path without a real 5-minute
+    /// wait.
     /// </summary>
-    private static readonly TimeSpan ReadTimeout = TimeSpan.FromMinutes(5);
+    private static readonly TimeSpan DefaultReadTimeout = TimeSpan.FromMinutes(5);
+
+    /// <summary>
+    /// Test-only override for <see cref="DefaultReadTimeout"/>; <see langword="null"/> means use
+    /// the production default. Set via <c>InternalsVisibleTo("ManagedDrive.Tests")</c>.
+    /// </summary>
+    internal static TimeSpan? TestReadTimeoutOverride;
+
+    private static TimeSpan ReadTimeout => TestReadTimeoutOverride ?? DefaultReadTimeout;
+
+    /// <summary>
+    /// Test-only override for the pipe name <see cref="TrySend"/> connects to; <see langword="null"/>
+    /// means use <see cref="CliPipeProtocol.PipeName"/>. Lets tests stand up a fake server without
+    /// colliding with a real running instance's pipe. Set via
+    /// <c>InternalsVisibleTo("ManagedDrive.Tests")</c>.
+    /// </summary>
+    internal static string? TestPipeNameOverride;
+
+    private static string PipeName => TestPipeNameOverride ?? CliPipeProtocol.PipeName;
 
     /// <summary>
     /// Tries to connect to a running instance's CLI pipe and execute <paramref name="args"/>
@@ -31,7 +51,7 @@ public static class CliPipeClient
     {
         response = new(false, string.Empty, null, 1);
 
-        using var pipe = new NamedPipeClientStream(".", CliPipeProtocol.PipeName, PipeDirection.InOut, PipeOptions.Asynchronous);
+        using var pipe = new NamedPipeClientStream(".", PipeName, PipeDirection.InOut, PipeOptions.Asynchronous);
 
         try
         {

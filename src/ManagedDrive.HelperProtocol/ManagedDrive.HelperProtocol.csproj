@@ -6,4 +6,8 @@
     does not transitively load Core's mixed-mode winfsp-msil.dll.
   -->
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="ManagedDrive.Tests" />
+  </ItemGroup>
+
 </Project>

@@ -4,4 +4,8 @@
     <PackageReference Include="System.CommandLine" />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="ManagedDrive.Tests" />
+  </ItemGroup>
+
 </Project>
