@@ -1,4 +1,5 @@
 using System.IO.Pipes;
+using System.Text;
 
 namespace ManagedDrive.HelperProtocol;
 
@@ -39,6 +40,14 @@ public static class HelperPipeClient
     internal static string? TestPipeNameOverride;
 
     private static string PipeName => TestPipeNameOverride ?? HelperPipeProtocol.PipeName;
+
+    /// <summary>
+    /// Upper bound on the response line read by <see cref="ReadBoundedLineAsync"/>, mirroring
+    /// <c>PipeIo.MaxLineLength</c>'s guard against an unbounded buffer — this pipe's server side
+    /// already caps its own request read the same way, and the service is itself a peer this
+    /// client shouldn't trust to always send '\n'.
+    /// </summary>
+    private const int MaxResponseLineLength = 64 * 1024;
 
     /// <summary>
     /// Asks the service to publish a global symlink <paramref name="letter"/> →
@@ -103,7 +112,7 @@ public static class HelperPipeClient
         // like this one). Task.WaitAny blocks this thread with a real kernel-level timeout instead,
         // so the deadline is enforced even under ThreadPool contention.
         using var readCts = new CancellationTokenSource();
-        var readTask = reader.ReadLineAsync(readCts.Token).AsTask();
+        var readTask = ReadBoundedLineAsync(reader, readCts.Token);
 
         if (Task.WaitAny([readTask], ReadTimeout) == -1)
         {
@@ -142,4 +151,40 @@ public static class HelperPipeClient
             CancellationToken.None,
             TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
             TaskScheduler.Default);
+
+    /// <summary>
+    /// Bounded alternative to <see cref="TextReader.ReadLineAsync()"/>: caps the buffered line at
+    /// <see cref="MaxResponseLineLength"/> so a misbehaving or compromised service on the other end
+    /// of this pipe can't make this client buffer an unbounded amount of data by never sending
+    /// '\n' — the same DoS shape <c>PipeIo.ReadBoundedLineAsync</c> closes on the listening side.
+    /// </summary>
+    /// <param name="reader">The reader to read a line from.</param>
+    /// <param name="cancellationToken">Token that cancels the read.</param>
+    private static async Task<string?> ReadBoundedLineAsync(TextReader reader, CancellationToken cancellationToken)
+    {
+        var charBuffer = new char[1];
+        var line = new StringBuilder();
+
+        while (true)
+        {
+            var read = await reader.ReadAsync(charBuffer.AsMemory(), cancellationToken);
+            if (read == 0)
+            {
+                return line.Length > 0 ? line.ToString() : null;
+            }
+
+            var ch = charBuffer[0];
+            if (ch is '\n' or '\r')
+            {
+                return line.ToString();
+            }
+
+            if (line.Length >= MaxResponseLineLength)
+            {
+                return null;
+            }
+
+            line.Append(ch);
+        }
+    }
 }
