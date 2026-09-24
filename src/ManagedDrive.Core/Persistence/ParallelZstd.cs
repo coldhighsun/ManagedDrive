@@ -19,10 +19,24 @@ namespace ManagedDrive.Core.Persistence;
 internal static class ParallelZstd
 {
     /// <summary>
+    /// Backing store for <see cref="TestChunkSizeOverride"/>. An <see cref="AsyncLocal{T}"/>
+    /// rather than a plain static field so that tests running concurrently (different test
+    /// classes/collections, or parallel test execution) each see only their own override instead
+    /// of racing on a single shared value — the value set here flows to any code called from the
+    /// same logical call chain, including work queued via <see cref="Task.Run(Action)"/>, but
+    /// never to an unrelated, concurrently-running chain.
+    /// </summary>
+    private static readonly AsyncLocal<int?> _testChunkSizeOverride = new();
+
+    /// <summary>
     /// Test-only override for <see cref="DefaultChunkSize"/>; <see langword="null"/> means use the
     /// production default. Set via <c>InternalsVisibleTo("ManagedDrive.Tests")</c>.
     /// </summary>
-    internal static int? TestChunkSizeOverride;
+    internal static int? TestChunkSizeOverride
+    {
+        get => _testChunkSizeOverride.Value;
+        set => _testChunkSizeOverride.Value = value;
+    }
 
     /// <summary>
     /// Size of each independently compressed chunk. Large enough that per-chunk compression
@@ -303,6 +317,10 @@ internal static class ParallelZstd
                 throw;
             }
 
+            // Zeroed like _currentChunk below: for an encrypted image this buffer held the
+            // already-decrypted, still-Zstd-compressed bytes of this chunk's plaintext content, so
+            // it shouldn't linger in the pool unscrubbed any more than the decompressed form does.
+            SecureZero.All(decoded.Compressed);
             _freeCompressed.Push(decoded.Compressed);
             _freeDecompressors.Push(decompressor);
             _currentChunk = decoded.Decompressed;
@@ -406,7 +424,7 @@ internal static class ParallelZstd
                         // Zeroed rather than pooled: this chunk's plaintext was never handed to a
                         // caller (the stream is being disposed early), but it still shouldn't
                         // linger in memory any longer than a chunk that was actually read.
-                        SecureZero.All(pending.Task.GetAwaiter().GetResult().Decompressed);
+                        ZeroDecodedChunk(pending.Task.GetAwaiter().GetResult());
                     }
                     catch
                     {
@@ -424,6 +442,19 @@ internal static class ParallelZstd
             }
 
             base.Dispose(disposing);
+        }
+
+        /// <summary>
+        /// Zeroes both buffers of a decoded chunk that will never be handed to a caller (this
+        /// stream is being disposed before the chunk was read) — used only from the early-disposal
+        /// path above; the normal read path in <see cref="TryAdvanceChunk"/> zeroes each buffer
+        /// separately since one of them (<c>Decompressed</c>) becomes <see cref="_currentChunk"/>
+        /// and is still live for the caller at that point.
+        /// </summary>
+        private static void ZeroDecodedChunk(DecodedChunk decoded)
+        {
+            SecureZero.All(decoded.Decompressed);
+            SecureZero.All(decoded.Compressed);
         }
 
         private readonly record struct DecodedChunk(byte[] Compressed, byte[] Decompressed, int Length);
