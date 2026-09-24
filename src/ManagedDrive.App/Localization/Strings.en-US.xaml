@@ -152,6 +152,8 @@
     <sys:String x:Key="PasswordPrompt.SizeHeader">Size</sys:String>
     <sys:String x:Key="Msg.RemovePasswordConfirmTitle">Remove Password</sys:String>
     <sys:String x:Key="Msg.RemovePasswordConfirmBody">Removing the password will also permanently delete this disk's snapshot history, since old snapshots were encrypted and cannot be recovered without it.&#x0a;&#x0a;Continue?</sys:String>
+    <sys:String x:Key="Msg.AddPasswordConfirmTitle">Add Password</sys:String>
+    <sys:String x:Key="Msg.AddPasswordConfirmBody">Adding a password will also permanently delete this disk's existing snapshot history, since those snapshots were stored unencrypted.&#x0a;&#x0a;Continue?</sys:String>
 
     <!-- CloneDiskDialog -->
     <sys:String x:Key="CloneDisk.Title">Clone Disk</sys:String>

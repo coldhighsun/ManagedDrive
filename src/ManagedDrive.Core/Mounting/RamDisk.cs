@@ -786,7 +786,9 @@ public sealed class RamDisk : IDisposable
 
     /// <summary>
     /// Sets, changes, or removes this disk's password. Passing a non-null value when the disk is
-    /// not yet encrypted generates a fresh content-encryption key (CEK); passing a non-null value
+    /// not yet encrypted generates a fresh content-encryption key (CEK) and deletes all of this
+    /// disk's existing snapshots, which were written in plaintext and would otherwise stay readable
+    /// on disk after the user asked for encryption; passing a non-null value
     /// when it is already encrypted only changes the password used to wrap the existing CEK, so
     /// previously written node data and snapshot blobs remain valid without re-encryption.
     /// Passing <see langword="null"/> removes password protection and discards the CEK — because
@@ -810,6 +812,11 @@ public sealed class RamDisk : IDisposable
                 {
                     _cek = DiskImageSerializer.GenerateCek();
                     _cekRotatedSinceLastSave = true;
+
+                    if (Options.PersistImagePath is { } plaintextPath)
+                    {
+                        SnapshotManager.DeleteAllSnapshots(plaintextPath);
+                    }
                 }
 
                 _password = newPassword;

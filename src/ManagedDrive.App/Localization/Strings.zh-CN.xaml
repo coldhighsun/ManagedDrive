@@ -152,6 +152,8 @@
     <sys:String x:Key="PasswordPrompt.SizeHeader">大小</sys:String>
     <sys:String x:Key="Msg.RemovePasswordConfirmTitle">移除密码</sys:String>
     <sys:String x:Key="Msg.RemovePasswordConfirmBody">移除密码将同时永久删除该磁盘的历史快照，因为旧快照是加密存储的，移除密码后将无法再恢复。&#x0a;&#x0a;是否继续？</sys:String>
+    <sys:String x:Key="Msg.AddPasswordConfirmTitle">设置密码</sys:String>
+    <sys:String x:Key="Msg.AddPasswordConfirmBody">设置密码将同时永久删除该磁盘现有的历史快照，因为这些快照是以未加密形式存储的。&#x0a;&#x0a;是否继续？</sys:String>
 
     <!-- CloneDiskDialog -->
     <sys:String x:Key="CloneDisk.Title">克隆磁盘</sys:String>
