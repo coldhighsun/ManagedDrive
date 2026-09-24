@@ -380,15 +380,16 @@ public sealed class RamDisk : IDisposable
 
             if (Options.PersistImagePath != null)
             {
-                // Wait for any in-flight periodic save to finish, then perform the final save,
-                // so the two never write to the image file concurrently.
+                // Wait for any in-flight periodic save (or a SaveToImage() call that read
+                // _disposed as 0 just before the Exchange above) to finish, then perform the
+                // final save, so two saves never write to the image file at the same time.
                 lock (_autoSaveLock)
                 {
                     try
                     {
                         if (NeedsExitSave())
                         {
-                            SaveToImage(progress);
+                            SaveToImageCore(progress, CancellationToken.None);
                         }
                     }
                     catch (Exception ex)
@@ -401,23 +402,38 @@ public sealed class RamDisk : IDisposable
                 }
             }
 
+            // Deliberately not under _autoSaveLock: unmounting can block for as long as WinFsp
+            // takes to drain outstanding I/O (or an external process to release a handle on the
+            // volume), and holding the lock across that would stall every other _autoSaveLock-
+            // guarded operation on this disk (SetPassword, TryApplyOptions, a manual save, ...)
+            // for the same duration. Nothing here touches _fs.NodeMap or _cek/_password, so a
+            // SaveToImage() call that's still running (or starts) while this is in flight is
+            // safe — the finally block below, which does touch them, waits for the same lock.
             _host.Unmount();
             _host.Dispose();
         }
         finally
         {
-            // The host is unmounted, so no WinFsp callbacks can still touch the map. Runs even
-            // if the final save or the unmount above threw, so the node map's lock and the CEK
-            // are always released rather than leaked.
-            _fs.NodeMap.Dispose();
-
-            if (_cek is not null)
+            // Locked so a SaveToImage() call that acquired _autoSaveLock before this point (and
+            // is still running) fully finishes — using the still-valid NodeMap/CEK — before this
+            // disposes/zeroes them; and so a SaveToImage() call that hasn't acquired the lock yet
+            // is guaranteed to see _disposed already set (it was set at the very top of this
+            // method, before any of this) once it does, and rejects itself instead of proceeding.
+            lock (_autoSaveLock)
             {
-                System.Security.Cryptography.CryptographicOperations.ZeroMemory(_cek);
-                _cek = null;
-            }
+                // The host is unmounted, so no WinFsp callbacks can still touch the map. Runs even
+                // if the final save or the unmount above threw, so the node map's lock and the CEK
+                // are always released rather than leaked.
+                _fs.NodeMap.Dispose();
 
-            _password = null;
+                if (_cek is not null)
+                {
+                    System.Security.Cryptography.CryptographicOperations.ZeroMemory(_cek);
+                    _cek = null;
+                }
+
+                _password = null;
+            }
         }
     }
 
@@ -557,6 +573,41 @@ public sealed class RamDisk : IDisposable
     /// does not raise <see cref="SaveFailed"/> or log an error.
     /// </param>
     public void SaveToImage(IProgress<double>? progress = null, CancellationToken cancellationToken = default)
+    {
+        if (Volatile.Read(ref _disposed) != 0)
+        {
+            throw new ObjectDisposedException(nameof(RamDisk));
+        }
+
+        // Serializes with the periodic auto-save tick and with Dispose's own final save and
+        // NodeMap/CEK cleanup (all of which take this lock too — System.Threading.Lock supports
+        // recursive re-entry by the owning thread, so Dispose's direct call to SaveToImageCore is
+        // unaffected) so two saves never write to the image file at the same time.
+        lock (_autoSaveLock)
+        {
+            // Re-checked now that the lock is held: the check above can race a concurrent
+            // Dispose() that hadn't set _disposed yet when it ran. Dispose sets _disposed before
+            // doing anything else, then takes this same lock for its final save and again for its
+            // NodeMap/CEK cleanup (though not for the unmount in between, which doesn't touch
+            // either) — so by the time this thread gets the lock, either Dispose hasn't started
+            // (safe to proceed) or _disposed is already set (must bail out here instead of
+            // touching state Dispose is about to, or already did, tear down).
+            if (Volatile.Read(ref _disposed) != 0)
+            {
+                throw new ObjectDisposedException(nameof(RamDisk));
+            }
+
+            SaveToImageCore(progress, cancellationToken);
+        }
+    }
+
+    /// <summary>
+    /// The actual save logic behind <see cref="SaveToImage"/>, factored out so <see cref="Dispose(IProgress{double}?)"/>
+    /// can perform its own final save without going through <see cref="SaveToImage"/>'s disposed
+    /// check — by the time Dispose reaches its final save, <see cref="_disposed"/> has already
+    /// been set. Callers must already hold <see cref="_autoSaveLock"/>.
+    /// </summary>
+    private void SaveToImageCore(IProgress<double>? progress, CancellationToken cancellationToken)
     {
         if (Options.PersistImagePath == null)
         {
