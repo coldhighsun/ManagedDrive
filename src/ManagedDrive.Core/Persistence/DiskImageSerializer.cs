@@ -399,6 +399,15 @@ public static class DiskImageSerializer
     /// Optional advanced override (1-22) of the exact Zstd level used instead of the one mapped
     /// from <paramref name="level"/> (see <see cref="ImageCompressionLevelExtensions.ToZstdLevel"/>).
     /// </param>
+    /// <param name="forceFullRewrite">
+    /// When <see langword="true"/>, skips segment reuse entirely and performs a full
+    /// <see cref="SaveSegmented"/> rewrite, as if no existing image were present. Callers must set
+    /// this after rotating the content-encryption key (e.g. removing and re-adding a password)
+    /// while an existing image on disk may still be encrypted under the previous key — segment
+    /// reuse only compares the encrypted/unencrypted flag, not key identity, so reusing that
+    /// image's segments verbatim under a new key would leave the image undecryptable even with the
+    /// correct new password.
+    /// </param>
     public static void SaveIncremental(
         FileNodeMap nodeMap,
         ulong capacityBytes,
@@ -407,8 +416,16 @@ public static class DiskImageSerializer
         ImageCompressionLevel level,
         ImageEncryptionInfo? encryption = null,
         IProgress<double>? progress = null,
-        int? customZstdLevel = null)
+        int? customZstdLevel = null,
+        bool forceFullRewrite = false)
     {
+        if (forceFullRewrite)
+        {
+            SaveSegmented(nodeMap, capacityBytes, volumeLabel, imagePath, level, encryption, progress,
+                customZstdLevel, SegmentTargetBytes);
+            return;
+        }
+
         SaveSegmentedIncremental(nodeMap, capacityBytes, volumeLabel, imagePath, level, encryption, progress,
             customZstdLevel, SegmentTargetBytes);
     }

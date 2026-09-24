@@ -40,6 +40,14 @@ public sealed class RamDisk : IDisposable
     private string? _lastSavedImagePath;
     private string? _password;
 
+    /// <summary>
+    /// Set when <see cref="SetPassword"/> generates a brand-new content-encryption key while an
+    /// existing on-disk image may still be encrypted under a previous key (removing and then
+    /// re-adding a password before an intervening save). Consumed by the next <see cref="SaveToImage"/>
+    /// to force a full rewrite instead of segment reuse — see <see cref="DiskImageSerializer.SaveIncremental"/>.
+    /// </summary>
+    private bool _cekRotatedSinceLastSave;
+
     private RamDisk(MemoryFileSystem fs, FileSystemHost host, DiskOptions options)
     {
         _fs = fs;
@@ -556,6 +564,7 @@ public sealed class RamDisk : IDisposable
         }
 
         var versionAtSaveStart = _fs.CaptureMutationVersion();
+        var forceFullRewrite = _cekRotatedSinceLastSave;
 
         try
         {
@@ -567,7 +576,8 @@ public sealed class RamDisk : IDisposable
                 Options.CompressionLevel,
                 _password is not null && _cek is not null ? new ImageEncryptionInfo(_password, _cek) : null,
                 CancellableProgress.Wrap(progress, cancellationToken),
-                Options.CustomZstdLevel);
+                Options.CustomZstdLevel,
+                forceFullRewrite);
         }
         catch (OperationCanceledException)
         {
@@ -582,6 +592,7 @@ public sealed class RamDisk : IDisposable
             throw;
         }
 
+        _cekRotatedSinceLastSave = false;
         LastSaveTime = DateTimeOffset.UtcNow;
         _fs.ClearDirtySince(versionAtSaveStart);
         _lastSavedImagePath = Options.PersistImagePath;
@@ -681,7 +692,12 @@ public sealed class RamDisk : IDisposable
         {
             if (newPassword is not null)
             {
-                _cek ??= DiskImageSerializer.GenerateCek();
+                if (RamDiskSaveDecisions.ShouldGenerateNewCek(_cek))
+                {
+                    _cek = DiskImageSerializer.GenerateCek();
+                    _cekRotatedSinceLastSave = true;
+                }
+
                 _password = newPassword;
             }
             else

@@ -22,6 +22,17 @@ internal static class RamDiskSaveDecisions
     internal static bool NeedsExitSave(bool saveImageOnExit, bool needsSave) => saveImageOnExit && needsSave;
 
     /// <summary>
+    /// Whether <see cref="RamDisk.SetPassword"/> should generate a fresh content-encryption key
+    /// rather than reuse <paramref name="currentCek"/> to just re-wrap it under a new password.
+    /// <see langword="true"/> only when there is no current CEK (the disk is unencrypted, or a
+    /// password was removed since the last save) — in that case an existing on-disk image may
+    /// still hold segments encrypted under a previous, now-discarded CEK, so the caller must also
+    /// force a full rewrite on the next save rather than let segment reuse copy those stale-key
+    /// segments verbatim under the new key.
+    /// </summary>
+    internal static bool ShouldGenerateNewCek(byte[]? currentCek) => currentCek is null;
+
+    /// <summary>
     /// Compares <paramref name="nodeMap"/> against the most recently written snapshot of
     /// <paramref name="mainImagePath"/>, if one exists. Returns <c>false</c> (i.e. "write a new
     /// snapshot") when there is no prior snapshot, or when reading/comparing it fails for any
