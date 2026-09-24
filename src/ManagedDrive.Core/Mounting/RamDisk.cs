@@ -439,6 +439,12 @@ public sealed class RamDisk : IDisposable
             // method, before any of this) once it does, and rejects itself instead of proceeding.
             lock (_autoSaveLock)
             {
+                // Again under the lock: a TryApplyOptions call that passed its disposed check
+                // just before _disposed was set may have re-armed the timer after it was disposed
+                // at the top of this method.
+                _autoSaveTimer?.Dispose();
+                _autoSaveTimer = null;
+
                 // The host is unmounted, so no WinFsp callbacks can still touch the map. Runs even
                 // if the final save or the unmount above threw, so the node map's lock and the CEK
                 // are always released rather than leaked.
@@ -566,6 +572,7 @@ public sealed class RamDisk : IDisposable
 
         lock (_autoSaveLock)
         {
+            ThrowIfDisposed();
             _fs.NodeMap.ClearAll();
             _fs.MarkDirty();
         }
@@ -793,6 +800,10 @@ public sealed class RamDisk : IDisposable
     {
         lock (_autoSaveLock)
         {
+            // Without this, a call that lost the race with Dispose would generate a CEK nothing
+            // ever zeroes, or delete every snapshot of a disk that is no longer mounted.
+            ThrowIfDisposed();
+
             if (newPassword is not null)
             {
                 if (RamDiskSaveDecisions.ShouldGenerateNewCek(_cek))
@@ -845,6 +856,14 @@ public sealed class RamDisk : IDisposable
     {
         lock (_autoSaveLock)
         {
+            // Without this, a call that lost the race with Dispose would re-arm the auto-save
+            // timer on a disk that is already gone.
+            if (IsDisposed)
+            {
+                error = DisposedError;
+                return false;
+            }
+
             if (newOptions.CapacityBytes != Options.CapacityBytes &&
                 !_fs.TryUpdateCapacity(newOptions.CapacityBytes))
             {
@@ -886,6 +905,12 @@ public sealed class RamDisk : IDisposable
         {
             lock (second._autoSaveLock)
             {
+                if (IsDisposed || source.IsDisposed)
+                {
+                    error = DisposedError;
+                    return false;
+                }
+
                 if (!_fs.TryReplaceContents(source._fs.NodeMap, out error))
                 {
                     return false;
@@ -950,6 +975,12 @@ public sealed class RamDisk : IDisposable
     {
         lock (_autoSaveLock)
         {
+            if (IsDisposed)
+            {
+                error = DisposedError;
+                return false;
+            }
+
             try
             {
                 // The loaded map is ours alone, so its nodes are adopted rather than copied again.
@@ -977,6 +1008,25 @@ public sealed class RamDisk : IDisposable
     /// </summary>
     internal static ulong ResolveEffectiveCapacity(ulong configuredCapacity, ulong actualUsed) =>
         Math.Max(configuredCapacity, actualUsed);
+
+    /// <summary>
+    /// Throws <see cref="ObjectDisposedException"/> once <see cref="Dispose(IProgress{double}?)"/>
+    /// has started. Callers check this while holding <see cref="_autoSaveLock"/>, so an operation
+    /// either runs entirely before Dispose's final save and cleanup or is rejected here.
+    /// </summary>
+    private void ThrowIfDisposed() => ObjectDisposedException.ThrowIf(IsDisposed, this);
+
+    /// <summary>
+    /// Whether <see cref="Dispose(IProgress{double}?)"/> has started. The <c>Try*</c> operations
+    /// check this under <see cref="_autoSaveLock"/> and report <see cref="DisposedError"/> instead
+    /// of throwing, keeping their "return false with an error" contract.
+    /// </summary>
+    private bool IsDisposed => Volatile.Read(ref _disposed) != 0;
+
+    /// <summary>
+    /// Error reported by the <c>Try*</c> operations when the disk was disposed before they ran.
+    /// </summary>
+    private const string DisposedError = "The disk is no longer mounted.";
 
     private static void ConfigureHost(FileSystemHost host)
     {
