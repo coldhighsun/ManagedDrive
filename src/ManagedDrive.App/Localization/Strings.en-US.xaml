@@ -248,6 +248,7 @@
     <sys:String x:Key="Btn.Browse">Browse...</sys:String>
     <sys:String x:Key="Settings.HelperServiceStatus">Helper service:</sys:String>
     <sys:String x:Key="Tip.HelperServiceStatus">The optional SYSTEM-level helper service that publishes RAM disks for cross-session visibility (e.g. installers running as SYSTEM). See the README for setup.</sys:String>
+    <sys:String x:Key="Settings.HelperServiceChecking">Checking...</sys:String>
     <sys:String x:Key="Settings.HelperServiceAvailable">Running</sys:String>
     <sys:String x:Key="Settings.HelperServiceUnavailable">Not installed or not running</sys:String>
     <sys:String x:Key="ShellMenu.ImportArchive">Mount as RAM disk (ManagedDrive)</sys:String>

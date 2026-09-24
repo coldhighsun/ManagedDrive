@@ -248,6 +248,7 @@
     <sys:String x:Key="Btn.Browse">浏览...</sys:String>
     <sys:String x:Key="Settings.HelperServiceStatus">Helper 服务：</sys:String>
     <sys:String x:Key="Tip.HelperServiceStatus">可选的 SYSTEM 级 Helper 服务，用于让 RAM 磁盘在跨会话场景（例如以 SYSTEM 身份运行的安装程序）中可见。设置方法请参阅 README。</sys:String>
+    <sys:String x:Key="Settings.HelperServiceChecking">检测中…</sys:String>
     <sys:String x:Key="Settings.HelperServiceAvailable">正在运行</sys:String>
     <sys:String x:Key="Settings.HelperServiceUnavailable">未安装或未运行</sys:String>
     <sys:String x:Key="ShellMenu.ImportArchive">挂载为内存盘 (ManagedDrive)</sys:String>

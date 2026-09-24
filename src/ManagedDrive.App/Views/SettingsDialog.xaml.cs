@@ -8,6 +8,13 @@ namespace ManagedDrive.App.Views;
 /// </summary>
 public partial class SettingsDialog
 {
+    /// <summary>
+    /// Logger used to record why <see cref="HelperPipeClient.IsServiceAvailable(out string?)"/>
+    /// reported the helper service unavailable, since that check otherwise gives no diagnostic
+    /// trail when a user reports the service as running.
+    /// </summary>
+    private static readonly ILogger Logger = AppLog.CreateLogger<SettingsDialog>();
+
     private static readonly List<ImageCompressionLevel> CompressionLevels = [
         ImageCompressionLevel.None,
         ImageCompressionLevel.Fastest,
@@ -37,9 +44,8 @@ public partial class SettingsDialog
         ContextMenuEnabledBox.IsChecked = ShellContextMenuManager.IsRegistered;
         AutoCheckForUpdatesBox.IsChecked = config.AutoCheckForUpdates;
         DefaultImageDirectoryBox.Text = config.DefaultImageDirectory ?? string.Empty;
-        HelperServiceStatusText.Text = HelperPipeClient.IsServiceAvailable()
-            ? Loc.Get("Settings.HelperServiceAvailable")
-            : Loc.Get("Settings.HelperServiceUnavailable");
+        HelperServiceStatusText.Text = Loc.Get("Settings.HelperServiceChecking");
+        _ = UpdateHelperServiceStatusAsync();
 
         foreach (var level in CompressionLevels)
         {
@@ -88,6 +94,28 @@ public partial class SettingsDialog
         {
             ThemeBox.SelectedIndex = 0;
         }
+    }
+
+    /// <summary>
+    /// Pings the helper service off the UI thread and fills in <see cref="HelperServiceStatusText"/>
+    /// once it answers, so opening the dialog doesn't block on the pipe connect/read timeouts.
+    /// </summary>
+    private async Task UpdateHelperServiceStatusAsync()
+    {
+        var available = await Task.Run(() =>
+        {
+            var ok = HelperPipeClient.IsServiceAvailable(out var failureReason);
+            if (!ok && failureReason != null)
+            {
+                Logger.LogInformation("Helper service unavailable: {Reason}", failureReason);
+            }
+
+            return ok;
+        });
+
+        HelperServiceStatusText.Text = available
+            ? Loc.Get("Settings.HelperServiceAvailable")
+            : Loc.Get("Settings.HelperServiceUnavailable");
     }
 
     /// <summary>
