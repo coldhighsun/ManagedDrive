@@ -176,7 +176,15 @@ public sealed class HelperPipeService(GlobalMountManager mountManager, ILogger<H
         }
 
         var request = HelperPipeProtocol.DeserializeRequest(requestJson);
-        var response = Handle(request, GetCallerSid(pipe));
+
+        // Impersonating the caller (via GetCallerSid) is only meaningful for publish/unpublish,
+        // which need it for the ownership check in Handle(). Skip it for ping — the far more
+        // frequent op (e.g. the Settings dialog's helper-service status check) — so a liveness
+        // check never pays for an impersonate/revert round trip it doesn't use.
+        var callerSid = request.Op is HelperPipeProtocol.OpPublish or HelperPipeProtocol.OpUnpublish
+            ? GetCallerSid(pipe)
+            : null;
+        var response = Handle(request, callerSid);
 
         await PipeIo.WriteLineWithTimeoutAsync(writer, HelperPipeProtocol.SerializeResponse(response), PerIoTimeout, ct);
     }
