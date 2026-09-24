@@ -1031,24 +1031,34 @@ public static class DiskImageSerializer
         };
 
         var dataLen = reader.ReadInt64();
-        if (dataLen > 0 && !node.IsDirectory)
+        var storedDataLen = dataLen > 0 ? (ulong)dataLen : 0;
+        var aligned = node.IsDirectory
+            ? 0
+            : FileNode.AlignToAllocationUnit(
+                Math.Max(node.FileInfo.AllocationSize, Math.Max(storedDataLen, node.FileInfo.FileSize)));
+
+        if (aligned > 0)
         {
             // Older builds could save a file caught growing with an AllocationSize (and FileSize)
             // out of step with its data. Size the content to cover all of them rather than fail
             // the whole load, keeping FileSize <= AllocationSize == content length as reads assume.
-            var aligned = FileNode.AlignToAllocationUnit(
-                Math.Max(node.FileInfo.AllocationSize, Math.Max((ulong)dataLen, node.FileInfo.FileSize)));
+            // This also covers a preallocated file saved while still empty (FileSize 0, so no
+            // data bytes, but AllocationSize > 0): writes within an existing allocation never
+            // create content, so leaving FileData null there would silently drop them.
             node.FileInfo.AllocationSize = aligned;
             node.FileData = FileContent.CreateZeroed(aligned);
 
             // FillFromStream zero-pads a short read instead of throwing; a truncated image must
             // fail the load, or the next save would persist the zero-padded file as if it were
             // the real content.
-            var filled = node.FileData.FillFromStream(reader.BaseStream, dataLen);
-            if (filled < dataLen)
+            if (dataLen > 0)
             {
-                throw new InvalidDataException(
-                    $"Image is truncated: file '{path}' has {filled:N0} of {dataLen:N0} bytes.");
+                var filled = node.FileData.FillFromStream(reader.BaseStream, dataLen);
+                if (filled < dataLen)
+                {
+                    throw new InvalidDataException(
+                        $"Image is truncated: file '{path}' has {filled:N0} of {dataLen:N0} bytes.");
+                }
             }
         }
         else if (dataLen > 0)

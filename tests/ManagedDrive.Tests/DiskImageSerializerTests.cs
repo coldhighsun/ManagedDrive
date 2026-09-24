@@ -1,4 +1,5 @@
 using System.IO.Compression;
+using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 
 namespace ManagedDrive.Tests;
@@ -554,6 +555,63 @@ public sealed class DiskImageSerializerTests
             Assert.True(loaded.TryGet("\\File.txt", out var node));
             Assert.Equal("hello world"u8.ToArray(), node!.FileData!.ToArray("hello world"u8.Length));
             Assert.Null(cek);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    /// <summary>
+    /// A file with allocation but no data (e.g. preallocated then never written) must come back
+    /// with backing content for its allocation, so a later write inside it is kept.
+    /// </summary>
+    /// <param name="incremental">Whether the image is written by the incremental (v6) path.</param>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Load_PreallocatedEmptyFile_LaterWriteWithinAllocationIsReadBack(bool incremental)
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid()}.mdr");
+        try
+        {
+            var source = new MemoryFileSystem(1024 * 1024, "Label");
+            source.Create("\\pre.bin", 0, 0, (uint)FileAttributes.Normal, [], 8192,
+                out _, out _, out _, out _);
+
+            if (incremental)
+            {
+                DiskImageSerializer.SaveIncremental(source.NodeMap, capacityBytes: 1024 * 1024, "Label", path,
+                    ImageCompressionLevel.Fastest);
+            }
+            else
+            {
+                DiskImageSerializer.Save(source.NodeMap, capacityBytes: 1024 * 1024, "Label", path,
+                    ImageCompressionLevel.Fastest);
+            }
+
+            var loaded = DiskImageSerializer.Load(path, out _, out _, password: null, out _);
+            var fs = new MemoryFileSystem(1024 * 1024, "Label", loaded);
+            Assert.True(fs.NodeMap.TryGet("\\pre.bin", out var node));
+
+            byte[] payload = [1, 2, 3, 4];
+            var readBack = new byte[payload.Length];
+            var ptr = Marshal.AllocHGlobal(payload.Length);
+            try
+            {
+                Marshal.Copy(payload, 0, ptr, payload.Length);
+                fs.Write(node!, null!, ptr, 0, (uint)payload.Length, false, false, out _, out _);
+
+                Marshal.Copy(new byte[payload.Length], 0, ptr, payload.Length);
+                fs.Read(node!, null!, ptr, 0, (uint)payload.Length, out var bytesRead);
+                Marshal.Copy(ptr, readBack, 0, (int)bytesRead);
+            }
+            finally
+            {
+                Marshal.FreeHGlobal(ptr);
+            }
+
+            Assert.Equal(payload, readBack);
         }
         finally
         {
