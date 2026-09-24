@@ -830,11 +830,7 @@ public static class DiskImageSerializer
         {
             foreach (var segment in segments)
             {
-                var payload = reader.ReadBytes(checked((int)segment.PayloadLength));
-                if (payload.Length != segment.PayloadLength)
-                {
-                    throw new EndOfStreamException("The image ends before its last segment.");
-                }
+                var payload = ReadSegmentPayload(reader, segment.PayloadLength);
 
                 // A payload spanning several Zstd chunks (typically one large file on its own)
                 // gains more from decompressing its own chunks in parallel than from a lone worker
@@ -1363,7 +1359,8 @@ public static class DiskImageSerializer
                     var entry = oldSegments[i];
                     if (reusable[i])
                     {
-                        reusedSegments.Add((i, entry, oldReader.ReadBytes(checked((int)entry.PayloadLength))));
+                        var payload = ReadSegmentPayload(oldReader, entry.PayloadLength);
+                        reusedSegments.Add((i, entry, payload));
 
                         foreach (var pos in byOldSegment[i])
                         {
@@ -1826,6 +1823,24 @@ public static class DiskImageSerializer
                 payloadStream.Dispose();
             }
         }
+    }
+
+    /// <summary>
+    /// Reads exactly <paramref name="payloadLength"/> bytes of a segment's payload from
+    /// <paramref name="reader"/>. Unlike <see cref="BinaryReader.ReadBytes"/> alone, which returns
+    /// a shorter array instead of throwing when the underlying stream ends early, this verifies
+    /// the full length was read so a truncated/corrupted image fails loudly here rather than
+    /// silently propagating a too-short payload alongside a stale, too-large recorded length.
+    /// </summary>
+    private static byte[] ReadSegmentPayload(BinaryReader reader, long payloadLength)
+    {
+        var payload = reader.ReadBytes(checked((int)payloadLength));
+        if (payload.Length != payloadLength)
+        {
+            throw new EndOfStreamException("The image ends before its last segment.");
+        }
+
+        return payload;
     }
 
     private readonly record struct SegmentIndexEntry(
