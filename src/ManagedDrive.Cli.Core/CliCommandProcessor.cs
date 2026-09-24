@@ -14,7 +14,15 @@ public static class CliCommandProcessor
     /// Parses <paramref name="args"/> and executes the matching subcommand against
     /// <paramref name="diskController"/>.
     /// </summary>
-    public static async Task<CliOutcome> ExecuteAsync(string[] args, ICliDiskController diskController)
+    /// <param name="args">The command-line arguments, without the executable name.</param>
+    /// <param name="diskController">The disk operations the commands act on.</param>
+    /// <param name="workingDirectory">
+    /// The working directory of the process the command was typed into. Relative host-file paths
+    /// (image, archive, export output, <c>--password-file</c>) are resolved against it, since the
+    /// command runs inside the app process, whose own working directory is unrelated. When
+    /// <see langword="null"/>, paths are passed through unchanged.
+    /// </param>
+    public static async Task<CliOutcome> ExecuteAsync(string[] args, ICliDiskController diskController, string? workingDirectory = null)
     {
         var buffer = new StringWriter();
         CliOutcome? outcome = null;
@@ -100,7 +108,7 @@ public static class CliCommandProcessor
                 return 1;
             }
 
-            if (passwordFile is not null && !TryReadPasswordFile(passwordFile, out password, out var readError))
+            if (passwordFile is not null && !TryReadPasswordFile(ResolvePath(passwordFile, workingDirectory), out password, out var readError))
             {
                 outcome = new(false, readError!, null, 1);
                 return 1;
@@ -120,7 +128,7 @@ public static class CliCommandProcessor
             };
 
             var exitCode = await MountAsync(
-                parseResult.GetValue(mountImageArgument)!,
+                ResolvePath(parseResult.GetValue(mountImageArgument)!, workingDirectory),
                 parseResult.GetValue(mountDriveArgument)!,
                 overrides,
                 diskController,
@@ -154,7 +162,7 @@ public static class CliCommandProcessor
             };
 
             var exitCode = await MountArchiveAsync(
-                parseResult.GetValue(mountArchiveArgument)!,
+                ResolvePath(parseResult.GetValue(mountArchiveArgument)!, workingDirectory),
                 parseResult.GetValue(mountArchiveDriveArgument),
                 overrides,
                 diskController,
@@ -241,7 +249,7 @@ public static class CliCommandProcessor
                 return 1;
             }
 
-            if (passwordFile is not null && !TryReadPasswordFile(passwordFile, out password, out var readError))
+            if (passwordFile is not null && !TryReadPasswordFile(ResolvePath(passwordFile, workingDirectory), out password, out var readError))
             {
                 outcome = new(false, readError!, null, 1);
                 return 1;
@@ -299,13 +307,15 @@ public static class CliCommandProcessor
                 return 1;
             }
 
-            if (passwordFile is not null && !TryReadPasswordFile(passwordFile, out password, out var readError))
+            if (passwordFile is not null && !TryReadPasswordFile(ResolvePath(passwordFile, workingDirectory), out password, out var readError))
             {
                 outcome = new(false, readError!, null, 1);
                 return 1;
             }
 
-            var imagePath = parseResult.GetValue(createImageOption);
+            var imagePath = parseResult.GetValue(createImageOption) is { } rawImagePath
+                ? ResolvePath(rawImagePath, workingDirectory)
+                : null;
             if (password is not null && imagePath is null)
             {
                 outcome = new(false, "--password/--password-file requires --image.", null, 1);
@@ -546,7 +556,7 @@ public static class CliCommandProcessor
                 return 1;
             }
 
-            if (passwordFile is not null && !TryReadPasswordFile(passwordFile, out password, out var readError))
+            if (passwordFile is not null && !TryReadPasswordFile(ResolvePath(passwordFile, workingDirectory), out password, out var readError))
             {
                 outcome = new(false, readError!, null, 1);
                 return 1;
@@ -554,7 +564,7 @@ public static class CliCommandProcessor
 
             var exitCode = await ExportAsync(
                 parseResult.GetValue(exportDriveArgument)!,
-                parseResult.GetValue(exportOutputArgument)!,
+                ResolvePath(parseResult.GetValue(exportOutputArgument)!, workingDirectory),
                 format,
                 parseResult.GetValue(exportCompressionOption),
                 password,
@@ -797,6 +807,35 @@ public static class CliCommandProcessor
         var (success, message) = await diskController.MountImageAsync(imagePath, driveLetter, overrides);
         setOutcome(new(success, message, null, success ? 0 : 1));
         return success ? 0 : 1;
+    }
+
+    /// <summary>
+    /// Resolves a host-file path typed on the command line against the invoking process's
+    /// <paramref name="workingDirectory"/>. Blank and fully qualified paths, and every path when
+    /// <paramref name="workingDirectory"/> is missing or not fully qualified itself, are returned
+    /// unchanged, as are paths <see cref="Path.GetFullPath(string, string)"/> rejects, so the
+    /// command reports those through its normal invalid-path handling.
+    /// </summary>
+    /// <param name="path">The path as typed.</param>
+    /// <param name="workingDirectory">The invoking process's working directory, if known.</param>
+    /// <returns>The absolute path, or <paramref name="path"/> unchanged.</returns>
+    internal static string ResolvePath(string path, string? workingDirectory)
+    {
+        // A blank path would otherwise resolve to the working directory itself.
+        if (string.IsNullOrWhiteSpace(path) ||
+            workingDirectory is null || !Path.IsPathFullyQualified(workingDirectory) || Path.IsPathFullyQualified(path))
+        {
+            return path;
+        }
+
+        try
+        {
+            return Path.GetFullPath(path, workingDirectory);
+        }
+        catch (ArgumentException)
+        {
+            return path;
+        }
     }
 
     /// <summary>

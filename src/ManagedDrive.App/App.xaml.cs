@@ -186,7 +186,7 @@ public partial class App
             // Launched with CLI-style args (e.g. from the Explorer context menu) as the first
             // instance: execute the command directly against this instance's MainViewModel.
             var controller = new MainViewModelCliDiskController(_mainViewModel);
-            var result = await CliCommandProcessor.ExecuteAsync(e.Args, controller);
+            var result = await CliCommandProcessor.ExecuteAsync(e.Args, controller, Environment.CurrentDirectory);
             if (result.ExitCode != 0)
             {
                 MessageBox.Show(result.Message, "ManagedDrive", MessageBoxButton.OK, MessageBoxImage.Warning);

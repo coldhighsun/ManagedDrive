@@ -108,7 +108,7 @@ public static class CliPipeClient
     private static bool TrySendCore(
         NamedPipeClientStream pipe, StreamReader reader, StreamWriter writer, string[] args, ref CliResponse response)
     {
-        writer.WriteLine(CliPipeProtocol.SerializeRequest(args));
+        writer.WriteLine(CliPipeProtocol.SerializeRequest(args, Environment.CurrentDirectory));
 
         // Deliberately not `new CancellationTokenSource(ReadTimeout)`: that schedules its Cancel()
         // call on the ThreadPool, whose timer callback can be delayed well past ReadTimeout if the
