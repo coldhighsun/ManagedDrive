@@ -115,8 +115,22 @@ public sealed class HelperPipeService(GlobalMountManager mountManager, ILogger<H
             security);
     }
 
-    private HelperResponse Handle(HelperRequest request)
+    /// <summary>
+    /// Executes <paramref name="request"/> on behalf of the connected user.
+    /// </summary>
+    /// <param name="request">The decoded request.</param>
+    /// <param name="callerSid">
+    /// SID of the connected user, or <c>null</c> if it couldn't be determined — publish and
+    /// unpublish are refused then, since ownership decides who may change which letter.
+    /// </param>
+    /// <returns>The response to send back.</returns>
+    private HelperResponse Handle(HelperRequest request, string? callerSid)
     {
+        if (request.Op is HelperPipeProtocol.OpPublish or HelperPipeProtocol.OpUnpublish && callerSid is null)
+        {
+            return new(false, "Could not identify the calling user.");
+        }
+
         switch (request.Op)
         {
             case HelperPipeProtocol.OpPing:
@@ -128,7 +142,7 @@ public sealed class HelperPipeService(GlobalMountManager mountManager, ILogger<H
                     return new(false, "publish requires Letter and DevicePath.");
                 }
 
-                var (pubOk, pubMsg) = mountManager.Publish(request.Letter, request.DevicePath);
+                var (pubOk, pubMsg) = mountManager.Publish(request.Letter, request.DevicePath, callerSid!);
                 return new(pubOk, pubMsg);
 
             case HelperPipeProtocol.OpUnpublish:
@@ -137,7 +151,7 @@ public sealed class HelperPipeService(GlobalMountManager mountManager, ILogger<H
                     return new(false, "unpublish requires Letter.");
                 }
 
-                var (unpubOk, unpubMsg) = mountManager.Unpublish(request.Letter);
+                var (unpubOk, unpubMsg) = mountManager.Unpublish(request.Letter, callerSid!);
                 return new(unpubOk, unpubMsg);
 
             default:
@@ -162,9 +176,29 @@ public sealed class HelperPipeService(GlobalMountManager mountManager, ILogger<H
         }
 
         var request = HelperPipeProtocol.DeserializeRequest(requestJson);
-        var response = Handle(request);
+        var response = Handle(request, GetCallerSid(pipe));
 
         await PipeIo.WriteLineWithTimeoutAsync(writer, HelperPipeProtocol.SerializeResponse(response), PerIoTimeout, ct);
+    }
+
+    /// <summary>
+    /// Identifies the user on the other end of <paramref name="pipe"/>, after the request has been read.
+    /// </summary>
+    /// <param name="pipe">The connected pipe.</param>
+    /// <returns>The caller's SID, or <c>null</c> if impersonation failed.</returns>
+    private string? GetCallerSid(NamedPipeServerStream pipe)
+    {
+        try
+        {
+            return NativeMethods.GetClientUserSid(pipe);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            logger.LogWarningThrottled(
+                "pipe-impersonation-failed", TimeSpan.FromMinutes(5),
+                "Could not identify the pipe client: {Error}", ex.Message);
+            return null;
+        }
     }
 
     private async Task ReconcileLoopAsync(CancellationToken stoppingToken)

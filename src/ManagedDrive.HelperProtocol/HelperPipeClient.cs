@@ -1,4 +1,5 @@
 using System.IO.Pipes;
+using System.Security.Principal;
 using System.Text;
 
 namespace ManagedDrive.HelperProtocol;
@@ -73,7 +74,11 @@ public static class HelperPipeClient
     {
         response = new(false, string.Empty);
 
-        using var pipe = new NamedPipeClientStream(".", PipeName, PipeDirection.InOut, PipeOptions.Asynchronous);
+        using var pipe = new NamedPipeClientStream(
+            ".", PipeName, PipeDirection.InOut, PipeOptions.Asynchronous,
+            // Enough for the service to read who is asking (it authorizes by user); it gets no
+            // token it could act as this user with.
+            TokenImpersonationLevel.Identification);
 
         try
         {

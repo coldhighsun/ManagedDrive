@@ -1,4 +1,6 @@
+using System.IO.Pipes;
 using System.Runtime.InteropServices;
+using System.Security.Principal;
 using Microsoft.Win32.SafeHandles;
 
 namespace ManagedDrive.Service;
@@ -21,6 +23,36 @@ internal static class NativeMethods
     private const uint OPEN_EXISTING = 3;
 
     /// <summary>
+    /// Win32 error returned by <see cref="QueryDosDevice"/> when the name has no definition.
+    /// </summary>
+    private const int ERROR_FILE_NOT_FOUND = 2;
+
+    /// <summary>
+    /// Win32 error returned when part of a path (here: the device) doesn't exist.
+    /// </summary>
+    private const int ERROR_PATH_NOT_FOUND = 3;
+
+    /// <summary>
+    /// Win32 error returned by <see cref="QueryDosDevice"/> when the target buffer is too small.
+    /// </summary>
+    private const int ERROR_INSUFFICIENT_BUFFER = 122;
+
+    /// <summary>
+    /// Initial <see cref="QueryDosDevice"/> buffer size, in characters.
+    /// </summary>
+    private const int QueryDosDeviceInitialChars = 1024;
+
+    /// <summary>
+    /// Largest <see cref="QueryDosDevice"/> buffer tried, in characters, before giving up.
+    /// </summary>
+    private const int QueryDosDeviceMaxChars = 64 * 1024;
+
+    /// <summary>
+    /// Access right needed to query a token's user SID.
+    /// </summary>
+    private const uint TOKEN_QUERY = 0x0008;
+
+    /// <summary>
     /// Creates a global DOS-device symlink <paramref name="letter"/> → <paramref name="devicePath"/>.
     /// </summary>
     public static bool CreateGlobalSymlink(string letter, string devicePath) =>
@@ -28,7 +60,10 @@ internal static class NativeMethods
 
     /// <summary>
     /// Probes whether the underlying NT volume device is still present, independent of any
-    /// drive-letter symlink, by opening it through the <c>GLOBALROOT</c> device namespace.
+    /// drive-letter symlink, by opening it through the <c>GLOBALROOT</c> device namespace. Only a
+    /// "not found" failure counts as absent: a live volume whose open fails for another reason
+    /// (access denied, a busy or stalled file system) must not be treated as gone, or its letter
+    /// would be purged and handed to someone else.
     /// </summary>
     public static bool DeviceExists(string devicePath)
     {
@@ -41,8 +76,16 @@ internal static class NativeMethods
             FILE_FLAG_BACKUP_SEMANTICS,
             IntPtr.Zero);
 
-        return !handle.IsInvalid;
+        return !handle.IsInvalid || !IsDeviceNotFoundError(Marshal.GetLastWin32Error());
     }
+
+    /// <summary>
+    /// Whether a failed open of a device path means the device doesn't exist.
+    /// </summary>
+    /// <param name="error">The Win32 error of the failed open.</param>
+    /// <returns><c>true</c> for "file not found" and "path not found".</returns>
+    internal static bool IsDeviceNotFoundError(int error) =>
+        error is ERROR_FILE_NOT_FOUND or ERROR_PATH_NOT_FOUND;
 
     /// <summary>
     /// Returns the PID of the process connected to the server end of <paramref name="pipeHandle"/>,
@@ -50,6 +93,81 @@ internal static class NativeMethods
     /// </summary>
     public static int GetClientProcessId(SafeHandle pipeHandle) =>
         GetNamedPipeClientProcessId(pipeHandle.DangerousGetHandle(), out var pid) ? (int)pid : -1;
+
+    /// <summary>
+    /// Returns the SID of the user connected to <paramref name="pipe"/>, or <c>null</c> if it
+    /// cannot be determined. Must be called after data has been read from the pipe (a
+    /// requirement of named-pipe impersonation). Only the impersonation token is opened while
+    /// impersonating — the client connects at identification level, under which the thread can't
+    /// load assemblies or open files, so the SID is read after reverting.
+    /// </summary>
+    public static string? GetClientUserSid(NamedPipeServerStream pipe)
+    {
+        SafeAccessTokenHandle? token = null;
+        pipe.RunAsClient(() =>
+        {
+            // openAsSelf: check access against the service's own token, not the client's.
+            if (!OpenThreadToken(GetCurrentThread(), TOKEN_QUERY, openAsSelf: true, out token))
+            {
+                token = null;
+            }
+        });
+
+        if (token == null)
+        {
+            return null;
+        }
+
+        using (token)
+        {
+            using var identity = new WindowsIdentity(token.DangerousGetHandle());
+            return identity.User?.Value;
+        }
+    }
+
+    /// <summary>
+    /// Returns every definition of <paramref name="letter"/>, current one first, followed by the
+    /// earlier definitions it is stacked on.
+    /// </summary>
+    /// <param name="letter">The drive letter, in <c>"X:"</c> form.</param>
+    /// <returns>
+    /// The targets (empty if the letter is undefined), or <c>null</c> if they could not be queried.
+    /// </returns>
+    public static IReadOnlyList<string>? QueryDosDeviceTargets(string letter)
+    {
+        for (var size = QueryDosDeviceInitialChars; size <= QueryDosDeviceMaxChars; size *= 2)
+        {
+            var buffer = new char[size];
+            var chars = QueryDosDevice(letter, buffer, (uint)buffer.Length);
+            var error = chars == 0 ? Marshal.GetLastWin32Error() : 0;
+            if (error != ERROR_INSUFFICIENT_BUFFER)
+            {
+                return ParseQueryDosDeviceResult(buffer, chars, error);
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Decodes the result of a <see cref="QueryDosDevice"/> call.
+    /// </summary>
+    /// <param name="buffer">The buffer passed to the call.</param>
+    /// <param name="charsReturned">The call's return value.</param>
+    /// <param name="lastError">The Win32 error after the call, when it returned 0.</param>
+    /// <returns>
+    /// The null-separated targets in <paramref name="buffer"/>; an empty list if the name is not
+    /// defined; or <c>null</c> for any other failure, whose meaning is unknown.
+    /// </returns>
+    internal static IReadOnlyList<string>? ParseQueryDosDeviceResult(char[] buffer, uint charsReturned, int lastError)
+    {
+        if (charsReturned == 0)
+        {
+            return lastError == ERROR_FILE_NOT_FOUND ? [] : null;
+        }
+
+        return new string(buffer, 0, (int)charsReturned).Split('\0', StringSplitOptions.RemoveEmptyEntries);
+    }
 
     /// <summary>
     /// Removes the global DOS-device symlink for <paramref name="letter"/>, matching exactly
@@ -75,6 +193,26 @@ internal static class NativeMethods
     [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Auto)]
     private static extern bool DefineDosDevice(uint flags, string deviceName, string? targetPath);
 
+    /// <summary>
+    /// Returns a pseudo-handle for the calling thread; it needs no closing.
+    /// </summary>
+    [DllImport("kernel32.dll")]
+    private static extern IntPtr GetCurrentThread();
+
     [DllImport("kernel32.dll", SetLastError = true)]
     private static extern bool GetNamedPipeClientProcessId(IntPtr pipe, out uint clientProcessId);
+
+    /// <summary>
+    /// Opens the access token of a thread — while impersonating, the impersonated client's token.
+    /// </summary>
+    [DllImport("advapi32.dll", SetLastError = true)]
+    private static extern bool OpenThreadToken(
+        IntPtr threadHandle, uint desiredAccess, bool openAsSelf, out SafeAccessTokenHandle tokenHandle);
+
+    /// <summary>
+    /// Retrieves the null-separated targets of a DOS-device name into <paramref name="targetPath"/>,
+    /// returning the number of characters written, or 0 on failure.
+    /// </summary>
+    [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+    private static extern uint QueryDosDevice(string deviceName, char[] targetPath, uint max);
 }
