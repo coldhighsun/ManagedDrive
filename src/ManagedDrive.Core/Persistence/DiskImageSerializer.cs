@@ -156,6 +156,11 @@ public static class DiskImageSerializer
     private static readonly byte[] Magic = "MDRD"u8.ToArray();
 
     /// <summary>
+    /// Logger for recoverable anomalies found in an existing image while saving over it.
+    /// </summary>
+    private static readonly ILogger Logger = AppLog.CreateLogger(typeof(DiskImageSerializer));
+
+    /// <summary>
     /// Generates a fresh random 256-bit content-encryption key for use when encryption is first
     /// enabled on a disk.
     /// </summary>
@@ -1025,7 +1030,16 @@ public static class DiskImageSerializer
                 Math.Max(node.FileInfo.AllocationSize, Math.Max((ulong)dataLen, node.FileInfo.FileSize)));
             node.FileInfo.AllocationSize = aligned;
             node.FileData = FileContent.CreateZeroed(aligned);
-            node.FileData.FillFromStream(reader.BaseStream, dataLen);
+
+            // FillFromStream zero-pads a short read instead of throwing; a truncated image must
+            // fail the load, or the next save would persist the zero-padded file as if it were
+            // the real content.
+            var filled = node.FileData.FillFromStream(reader.BaseStream, dataLen);
+            if (filled < dataLen)
+            {
+                throw new InvalidDataException(
+                    $"Image is truncated: file '{path}' has {filled:N0} of {dataLen:N0} bytes.");
+            }
         }
         else if (dataLen > 0)
         {
@@ -1679,6 +1693,18 @@ public static class DiskImageSerializer
                 entries[i] = new(nodeCount, payloadLength, contentHash, nonce, tag);
             }
 
+            if (!SegmentIndexMatchesPayloadRegion(entries, candidateStream.Length - candidateStream.Position))
+            {
+                // A truncated (or otherwise damaged) old image: reusing it would fail mid-copy on
+                // every save, forever, since the file never gets replaced. A full rewrite from
+                // the in-memory tree replaces it instead.
+                Logger.LogWarning(
+                    "Existing image '{ImagePath}' has a segment index inconsistent with its size; rewriting it in full.",
+                    imagePath);
+                candidateStream.Dispose();
+                return false;
+            }
+
             stream = candidateStream;
             reader = candidateReader;
             segments = entries;
@@ -1844,6 +1870,34 @@ public static class DiskImageSerializer
                 payloadStream.Dispose();
             }
         }
+    }
+
+    /// <summary>
+    /// Returns whether <paramref name="entries"/> describe exactly the
+    /// <paramref name="payloadRegionBytes"/> bytes that follow the segment index: every node count
+    /// and payload length non-negative, every payload small enough for
+    /// <see cref="ReadSegmentPayload"/>, and the payload lengths summing to the region's size. The
+    /// writer never appends anything after the last payload, so any mismatch means the image was
+    /// truncated or damaged.
+    /// </summary>
+    private static bool SegmentIndexMatchesPayloadRegion(SegmentIndexEntry[] entries, long payloadRegionBytes)
+    {
+        var total = 0L;
+        foreach (var entry in entries)
+        {
+            if (entry.NodeCount < 0 || entry.PayloadLength < 0 || entry.PayloadLength > int.MaxValue)
+            {
+                return false;
+            }
+
+            total += entry.PayloadLength;
+            if (total > payloadRegionBytes)
+            {
+                return false;
+            }
+        }
+
+        return total == payloadRegionBytes;
     }
 
     /// <summary>
