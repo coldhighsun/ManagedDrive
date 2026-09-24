@@ -495,33 +495,36 @@ public sealed class FileContent
                 $"Not enough free memory to load {cost:N0} more bytes of file content.");
         }
 
-        var remaining = count;
-        var chunkIndex = 0;
-        var totalFilled = 0L;
-
-        while (remaining > 0)
+        lock (_lock)
         {
-            var segment = (int)Math.Min(remaining, ChunkSize);
-            var chunk = _chunks[chunkIndex] ??= AllocateChunk(chunkIndex);
-            var filled = 0;
+            var remaining = count;
+            var chunkIndex = 0;
+            var totalFilled = 0L;
 
-            while (filled < segment)
+            while (remaining > 0)
             {
-                var read = source.Read(chunk, filled, segment - filled);
-                if (read == 0)
+                var segment = (int)Math.Min(remaining, ChunkSize);
+                var chunk = _chunks[chunkIndex] ??= AllocateChunk(chunkIndex);
+                var filled = 0;
+
+                while (filled < segment)
                 {
-                    return totalFilled + filled;
+                    var read = source.Read(chunk, filled, segment - filled);
+                    if (read == 0)
+                    {
+                        return totalFilled + filled;
+                    }
+
+                    filled += read;
                 }
 
-                filled += read;
+                totalFilled += filled;
+                remaining -= segment;
+                chunkIndex++;
             }
 
-            totalFilled += filled;
-            remaining -= segment;
-            chunkIndex++;
+            return totalFilled;
         }
-
-        return totalFilled;
     }
 
     /// <summary>
