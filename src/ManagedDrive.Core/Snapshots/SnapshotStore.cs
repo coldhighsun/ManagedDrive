@@ -261,8 +261,8 @@ internal static class SnapshotStore
 
     /// <summary>
     /// Stores the first <paramref name="length"/> bytes of <paramref name="data"/> as a
-    /// content-addressed blob, unless a blob with that content already exists, and returns the
-    /// SHA-256 hash the blob is stored under. Streams
+    /// content-addressed blob, unless a blob with that content and the same encryption state
+    /// already exists, and returns the SHA-256 hash the blob is stored under. Streams
     /// <paramref name="data"/> straight from <see cref="FileContent"/> through Zstd compression
     /// and (when <paramref name="cek"/> is set) chunked AES-256-GCM encryption directly into the
     /// destination file — no whole-file buffer is ever materialized, so a single blob's size is
@@ -271,7 +271,7 @@ internal static class SnapshotStore
     /// <see cref="ReadBlob"/> for the legacy whole-blob layout this format replaces. New compressed
     /// blobs are always flagged <see cref="BlobFlagZstd"/> — nothing writes gzip anymore, but blobs
     /// written before this flag existed stay gzip forever since content-addressed blobs already on
-    /// disk are never rewritten.
+    /// disk are only rewritten when their encryption state doesn't match <paramref name="cek"/>.
     /// <para>
     /// The file may still be written to while this runs, so the content is read twice: once to
     /// hash it and check whether the blob already exists, then again to write a new blob. The
@@ -290,8 +290,9 @@ internal static class SnapshotStore
             hash = incrementalHash.GetHashAndReset();
         }
 
+        var encrypted = cek is not null;
         var blobPath = HashToBlobPath(blobDirectory, hash);
-        if (File.Exists(blobPath))
+        if (IsReusableBlob(blobPath, encrypted))
         {
             return hash;
         }
@@ -300,7 +301,7 @@ internal static class SnapshotStore
         Directory.CreateDirectory(Path.GetDirectoryName(blobPath)!);
 
         var compress = level != ImageCompressionLevel.None;
-        var flag = (compress ? BlobFlagCompressed | BlobFlagZstd : 0) | (cek is not null ? BlobFlagEncrypted | BlobFlagChunked : 0);
+        var flag = (compress ? BlobFlagCompressed | BlobFlagZstd : 0) | (encrypted ? BlobFlagEncrypted | BlobFlagChunked : 0);
 
         var tempPath = blobPath + "." + Guid.NewGuid().ToString("N") + ".tmp";
         using var writtenHash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
@@ -364,9 +365,13 @@ internal static class SnapshotStore
                 Directory.CreateDirectory(Path.GetDirectoryName(blobPath)!);
             }
 
-            File.Move(tempPath, blobPath, overwrite: false);
+            // Overwriting is safe: a blob under this name was either rejected above because its
+            // encryption state doesn't match (every snapshot of this disk is read with the disk's
+            // current key, so it would leak plaintext or be unreadable), or it appeared since and
+            // holds the same content. That avoids re-reading the existing blob's flag here.
+            File.Move(tempPath, blobPath, overwrite: true);
         }
-        catch (IOException) when (File.Exists(blobPath))
+        catch (Exception ex) when ((ex is IOException or UnauthorizedAccessException) && IsReusableBlob(blobPath, encrypted))
         {
             // Another writer already created this content-addressed blob; its bytes are
             // equivalent modulo compression, so no correctness issue. Clean up our temp file.
@@ -383,6 +388,40 @@ internal static class SnapshotStore
         return hash;
     }
 
+    /// <summary>
+    /// Returns whether the blob at <paramref name="blobPath"/> exists and its flag byte matches
+    /// the requested encryption state, so it can stand in for a freshly written blob.
+    /// </summary>
+    /// <param name="blobPath">The content-addressed blob path to inspect.</param>
+    /// <param name="encrypted">Whether the caller needs an encrypted blob.</param>
+    private static bool IsReusableBlob(string blobPath, bool encrypted)
+    {
+        try
+        {
+            using var stream = new FileStream(blobPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+            var flag = stream.ReadByte();
+            return flag >= 0 && ((flag & BlobFlagEncrypted) != 0) == encrypted;
+        }
+        catch (FileNotFoundException)
+        {
+            return false;
+        }
+        catch (DirectoryNotFoundException)
+        {
+            return false;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // The blob exists but can't be opened right now (e.g. held exclusively by a scanner, or
+            // pending deletion): fall back to a plain existence check rather than fail the snapshot.
+            return File.Exists(blobPath);
+        }
+    }
+
+    /// <summary>
+    /// Deletes <paramref name="path"/>, ignoring any failure.
+    /// </summary>
+    /// <param name="path">The file to delete.</param>
     private static void TryDelete(string path)
     {
         try

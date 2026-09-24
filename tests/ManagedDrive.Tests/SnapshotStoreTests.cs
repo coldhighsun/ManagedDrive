@@ -54,6 +54,95 @@ public sealed class SnapshotStoreTests : IDisposable
     }
 
     [Fact]
+    public void WriteBlob_ExistingPlaintextBlobWithCek_ReplacesItWithEncryptedBlob()
+    {
+        var blobDirectory = Path.Combine(_dir, "blobs");
+        byte[] data = [1, 2, 3, 4];
+        var content = FileContent.FromSpan(data, 512);
+        SnapshotStore.WriteBlob(blobDirectory, content, data.Length, ImageCompressionLevel.None, cek: null, customZstdLevel: null);
+
+        var hash = SnapshotStore.WriteBlob(blobDirectory, content, data.Length, ImageCompressionLevel.None, DiskImageSerializer.GenerateCek(), customZstdLevel: null);
+
+        var blob = File.ReadAllBytes(SnapshotStore.HashToBlobPath(blobDirectory, hash));
+        Assert.NotEqual(0, blob[0] & 0b010);
+        Assert.Single(Directory.EnumerateFiles(blobDirectory, "*", SearchOption.AllDirectories));
+    }
+
+    [Fact]
+    public void WriteBlob_ExistingEncryptedBlobWithoutCek_ReplacesItWithPlaintextBlob()
+    {
+        var blobDirectory = Path.Combine(_dir, "blobs");
+        byte[] data = [1, 2, 3, 4];
+        var content = FileContent.FromSpan(data, 512);
+        SnapshotStore.WriteBlob(blobDirectory, content, data.Length, ImageCompressionLevel.None, DiskImageSerializer.GenerateCek(), customZstdLevel: null);
+
+        var hash = SnapshotStore.WriteBlob(blobDirectory, content, data.Length, ImageCompressionLevel.None, cek: null, customZstdLevel: null);
+
+        var blob = File.ReadAllBytes(SnapshotStore.HashToBlobPath(blobDirectory, hash));
+        Assert.Equal(0, blob[0] & 0b010);
+        Assert.Equal(data, blob[1..]);
+    }
+
+    [Fact]
+    public void WriteBlob_ExistingBlobWithMatchingEncryption_ReusesIt()
+    {
+        var blobDirectory = Path.Combine(_dir, "blobs");
+        byte[] data = [1, 2, 3, 4];
+        var content = FileContent.FromSpan(data, 512);
+        var cek = DiskImageSerializer.GenerateCek();
+        var hash = SnapshotStore.WriteBlob(blobDirectory, content, data.Length, ImageCompressionLevel.None, cek, customZstdLevel: null);
+        var blobPath = SnapshotStore.HashToBlobPath(blobDirectory, hash);
+        var original = File.ReadAllBytes(blobPath);
+
+        SnapshotStore.WriteBlob(blobDirectory, content, data.Length, ImageCompressionLevel.None, cek, customZstdLevel: null);
+
+        // A rewrite would pick a fresh random nonce, so identical bytes mean the blob was reused.
+        Assert.Equal(original, File.ReadAllBytes(blobPath));
+    }
+
+    [Fact]
+    public void WriteBlob_ExistingBlobLockedExclusively_ReusesItInsteadOfThrowing()
+    {
+        var blobDirectory = Path.Combine(_dir, "blobs");
+        byte[] data = [1, 2, 3, 4];
+        var content = FileContent.FromSpan(data, 512);
+        var hash = SnapshotStore.WriteBlob(blobDirectory, content, data.Length, ImageCompressionLevel.None, cek: null, customZstdLevel: null);
+        var blobPath = SnapshotStore.HashToBlobPath(blobDirectory, hash);
+
+        byte[] result;
+        using (new FileStream(blobPath, FileMode.Open, FileAccess.Read, FileShare.None))
+        {
+            result = SnapshotStore.WriteBlob(blobDirectory, content, data.Length, ImageCompressionLevel.None, cek: null, customZstdLevel: null);
+        }
+
+        Assert.Equal(hash, result);
+        Assert.Single(Directory.EnumerateFiles(blobDirectory, "*", SearchOption.AllDirectories));
+    }
+
+    [Fact]
+    public void Write_EncryptedSnapshotAfterPlaintextSnapshotOfSameContent_LoadsWithCek()
+    {
+        var data = Enumerable.Range(0, 512).Select(i => (byte)i).ToArray();
+        var map = new FileNodeMap();
+        map.Add("\\", new() { FileInfo = { FileAttributes = (uint)FileAttributes.Directory } });
+        map.Add("\\a.bin", new()
+        {
+            FileData = FileContent.FromSpan(data, 512),
+            FileInfo = { FileAttributes = (uint)FileAttributes.Normal, FileSize = 512, AllocationSize = 512 },
+        });
+        var blobDirectory = Path.Combine(_dir, "blobs");
+        var cek = DiskImageSerializer.GenerateCek();
+        SnapshotStore.Write(map, 1 << 20, "label", Path.Combine(_dir, "plain.mdr"), blobDirectory, ImageCompressionLevel.Optimal, cek: null);
+        var encryptedIndexPath = Path.Combine(_dir, "encrypted.mdr");
+
+        SnapshotStore.Write(map, 1 << 20, "label", encryptedIndexPath, blobDirectory, ImageCompressionLevel.Optimal, cek);
+        var loaded = SnapshotStore.Load(encryptedIndexPath, blobDirectory, out _, out _, cek);
+
+        Assert.True(loaded.TryGet("\\a.bin", out var node));
+        Assert.Equal(data, node!.FileData!.ToArray(512));
+    }
+
+    [Fact]
     public void Write_FileSizeAheadOfContentLength_RecordsSizeMatchingStoredBytes()
     {
         // Mirrors a node caught mid-resize: FileSize already past the content's current length.
