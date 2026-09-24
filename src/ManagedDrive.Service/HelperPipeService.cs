@@ -19,6 +19,16 @@ public sealed class HelperPipeService(GlobalMountManager mountManager, ILogger<H
 {
     private static readonly TimeSpan ReconcileInterval = TimeSpan.FromSeconds(60);
 
+    /// <summary>
+    /// Upper bound on reading the request line and writing the response line of a single
+    /// connection. Publish/unpublish requests are quick, so unlike the CLI pipe server's timeout
+    /// this also effectively bounds the whole exchange. Guards the single-instance accept loop
+    /// against a connected client that never sends anything (or never reads the reply), which
+    /// would otherwise wedge every other local caller (the app's publish/unpublish requests) behind
+    /// it until the service restarts.
+    /// </summary>
+    private static readonly TimeSpan PerIoTimeout = TimeSpan.FromSeconds(30);
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         mountManager.Reconcile();
@@ -120,7 +130,9 @@ public sealed class HelperPipeService(GlobalMountManager mountManager, ILogger<H
         await using var writer = new StreamWriter(pipe, leaveOpen: true);
         writer.AutoFlush = true;
 
-        var requestJson = await reader.ReadLineAsync(ct);
+        // Either the connected client never sent a request within PerIoTimeout, or the service
+        // itself is stopping — either way, drop this connection without blocking the next one.
+        var requestJson = await PipeIo.ReadLineWithTimeoutAsync(reader, PerIoTimeout, ct);
         if (requestJson == null)
         {
             return;
@@ -129,7 +141,7 @@ public sealed class HelperPipeService(GlobalMountManager mountManager, ILogger<H
         var request = HelperPipeProtocol.DeserializeRequest(requestJson);
         var response = Handle(request);
 
-        await writer.WriteLineAsync(HelperPipeProtocol.SerializeResponse(response).AsMemory(), ct);
+        await PipeIo.WriteLineWithTimeoutAsync(writer, HelperPipeProtocol.SerializeResponse(response), PerIoTimeout, ct);
     }
 
     private async Task ReconcileLoopAsync(CancellationToken stoppingToken)
