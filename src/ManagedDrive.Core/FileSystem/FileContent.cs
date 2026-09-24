@@ -166,6 +166,52 @@ public sealed class FileContent
     }
 
     /// <summary>
+    /// Makes the range <c>[<paramref name="start"/>, <paramref name="start"/> + <paramref name="count"/>)</c>
+    /// read as zero without changing <see cref="Length"/>, so bytes cut off by a file-size
+    /// truncation can't resurface when the file is later extended within its existing allocation.
+    /// Chunks the range fully covers are returned to sparse (releasing their memory); only
+    /// partially covered chunks are cleared in place. The range is clamped to <see cref="Length"/>.
+    /// </summary>
+    /// <param name="start">Zero-based byte offset of the first byte to discard.</param>
+    /// <param name="count">Number of bytes to discard.</param>
+    internal void DiscardRange(ulong start, ulong count)
+    {
+        lock (_lock)
+        {
+            if (start >= (ulong)_length || count == 0)
+            {
+                return;
+            }
+
+            var pos = (long)start;
+            var end = (long)(start + Math.Min(count, (ulong)_length - start));
+
+            while (pos < end)
+            {
+                var chunkIndex = (int)(pos / ChunkSize);
+                var chunkOffset = (int)(pos % ChunkSize);
+                var n = (int)Math.Min(end - pos, ChunkSize - chunkOffset);
+                var chunk = _chunks[chunkIndex];
+
+                if (chunk != null)
+                {
+                    var chunkEnd = (long)chunkIndex * ChunkSize + chunk.Length;
+                    if (chunkOffset == 0 && pos + n >= Math.Min(chunkEnd, _length))
+                    {
+                        _chunks[chunkIndex] = null;
+                    }
+                    else
+                    {
+                        Array.Clear(chunk, chunkOffset, Math.Min(n, chunk.Length - chunkOffset));
+                    }
+                }
+
+                pos += n;
+            }
+        }
+    }
+
+    /// <summary>
     /// <see cref="WriteFrom"/>, but first charges the backing memory the write would really
     /// allocate (<see cref="WriteCost"/>) against <paramref name="budget"/>, under the same lock
     /// acquisition. Leaves the content untouched when the budget refuses.

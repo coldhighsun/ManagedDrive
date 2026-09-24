@@ -425,6 +425,47 @@ public class FileContentTests
         return data;
     }
 
+    [Fact]
+    public void DiscardRange_WithinOneChunk_ZeroesOnlyTheRange()
+    {
+        var content = FileContent.FromSpan(Enumerable.Repeat((byte)0xAA, 1024).ToArray(), 1024);
+
+        content.DiscardRange(10, 100);
+
+        var bytes = content.ToArray(1024);
+        Assert.All(bytes[..10], b => Assert.Equal(0xAA, b));
+        Assert.All(bytes[10..110], b => Assert.Equal(0, b));
+        Assert.All(bytes[110..], b => Assert.Equal(0xAA, b));
+        Assert.Equal(1024, content.Length);
+    }
+
+    [Fact]
+    public void DiscardRange_CoveringWholeChunks_ReturnsThemToSparse()
+    {
+        const int length = FileContent.ChunkSize * 3;
+        var content = FileContent.FromSpan(Enumerable.Repeat((byte)0xAA, length).ToArray(), length);
+
+        content.DiscardRange(100, length);
+
+        // Chunk 0 is only partially covered, so it stays materialized (cleared past offset 100);
+        // chunks 1 and 2 are fully covered and released.
+        Assert.Equal(FileContent.ChunkSize, content.BackingByteCount);
+        var bytes = content.ToArray(length);
+        Assert.All(bytes[..100], b => Assert.Equal(0xAA, b));
+        Assert.All(bytes[100..], b => Assert.Equal(0, b));
+    }
+
+    [Fact]
+    public void DiscardRange_PastLength_IsClampedAndDoesNotThrow()
+    {
+        var content = FileContent.FromSpan([1, 2, 3], 512);
+
+        content.DiscardRange(1, ulong.MaxValue);
+        content.DiscardRange(4096, 10);
+
+        Assert.Equal(new byte[] { 1, 0, 0 }, content.ToArray(3));
+    }
+
     private static void WriteBytes(FileContent content, long offset, byte[] data)
     {
         var ptr = Marshal.AllocHGlobal(data.Length);
