@@ -115,6 +115,7 @@ public sealed class FileNodeMap : IDisposable
         if (_map.TryGetValue(filePath, out var existing))
         {
             Interlocked.Add(ref _totalAllocated, -(long)existing.FileInfo.AllocationSize);
+            existing.IsDetached = true;
         }
         else
         {
@@ -123,6 +124,7 @@ public sealed class FileNodeMap : IDisposable
 
         node.FilePath = filePath;
         node.LeafName = ComputeLeafName(filePath);
+        node.IsDetached = false;
         _map[filePath] = node;
         Interlocked.Add(ref _totalAllocated, (long)node.FileInfo.AllocationSize);
     }
@@ -135,21 +137,62 @@ public sealed class FileNodeMap : IDisposable
         _syncRoot.EnterWriteLock();
         try
         {
-            var hasRoot = _map.TryGetValue("\\", out var root);
-            _map.Clear();
-            _sortedKeys.Clear();
-            Interlocked.Exchange(ref _totalAllocated, 0);
+            ClearAllCore();
+        }
+        finally
+        {
+            _syncRoot.ExitWriteLock();
+        }
+    }
 
-            if (hasRoot)
+    /// <summary>
+    /// Replaces the map's entire contents with <paramref name="nodes"/> under a single write-lock
+    /// acquisition, so a concurrent file-system callback never observes the half-emptied map that a
+    /// separate <see cref="ClearAll"/> followed by one <see cref="Add"/> per node would expose. The
+    /// current root is kept unless <paramref name="nodes"/> supplies its own.
+    /// </summary>
+    /// <param name="nodes">The path/node pairs to store; the nodes must not belong to another live map.</param>
+    public void ReplaceAll(IEnumerable<KeyValuePair<string, FileNode>> nodes)
+    {
+        _syncRoot.EnterWriteLock();
+        try
+        {
+            ClearAllCore();
+            foreach (var kvp in nodes)
             {
-                _map["\\"] = root!;
-                _sortedKeys.Add("\\");
-                Interlocked.Exchange(ref _totalAllocated, (long)root!.FileInfo.AllocationSize);
+                AddCore(kvp.Key, kvp.Value);
             }
         }
         finally
         {
             _syncRoot.ExitWriteLock();
+        }
+    }
+
+    /// <summary>
+    /// Lock-free core of <see cref="ClearAll"/> and <see cref="ReplaceAll"/>: removes every node
+    /// except the root, marking each removed node <see cref="FileNode.IsDetached"/> so a handle
+    /// still holding one can't skew <see cref="_totalAllocated"/>. Caller must already hold the
+    /// write lock.
+    /// </summary>
+    private void ClearAllCore()
+    {
+        var hasRoot = _map.TryGetValue("\\", out var root);
+        foreach (var node in _map.Values)
+        {
+            node.IsDetached = true;
+        }
+
+        _map.Clear();
+        _sortedKeys.Clear();
+        Interlocked.Exchange(ref _totalAllocated, 0);
+
+        if (hasRoot)
+        {
+            root!.IsDetached = false;
+            _map["\\"] = root;
+            _sortedKeys.Add("\\");
+            Interlocked.Exchange(ref _totalAllocated, (long)root.FileInfo.AllocationSize);
         }
     }
 
@@ -344,6 +387,7 @@ public sealed class FileNodeMap : IDisposable
         {
             _sortedKeys.Remove(filePath);
             Interlocked.Add(ref _totalAllocated, -(long)removed.FileInfo.AllocationSize);
+            removed.IsDetached = true;
         }
     }
 
@@ -379,6 +423,7 @@ public sealed class FileNodeMap : IDisposable
         {
             _sortedKeys.Remove(dirPath);
             Interlocked.Add(ref _totalAllocated, -(long)removed.FileInfo.AllocationSize);
+            removed.IsDetached = true;
         }
 
         var prefix = dirPath + "\\";
@@ -391,6 +436,7 @@ public sealed class FileNodeMap : IDisposable
             {
                 _sortedKeys.Remove(key);
                 Interlocked.Add(ref _totalAllocated, -(long)descendant.FileInfo.AllocationSize);
+                descendant.IsDetached = true;
             }
         }
     }
@@ -583,7 +629,13 @@ public sealed class FileNodeMap : IDisposable
         {
             var delta = (long)newAllocationSize - (long)node.FileInfo.AllocationSize;
             node.FileInfo.AllocationSize = newAllocationSize;
-            Interlocked.Add(ref _totalAllocated, delta);
+
+            // A node no longer in the map (still referenced by an open handle) isn't part of the
+            // total, so its size changes must not be either.
+            if (!node.IsDetached)
+            {
+                Interlocked.Add(ref _totalAllocated, delta);
+            }
         }
         finally
         {
@@ -612,6 +664,20 @@ public sealed class FileNodeMap : IDisposable
         try
         {
             var delta = (long)newAllocationSize - (long)node.FileInfo.AllocationSize;
+            if (node.IsDetached)
+            {
+                // Not counted in the total (see UpdateAllocationSize). Shrinking is harmless, but
+                // growth would take memory no capacity check accounts for, for a file nobody can
+                // open again — refuse it.
+                if (delta > 0)
+                {
+                    return false;
+                }
+
+                node.FileInfo.AllocationSize = newAllocationSize;
+                return true;
+            }
+
             if (delta <= 0)
             {
                 node.FileInfo.AllocationSize = newAllocationSize;

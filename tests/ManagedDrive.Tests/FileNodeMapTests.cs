@@ -529,6 +529,102 @@ public sealed class FileNodeMapTests
         Assert.Equal(1UL, file.MetadataVersion);
     }
 
+    [Fact]
+    public void UpdateAllocationSize_NodeRemovedByClearAll_LeavesTotalUnchanged()
+    {
+        var map = new FileNodeMap();
+        map.Add("\\", MakeDir());
+        var stale = MakeFile();
+        stale.FileInfo.AllocationSize = 4096;
+        map.Add("\\stale.bin", stale);
+        map.ClearAll();
+
+        map.UpdateAllocationSize(stale, 0);
+
+        Assert.Equal(0UL, map.GetTotalAllocated());
+        Assert.Equal(0UL, stale.FileInfo.AllocationSize);
+    }
+
+    [Fact]
+    public void TryUpdateAllocationSizeWithinCapacity_DetachedNodeGrowing_ReturnsFalseAndLeavesTotalUnchanged()
+    {
+        var map = new FileNodeMap();
+        map.Add("\\", MakeDir());
+        var stale = MakeFile();
+        map.Add("\\stale.bin", stale);
+        map.Remove("\\stale.bin");
+
+        var applied = map.TryUpdateAllocationSizeWithinCapacity(stale, 4096, ulong.MaxValue);
+
+        Assert.False(applied);
+        Assert.Equal(0UL, map.GetTotalAllocated());
+        Assert.Equal(0UL, stale.FileInfo.AllocationSize);
+    }
+
+    [Fact]
+    public void UpdateAllocationSize_NodeReaddedByRename_CountsTowardTotal()
+    {
+        var map = new FileNodeMap();
+        map.Add("\\", MakeDir());
+        var file = MakeFile();
+        map.Add("\\a.bin", file);
+        map.Rename("\\a.bin", "\\b.bin", file, replaceIfExists: false);
+
+        map.UpdateAllocationSize(file, 4096);
+
+        Assert.Equal(4096UL, map.GetTotalAllocated());
+    }
+
+    [Fact]
+    public void UpdateAllocationSize_NodeReplacedAtSamePath_LeavesTotalUnchanged()
+    {
+        var map = new FileNodeMap();
+        var old = MakeFile();
+        old.FileInfo.AllocationSize = 512;
+        map.Add("\\f", old);
+        var replacement = MakeFile();
+        replacement.FileInfo.AllocationSize = 1024;
+        map.Add("\\f", replacement);
+
+        map.UpdateAllocationSize(old, 0);
+
+        Assert.Equal(1024UL, map.GetTotalAllocated());
+    }
+
+    [Fact]
+    public void ReplaceAll_NewNodes_StoresThemAndCountsOnlyTheirAllocation()
+    {
+        var map = new FileNodeMap();
+        map.Add("\\", MakeDir());
+        var old = MakeFile();
+        old.FileInfo.AllocationSize = 512;
+        map.Add("\\old.bin", old);
+        var incoming = MakeFile();
+        incoming.FileInfo.AllocationSize = 1024;
+
+        map.ReplaceAll([KeyValuePair.Create("\\", MakeDir()), KeyValuePair.Create("\\new.bin", incoming)]);
+        map.UpdateAllocationSize(old, 0);
+
+        Assert.False(map.TryGet("\\old.bin", out _));
+        Assert.True(map.TryGet("\\new.bin", out var stored));
+        Assert.Same(incoming, stored);
+        Assert.Equal(2, map.Count);
+        Assert.Equal(1024UL, map.GetTotalAllocated());
+    }
+
+    [Fact]
+    public void ReplaceAll_WithoutRoot_KeepsCurrentRoot()
+    {
+        var map = new FileNodeMap();
+        var root = MakeDir();
+        map.Add("\\", root);
+
+        map.ReplaceAll([KeyValuePair.Create("\\a.bin", MakeFile())]);
+
+        Assert.True(map.TryGet("\\", out var stored));
+        Assert.Same(root, stored);
+    }
+
     private static FileNode MakeDir() => new()
     {
         FileInfo = { FileAttributes = (uint)FileAttributes.Directory },

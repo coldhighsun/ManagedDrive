@@ -42,6 +42,45 @@ public sealed class MemoryFileSystemCallbackTests
     }
 
     [Fact]
+    public void SetFileSize_ThroughHandleOpenedBeforeFormat_LeavesTotalAllocatedUnchanged()
+    {
+        var fs = new MemoryFileSystem(1024 * 1024, "Label");
+        fs.Create("\\file.bin", 0, 0, (uint)FileAttributes.Normal, [], 0,
+            out var staleNode, out _, out _, out _);
+        WriteBytes(fs, staleNode!, new byte[8192], 0);
+        fs.NodeMap.ClearAll();
+        var totalAfterFormat = fs.NodeMap.GetTotalAllocated();
+
+        fs.SetFileSize(staleNode!, null!, 0, setAllocationSize: true, out _);
+
+        Assert.Equal(totalAfterFormat, fs.NodeMap.GetTotalAllocated());
+    }
+
+    [Fact]
+    public void Write_ExtendingThroughHandleOpenedBeforeFormat_FailsAndLeavesTotalAllocatedUnchanged()
+    {
+        var fs = new MemoryFileSystem(1024 * 1024, "Label");
+        fs.Create("\\file.bin", 0, 0, (uint)FileAttributes.Normal, [], 0,
+            out var staleNode, out _, out _, out _);
+        fs.NodeMap.ClearAll();
+        var totalAfterFormat = fs.NodeMap.GetTotalAllocated();
+
+        var ptr = Marshal.AllocHGlobal(8192);
+        int status;
+        try
+        {
+            status = fs.Write(staleNode!, null!, ptr, 0, 8192, false, false, out _, out _);
+        }
+        finally
+        {
+            Marshal.FreeHGlobal(ptr);
+        }
+
+        Assert.NotEqual(0, status);
+        Assert.Equal(totalAfterFormat, fs.NodeMap.GetTotalAllocated());
+    }
+
+    [Fact]
     public void Cleanup_WithSetLastWriteTimeFlag_BumpsMetadataVersion()
     {
         var fs = new MemoryFileSystem(1024 * 1024, "Label");
