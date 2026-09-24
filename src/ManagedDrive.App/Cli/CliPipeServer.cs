@@ -1,6 +1,7 @@
 using ManagedDrive.Cli.Core;
 using ManagedDrive.HelperProtocol;
 using System.IO.Pipes;
+using ThrottledLogging;
 
 namespace ManagedDrive.App.Cli;
 
@@ -41,6 +42,12 @@ public sealed class CliPipeServer(MainViewModel mainViewModel) : IDisposable
     /// </summary>
     private static readonly ILogger Logger = AppLog.CreateLogger<CliPipeServer>();
 
+    /// <summary>
+    /// Pause before retrying after the pipe couldn't be created or a connection couldn't be
+    /// accepted, so a persistent failure doesn't turn the accept loop into a busy spin.
+    /// </summary>
+    private static readonly TimeSpan AcceptRetryDelay = TimeSpan.FromSeconds(1);
+
     private readonly CancellationTokenSource _cts = new();
     private readonly ICliDiskController _diskController = new MainViewModelCliDiskController(mainViewModel);
     private Task? _acceptLoop;
@@ -78,35 +85,88 @@ public sealed class CliPipeServer(MainViewModel mainViewModel) : IDisposable
         _acceptLoop = Task.Run(() => AcceptLoopAsync(_cts.Token));
     }
 
+    /// <summary>
+    /// Serves one connection at a time until <paramref name="ct"/> is cancelled. Failing to
+    /// create the pipe or to accept a connection (e.g. another process holds the pipe name, or a
+    /// client connects and drops before the handshake completes) is logged and retried after
+    /// <see cref="AcceptRetryDelay"/>, rather than faulting the loop and silently leaving every
+    /// later CLI invocation with nothing to connect to.
+    /// </summary>
     private async Task AcceptLoopAsync(CancellationToken ct)
     {
         while (!ct.IsCancellationRequested)
         {
-            await using var pipe = new NamedPipeServerStream(
-                CliPipeProtocol.PipeName,
-                PipeDirection.InOut,
-                1,
-                PipeTransmissionMode.Byte,
-                PipeOptions.Asynchronous);
-
+            NamedPipeServerStream pipe;
             try
             {
-                await pipe.WaitForConnectionAsync(ct);
+                pipe = new(
+                    CliPipeProtocol.PipeName,
+                    PipeDirection.InOut,
+                    1,
+                    PipeTransmissionMode.Byte,
+                    PipeOptions.Asynchronous);
             }
-            catch (OperationCanceledException)
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
-                return;
+                Logger.LogWarningThrottled(
+                    "cli-pipe-create-failed", TimeSpan.FromMinutes(5),
+                    "Failed to create the CLI pipe; retrying: {Error}", ex.Message);
+                if (!await DelayUnlessCancelledAsync(AcceptRetryDelay, ct))
+                {
+                    return;
+                }
+
+                continue;
             }
 
-            try
+            await using (pipe)
             {
-                await HandleConnectionAsync(pipe, ct);
+                try
+                {
+                    await pipe.WaitForConnectionAsync(ct);
+                }
+                catch (OperationCanceledException)
+                {
+                    return;
+                }
+                catch (IOException ex)
+                {
+                    Logger.LogDebug(ex, "CLI pipe connection was dropped before it was accepted.");
+                    if (!await DelayUnlessCancelledAsync(AcceptRetryDelay, ct))
+                    {
+                        return;
+                    }
+
+                    continue;
+                }
+
+                try
+                {
+                    await HandleConnectionAsync(pipe, ct);
+                }
+                catch
+                {
+                    // Best-effort — a malformed or interrupted request must not take down the
+                    // accept loop for future CLI invocations.
+                }
             }
-            catch
-            {
-                // Best-effort — a malformed or interrupted request must not take down the
-                // accept loop for future CLI invocations.
-            }
+        }
+    }
+
+    /// <summary>
+    /// Waits <paramref name="delay"/>, returning <see langword="false"/> instead of throwing if
+    /// <paramref name="ct"/> is cancelled first.
+    /// </summary>
+    private static async Task<bool> DelayUnlessCancelledAsync(TimeSpan delay, CancellationToken ct)
+    {
+        try
+        {
+            await Task.Delay(delay, ct);
+            return true;
+        }
+        catch (OperationCanceledException)
+        {
+            return false;
         }
     }
 
