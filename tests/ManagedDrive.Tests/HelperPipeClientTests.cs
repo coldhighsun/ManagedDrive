@@ -74,6 +74,29 @@ public sealed class HelperPipeClientTests : IDisposable
         await AwaitIgnoringCancellationAsync(serverTask);
     }
 
+    [Fact]
+    public void IsServiceAvailable_NoListener_ReturnsFalseWithConnectFailureReason()
+    {
+        var available = HelperPipeClient.IsServiceAvailable(out var failureReason);
+
+        Assert.False(available);
+        Assert.NotNull(failureReason);
+        Assert.Contains("connect failed", failureReason);
+    }
+
+    [Fact]
+    public async Task IsServiceAvailable_ServiceRespondsWithPong_ReturnsTrueWithNullFailureReason()
+    {
+        var pipeName = HelperPipeClient.TestPipeNameOverride!;
+        var serverTask = RunEchoingServerOnceAsync(pipeName, new HelperResponse(true, "pong"));
+
+        var available = HelperPipeClient.IsServiceAvailable(out var failureReason);
+
+        await serverTask;
+        Assert.True(available);
+        Assert.Null(failureReason);
+    }
+
     private static async Task RunEchoingServerOnceAsync(string pipeName, HelperResponse response)
     {
         using var server = new NamedPipeServerStream(
