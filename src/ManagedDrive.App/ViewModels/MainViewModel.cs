@@ -1724,6 +1724,25 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 
             _logger.LogInformation("Password removal confirmed for disk {MountPoint}.", vm.MountPoint);
         }
+        else if (dialog.PasswordChanged && dialog.Password is not null && !vm.Disk.IsPasswordProtected &&
+            newOptions.PersistImagePath is { } imagePath &&
+            (await Task.Run(() => SnapshotManager.ListSnapshots(imagePath))).Count > 0)
+        {
+            // RamDisk.SetPassword deletes the existing plaintext snapshots when encryption is added.
+            var confirmAdd = new ConfirmDialog(
+                Loc.Get("Msg.AddPasswordConfirmTitle"),
+                Loc.Get("Msg.AddPasswordConfirmBody"))
+            {
+                Owner = Application.Current.MainWindow
+            };
+
+            if (confirmAdd.ShowDialog() != true || !IsStillMounted(vm))
+            {
+                return;
+            }
+
+            _logger.LogInformation("Password addition confirmed for disk {MountPoint}.", vm.MountPoint);
+        }
         else if (dialog.PasswordChanged)
         {
             _logger.LogInformation("Password changed for disk {MountPoint}.", vm.MountPoint);
