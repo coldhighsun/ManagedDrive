@@ -192,7 +192,10 @@ public sealed class MemoryFileSystem : FileSystemBase
         var deleted = (flags & CleanupDelete) != 0 && !_readOnly;
         if (deleted)
         {
-            NodeMap.Remove(fileName);
+            // Only this handle's own node: after a format or restore swapped it out, another node
+            // may now live at the same path, and it must not be deleted in its place. A directory
+            // that gained a child since CanDelete approved it is kept rather than orphaning it.
+            NodeMap.TryDelete(fileName, node);
             MarkDirty();
         }
 

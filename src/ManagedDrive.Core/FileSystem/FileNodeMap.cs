@@ -472,6 +472,44 @@ public sealed class FileNodeMap : IDisposable
     }
 
     /// <summary>
+    /// Deletes the node at <paramref name="filePath"/> through an open handle to
+    /// <paramref name="expected"/>, only if it is still that node and — for a directory — still
+    /// empty. If the handle's node was already swapped out (e.g. by a format or snapshot restore)
+    /// and a different node now lives at the same path, a plain <see cref="Remove"/> would delete
+    /// that unrelated node instead. And a directory can gain a child between the emptiness check
+    /// that allowed its deletion and this call; removing it anyway would leave that child an
+    /// unreachable orphan, so it is kept instead.
+    /// </summary>
+    /// <param name="filePath">Absolute file-system path.</param>
+    /// <param name="expected">The node the caller means to delete.</param>
+    /// <returns>
+    /// <c>true</c> if <paramref name="expected"/> was stored at <paramref name="filePath"/> and was removed.
+    /// </returns>
+    public bool TryDelete(string filePath, FileNode expected)
+    {
+        _syncRoot.EnterWriteLock();
+        try
+        {
+            if (!_map.TryGetValue(filePath, out var current) || !ReferenceEquals(current, expected))
+            {
+                return false;
+            }
+
+            if (expected.IsDirectory && ScanImmediateChildren(filePath, marker: null, matches: null))
+            {
+                return false;
+            }
+
+            RemoveCore(filePath);
+            return true;
+        }
+        finally
+        {
+            _syncRoot.ExitWriteLock();
+        }
+    }
+
+    /// <summary>
     /// Lock-free core of <see cref="Remove"/> and <see cref="Rename"/>: removes the node at
     /// <paramref name="filePath"/>, if present, updating <see cref="_sortedKeys"/> and
     /// <see cref="_totalAllocated"/> to match. Caller must already hold the write lock.
