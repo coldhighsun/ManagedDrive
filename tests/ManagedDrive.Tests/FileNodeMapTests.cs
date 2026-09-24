@@ -626,6 +626,63 @@ public sealed class FileNodeMapTests
     }
 
     [Fact]
+    public void TryDelete_ExpectedNodeAtPath_RemovesIt()
+    {
+        var map = new FileNodeMap();
+        var file = MakeFile();
+        map.Add("\\f", file);
+
+        var removed = map.TryDelete("\\f", file);
+
+        Assert.True(removed);
+        Assert.False(map.TryGet("\\f", out _));
+    }
+
+    [Fact]
+    public void TryDelete_DifferentNodeAtPath_KeepsIt()
+    {
+        var map = new FileNodeMap();
+        var stale = MakeFile();
+        map.Add("\\f", stale);
+        map.ClearAll();
+        var current = MakeFile();
+        map.Add("\\f", current);
+
+        var removed = map.TryDelete("\\f", stale);
+
+        Assert.False(removed);
+        Assert.True(map.TryGet("\\f", out var stored));
+        Assert.Same(current, stored);
+    }
+
+    [Fact]
+    public void TryDelete_DirectoryThatGainedAChild_KeepsIt()
+    {
+        var map = new FileNodeMap();
+        var dir = MakeDir();
+        map.Add("\\d", dir);
+        map.Add("\\d\\child.txt", MakeFile());
+
+        var removed = map.TryDelete("\\d", dir);
+
+        Assert.False(removed);
+        Assert.True(map.TryGet("\\d", out _));
+    }
+
+    [Fact]
+    public void TryDelete_EmptyDirectory_RemovesIt()
+    {
+        var map = new FileNodeMap();
+        var dir = MakeDir();
+        map.Add("\\d", dir);
+
+        var removed = map.TryDelete("\\d", dir);
+
+        Assert.True(removed);
+        Assert.False(map.TryGet("\\d", out _));
+    }
+
+    [Fact]
     public void TryCreate_ParentMissing_ReturnsParentNotFoundAndAddsNothing()
     {
         var map = new FileNodeMap();

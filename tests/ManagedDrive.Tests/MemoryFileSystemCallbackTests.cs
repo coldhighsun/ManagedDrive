@@ -42,6 +42,37 @@ public sealed class MemoryFileSystemCallbackTests
     }
 
     [Fact]
+    public void Cleanup_WithDeleteFlagThroughHandleOpenedBeforeFormat_KeepsNewNodeAtSamePath()
+    {
+        var fs = new MemoryFileSystem(1024 * 1024, "Label");
+        fs.Create("\\file.bin", 0, 0, (uint)FileAttributes.Normal, [], 0,
+            out var staleNode, out _, out _, out _);
+        fs.NodeMap.ClearAll();
+        fs.Create("\\file.bin", 0, 0, (uint)FileAttributes.Normal, [], 0,
+            out var currentNode, out _, out _, out _);
+
+        fs.Cleanup(staleNode!, null!, "\\file.bin", MemoryFileSystem.CleanupDelete);
+
+        Assert.True(fs.NodeMap.TryGet("\\file.bin", out var stored));
+        Assert.Same(currentNode, stored);
+    }
+
+    [Fact]
+    public void Cleanup_WithDeleteFlagOnDirectoryThatGainedAChild_KeepsDirectoryAndChild()
+    {
+        var fs = new MemoryFileSystem(1024 * 1024, "Label");
+        fs.Create("\\dir", 0, 0, (uint)FileAttributes.Directory, [], 0,
+            out var dirNode, out _, out _, out _);
+        Assert.Equal(0, fs.CanDelete(dirNode!, null!, "\\dir"));
+        fs.Create("\\dir\\child.bin", 0, 0, (uint)FileAttributes.Normal, [], 0, out _, out _, out _, out _);
+
+        fs.Cleanup(dirNode!, null!, "\\dir", MemoryFileSystem.CleanupDelete);
+
+        Assert.True(fs.NodeMap.TryGet("\\dir", out _));
+        Assert.True(fs.NodeMap.TryGet("\\dir\\child.bin", out _));
+    }
+
+    [Fact]
     public void Create_ParentDirectoryMissing_ReturnsObjectPathNotFound()
     {
         var fs = new MemoryFileSystem(1024 * 1024, "Label");
