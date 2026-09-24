@@ -68,24 +68,63 @@ public sealed class FileNodeMap : IDisposable
         _syncRoot.EnterWriteLock();
         try
         {
-            if (_map.TryGetValue(filePath, out var existing))
-            {
-                Interlocked.Add(ref _totalAllocated, -(long)existing.FileInfo.AllocationSize);
-            }
-            else
-            {
-                _sortedKeys.Add(filePath);
-            }
-
-            node.FilePath = filePath;
-            node.LeafName = ComputeLeafName(filePath);
-            _map[filePath] = node;
-            Interlocked.Add(ref _totalAllocated, (long)node.FileInfo.AllocationSize);
+            AddCore(filePath, node);
         }
         finally
         {
             _syncRoot.ExitWriteLock();
         }
+    }
+
+    /// <summary>
+    /// Capacity-checked counterpart to <see cref="Add"/>: atomically verifies that
+    /// <paramref name="node"/>'s allocation size would not push the running total past
+    /// <paramref name="maxCapacity"/> and only then adds it, under one write-lock acquisition —
+    /// closing the same check-then-apply race <see cref="TryUpdateAllocationSizeWithinCapacity"/>
+    /// closes for growing an existing node.
+    /// </summary>
+    /// <returns><c>true</c> if added; <c>false</c> if it would have exceeded capacity (nothing changed).</returns>
+    public bool TryAddWithinCapacity(string filePath, FileNode node, ulong maxCapacity)
+    {
+        _syncRoot.EnterWriteLock();
+        try
+        {
+            if ((ulong)Interlocked.Read(ref _totalAllocated) + node.FileInfo.AllocationSize > maxCapacity)
+            {
+                return false;
+            }
+
+            AddCore(filePath, node);
+            return true;
+        }
+        finally
+        {
+            _syncRoot.ExitWriteLock();
+        }
+    }
+
+    /// <summary>
+    /// Lock-free core of <see cref="Add"/> and <see cref="TryAddWithinCapacity"/>: inserts or
+    /// replaces the node at <paramref name="filePath"/>, updates <see cref="_sortedKeys"/>, and
+    /// adjusts <see cref="_totalAllocated"/>. Caller must already hold the write lock.
+    /// </summary>
+    /// <param name="filePath">Absolute file-system path (e.g. <c>\Folder\File.txt</c>).</param>
+    /// <param name="node">The file node to store.</param>
+    private void AddCore(string filePath, FileNode node)
+    {
+        if (_map.TryGetValue(filePath, out var existing))
+        {
+            Interlocked.Add(ref _totalAllocated, -(long)existing.FileInfo.AllocationSize);
+        }
+        else
+        {
+            _sortedKeys.Add(filePath);
+        }
+
+        node.FilePath = filePath;
+        node.LeafName = ComputeLeafName(filePath);
+        _map[filePath] = node;
+        Interlocked.Add(ref _totalAllocated, (long)node.FileInfo.AllocationSize);
     }
 
     /// <summary>
@@ -285,15 +324,26 @@ public sealed class FileNodeMap : IDisposable
         _syncRoot.EnterWriteLock();
         try
         {
-            if (_map.Remove(filePath, out var removed))
-            {
-                _sortedKeys.Remove(filePath);
-                Interlocked.Add(ref _totalAllocated, -(long)removed.FileInfo.AllocationSize);
-            }
+            RemoveCore(filePath);
         }
         finally
         {
             _syncRoot.ExitWriteLock();
+        }
+    }
+
+    /// <summary>
+    /// Lock-free core of <see cref="Remove"/> and <see cref="Rename"/>: removes the node at
+    /// <paramref name="filePath"/>, if present, updating <see cref="_sortedKeys"/> and
+    /// <see cref="_totalAllocated"/> to match. Caller must already hold the write lock.
+    /// </summary>
+    /// <param name="filePath">Absolute file-system path.</param>
+    private void RemoveCore(string filePath)
+    {
+        if (_map.Remove(filePath, out var removed))
+        {
+            _sortedKeys.Remove(filePath);
+            Interlocked.Add(ref _totalAllocated, -(long)removed.FileInfo.AllocationSize);
         }
     }
 
@@ -308,28 +358,40 @@ public sealed class FileNodeMap : IDisposable
         _syncRoot.EnterWriteLock();
         try
         {
-            if (_map.Remove(dirPath, out var removed))
-            {
-                _sortedKeys.Remove(dirPath);
-                Interlocked.Add(ref _totalAllocated, -(long)removed.FileInfo.AllocationSize);
-            }
-
-            var prefix = dirPath + "\\";
-            var upperBound = prefix + '￿';
-            var keys = new List<string>(_sortedKeys.GetViewBetween(prefix, upperBound));
-
-            foreach (var key in keys)
-            {
-                if (_map.Remove(key, out var descendant))
-                {
-                    _sortedKeys.Remove(key);
-                    Interlocked.Add(ref _totalAllocated, -(long)descendant.FileInfo.AllocationSize);
-                }
-            }
+            RemoveSubtreeCore(dirPath);
         }
         finally
         {
             _syncRoot.ExitWriteLock();
+        }
+    }
+
+    /// <summary>
+    /// Lock-free core of <see cref="RemoveSubtree"/> and <see cref="Rename"/>: removes the node at
+    /// <paramref name="dirPath"/> together with every descendant beneath it, updating
+    /// <see cref="_sortedKeys"/> and <see cref="_totalAllocated"/> to match. Caller must already
+    /// hold the write lock.
+    /// </summary>
+    /// <param name="dirPath">Absolute path of the directory (or file) to remove, with its subtree.</param>
+    private void RemoveSubtreeCore(string dirPath)
+    {
+        if (_map.Remove(dirPath, out var removed))
+        {
+            _sortedKeys.Remove(dirPath);
+            Interlocked.Add(ref _totalAllocated, -(long)removed.FileInfo.AllocationSize);
+        }
+
+        var prefix = dirPath + "\\";
+        var upperBound = prefix + '￿';
+        var keys = new List<string>(_sortedKeys.GetViewBetween(prefix, upperBound));
+
+        foreach (var key in keys)
+        {
+            if (_map.Remove(key, out var descendant))
+            {
+                _sortedKeys.Remove(key);
+                Interlocked.Add(ref _totalAllocated, -(long)descendant.FileInfo.AllocationSize);
+            }
         }
     }
 
@@ -344,22 +406,128 @@ public sealed class FileNodeMap : IDisposable
         _syncRoot.EnterWriteLock();
         try
         {
-            var prefix = oldPath + "\\";
-            var upperBound = prefix + '￿';
-            var keys = new List<string>(_sortedKeys.GetViewBetween(prefix, upperBound));
+            RenameDescendantsCore(oldPath, newPath);
+        }
+        finally
+        {
+            _syncRoot.ExitWriteLock();
+        }
+    }
 
-            foreach (var key in keys)
+    /// <summary>
+    /// Lock-free core of <see cref="RenameDescendants"/> and <see cref="Rename"/>: renames all
+    /// descendant nodes of <paramref name="oldPath"/> so that their paths begin with
+    /// <paramref name="newPath"/> instead. Caller must already hold the write lock.
+    /// </summary>
+    /// <param name="oldPath">Current absolute path of the directory being renamed.</param>
+    /// <param name="newPath">New absolute path for the directory.</param>
+    private void RenameDescendantsCore(string oldPath, string newPath)
+    {
+        var prefix = oldPath + "\\";
+        var upperBound = prefix + '￿';
+        var keys = new List<string>(_sortedKeys.GetViewBetween(prefix, upperBound));
+
+        foreach (var key in keys)
+        {
+            var descendant = _map[key];
+            _map.Remove(key);
+            _sortedKeys.Remove(key);
+            var newKey = string.Concat(newPath, key.AsSpan(oldPath.Length));
+            descendant.FilePath = newKey;
+            descendant.LeafName = ComputeLeafName(newKey);
+            descendant.MetadataVersion++;
+            _map[newKey] = descendant;
+            _sortedKeys.Add(newKey);
+        }
+    }
+
+    /// <summary>
+    /// Outcome of <see cref="Rename"/>, mirroring the collision cases <c>MemoryFileSystem.Rename</c>
+    /// must translate into distinct NTSTATUS codes.
+    /// </summary>
+    public enum RenameConflict
+    {
+        /// <summary>
+        /// The rename was applied; no conflict.
+        /// </summary>
+        None,
+
+        /// <summary>
+        /// A node already exists at the destination path and <c>replaceIfExists</c> was <c>false</c>.
+        /// </summary>
+        NameCollision,
+
+        /// <summary>
+        /// The destination is a non-empty directory, so it can't be replaced.
+        /// </summary>
+        DirectoryNotEmpty,
+
+        /// <summary>
+        /// The destination is a directory but the node being renamed is a file.
+        /// </summary>
+        TargetIsDirectory,
+
+        /// <summary>
+        /// The destination is a file but the node being renamed is a directory.
+        /// </summary>
+        TargetIsFile,
+    }
+
+    /// <summary>
+    /// Atomically renames <paramref name="node"/> (currently at <paramref name="fileName"/>) to
+    /// <paramref name="newFileName"/> — checking for and clearing a colliding target, renaming a
+    /// directory's descendants, and moving the node itself — under one write-lock acquisition.
+    /// Doing this as separate <see cref="TryGet"/>/<see cref="HasChildren"/>/<see cref="RemoveSubtree"/>/
+    /// <see cref="Remove"/>/<see cref="Add"/> calls (each its own lock acquisition) would leave
+    /// windows where a concurrent structural mutation on another WinFsp driver thread — e.g. a
+    /// <see cref="Add"/> landing between a "target has no children" check and
+    /// <see cref="RemoveSubtree"/> unconditionally deleting that prefix — could be silently
+    /// destroyed, or where the node is briefly absent from the map between removing it from
+    /// <paramref name="fileName"/> and adding it at <paramref name="newFileName"/>.
+    /// </summary>
+    /// <param name="fileName">The node's current absolute path.</param>
+    /// <param name="newFileName">The node's new absolute path.</param>
+    /// <param name="node">The node being renamed (already retrieved by the caller).</param>
+    /// <param name="replaceIfExists">Whether an existing node at <paramref name="newFileName"/> may be replaced.</param>
+    /// <returns>
+    /// <see cref="RenameConflict.None"/> on success (the rename was applied); otherwise the reason
+    /// it was rejected, with no change made to the map.
+    /// </returns>
+    public RenameConflict Rename(string fileName, string newFileName, FileNode node, bool replaceIfExists)
+    {
+        _syncRoot.EnterWriteLock();
+        try
+        {
+            if (_map.TryGetValue(newFileName, out var existing) && !ReferenceEquals(existing, node))
             {
-                var descendant = _map[key];
-                _map.Remove(key);
-                _sortedKeys.Remove(key);
-                var newKey = string.Concat(newPath, key.AsSpan(oldPath.Length));
-                descendant.FilePath = newKey;
-                descendant.LeafName = ComputeLeafName(newKey);
-                descendant.MetadataVersion++;
-                _map[newKey] = descendant;
-                _sortedKeys.Add(newKey);
+                if (!replaceIfExists)
+                {
+                    return RenameConflict.NameCollision;
+                }
+
+                if (existing.IsDirectory != node.IsDirectory)
+                {
+                    return existing.IsDirectory ? RenameConflict.TargetIsDirectory : RenameConflict.TargetIsFile;
+                }
+
+                if (existing.IsDirectory && ScanImmediateChildren(newFileName, marker: null, matches: null))
+                {
+                    return RenameConflict.DirectoryNotEmpty;
+                }
+
+                // Directories are already verified empty above, but RemoveSubtreeCore also clears
+                // any descendants left behind by an earlier inconsistency instead of orphaning them.
+                RemoveSubtreeCore(newFileName);
             }
+
+            if (node.IsDirectory)
+            {
+                RenameDescendantsCore(fileName, newFileName);
+            }
+
+            RemoveCore(fileName);
+            AddCore(newFileName, node);
+            return RenameConflict.None;
         }
         finally
         {
@@ -416,6 +584,55 @@ public sealed class FileNodeMap : IDisposable
             var delta = (long)newAllocationSize - (long)node.FileInfo.AllocationSize;
             node.FileInfo.AllocationSize = newAllocationSize;
             Interlocked.Add(ref _totalAllocated, delta);
+        }
+        finally
+        {
+            _syncRoot.ExitReadLock();
+        }
+    }
+
+    /// <summary>
+    /// Capacity-checked counterpart to <see cref="UpdateAllocationSize"/>: when
+    /// <paramref name="newAllocationSize"/> grows the node, atomically verifies that applying it
+    /// would not push the running total past <paramref name="maxCapacity"/> and only then applies
+    /// it — via a compare-exchange loop on the same field <see cref="UpdateAllocationSize"/> uses,
+    /// so this stays as lock-free as that hot path instead of escalating to the write lock. Without
+    /// this, checking headroom (e.g. via <see cref="GetTotalAllocated"/>) and applying growth as two
+    /// separate steps lets two concurrent extending writes on different nodes each see the same
+    /// stale total, both pass the check, and together push the real total past
+    /// <paramref name="maxCapacity"/>.
+    /// </summary>
+    /// <param name="node">The node whose allocation size is changing.</param>
+    /// <param name="newAllocationSize">The new allocation size, in bytes.</param>
+    /// <param name="maxCapacity">The volume's capacity ceiling, in bytes.</param>
+    /// <returns><c>true</c> if applied; <c>false</c> if it would have exceeded capacity (nothing changed).</returns>
+    public bool TryUpdateAllocationSizeWithinCapacity(FileNode node, ulong newAllocationSize, ulong maxCapacity)
+    {
+        _syncRoot.EnterReadLock();
+        try
+        {
+            var delta = (long)newAllocationSize - (long)node.FileInfo.AllocationSize;
+            if (delta <= 0)
+            {
+                node.FileInfo.AllocationSize = newAllocationSize;
+                Interlocked.Add(ref _totalAllocated, delta);
+                return true;
+            }
+
+            while (true)
+            {
+                var current = Interlocked.Read(ref _totalAllocated);
+                if ((ulong)current + (ulong)delta > maxCapacity)
+                {
+                    return false;
+                }
+
+                if (Interlocked.CompareExchange(ref _totalAllocated, current + delta, current) == current)
+                {
+                    node.FileInfo.AllocationSize = newAllocationSize;
+                    return true;
+                }
+            }
         }
         finally
         {

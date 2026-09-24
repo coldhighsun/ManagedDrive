@@ -262,11 +262,6 @@ public sealed class MemoryFileSystem : FileSystemBase
 
         var aligned = FileNode.AlignToAllocationUnit(allocationSize);
 
-        if (WouldExceedCapacity(aligned))
-        {
-            return STATUS_DISK_FULL;
-        }
-
         var now = FileTimeNow();
         var node = new FileNode
         {
@@ -288,10 +283,27 @@ public sealed class MemoryFileSystem : FileSystemBase
 
         if (aligned > 0 && !node.IsDirectory)
         {
+            // Cheap pre-check so a request that obviously exceeds capacity is rejected before
+            // paying for CreateZeroed's chunk-pointer allocation (proportional to aligned) below.
+            // Not a substitute for the atomic check below — two concurrent creates can still both
+            // read a stale total here and pass — just a fast path that avoids the wasted
+            // allocation in the common (non-racing) over-capacity case.
+            if (NodeMap.GetTotalAllocated() + aligned > _maxCapacity)
+            {
+                return STATUS_DISK_FULL;
+            }
+
             node.FileData = FileContent.CreateZeroed(aligned);
         }
 
-        NodeMap.Add(fileName, node);
+        // Checking headroom and adding the node happen under one NodeMap write-lock acquisition
+        // (see TryAddWithinCapacity), so two concurrent creates can't both pass a stale capacity
+        // check and together push the real total past _maxCapacity.
+        if (!NodeMap.TryAddWithinCapacity(fileName, node, _maxCapacity))
+        {
+            return STATUS_DISK_FULL;
+        }
+
         MarkDirty();
         fileNode = node;
         fileInfo = node.FileInfo;
@@ -500,10 +512,12 @@ public sealed class MemoryFileSystem : FileSystemBase
 
         var node = (FileNode)fileNode;
         var aligned = FileNode.AlignToAllocationUnit(allocationSize);
-        var currentAlloc = node.FileInfo.AllocationSize;
-        var extra = aligned > currentAlloc ? aligned - currentAlloc : 0;
 
-        if (WouldExceedCapacity(extra))
+        // Checking headroom and applying the growth happen atomically (see
+        // TryUpdateAllocationSizeWithinCapacity), so two concurrent extending writes on different
+        // nodes can't both pass a stale capacity check and together push the real total past
+        // _maxCapacity.
+        if (!NodeMap.TryUpdateAllocationSizeWithinCapacity(node, aligned, _maxCapacity))
         {
             fileInfo = node.FileInfo;
             return STATUS_DISK_FULL;
@@ -517,8 +531,6 @@ public sealed class MemoryFileSystem : FileSystemBase
         {
             node.FileInfo.FileAttributes |= fileAttributes;
         }
-
-        NodeMap.UpdateAllocationSize(node, aligned);
         node.FileInfo.FileSize = 0;
         node.FileData = aligned > 0 ? FileContent.CreateZeroed(aligned) : null;
         node.ContentVersion++;
@@ -627,35 +639,23 @@ public sealed class MemoryFileSystem : FileSystemBase
             return STATUS_ACCESS_DENIED;
         }
 
-        if (NodeMap.TryGet(newFileName, out var existing) && existing != null && !ReferenceEquals(existing, node))
+        // Checking for a colliding target and moving the node both happen under one NodeMap.Rename
+        // write-lock acquisition, so a concurrent Create/Rename on another WinFsp driver thread
+        // can't interleave with this — e.g. land a new child between a "target directory is empty"
+        // check and the subtree removal that would otherwise silently delete it.
+        var conflict = NodeMap.Rename(fileName, newFileName, node, replaceIfExists);
+        switch (conflict)
         {
-            if (!replaceIfExists)
-            {
+            case FileNodeMap.RenameConflict.NameCollision:
                 return STATUS_OBJECT_NAME_COLLISION;
-            }
-
-            if (existing.IsDirectory != node.IsDirectory)
-            {
-                return existing.IsDirectory ? STATUS_FILE_IS_A_DIRECTORY : STATUS_NOT_A_DIRECTORY;
-            }
-
-            if (existing.IsDirectory && NodeMap.HasChildren(newFileName))
-            {
+            case FileNodeMap.RenameConflict.TargetIsDirectory:
+                return STATUS_FILE_IS_A_DIRECTORY;
+            case FileNodeMap.RenameConflict.TargetIsFile:
+                return STATUS_NOT_A_DIRECTORY;
+            case FileNodeMap.RenameConflict.DirectoryNotEmpty:
                 return STATUS_DIRECTORY_NOT_EMPTY;
-            }
-
-            // Directories are already verified empty above, but RemoveSubtree also clears any
-            // descendants left behind by an earlier inconsistency instead of orphaning them.
-            NodeMap.RemoveSubtree(newFileName);
         }
 
-        if (node.IsDirectory)
-        {
-            NodeMap.RenameDescendants(fileName, newFileName);
-        }
-
-        NodeMap.Remove(fileName);
-        NodeMap.Add(newFileName, node);
         node.MetadataVersion++;
         MarkDirty();
         return STATUS_SUCCESS;
@@ -1138,13 +1138,15 @@ public sealed class MemoryFileSystem : FileSystemBase
                 return STATUS_SUCCESS;
             }
 
-            if (aligned > node.FileInfo.AllocationSize)
+            var previousAllocationSize = node.FileInfo.AllocationSize;
+
+            // Checking headroom and applying the growth happen atomically (see
+            // TryUpdateAllocationSizeWithinCapacity), so two concurrent extending writes on
+            // different nodes can't both pass a stale capacity check and together push the real
+            // total past _maxCapacity.
+            if (!NodeMap.TryUpdateAllocationSizeWithinCapacity(node, aligned, _maxCapacity))
             {
-                var extra = aligned - node.FileInfo.AllocationSize;
-                if (WouldExceedCapacity(extra))
-                {
-                    return STATUS_DISK_FULL;
-                }
+                return STATUS_DISK_FULL;
             }
 
             if (aligned > 0)
@@ -1155,6 +1157,9 @@ public sealed class MemoryFileSystem : FileSystemBase
                     // holds data; only that is charged against the low-memory guard.
                     if (!node.FileData.TryResize(aligned, _memoryBudget))
                     {
+                        // The capacity reservation above already applied; undo it since the growth
+                        // didn't actually happen.
+                        NodeMap.UpdateAllocationSize(node, previousAllocationSize);
                         return STATUS_INSUFFICIENT_RESOURCES;
                     }
                 }
@@ -1167,8 +1172,6 @@ public sealed class MemoryFileSystem : FileSystemBase
             {
                 node.FileData = null;
             }
-
-            NodeMap.UpdateAllocationSize(node, aligned);
 
             if (node.FileInfo.FileSize > aligned)
             {
@@ -1197,10 +1200,4 @@ public sealed class MemoryFileSystem : FileSystemBase
         node.ContentVersion++;
         return STATUS_SUCCESS;
     }
-
-    /// <summary>
-    /// Returns <c>true</c> when allocating <paramref name="extra"/> more bytes on top of the
-    /// currently allocated total would exceed the volume's capacity ceiling.
-    /// </summary>
-    private bool WouldExceedCapacity(ulong extra) => NodeMap.GetTotalAllocated() + extra > _maxCapacity;
 }
