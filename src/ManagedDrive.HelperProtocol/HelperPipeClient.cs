@@ -12,7 +12,7 @@ namespace ManagedDrive.HelperProtocol;
 /// </summary>
 public static class HelperPipeClient
 {
-    private static readonly TimeSpan ConnectTimeout = TimeSpan.FromMilliseconds(500);
+    private static readonly TimeSpan ConnectTimeout = TimeSpan.FromMilliseconds(2000);
 
     /// <summary>
     /// Upper bound on waiting for the service's response line. The service only performs a quick
@@ -55,24 +55,39 @@ public static class HelperPipeClient
     /// <paramref name="devicePath"/>.
     /// </summary>
     public static bool TryPublish(string letter, string devicePath, out HelperResponse response) =>
-        TrySend(new(HelperPipeProtocol.OpPublish, letter, devicePath), out response);
+        TrySend(new(HelperPipeProtocol.OpPublish, letter, devicePath), out response, out _);
 
     /// <summary>
     /// Asks the service to remove the global symlink previously published for
     /// <paramref name="letter"/>.
     /// </summary>
     public static bool TryUnpublish(string letter, out HelperResponse response) =>
-        TrySend(new(HelperPipeProtocol.OpUnpublish, letter, null), out response);
+        TrySend(new(HelperPipeProtocol.OpUnpublish, letter, null), out response, out _);
 
     /// <summary>
     /// Checks whether the helper service is installed and listening.
     /// </summary>
-    public static bool IsServiceAvailable() =>
-        TrySend(new(HelperPipeProtocol.OpPing, null, null), out var response) && response.Success;
+    public static bool IsServiceAvailable() => IsServiceAvailable(out _);
 
-    private static bool TrySend(HelperRequest request, out HelperResponse response)
+    /// <summary>
+    /// Checks whether the helper service is installed and listening, additionally reporting why
+    /// the check failed (e.g. the exception type/message from the failed connect or read) so a
+    /// caller can log it — <see cref="TrySend"/> otherwise collapses every failure into a bare
+    /// <see langword="false"/>, which makes an unexpectedly-unavailable service undiagnosable.
+    /// </summary>
+    /// <param name="failureReason">
+    /// A short description of why the check failed, or <see langword="null"/> if it succeeded.
+    /// </param>
+    public static bool IsServiceAvailable(out string? failureReason)
+    {
+        var ok = TrySend(new(HelperPipeProtocol.OpPing, null, null), out var response, out failureReason);
+        return ok && response.Success;
+    }
+
+    private static bool TrySend(HelperRequest request, out HelperResponse response, out string? failureReason)
     {
         response = new(false, string.Empty);
+        failureReason = null;
 
         using var pipe = new NamedPipeClientStream(
             ".", PipeName, PipeDirection.InOut, PipeOptions.Asynchronous,
@@ -86,6 +101,7 @@ public static class HelperPipeClient
         }
         catch (Exception ex) when (ex is TimeoutException or IOException or UnauthorizedAccessException)
         {
+            failureReason = $"connect failed: {ex.GetType().Name}: {ex.Message}";
             return false;
         }
 
@@ -97,7 +113,7 @@ public static class HelperPipeClient
         // trying to flush/close a stream on top of an already-closed pipe.
         try
         {
-            return TrySendCore(pipe, reader, writer, request, ref response);
+            return TrySendCore(pipe, reader, writer, request, ref response, ref failureReason);
         }
         finally
         {
@@ -107,7 +123,8 @@ public static class HelperPipeClient
     }
 
     private static bool TrySendCore(
-        NamedPipeClientStream pipe, StreamReader reader, StreamWriter writer, HelperRequest request, ref HelperResponse response)
+        NamedPipeClientStream pipe, StreamReader reader, StreamWriter writer, HelperRequest request,
+        ref HelperResponse response, ref string? failureReason)
     {
         writer.WriteLine(HelperPipeProtocol.SerializeRequest(request));
 
@@ -136,6 +153,7 @@ public static class HelperPipeClient
             // ReadTimeout — the very hang this path exists to bound. Nothing reads the abandoned
             // task's result; just observe its fault so it isn't reported as unobserved.
             ObserveAbandonedRead(readTask);
+            failureReason = $"read timed out after {ReadTimeout}";
             return false;
         }
 
@@ -143,6 +161,7 @@ public static class HelperPipeClient
 
         if (responseJson == null)
         {
+            failureReason = "connection closed before a response line was received";
             return false;
         }
 
