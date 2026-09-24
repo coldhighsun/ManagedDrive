@@ -91,11 +91,13 @@ public readonly record struct ImageEncryptionInfo(string Password, byte[] Cek);
 ///       </item>
 ///       <item>
 ///         Segment payloads follow back to back, each exactly its indexed payload length: when
-///         encrypted, one AES-256-GCM ciphertext per segment (bounded by the target segment size,
-///         so unlike version 3's whole-image blob this never approaches the single-shot API's ~2 GB
-///         ceiling); the plaintext of each (post-decryption, if encrypted) is itself Zstd-compressed
-///         using the same <see cref="ParallelZstd"/> chunk framing as version 5 when compression is
-///         enabled, or the raw node bytes when it is not.
+///         encrypted, one AES-256-GCM ciphertext per segment, encrypted with the single-shot
+///         <see cref="AesGcm"/> API and so, like version 3's whole-image blob, capped near 2 GB —
+///         <see cref="SaveIncremental"/> avoids ever hitting that cap by diverting the whole save to
+///         the non-segmented <see cref="Save"/> instead whenever a single node's content approaches
+///         it (see <see cref="MaxSafeSegmentNodeBytes"/>); the plaintext of each (post-decryption, if
+///         encrypted) is itself Zstd-compressed using the same <see cref="ParallelZstd"/> chunk
+///         framing as version 5 when compression is enabled, or the raw node bytes when it is not.
 ///       </item>
 ///     </list>
 ///   </item>
@@ -129,6 +131,18 @@ public static class DiskImageSerializer
     /// index entry) don't dominate.
     /// </summary>
     private const long SegmentTargetBytes = 4L * 1024 * 1024;
+
+    /// <summary>
+    /// A segment always holds at least one whole node's content (see <see cref="SegmentTargetBytes"/>),
+    /// so a single node whose own content approaches this size can't safely be built by
+    /// <see cref="BuildSegmentPayload"/>, which buffers a segment's plaintext in one
+    /// <see cref="MemoryStream"/> and (when encrypted) encrypts it with <see cref="AesGcm"/>'s
+    /// single-shot API — both capped near 2 GB. <see cref="SaveIncremental"/> checks node content
+    /// against this (deliberately conservative, well under that ceiling) threshold and diverts the
+    /// whole save to the non-segmented <see cref="Save"/>, which streams without any such limit,
+    /// rather than let the segmented writer overflow.
+    /// </summary>
+    private const ulong MaxSafeSegmentNodeBytes = 1UL * 1024 * 1024 * 1024;
 
     /// <summary>
     /// Rough per-node size of the fixed metadata fields <see cref="WriteNode"/> emits, excluding
@@ -419,6 +433,12 @@ public static class DiskImageSerializer
         int? customZstdLevel = null,
         bool forceFullRewrite = false)
     {
+        if (nodeMap.GetAllNodes().Any(kvp => kvp.Value.FileInfo.AllocationSize > MaxSafeSegmentNodeBytes))
+        {
+            Save(nodeMap, capacityBytes, volumeLabel, imagePath, level, encryption, progress, customZstdLevel);
+            return;
+        }
+
         if (forceFullRewrite)
         {
             SaveSegmented(nodeMap, capacityBytes, volumeLabel, imagePath, level, encryption, progress,
@@ -745,10 +765,11 @@ public static class DiskImageSerializer
     /// encrypted, the same key-wrap fields as version 3+, reads the segment index and then each
     /// segment's payload in turn, decrypting (if encrypted), decompressing (if compressed) and
     /// parsing the segments concurrently, since each is independent, while adding their nodes to
-    /// the map in file order. See the class remarks for the on-disk
-    /// layout. Segment sizes are bounded by the writer to a few MB, so — unlike version 3's
-    /// whole-image encrypted blob — decrypting a segment's ciphertext with the single-shot
-    /// <see cref="AesGcm"/> API here never risks its ~2 GB ceiling.
+    /// the map in file order. See the class remarks for the on-disk layout. Segment sizes are
+    /// normally bounded by the writer to a few MB, so decrypting a segment's ciphertext with the
+    /// single-shot <see cref="AesGcm"/> API here is safe in practice — <see cref="SaveIncremental"/>
+    /// never writes a segment close to its ~2 GB ceiling, diverting to the non-segmented
+    /// <see cref="Save"/> instead whenever a single node's content approaches it.
     /// </summary>
     private static FileNodeMap LoadSegmented(
         BinaryReader reader,
