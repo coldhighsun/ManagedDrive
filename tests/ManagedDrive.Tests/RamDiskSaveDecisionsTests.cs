@@ -42,6 +42,36 @@ public sealed class RamDiskSaveDecisionsTests : IDisposable
     }
 
     [Fact]
+    public void ShouldForceFullRewrite_SamePathNoRotation_ReturnsFalse()
+    {
+        Assert.False(RamDiskSaveDecisions.ShouldForceFullRewrite(
+            cekRotatedSinceLastSave: false, configuredPersistImagePath: "a.mdr", lastSavedImagePath: "a.mdr"));
+    }
+
+    [Fact]
+    public void ShouldForceFullRewrite_CekRotated_ReturnsTrue()
+    {
+        Assert.True(RamDiskSaveDecisions.ShouldForceFullRewrite(
+            cekRotatedSinceLastSave: true, configuredPersistImagePath: "a.mdr", lastSavedImagePath: "a.mdr"));
+    }
+
+    [Fact]
+    public void ShouldForceFullRewrite_PersistPathChanged_ReturnsTrue()
+    {
+        // The nodes' saved-segment indices describe a.mdr's layout; reusing them against b.mdr
+        // would copy whatever segments b.mdr happens to hold.
+        Assert.True(RamDiskSaveDecisions.ShouldForceFullRewrite(
+            cekRotatedSinceLastSave: false, configuredPersistImagePath: "b.mdr", lastSavedImagePath: "a.mdr"));
+    }
+
+    [Fact]
+    public void ShouldForceFullRewrite_NeverSavedOrLoaded_ReturnsTrue()
+    {
+        Assert.True(RamDiskSaveDecisions.ShouldForceFullRewrite(
+            cekRotatedSinceLastSave: false, configuredPersistImagePath: "a.mdr", lastSavedImagePath: null));
+    }
+
+    [Fact]
     public void ShouldGenerateNewCek_NoCurrentCek_ReturnsTrue()
     {
         // Mirrors RamDisk.SetPassword's guard: no CEK (unencrypted, or a password was removed

@@ -33,6 +33,18 @@ internal static class RamDiskSaveDecisions
     internal static bool ShouldGenerateNewCek(byte[]? currentCek) => currentCek is null;
 
     /// <summary>
+    /// Whether the next save must rewrite the whole image rather than reuse segments of the file
+    /// already at <paramref name="configuredPersistImagePath"/>. Each node's saved-segment
+    /// bookkeeping describes the image it was last written to (or loaded from); if that isn't the
+    /// file about to be written, the segment indices point into some other image's layout, and
+    /// reusing them would copy stale or foreign bytes verbatim. Also forced after a CEK rotation,
+    /// since reused segments would still be encrypted under the discarded key.
+    /// </summary>
+    internal static bool ShouldForceFullRewrite(
+        bool cekRotatedSinceLastSave, string? configuredPersistImagePath, string? lastSavedImagePath) =>
+        cekRotatedSinceLastSave || configuredPersistImagePath != lastSavedImagePath;
+
+    /// <summary>
     /// Compares <paramref name="nodeMap"/> against the most recently written snapshot of
     /// <paramref name="mainImagePath"/>, if one exists. Returns <c>false</c> (i.e. "write a new
     /// snapshot") when there is no prior snapshot, or when reading/comparing it fails for any

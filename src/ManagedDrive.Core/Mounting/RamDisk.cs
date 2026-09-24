@@ -644,7 +644,8 @@ public sealed class RamDisk : IDisposable
         }
 
         var versionAtSaveStart = _fs.CaptureMutationVersion();
-        var forceFullRewrite = _cekRotatedSinceLastSave;
+        var forceFullRewrite = RamDiskSaveDecisions.ShouldForceFullRewrite(
+            _cekRotatedSinceLastSave, Options.PersistImagePath, _lastSavedImagePath);
 
         try
         {
