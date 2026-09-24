@@ -24,6 +24,23 @@ public sealed class CliPipeServer(MainViewModel mainViewModel) : IDisposable
     /// </summary>
     private static readonly TimeSpan PerIoTimeout = TimeSpan.FromSeconds(30);
 
+    /// <summary>
+    /// Upper bound on command execution itself. The accept loop serves one connection at a time,
+    /// so a command that never returns (e.g. it's dispatched onto the UI thread while that thread
+    /// is blocked showing a modal dialog, such as the password prompt in
+    /// <c>MountWithPasswordRetryAsync</c>) would otherwise wedge every subsequent CLI invocation
+    /// behind it indefinitely, with no diagnostic. Generous enough not to cut off a legitimately
+    /// slow command (e.g. exporting a large disk).
+    /// </summary>
+    private static readonly TimeSpan CommandExecutionTimeout = TimeSpan.FromMinutes(5);
+
+    /// <summary>
+    /// Logger for faults observed after a command's execution already timed out (see
+    /// <see cref="CommandExecutionTimeout"/>) — by that point the client has already been told the
+    /// command failed, so a later exception has nowhere else to surface.
+    /// </summary>
+    private static readonly ILogger Logger = AppLog.CreateLogger<CliPipeServer>();
+
     private readonly CancellationTokenSource _cts = new();
     private readonly ICliDiskController _diskController = new MainViewModelCliDiskController(mainViewModel);
     private Task? _acceptLoop;
@@ -113,9 +130,37 @@ public sealed class CliPipeServer(MainViewModel mainViewModel) : IDisposable
         // Marshal onto the UI thread: CliCommandProcessor calls into MainViewModel (via
         // _diskController), which mutates the WPF-bound Disks collection and must not be
         // touched from this pipe thread. Not subject to PerIoTimeout — command execution itself
-        // can legitimately run long.
-        var result = await Application.Current.Dispatcher.InvokeAsync(
+        // can legitimately run long — but still bounded by CommandExecutionTimeout so a command
+        // stuck behind a blocked UI thread can't wedge every later CLI invocation behind it forever.
+        var executeTask = Application.Current.Dispatcher.InvokeAsync(
             () => CliCommandProcessor.ExecuteAsync(args, _diskController)).Task.Unwrap();
+
+        CliOutcome result;
+        try
+        {
+            result = await executeTask.WaitAsync(CommandExecutionTimeout, ct);
+        }
+        catch (TimeoutException)
+        {
+            // executeTask is still running on the UI dispatcher and is left to finish on its own
+            // — there's no cancellation token to thread into it. Observe its eventual completion
+            // anyway so a later exception doesn't become an unobserved task exception, and log it
+            // since it now happens after this response already told the client it failed.
+            _ = executeTask.ContinueWith(
+                t => Logger.LogError(t.Exception, "CLI command execution failed after its client was already told it timed out."),
+                TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously);
+
+            await PipeIo.WriteLineWithTimeoutAsync(
+                writer,
+                CliPipeProtocol.SerializeResponse(new(
+                    false,
+                    "Timed out waiting for ManagedDrive to execute the command — it may be blocked on a dialog (e.g. a password prompt) in the app's window.",
+                    null,
+                    1)),
+                PerIoTimeout,
+                ct);
+            return;
+        }
 
         await PipeIo.WriteLineWithTimeoutAsync(
             writer,
