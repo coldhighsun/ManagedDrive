@@ -91,6 +91,16 @@ public sealed class FileNode
     /// </summary>
     internal int SavedSegmentIndex = -1;
 
+    /// <summary>
+    /// Set by <see cref="FileNodeMap"/> when this node is removed from (or replaced in) the map it
+    /// was stored in, and cleared again when it is added back. An open WinFsp handle keeps its node
+    /// as the file context even after a format, clone, or snapshot restore swaps out every node, so
+    /// the map uses this to keep such a handle's allocation changes out of its cached total —
+    /// otherwise that total drifts away from the nodes actually stored. Only read or written under
+    /// the owning map's lock.
+    /// </summary>
+    internal bool IsDetached;
+
     private static long _nextIndex = 1;
 
     /// <summary>

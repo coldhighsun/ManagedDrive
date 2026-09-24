@@ -1015,11 +1015,12 @@ public sealed class MemoryFileSystem : FileSystemBase
             }
         }
 
-        NodeMap.ClearAll();
-        foreach (var kvp in nodes)
-        {
-            NodeMap.Add(kvp.Key, adoptNodes ? kvp.Value : kvp.Value.Clone());
-        }
+        // Copies are made before taking the map's write lock, so a large clone doesn't stall every
+        // file-system callback; the swap itself is then atomic.
+        var replacement = adoptNodes
+            ? nodes
+            : nodes.Select(kvp => KeyValuePair.Create(kvp.Key, kvp.Value.Clone())).ToList();
+        NodeMap.ReplaceAll(replacement);
 
         MarkDirty();
         error = null;
