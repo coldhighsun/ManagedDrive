@@ -77,6 +77,29 @@ public sealed class CliPipeClientTests : IDisposable
         await AwaitIgnoringCancellationAsync(serverTask);
     }
 
+    [Fact]
+    public void TrySend_ServerPipeDeniesThisUser_ReturnsTrueWithAccessDeniedFailure()
+    {
+        var pipeName = CliPipeClient.TestPipeNameOverride!;
+
+        // Only SYSTEM may connect — this test process's own (non-SYSTEM) user is denied, the same
+        // way an elevated or other-user instance's pipe would reject it.
+        var security = new PipeSecurity();
+        security.AddAccessRule(new(
+            new System.Security.Principal.SecurityIdentifier(System.Security.Principal.WellKnownSidType.LocalSystemSid, null),
+            PipeAccessRights.FullControl,
+            System.Security.AccessControl.AccessControlType.Allow));
+        using var server = NamedPipeServerStreamAcl.Create(
+            pipeName, PipeDirection.InOut, 1, PipeTransmissionMode.Byte, PipeOptions.Asynchronous, 0, 0, security);
+
+        var answered = CliPipeClient.TrySend(["list"], out var response);
+
+        Assert.True(answered);
+        Assert.False(response.Success);
+        Assert.Equal(1, response.ExitCode);
+        Assert.Equal(CliPipeClient.AccessDeniedMessage, response.Message);
+    }
+
     private static async Task AwaitIgnoringCancellationAsync(Task task)
     {
         try

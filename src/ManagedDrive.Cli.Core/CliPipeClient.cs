@@ -49,12 +49,20 @@ public static class CliPipeClient
     private const int MaxResponseLineLength = 64 * 1024;
 
     /// <summary>
+    /// Failure message reported when a running instance's pipe denies this process access.
+    /// </summary>
+    internal const string AccessDeniedMessage =
+        "Access to the running ManagedDrive instance was denied. It may be running as administrator or as another user; run mdrive the same way.";
+
+    /// <summary>
     /// Tries to connect to a running instance's CLI pipe and execute <paramref name="args"/>
     /// there.
     /// </summary>
     /// <returns>
     /// <c>true</c> if a running instance answered the request (regardless of the command's own
-    /// exit code); <c>false</c> if no instance is currently listening on the pipe.
+    /// exit code), or refused this process access to its pipe (<paramref name="response"/> then
+    /// carries a failure explaining that); <c>false</c> if no instance is currently listening on
+    /// the pipe.
     /// </returns>
     public static bool TrySend(string[] args, out CliResponse response)
     {
@@ -69,6 +77,15 @@ public static class CliPipeClient
         catch (Exception ex) when (ex is TimeoutException or IOException)
         {
             return false;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            // An instance is listening but its pipe rejects this process — typically it's running
+            // elevated or as another user. Report that as the answer rather than "nothing
+            // listening": the caller would otherwise launch a second instance and then time out
+            // waiting for a pipe it can never reach.
+            response = new(false, AccessDeniedMessage, null, 1);
+            return true;
         }
 
         var reader = new StreamReader(pipe, leaveOpen: true);
