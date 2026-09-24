@@ -761,6 +761,72 @@ public sealed class FileNodeMapTests
         Assert.Same(node, stored);
     }
 
+    [Fact]
+    public void Rename_NodeReplacedAtSourcePath_ReturnsSourceNotFoundAndKeepsNewNode()
+    {
+        var map = new FileNodeMap();
+        map.Add("\\", MakeDir());
+        var stale = MakeFile();
+        map.Add("\\a.txt", stale);
+        map.ReplaceAll([KeyValuePair.Create("\\", MakeDir()), KeyValuePair.Create("\\a.txt", MakeFile())]);
+        map.TryGet("\\a.txt", out var current);
+
+        var result = map.Rename("\\a.txt", "\\b.txt", stale, replaceIfExists: false);
+
+        Assert.Equal(FileNodeMap.RenameConflict.SourceNotFound, result);
+        Assert.True(map.TryGet("\\a.txt", out var stored));
+        Assert.Same(current, stored);
+        Assert.False(map.TryGet("\\b.txt", out _));
+    }
+
+    [Fact]
+    public void Rename_DestinationParentMissing_ReturnsParentNotFoundAndLeavesNodeInPlace()
+    {
+        var map = new FileNodeMap();
+        map.Add("\\", MakeDir());
+        var file = MakeFile();
+        map.Add("\\x", file);
+
+        var result = map.Rename("\\x", "\\gone\\x", file, replaceIfExists: false);
+
+        Assert.Equal(FileNodeMap.RenameConflict.ParentNotFound, result);
+        Assert.True(map.TryGet("\\x", out var stored));
+        Assert.Same(file, stored);
+        Assert.False(map.TryGet("\\gone\\x", out _));
+    }
+
+    [Fact]
+    public void Rename_DestinationParentIsFile_ReturnsParentNotDirectory()
+    {
+        var map = new FileNodeMap();
+        map.Add("\\", MakeDir());
+        map.Add("\\file.txt", MakeFile());
+        var file = MakeFile();
+        map.Add("\\x", file);
+
+        var result = map.Rename("\\x", "\\file.txt\\x", file, replaceIfExists: false);
+
+        Assert.Equal(FileNodeMap.RenameConflict.ParentNotDirectory, result);
+        Assert.True(map.TryGet("\\x", out _));
+    }
+
+    [Fact]
+    public void Rename_IntoExistingDirectory_MovesNode()
+    {
+        var map = new FileNodeMap();
+        map.Add("\\", MakeDir());
+        map.Add("\\dir", MakeDir());
+        var file = MakeFile();
+        map.Add("\\x", file);
+
+        var result = map.Rename("\\x", "\\dir\\x", file, replaceIfExists: false);
+
+        Assert.Equal(FileNodeMap.RenameConflict.None, result);
+        Assert.True(map.TryGet("\\dir\\x", out var stored));
+        Assert.Same(file, stored);
+        Assert.False(map.TryGet("\\x", out _));
+    }
+
     private static FileNode MakeDir() => new()
     {
         FileInfo = { FileAttributes = (uint)FileAttributes.Directory },
