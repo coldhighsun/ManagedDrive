@@ -26,10 +26,24 @@ internal static class ChunkedGcm
     private const int DefaultChunkSize = 64 * 1024 * 1024;
 
     /// <summary>
+    /// Backing store for <see cref="TestChunkSizeOverride"/>. An <see cref="AsyncLocal{T}"/>
+    /// rather than a plain static field so that tests running concurrently (different test
+    /// classes/collections, or parallel test execution) each see only their own override instead
+    /// of racing on a single shared value — the value set here flows to any code called from the
+    /// same logical call chain, including work queued via <see cref="Task.Run(Action)"/>, but
+    /// never to an unrelated, concurrently-running chain.
+    /// </summary>
+    private static readonly AsyncLocal<int?> _testChunkSizeOverride = new();
+
+    /// <summary>
     /// Test-only override for <see cref="DefaultChunkSize"/>; <see langword="null"/> means use the
     /// production default. Set via <c>InternalsVisibleTo("ManagedDrive.Tests")</c>.
     /// </summary>
-    internal static int? TestChunkSizeOverride;
+    internal static int? TestChunkSizeOverride
+    {
+        get => _testChunkSizeOverride.Value;
+        set => _testChunkSizeOverride.Value = value;
+    }
 
     internal static int ChunkSize => TestChunkSizeOverride ?? DefaultChunkSize;
 
