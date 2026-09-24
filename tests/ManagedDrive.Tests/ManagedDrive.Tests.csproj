@@ -19,6 +19,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\ManagedDrive.Core\ManagedDrive.Core.csproj" />
     <ProjectReference Include="..\..\src\ManagedDrive.App\ManagedDrive.App.csproj" />
+    <ProjectReference Include="..\..\src\ManagedDrive.Service\ManagedDrive.Service.csproj" />
   </ItemGroup>
 
   <ItemGroup>

@@ -20,10 +20,15 @@ public sealed partial class GlobalMountManager(ILogger<GlobalMountManager> logge
     private readonly Lock _lock = new();
 
     /// <summary>
-    /// Publishes a global symlink <paramref name="letter"/> → <paramref name="devicePath"/> and
-    /// records it for later cleanup.
+    /// Publishes a global symlink <paramref name="letter"/> → <paramref name="devicePath"/> on
+    /// behalf of <paramref name="callerSid"/> and records it for later cleanup. Refuses a letter
+    /// that is already defined system-wide or published by someone else (see <see cref="GlobalMountPolicy"/>).
     /// </summary>
-    public (bool Success, string Message) Publish(string letter, string devicePath)
+    /// <param name="letter">The drive letter, in <c>"X:"</c> form.</param>
+    /// <param name="devicePath">The <c>\Device\Volume{GUID}</c> path to point it at.</param>
+    /// <param name="callerSid">SID of the user requesting the publication.</param>
+    /// <returns>Whether the letter is now published, and a diagnostic message.</returns>
+    public (bool Success, string Message) Publish(string letter, string devicePath, string callerSid)
     {
         if (!DriveLetterRegex().IsMatch(letter))
         {
@@ -37,6 +42,45 @@ public sealed partial class GlobalMountManager(ILogger<GlobalMountManager> logge
 
         lock (_lock)
         {
+            // A record whose device has gone away is only waiting for the next reconciliation
+            // sweep; clear it now so it neither blocks nor is mistaken for the caller's own.
+            var recorded = ReadRegistryEntry(letter);
+            if (recorded != null && !NativeMethods.DeviceExists(recorded.DevicePath))
+            {
+                NativeMethods.RemoveGlobalSymlink(letter, recorded.DevicePath);
+                DeleteRegistryEntry(letter);
+                recorded = null;
+            }
+
+            var decision = GlobalMountPolicy.DecidePublish(
+                devicePath,
+                callerSid,
+                recorded,
+                NativeMethods.DeviceExists(devicePath),
+                NativeMethods.QueryDosDeviceTargets(letter));
+
+            switch (decision)
+            {
+                case PublishDecision.AlreadyPublished:
+                    WriteRegistryEntry(letter, new(devicePath, callerSid));
+                    return (true, $"{letter} -> {devicePath} is already published.");
+
+                case PublishDecision.RejectDeviceMissing:
+                    return (false, $"Device '{devicePath}' does not exist.");
+
+                case PublishDecision.RejectLetterInUse:
+                    logger.LogWarning(
+                        "Refused to publish {Letter} -> {Device} for {Sid}: letter already defined globally",
+                        letter, devicePath, callerSid);
+                    return (false, $"{letter} is already in use system-wide.");
+
+                case PublishDecision.RejectPublishedByOther:
+                    logger.LogWarning(
+                        "Refused to publish {Letter} -> {Device} for {Sid}: letter published by another user or for another device",
+                        letter, devicePath, callerSid);
+                    return (false, $"{letter} is already published for another disk.");
+            }
+
             if (!NativeMethods.CreateGlobalSymlink(letter, devicePath))
             {
                 var error = Marshal.GetLastWin32Error();
@@ -45,8 +89,18 @@ public sealed partial class GlobalMountManager(ILogger<GlobalMountManager> logge
                 return (false, $"DefineDosDevice failed. Win32Error={error}");
             }
 
-            WriteRegistryEntry(letter, devicePath);
-            logger.LogInformation("Published global symlink {Letter} -> {Device}", letter, devicePath);
+            if (!GlobalMountPolicy.IsSoleDefinition(NativeMethods.QueryDosDeviceTargets(letter), devicePath))
+            {
+                // Someone else defined the letter between the check above and our definition.
+                NativeMethods.RemoveGlobalSymlink(letter, devicePath);
+                logger.LogWarning(
+                    "Withdrew {Letter} -> {Device} for {Sid}: letter was defined concurrently by someone else",
+                    letter, devicePath, callerSid);
+                return (false, $"{letter} is already in use system-wide.");
+            }
+
+            WriteRegistryEntry(letter, new(devicePath, callerSid));
+            logger.LogInformation("Published global symlink {Letter} -> {Device} for {Sid}", letter, devicePath, callerSid);
             return (true, $"Published {letter} -> {devicePath}");
         }
     }
@@ -61,7 +115,7 @@ public sealed partial class GlobalMountManager(ILogger<GlobalMountManager> logge
     {
         lock (_lock)
         {
-            foreach (var (letter, devicePath) in ReadAllRegistryEntries())
+            foreach (var (letter, (devicePath, _)) in ReadAllRegistryEntries())
             {
                 if (NativeMethods.DeviceExists(devicePath))
                 {
@@ -79,9 +133,13 @@ public sealed partial class GlobalMountManager(ILogger<GlobalMountManager> logge
 
     /// <summary>
     /// Removes the global symlink previously published for <paramref name="letter"/>, using the
-    /// device path recorded at publish time for an exact-match removal.
+    /// device path recorded at publish time for an exact-match removal. Only the user who
+    /// published it may remove it.
     /// </summary>
-    public (bool Success, string Message) Unpublish(string letter)
+    /// <param name="letter">The drive letter, in <c>"X:"</c> form.</param>
+    /// <param name="callerSid">SID of the user requesting the removal.</param>
+    /// <returns>Whether the letter is no longer published, and a diagnostic message.</returns>
+    public (bool Success, string Message) Unpublish(string letter, string callerSid)
     {
         if (!DriveLetterRegex().IsMatch(letter))
         {
@@ -90,13 +148,19 @@ public sealed partial class GlobalMountManager(ILogger<GlobalMountManager> logge
 
         lock (_lock)
         {
-            var devicePath = ReadRegistryEntry(letter);
-            if (devicePath == null)
+            var recorded = ReadRegistryEntry(letter);
+            switch (GlobalMountPolicy.DecideUnpublish(callerSid, recorded))
             {
-                // Nothing recorded — treat as already gone rather than an error.
-                return (true, $"No published symlink recorded for {letter}.");
+                case UnpublishDecision.NothingRecorded:
+                    // Nothing recorded — treat as already gone rather than an error.
+                    return (true, $"No published symlink recorded for {letter}.");
+
+                case UnpublishDecision.RejectNotOwner:
+                    logger.LogWarning("Refused to unpublish {Letter} for {Sid}: published by another user", letter, callerSid);
+                    return (false, $"{letter} was published by another user.");
             }
 
+            var devicePath = recorded!.DevicePath;
             var removed = NativeMethods.RemoveGlobalSymlink(letter, devicePath);
             if (!removed)
             {
@@ -124,7 +188,26 @@ public sealed partial class GlobalMountManager(ILogger<GlobalMountManager> logge
     [GeneratedRegex(@"^[A-Za-z]:$")]
     private static partial Regex DriveLetterRegex();
 
-    private static IReadOnlyList<(string Letter, string DevicePath)> ReadAllRegistryEntries()
+    /// <summary>
+    /// Decodes a registry value written by <see cref="WriteRegistryEntry"/>: a
+    /// <c>REG_MULTI_SZ</c> of device path and owner SID, or a plain <c>REG_SZ</c> device path
+    /// written before owners were recorded.
+    /// </summary>
+    /// <param name="value">The raw registry value.</param>
+    /// <returns>The recorded publication, or <c>null</c> if the value is in neither format.</returns>
+    internal static PublishedMount? ParseRegistryValue(object? value) => value switch
+    {
+        string devicePath => new(devicePath, null),
+        string[] { Length: >= 2 } parts => new(parts[0], string.IsNullOrEmpty(parts[1]) ? null : parts[1]),
+        string[] { Length: 1 } parts => new(parts[0], null),
+        _ => null,
+    };
+
+    /// <summary>
+    /// Reads every recorded publication.
+    /// </summary>
+    /// <returns>The recorded letters and their publications.</returns>
+    private static IReadOnlyList<(string Letter, PublishedMount Mount)> ReadAllRegistryEntries()
     {
         using var key = Registry.LocalMachine.OpenSubKey(RegistryKeyPath, writable: false);
         if (key == null)
@@ -132,27 +215,37 @@ public sealed partial class GlobalMountManager(ILogger<GlobalMountManager> logge
             return [];
         }
 
-        var entries = new List<(string, string)>();
+        var entries = new List<(string, PublishedMount)>();
         foreach (var name in key.GetValueNames())
         {
-            if (key.GetValue(name) is string devicePath)
+            if (ParseRegistryValue(key.GetValue(name)) is { } mount)
             {
-                entries.Add((name, devicePath));
+                entries.Add((name, mount));
             }
         }
 
         return entries;
     }
 
-    private static string? ReadRegistryEntry(string letter)
+    /// <summary>
+    /// Reads the recorded publication for <paramref name="letter"/>.
+    /// </summary>
+    /// <param name="letter">The drive letter, in <c>"X:"</c> form.</param>
+    /// <returns>The recorded publication, or <c>null</c> if none.</returns>
+    private static PublishedMount? ReadRegistryEntry(string letter)
     {
         using var key = Registry.LocalMachine.OpenSubKey(RegistryKeyPath, writable: false);
-        return key?.GetValue(letter) as string;
+        return ParseRegistryValue(key?.GetValue(letter));
     }
 
-    private static void WriteRegistryEntry(string letter, string devicePath)
+    /// <summary>
+    /// Records <paramref name="mount"/> as published for <paramref name="letter"/>.
+    /// </summary>
+    /// <param name="letter">The drive letter, in <c>"X:"</c> form.</param>
+    /// <param name="mount">The publication to record.</param>
+    private static void WriteRegistryEntry(string letter, PublishedMount mount)
     {
         using var key = Registry.LocalMachine.CreateSubKey(RegistryKeyPath, writable: true);
-        key.SetValue(letter, devicePath, RegistryValueKind.String);
+        key.SetValue(letter, new[] { mount.DevicePath, mount.OwnerSid ?? string.Empty }, RegistryValueKind.MultiString);
     }
 }
