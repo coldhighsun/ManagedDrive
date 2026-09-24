@@ -488,15 +488,15 @@ public sealed class FileContent
     /// </summary>
     internal long FillFromStream(Stream source, long count, MemoryHeadroomBudget budget)
     {
-        var cost = SparseCost(0, Math.Min(count, _length));
-        if (budget.WouldExceed((ulong)cost))
-        {
-            throw new InsufficientMemoryException(
-                $"Not enough free memory to load {cost:N0} more bytes of file content.");
-        }
-
         lock (_lock)
         {
+            var cost = SparseCost(0, Math.Min(count, _length));
+            if (budget.WouldExceed((ulong)cost))
+            {
+                throw new InsufficientMemoryException(
+                    $"Not enough free memory to load {cost:N0} more bytes of file content.");
+            }
+
             var remaining = count;
             var chunkIndex = 0;
             var totalFilled = 0L;
