@@ -29,6 +29,12 @@ public sealed class HelperPipeService(GlobalMountManager mountManager, ILogger<H
     /// </summary>
     private static readonly TimeSpan PerIoTimeout = TimeSpan.FromSeconds(30);
 
+    /// <summary>
+    /// Pause before retrying after the pipe couldn't be created or a connection couldn't be
+    /// accepted, so a persistent failure doesn't turn the accept loop into a busy spin.
+    /// </summary>
+    private static readonly TimeSpan AcceptRetryDelay = TimeSpan.FromSeconds(1);
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         mountManager.Reconcile();
@@ -37,10 +43,12 @@ public sealed class HelperPipeService(GlobalMountManager mountManager, ILogger<H
 
         while (!stoppingToken.IsCancellationRequested)
         {
+            var connected = false;
             try
             {
                 await using var pipe = CreatePipe();
                 await pipe.WaitForConnectionAsync(stoppingToken);
+                connected = true;
                 await HandleConnectionAsync(pipe, stoppingToken);
             }
             catch (OperationCanceledException)
@@ -53,6 +61,21 @@ public sealed class HelperPipeService(GlobalMountManager mountManager, ILogger<H
                 logger.LogWarningThrottled(
                     "pipe-connection-failed", TimeSpan.FromMinutes(5),
                     "Pipe connection handling failed: {Error}", ex.Message);
+
+                if (!connected)
+                {
+                    // Failing before any client connected (e.g. another process holds the pipe
+                    // name) will most likely fail again right away; without a pause this loop
+                    // would spin a core at 100% for as long as the condition lasts.
+                    try
+                    {
+                        await Task.Delay(AcceptRetryDelay, stoppingToken);
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        return;
+                    }
+                }
             }
         }
     }
