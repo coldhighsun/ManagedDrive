@@ -286,6 +286,7 @@
     <sys:String x:Key="Status.SaveFailed">Save failed for {0}: {1}</sys:String>
     <sys:String x:Key="Status.CapacityAdjusted">{0}: capacity auto-raised from {1} MB to {2} MB to fit the loaded image</sys:String>
     <sys:String x:Key="Status.Unmounted">Unmounted {0}</sys:String>
+    <sys:String x:Key="Status.DiskNoLongerMounted">{0} is no longer mounted</sys:String>
     <sys:String x:Key="Status.TempDirSet">Temp directory set to {0}</sys:String>
     <sys:String x:Key="Status.DiskRead">{0} reading "{1}"...</sys:String>
     <sys:String x:Key="Status.DiskWrite">{0} writing "{1}"...</sys:String>

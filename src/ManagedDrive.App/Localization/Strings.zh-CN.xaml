@@ -286,6 +286,7 @@
     <sys:String x:Key="Status.SaveFailed">{0} 保存失败：{1}</sys:String>
     <sys:String x:Key="Status.CapacityAdjusted">{0}：容量已从 {1} MB 自动提升到 {2} MB，以容纳已加载的镜像</sys:String>
     <sys:String x:Key="Status.Unmounted">已卸载 {0}</sys:String>
+    <sys:String x:Key="Status.DiskNoLongerMounted">{0} 已不再挂载</sys:String>
     <sys:String x:Key="Status.TempDirSet">临时文件夹已设置为 {0}</sys:String>
     <sys:String x:Key="Status.DiskRead">{0} 正在读取 "{1}"...</sys:String>
     <sys:String x:Key="Status.DiskWrite">{0} 正在写入 "{1}"...</sys:String>
