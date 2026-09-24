@@ -168,6 +168,8 @@
     <sys:String x:Key="CloneDisk.ExportFormat.SevenZip">7z 压缩包 (.7z)</sys:String>
     <sys:String x:Key="Val.NoCloneTarget">请选择目标磁盘。</sys:String>
     <sys:String x:Key="Val.NoExportPath">请选择目标镜像文件。</sys:String>
+    <sys:String x:Key="Msg.ExportOverwriteConfirmTitle">文件已存在</sys:String>
+    <sys:String x:Key="Msg.ExportOverwriteConfirmBody">文件 {0} 已存在。&#x0a;&#x0a;要用导出的副本替换它吗？</sys:String>
     <sys:String x:Key="Msg.CloneDiskConfirmTitle">克隆磁盘</sys:String>
     <sys:String x:Key="Msg.CloneDiskConfirmBody">将 {0} 的内容复制到 {1}（{2}）？&#x0a;&#x0a;{1} 上现有的所有文件和文件夹将被永久替换。</sys:String>
     <sys:String x:Key="Status.DiskCloned">已将 {0} 克隆到 {1}</sys:String>

@@ -168,6 +168,8 @@
     <sys:String x:Key="CloneDisk.ExportFormat.SevenZip">7z Archive (.7z)</sys:String>
     <sys:String x:Key="Val.NoCloneTarget">Please select a target disk.</sys:String>
     <sys:String x:Key="Val.NoExportPath">Please choose a destination image file.</sys:String>
+    <sys:String x:Key="Msg.ExportOverwriteConfirmTitle">File Already Exists</sys:String>
+    <sys:String x:Key="Msg.ExportOverwriteConfirmBody">The file {0} already exists.&#x0a;&#x0a;Replace it with the exported copy?</sys:String>
     <sys:String x:Key="Msg.CloneDiskConfirmTitle">Clone Disk</sys:String>
     <sys:String x:Key="Msg.CloneDiskConfirmBody">Copy the contents of {0} to {1} ({2})?&#x0a;&#x0a;All existing files and folders on {1} will be permanently replaced.</sys:String>
     <sys:String x:Key="Status.DiskCloned">Cloned {0} to {1}</sys:String>

@@ -28,6 +28,21 @@ public partial class CloneDiskDialog
     private readonly IReadOnlyList<DiskViewModel> _targets;
 
     /// <summary>
+    /// Mount points of every currently active disk, including the source itself: an export path
+    /// on any of them is rejected, since it would be read (and, for the source, written) through
+    /// WinFsp while the export is copying that same disk's data.
+    /// </summary>
+    private readonly IReadOnlyList<string> _activeMountPoints;
+
+    /// <summary>
+    /// The export path last chosen through the save dialog, whose own overwrite prompt has
+    /// already confirmed replacing it if it existed. Switching the export format rewrites the
+    /// extension to a path that was never prompted for, so <see cref="OK_Click"/> asks again for
+    /// any other existing path.
+    /// </summary>
+    private string? _overwriteConfirmedPath;
+
+    /// <summary>
     /// Initializes the dialog for cloning <paramref name="source"/> into one of
     /// <paramref name="targets"/> or exporting it to a new image file.
     /// </summary>
@@ -42,6 +57,7 @@ public partial class CloneDiskDialog
         InitializeComponent();
         _targets = targets;
         _otherDisks = otherDisks;
+        _activeMountPoints = [source.MountPoint, .. otherDisks.Select(d => d.MountPoint)];
 
         SourceDescriptionText.Text = Loc.Format("CloneDisk.SourceDescription", source.MountPoint, source.VolumeLabel);
 
@@ -138,6 +154,41 @@ public partial class CloneDiskDialog
         _ => ".mdr",
     };
 
+    /// <summary>
+    /// Checks whether <paramref name="path"/> may be used as an export destination.
+    /// </summary>
+    /// <param name="path">The full destination path.</param>
+    /// <param name="otherDisks">Options of the active disks whose image files must not be overwritten.</param>
+    /// <param name="activeMountPoints">Mount points of every currently active disk, including the source.</param>
+    /// <returns>
+    /// The localization key of the validation message to show, or <c>null</c> if the path is acceptable.
+    /// </returns>
+    internal static string? GetExportPathError(string path, IReadOnlyList<DiskOptions> otherDisks, IReadOnlyList<string> activeMountPoints)
+    {
+        if (activeMountPoints.Any(mp => path.StartsWith(mp, StringComparison.OrdinalIgnoreCase)))
+        {
+            return "Val.ImagePathOnRamDisk";
+        }
+
+        return CreateDiskOptionsBuilder.ValidateImagePathAvailable(path, otherDisks) switch
+        {
+            CreateDiskValidationError.ImagePathIsSnapshot => "Val.ImagePathIsSnapshot",
+            CreateDiskValidationError.ImagePathInUse => "Val.ImagePathInUse",
+            _ => null,
+        };
+    }
+
+    /// <summary>
+    /// Shows the warning message for <paramref name="errorKey"/> in the same style used by every
+    /// export path rejection.
+    /// </summary>
+    /// <param name="errorKey">The localization key of the message to show.</param>
+    private void ShowExportPathError(string errorKey) => MessageBox.Show(
+        Loc.Get(errorKey),
+        Loc.Get("Val.Title"),
+        MessageBoxButton.OK,
+        MessageBoxImage.Warning);
+
     private static string ExportFilterKey(ArchiveExportFormat? format) => format switch
     {
         ArchiveExportFormat.Zip => "SaveDlg.Filter.Zip",
@@ -197,14 +248,52 @@ public partial class CloneDiskDialog
                 return;
             }
 
+            // Re-validated here, not only when picked: switching the export format rewrites the
+            // extension, which can turn an accepted path into another disk's image file, a
+            // snapshot name, or an existing file nobody confirmed overwriting.
+            var exportPath = ExportPathBox.Text.Trim();
+            if (!ConfirmExportPath(exportPath))
+            {
+                return;
+            }
+
             TargetDisk = null;
-            ExportPath = ExportPathBox.Text.Trim();
+            ExportPath = exportPath;
             ExportArchiveFormat = (ExportFormatBox.SelectedItem as ExportFormatItem)?.Format;
             ExportCompressionLevel = (CompressionLevelBox.SelectedItem as CompressionLevelItem)?.Level
                 ?? ImageCompressionLevel.Fastest;
         }
 
         DialogResult = true;
+    }
+
+    /// <summary>
+    /// Validates <paramref name="path"/> as the export destination, showing the reason if it is
+    /// rejected and asking before overwriting an existing file the save dialog didn't prompt for.
+    /// </summary>
+    /// <param name="path">The full destination path.</param>
+    /// <returns><c>true</c> if the export may proceed to <paramref name="path"/>.</returns>
+    private bool ConfirmExportPath(string path)
+    {
+        if (GetExportPathError(path, _otherDisks, _activeMountPoints) is { } errorKey)
+        {
+            ShowExportPathError(errorKey);
+            return false;
+        }
+
+        if (File.Exists(path) && !string.Equals(path, _overwriteConfirmedPath, StringComparison.OrdinalIgnoreCase))
+        {
+            var confirm = new ConfirmDialog(
+                Loc.Get("Msg.ExportOverwriteConfirmTitle"),
+                Loc.Format("Msg.ExportOverwriteConfirmBody", path))
+            {
+                Owner = this
+            };
+
+            return confirm.ShowDialog() == true;
+        }
+
+        return true;
     }
 
     private void OpenExportPathDialog()
@@ -226,27 +315,13 @@ public partial class CloneDiskDialog
             return;
         }
 
-        if (_otherDisks.Any(d => d.PersistImagePath != null &&
-            string.Equals(d.PersistImagePath, dlg.FileName, StringComparison.OrdinalIgnoreCase)))
+        if (GetExportPathError(dlg.FileName, _otherDisks, _activeMountPoints) is { } errorKey)
         {
-            MessageBox.Show(
-                Loc.Get("Val.ImagePathInUse"),
-                Loc.Get("Val.Title"),
-                MessageBoxButton.OK,
-                MessageBoxImage.Warning);
+            ShowExportPathError(errorKey);
             return;
         }
 
-        if (SnapshotManager.IsSnapshotFileName(Path.GetFileName(dlg.FileName)))
-        {
-            MessageBox.Show(
-                Loc.Get("Val.ImagePathIsSnapshot"),
-                Loc.Get("Val.Title"),
-                MessageBoxButton.OK,
-                MessageBoxImage.Warning);
-            return;
-        }
-
+        _overwriteConfirmedPath = dlg.FileName;
         ExportPathBox.Text = dlg.FileName;
     }
 
