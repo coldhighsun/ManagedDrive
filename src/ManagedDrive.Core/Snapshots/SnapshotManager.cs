@@ -39,22 +39,47 @@ public static partial class SnapshotManager
     /// Deletes every snapshot index file of <paramref name="mainImagePath"/> along with its
     /// entire blob directory. Used when the user deletes the main image itself, so no orphaned
     /// snapshots or blobs are left behind. Failures deleting an individual file are skipped.
+    /// Index files are matched by name only, never parsed, so a corrupt or truncated index is
+    /// deleted along with the rest instead of aborting the whole deletion.
     /// </summary>
-    public static void DeleteAllSnapshots(string mainImagePath)
+    /// <param name="mainImagePath">The main image whose snapshots are deleted.</param>
+    /// <returns>
+    /// <c>true</c> if no snapshot index file or blob directory is left behind; <c>false</c> if
+    /// any of them could not be deleted (the failures are logged).
+    /// </returns>
+    public static bool DeleteAllSnapshots(string mainImagePath)
     {
-        foreach (var snapshot in ListSnapshots(mainImagePath))
+        var allDeleted = true;
+
+        // Listed up front, inside a try: the enumeration is lazy, and a directory that can't be
+        // listed must count as a leftover rather than escape callers expecting a result.
+        List<string> snapshotPaths;
+        try
+        {
+            snapshotPaths = [.. EnumerateSnapshotIndexPaths(mainImagePath).Select(s => s.Path)];
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            allDeleted = false;
+            snapshotPaths = [];
+            Logger.LogWarning(ex, "Failed to list the snapshots of '{Path}'", mainImagePath);
+        }
+
+        foreach (var snapshotPath in snapshotPaths)
         {
             try
             {
-                File.Delete(snapshot.Path);
+                File.Delete(snapshotPath);
             }
             catch (IOException ex)
             {
-                Logger.LogWarning(ex, "Failed to delete snapshot '{Path}'", snapshot.Path);
+                allDeleted = false;
+                Logger.LogWarning(ex, "Failed to delete snapshot '{Path}'", snapshotPath);
             }
             catch (UnauthorizedAccessException ex)
             {
-                Logger.LogWarning(ex, "Failed to delete snapshot '{Path}'", snapshot.Path);
+                allDeleted = false;
+                Logger.LogWarning(ex, "Failed to delete snapshot '{Path}'", snapshotPath);
             }
         }
 
@@ -68,12 +93,16 @@ public static partial class SnapshotManager
         }
         catch (IOException ex)
         {
+            allDeleted = false;
             Logger.LogWarning(ex, "Failed to delete blob directory '{Path}'", blobDirectory);
         }
         catch (UnauthorizedAccessException ex)
         {
+            allDeleted = false;
             Logger.LogWarning(ex, "Failed to delete blob directory '{Path}'", blobDirectory);
         }
+
+        return allDeleted;
     }
 
     /// <summary>
@@ -240,24 +269,10 @@ public static partial class SnapshotManager
     /// </summary>
     private static List<SnapshotListEntry> ListSnapshotEntries(string mainImagePath)
     {
-        var directory = Path.GetDirectoryName(mainImagePath);
-        if (string.IsNullOrEmpty(directory) || !Directory.Exists(directory))
-        {
-            return [];
-        }
-
-        var baseName = Path.GetFileNameWithoutExtension(mainImagePath);
         var entries = new List<SnapshotListEntry>();
 
-        foreach (var path in Directory.EnumerateFiles(directory, $"{baseName}.*.mdr"))
+        foreach (var (path, match) in EnumerateSnapshotIndexPaths(mainImagePath))
         {
-            var fileName = Path.GetFileName(path);
-            var match = SnapshotPattern().Match(fileName);
-            if (!match.Success || !string.Equals(match.Groups["base"].Value, baseName, StringComparison.OrdinalIgnoreCase))
-            {
-                continue;
-            }
-
             var timestamp = DateTimeOffset.TryParseExact(
                 match.Groups["ts"].Value,
                 TimestampFormat,
@@ -273,6 +288,32 @@ public static partial class SnapshotManager
 
         entries.Sort((a, b) => a.Info.TimestampUtc.CompareTo(b.Info.TimestampUtc));
         return entries;
+    }
+
+    /// <summary>
+    /// Yields every file next to <paramref name="mainImagePath"/> whose name matches the snapshot
+    /// naming scheme for that image, without opening or parsing any of them.
+    /// </summary>
+    /// <param name="mainImagePath">The main image whose snapshot index files are listed.</param>
+    /// <returns>Each index file's path and the successful match of its file name.</returns>
+    private static IEnumerable<(string Path, Match Match)> EnumerateSnapshotIndexPaths(string mainImagePath)
+    {
+        var directory = Path.GetDirectoryName(mainImagePath);
+        if (string.IsNullOrEmpty(directory) || !Directory.Exists(directory))
+        {
+            yield break;
+        }
+
+        var baseName = Path.GetFileNameWithoutExtension(mainImagePath);
+
+        foreach (var path in Directory.EnumerateFiles(directory, $"{baseName}.*.mdr"))
+        {
+            var match = SnapshotPattern().Match(Path.GetFileName(path));
+            if (match.Success && string.Equals(match.Groups["base"].Value, baseName, StringComparison.OrdinalIgnoreCase))
+            {
+                yield return (path, match);
+            }
+        }
     }
 
     /// <summary>

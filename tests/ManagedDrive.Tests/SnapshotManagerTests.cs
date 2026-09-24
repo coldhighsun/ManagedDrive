@@ -38,6 +38,43 @@ public sealed class SnapshotManagerTests : IDisposable
         Assert.EndsWith("-2.mdr", third);
     }
 
+    /// <summary>
+    /// A corrupt index must not stop the deletion of the other snapshots and the blob directory.
+    /// </summary>
+    [Fact]
+    public void DeleteAllSnapshots_CorruptIndexAlongsideValidOne_DeletesBothAndBlobDirectory()
+    {
+        WriteSnapshotWithFile(new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), "\\a.txt", [1, 2, 3]);
+        var corrupt = SnapshotManager.BuildSnapshotPath(_mainImagePath, new(2026, 1, 2, 0, 0, 0, TimeSpan.Zero));
+        File.WriteAllBytes(corrupt, [0xDE, 0xAD, 0xBE, 0xEF]);
+
+        var allDeleted = SnapshotManager.DeleteAllSnapshots(_mainImagePath);
+
+        Assert.True(allDeleted);
+        Assert.Empty(Directory.EnumerateFiles(_dir, "disk.*.mdr"));
+        Assert.False(Directory.Exists(BlobDirectory));
+    }
+
+    /// <summary>
+    /// A snapshot index that can't be deleted must be reported, so a caller relying on the
+    /// deletion (encrypting the disk) doesn't proceed as if it had succeeded.
+    /// </summary>
+    [Fact]
+    public void DeleteAllSnapshots_LockedIndexFile_ReturnsFalse()
+    {
+        WriteSnapshotWithFile(new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), "\\a.txt", [1, 2, 3]);
+        var snapshot = Assert.Single(SnapshotManager.ListSnapshots(_mainImagePath));
+
+        bool allDeleted;
+        using (new FileStream(snapshot.Path, FileMode.Open, FileAccess.Read, FileShare.None))
+        {
+            allDeleted = SnapshotManager.DeleteAllSnapshots(_mainImagePath);
+        }
+
+        Assert.False(allDeleted);
+        Assert.True(File.Exists(snapshot.Path));
+    }
+
     [Fact]
     public void DeleteSnapshot_InvalidSnapshotFileName_Throws()
     {
