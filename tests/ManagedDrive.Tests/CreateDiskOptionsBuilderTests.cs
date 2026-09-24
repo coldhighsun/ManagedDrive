@@ -120,6 +120,57 @@ public sealed class CreateDiskOptionsBuilderTests
     }
 
     [Fact]
+    public void ValidateImagePath_UsablePath_ReturnsNone()
+    {
+        var imagePath = Path.Combine(Path.GetTempPath(), "save-as.mdr");
+
+        var error = CreateDiskOptionsBuilder.ValidateImagePath(imagePath, "Z:", []);
+
+        Assert.Equal(CreateDiskValidationError.None, error);
+    }
+
+    [Fact]
+    public void ValidateImagePath_RelativePath_ReturnsBadImagePath()
+    {
+        var error = CreateDiskOptionsBuilder.ValidateImagePath("disk.mdr", "Z:", []);
+
+        Assert.Equal(CreateDiskValidationError.BadImagePath, error);
+    }
+
+    [Fact]
+    public void ValidateImagePath_OnDisksOwnMountPoint_ReturnsImagePathOnRamDisk()
+    {
+        var mountPoint = Path.GetTempPath()[..2]; // e.g. "C:"
+        var imagePath = Path.Combine(Path.GetTempPath(), "on-ramdisk.mdr");
+
+        var error = CreateDiskOptionsBuilder.ValidateImagePath(imagePath, mountPoint, []);
+
+        Assert.Equal(CreateDiskValidationError.ImagePathOnRamDisk, error);
+    }
+
+    [Fact]
+    public void ValidateImagePath_OnAnotherRamDisk_ReturnsImagePathOnRamDisk()
+    {
+        var other = MinimalOptions() with { MountPoint = Path.GetTempPath()[..2] };
+        var imagePath = Path.Combine(Path.GetTempPath(), "on-other-ramdisk.mdr");
+
+        var error = CreateDiskOptionsBuilder.ValidateImagePath(imagePath, "Z:", [other]);
+
+        Assert.Equal(CreateDiskValidationError.ImagePathOnRamDisk, error);
+    }
+
+    [Fact]
+    public void ValidateImagePath_AnotherDisksImage_ReturnsImagePathInUse()
+    {
+        var imagePath = Path.Combine(Path.GetTempPath(), "shared.mdr");
+        var other = MinimalOptions() with { PersistImagePath = imagePath };
+
+        var error = CreateDiskOptionsBuilder.ValidateImagePath(imagePath, "Z:", [other]);
+
+        Assert.Equal(CreateDiskValidationError.ImagePathInUse, error);
+    }
+
+    [Fact]
     public void Build_ReadOnlyWithoutImage_ReturnsReadOnlyRequiresImage()
     {
         var input = ValidCreateInput() with { IsReadOnly = true, ImagePathText = null };

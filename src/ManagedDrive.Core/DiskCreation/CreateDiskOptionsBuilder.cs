@@ -277,23 +277,10 @@ public static class CreateDiskOptionsBuilder
 
         if (imagePath != null)
         {
-            if (!IsValidImagePath(imagePath))
+            var imagePathError = ValidateImagePath(imagePath, mountPoint, input.OtherDisks);
+            if (imagePathError != CreateDiskValidationError.None)
             {
-                return Fail(CreateDiskValidationError.BadImagePath);
-            }
-
-            var availability = ValidateImagePathAvailable(imagePath, input.OtherDisks);
-            if (availability != CreateDiskValidationError.None)
-            {
-                return Fail(availability);
-            }
-
-            // Depends on the currently selected drive letter (which may change after the image
-            // file is picked), so this check stays here rather than at selection time.
-            var allMountPoints = input.OtherDisks.Select(d => d.MountPoint).Append(mountPoint);
-            if (allMountPoints.Any(mp => imagePath.StartsWith(mp, StringComparison.OrdinalIgnoreCase)))
-            {
-                return Fail(CreateDiskValidationError.ImagePathOnRamDisk);
+                return Fail(imagePathError);
             }
         }
 
@@ -398,6 +385,43 @@ public static class CreateDiskOptionsBuilder
             Password = passwordResult.Password,
             PasswordChanged = passwordResult.PasswordChanged,
         };
+    }
+
+    /// <summary>
+    /// Runs every check an image path must pass before a disk mounted at
+    /// <paramref name="mountPoint"/> may persist to it: a valid rooted path in an existing folder,
+    /// not a snapshot file, not another active disk's image, and not located on any RAM disk
+    /// (including the disk itself). Shared by <see cref="Build"/> and the "Save image" flow that
+    /// picks a path for a disk created without one.
+    /// </summary>
+    /// <param name="imagePath">The image file path to validate.</param>
+    /// <param name="mountPoint">The mount point of the disk that will persist to the image.</param>
+    /// <param name="otherDisks">Options of all other active disks.</param>
+    /// <returns>
+    /// <see cref="CreateDiskValidationError.None"/> when usable; otherwise the specific error.
+    /// </returns>
+    public static CreateDiskValidationError ValidateImagePath(string imagePath, string mountPoint, IReadOnlyList<DiskOptions> otherDisks)
+    {
+        if (!IsValidImagePath(imagePath))
+        {
+            return CreateDiskValidationError.BadImagePath;
+        }
+
+        var availability = ValidateImagePathAvailable(imagePath, otherDisks);
+        if (availability != CreateDiskValidationError.None)
+        {
+            return availability;
+        }
+
+        // Depends on the currently selected drive letter (which may change after the image
+        // file is picked), so this check runs at build time rather than at selection time.
+        var allMountPoints = otherDisks.Select(d => d.MountPoint).Append(mountPoint);
+        if (allMountPoints.Any(mp => imagePath.StartsWith(mp, StringComparison.OrdinalIgnoreCase)))
+        {
+            return CreateDiskValidationError.ImagePathOnRamDisk;
+        }
+
+        return CreateDiskValidationError.None;
     }
 
     /// <summary>
