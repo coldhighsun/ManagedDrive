@@ -54,6 +54,38 @@ public sealed class DirectoryEnumerationTests
         Assert.Equal(new[] { "file.txt" }, names);
     }
 
+    [Fact]
+    public void Build_MarkerIsDot_ResumesWithDotDotAndChildren()
+    {
+        var map = new FileNodeMap();
+        map.Add("\\", MakeDir());
+        map.Add("\\-early.txt", MakeFile());
+        map.Add("\\file.txt", MakeFile());
+
+        var names = Enumerate(map, "\\", pattern: null, marker: ".");
+
+        Assert.Equal(new[] { "..", "-early.txt", "file.txt" }, names);
+    }
+
+    [Theory]
+    [InlineData("-0001.txt")]
+    [InlineData(" leading-space.txt")]
+    [InlineData("(copy).txt")]
+    [InlineData(".!hidden")]
+    public void Build_MarkerIsChildSortingBeforeDots_ResumesAfterThatChildOnly(string earlyName)
+    {
+        // Such a child sorts before "." / ".." case-insensitively; it must still be treated as a
+        // child marker, or the next page restarts from the top and paging never ends.
+        var map = new FileNodeMap();
+        map.Add("\\", MakeDir());
+        map.Add("\\" + earlyName, MakeFile());
+        map.Add("\\file.txt", MakeFile());
+
+        var names = Enumerate(map, "\\", pattern: null, marker: earlyName);
+
+        Assert.Equal(new[] { "file.txt" }, names);
+    }
+
     private static List<string> Enumerate(FileNodeMap map, string dirPath, string? pattern, string? marker)
     {
         map.TryGet(dirPath, out var dir);

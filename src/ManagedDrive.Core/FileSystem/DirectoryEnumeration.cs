@@ -25,17 +25,21 @@ internal static class DirectoryEnumeration
     {
         var entries = new List<(string Name, FileInfo Info)>();
 
+        // The marker is matched against "." and ".." exactly, not by sort order: children are
+        // ordered case-insensitively, so a real child can sort before "." or ".." (e.g. names
+        // starting with a space, '-', '!' or '(') — comparing by order would re-emit the dot
+        // entries and restart the child list whenever such a child is the resume marker, making
+        // a paged enumeration return the same page forever.
+
         // "." — current directory
-        var addDot = marker == null ||
-                     string.Compare(".", marker, StringComparison.OrdinalIgnoreCase) > 0;
+        var addDot = marker == null;
         if (addDot)
         {
             entries.Add((".", dir.FileInfo));
         }
 
         // ".." — parent directory
-        var addDotDot = marker == null ||
-                        string.Compare("..", marker, StringComparison.OrdinalIgnoreCase) > 0;
+        var addDotDot = marker is null or ".";
         if (addDotDot)
         {
             var parentNode = dir;
@@ -55,13 +59,8 @@ internal static class DirectoryEnumeration
             entries.Add(("..", parentNode.FileInfo));
         }
 
-        // Pass marker to GetChildren only when it names a real child (i.e., it follows "..")
-        string? childMarker = null;
-        if (marker != null &&
-            string.Compare(marker, "..", StringComparison.OrdinalIgnoreCase) > 0)
-        {
-            childMarker = marker;
-        }
+        // Pass marker to GetChildren only when it names a real child
+        var childMarker = marker is null or "." or ".." ? null : marker;
 
         var children = nodeMap.GetChildren(dir.FilePath, childMarker);
         entries.Capacity = entries.Count + children.Count;
