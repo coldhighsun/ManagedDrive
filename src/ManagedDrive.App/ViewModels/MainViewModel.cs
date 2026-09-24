@@ -19,6 +19,15 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     private readonly SettingsStore _settingsStore;
 
     /// <summary>
+    /// Saved auto-mount profiles that failed to mount this session (image on an unplugged drive,
+    /// cancelled password prompt, drive letter taken, ...). <see cref="SaveSettings"/> keeps
+    /// writing them back so one failed startup doesn't permanently delete the disk's profile;
+    /// a profile is dropped once a mounted disk supersedes it (see <see cref="MergeProfiles"/>).
+    /// Only touched on the UI thread.
+    /// </summary>
+    private readonly List<DiskProfile> _unmountedProfiles = [];
+
+    /// <summary>
     /// Initializes a new <see cref="MainViewModel"/> using the supplied mount manager and settings store.
     /// </summary>
     /// <param name="mountManager">The application-wide mount manager.</param>
@@ -464,6 +473,40 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     public IEnumerable<DiskProfile> GetProfiles() => Disks.Select(vm => ToProfile(vm.Disk.Options));
 
     /// <summary>
+    /// Combines the profiles of the mounted disks with saved profiles that failed to mount, so the
+    /// latter survive a settings save. A not-mounted profile is dropped when a mounted disk
+    /// supersedes it: same mount point (the drive letter now belongs to that disk, and keeping
+    /// both would make them race for it on the next startup), or same backing image or archive
+    /// (the same disk was mounted again, possibly at another letter).
+    /// </summary>
+    /// <param name="mounted">Profiles of the currently mounted disks; always kept, in order.</param>
+    /// <param name="unmounted">Saved profiles that failed to mount.</param>
+    /// <returns>
+    /// <paramref name="mounted"/> followed by every profile in <paramref name="unmounted"/> that
+    /// isn't superseded by one of them.
+    /// </returns>
+    internal static List<DiskProfile> MergeProfiles(IReadOnlyList<DiskProfile> mounted, IEnumerable<DiskProfile> unmounted)
+    {
+        var merged = mounted.ToList();
+        foreach (var profile in unmounted)
+        {
+            if (!merged.Any(p => Supersedes(p, profile)))
+            {
+                merged.Add(profile);
+            }
+        }
+        return merged;
+
+        static bool Supersedes(DiskProfile kept, DiskProfile candidate) =>
+            string.Equals(kept.MountPoint, candidate.MountPoint, StringComparison.OrdinalIgnoreCase) ||
+            SamePath(kept.PersistImagePath, candidate.PersistImagePath) ||
+            SamePath(kept.SourceArchivePath, candidate.SourceArchivePath);
+
+        static bool SamePath(string? a, string? b) =>
+            a != null && b != null && string.Equals(a, b, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
     /// Maps a live disk's <see cref="DiskOptions"/> to its persistable <see cref="DiskProfile"/>
     /// counterpart. Inverse of <see cref="ProfileToOptions"/>; kept as a standalone pure function
     /// (rather than inlined in <see cref="GetProfiles"/>) so both directions of this hand-written
@@ -598,6 +641,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
                 _logger.LogWarning("Auto-mount failed for {MountPoint}.", profile.MountPoint);
                 StatusText = Loc.Format("Status.AutoMountFailed", profile.MountPoint, Loc.Get("Status.MountFailed"));
                 ResetTempIfPointingAt(profile.MountPoint);
+                _unmountedProfiles.Add(profile);
                 return false;
             }
 
@@ -610,6 +654,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             _logger.LogError(ex, "Auto-mount failed for {MountPoint}.", profile.MountPoint);
             StatusText = Loc.Format("Status.AutoMountFailed", profile.MountPoint, ex.Message);
             ResetTempIfPointingAt(profile.MountPoint);
+            _unmountedProfiles.Add(profile);
             return false;
         }
     }
@@ -1403,9 +1448,15 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             ByteFormatter.Format(totalBytes));
     }
 
+    /// <summary>
+    /// Persists the application settings, including a profile for every mounted disk plus every
+    /// auto-mount profile that failed to mount this session and hasn't been superseded since.
+    /// </summary>
     internal void SaveSettings()
     {
         var current = _settingsStore.Load();
+        var profiles = MergeProfiles(GetProfiles().ToList(), _unmountedProfiles);
+        _unmountedProfiles.RemoveAll(p => !profiles.Contains(p));
         _settingsStore.Save(new()
         {
             RunAtStartup = StartupManager.IsEnabled,
@@ -1413,7 +1464,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             CloseToTray = current.CloseToTray,
             Language = LanguageManager.Instance.SavedLanguage,
             Theme = ThemeManager.Instance.SavedTheme,
-            Disks = GetProfiles().ToList(),
+            Disks = profiles,
             TempDirCompatWarningShown = current.TempDirCompatWarningShown,
             ContextMenuEnabled = current.ContextMenuEnabled,
             AutoCheckForUpdates = current.AutoCheckForUpdates,
