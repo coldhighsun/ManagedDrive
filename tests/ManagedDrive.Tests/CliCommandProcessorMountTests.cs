@@ -29,6 +29,83 @@ public class CliCommandProcessorMountTests
     }
 
     [Fact]
+    public async Task Mount_RelativeImagePathWithWorkingDirectory_ResolvesAgainstWorkingDirectory()
+    {
+        var imagePath = CreateTempImageFile();
+        try
+        {
+            var controller = new FakeCliDiskController { MountSuccess = true };
+
+            var outcome = await CliCommandProcessor.ExecuteAsync(
+                ["mount", Path.GetFileName(imagePath), "R:"],
+                controller,
+                Path.GetDirectoryName(imagePath));
+
+            Assert.True(outcome.Success);
+            Assert.Equal(imagePath, controller.LastImagePath);
+        }
+        finally
+        {
+            File.Delete(imagePath);
+        }
+    }
+
+    [Fact]
+    public async Task Mount_RelativePasswordFileWithWorkingDirectory_ReadsFileFromWorkingDirectory()
+    {
+        var imagePath = CreateTempImageFile();
+        var passwordFile = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid()}.txt");
+        File.WriteAllText(passwordFile, "secret");
+        try
+        {
+            var controller = new FakeCliDiskController { MountSuccess = true };
+
+            var outcome = await CliCommandProcessor.ExecuteAsync(
+                ["mount", imagePath, "R:", "--password-file", Path.GetFileName(passwordFile)],
+                controller,
+                Path.GetDirectoryName(passwordFile));
+
+            Assert.True(outcome.Success);
+            Assert.Equal("secret", controller.LastOverrides?.Password);
+        }
+        finally
+        {
+            File.Delete(imagePath);
+            File.Delete(passwordFile);
+        }
+    }
+
+    [Theory]
+    [InlineData("disk.mdr", null, "disk.mdr")]
+    [InlineData("disk.mdr", "relative\\dir", "disk.mdr")]
+    [InlineData("C:\\images\\disk.mdr", "D:\\work", "C:\\images\\disk.mdr")]
+    [InlineData("..\\disk.mdr", "D:\\work\\sub", "D:\\work\\disk.mdr")]
+    [InlineData("\\images\\disk.mdr", "D:\\work", "D:\\images\\disk.mdr")]
+    [InlineData("", "D:\\work", "")]
+    [InlineData("   ", "D:\\work", "   ")]
+    public void ResolvePath_VariousInputs_ResolvesOnlyRelativePathsAgainstFullyQualifiedWorkingDirectory(
+        string path, string? workingDirectory, string expected)
+    {
+        var resolved = CliCommandProcessor.ResolvePath(path, workingDirectory);
+
+        Assert.Equal(expected, resolved);
+    }
+
+    [Fact]
+    public async Task Export_RelativeOutputPathWithWorkingDirectory_ResolvesAgainstWorkingDirectory()
+    {
+        var controller = new FakeCliDiskController { ExportSuccess = true };
+
+        var outcome = await CliCommandProcessor.ExecuteAsync(
+            ["export", "R:", "out\\disk.mdr"],
+            controller,
+            "D:\\work");
+
+        Assert.True(outcome.Success);
+        Assert.Equal("D:\\work\\out\\disk.mdr", controller.LastExportOutputPath);
+    }
+
+    [Fact]
     public async Task Mount_Failure_ReturnsErrorMessageAndNonZeroExitCode()
     {
         var imagePath = CreateTempImageFile();

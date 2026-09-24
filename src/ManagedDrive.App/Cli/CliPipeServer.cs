@@ -185,7 +185,7 @@ public sealed class CliPipeServer(MainViewModel mainViewModel) : IDisposable
             return;
         }
 
-        var args = CliPipeProtocol.DeserializeRequest(requestJson);
+        var request = CliPipeProtocol.DeserializeRequest(requestJson);
 
         // Marshal onto the UI thread: CliCommandProcessor calls into MainViewModel (via
         // _diskController), which mutates the WPF-bound Disks collection and must not be
@@ -193,7 +193,7 @@ public sealed class CliPipeServer(MainViewModel mainViewModel) : IDisposable
         // can legitimately run long — but still bounded by CommandExecutionTimeout so a command
         // stuck behind a blocked UI thread can't wedge every later CLI invocation behind it forever.
         var executeTask = Application.Current.Dispatcher.InvokeAsync(
-            () => CliCommandProcessor.ExecuteAsync(args, _diskController)).Task.Unwrap();
+            () => CliCommandProcessor.ExecuteAsync(request.Args, _diskController, request.WorkingDirectory)).Task.Unwrap();
 
         CliOutcome result;
         try

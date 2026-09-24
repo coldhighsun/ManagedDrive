@@ -6,22 +6,42 @@ namespace ManagedDrive.Tests;
 public class CliPipeProtocolTests
 {
     [Fact]
-    public void SerializeRequest_ThenDeserializeRequest_RoundTripsArgs()
+    public void SerializeRequest_ThenDeserializeRequest_RoundTripsArgsAndWorkingDirectory()
     {
         string[] args = ["mount", "C:\\disks\\test.mdr", "R:", "--read-only"];
 
-        var json = CliPipeProtocol.SerializeRequest(args);
+        var json = CliPipeProtocol.SerializeRequest(args, "D:\\work");
         var roundTripped = CliPipeProtocol.DeserializeRequest(json);
 
-        Assert.Equal(args, roundTripped);
+        Assert.Equal(args, roundTripped.Args);
+        Assert.Equal("D:\\work", roundTripped.WorkingDirectory);
     }
 
     [Fact]
-    public void DeserializeRequest_NullJsonLiteral_ReturnsEmptyArray()
+    public void DeserializeRequest_LegacyBareArgsArray_ReturnsArgsWithoutWorkingDirectory()
+    {
+        var result = CliPipeProtocol.DeserializeRequest("[\"list\",\"--json\"]");
+
+        Assert.Equal(["list", "--json"], result.Args);
+        Assert.Null(result.WorkingDirectory);
+    }
+
+    [Fact]
+    public void DeserializeRequest_NullJsonLiteral_ReturnsEmptyRequest()
     {
         var result = CliPipeProtocol.DeserializeRequest("null");
 
-        Assert.Empty(result);
+        Assert.Empty(result.Args);
+        Assert.Null(result.WorkingDirectory);
+    }
+
+    [Fact]
+    public void DeserializeRequest_ObjectWithoutArgs_ReturnsEmptyArgs()
+    {
+        var result = CliPipeProtocol.DeserializeRequest("{\"WorkingDirectory\":\"C:\\\\\"}");
+
+        Assert.Empty(result.Args);
+        Assert.Equal("C:\\", result.WorkingDirectory);
     }
 
     [Fact]

@@ -13,12 +13,10 @@ public static class Program
     private const int LaunchWaitTimeoutMs = 10_000;
     private const int RetryIntervalMs = 200;
 
-    private static readonly string[] PathArgCommands = ["mount", "mount-archive"];
-
+    // Relative path arguments need no rewriting here: CliPipeClient sends this process's working
+    // directory along with the args, and the app resolves paths against it.
     public static async Task<int> Main(string[] args)
     {
-        args = ResolvePathArgument(args);
-
         if (CliPipeClient.TrySend(args, out var response))
         {
             return CliOutputRenderer.Render(response);
@@ -43,25 +41,6 @@ public static class Program
 
         await Console.Error.WriteLineAsync("Timed out waiting for ManagedDrive to start.");
         return 1;
-    }
-
-    /// <summary>
-    /// Resolves the image/archive path argument of a <c>mount</c>/<c>mount-archive</c> command to
-    /// an absolute path before it's sent over the named pipe. <paramref name="args"/> is parsed
-    /// by <c>System.CommandLine</c> inside the <c>ManagedDrive.exe</c> process, so a relative
-    /// path would otherwise resolve against that process's working directory instead of the
-    /// shell the user actually invoked <c>mdrive</c> from.
-    /// </summary>
-    private static string[] ResolvePathArgument(string[] args)
-    {
-        if (args.Length < 2 || !PathArgCommands.Contains(args[0]) || args[1].StartsWith('-'))
-        {
-            return args;
-        }
-
-        var resolved = (string[])args.Clone();
-        resolved[1] = Path.GetFullPath(args[1]);
-        return resolved;
     }
 
     private static bool TryLaunchApp()
