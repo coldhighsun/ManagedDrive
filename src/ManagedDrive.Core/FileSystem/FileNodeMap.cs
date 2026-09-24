@@ -794,6 +794,13 @@ public sealed class FileNodeMap : IDisposable
     /// <returns><c>true</c> if applied; <c>false</c> if it would have exceeded capacity (nothing changed).</returns>
     public bool TryUpdateAllocationSizeWithinCapacity(FileNode node, ulong newAllocationSize, ulong maxCapacity)
     {
+        if (newAllocationSize > maxCapacity)
+        {
+            // Can never fit. Also keeps a size of 2^63 or more away from the signed delta below,
+            // where it would turn negative and be applied as a "shrink" that bypasses the check.
+            return false;
+        }
+
         _syncRoot.EnterReadLock();
         try
         {
