@@ -1598,7 +1598,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             Owner = Application.Current.MainWindow
         };
 
-        if (dialog.ShowDialog() != true)
+        if (dialog.ShowDialog() != true || !IsStillMounted(vm))
         {
             return;
         }
@@ -1612,7 +1612,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
                 Owner = Application.Current.MainWindow
             };
 
-            if (confirm.ShowDialog() != true)
+            if (confirm.ShowDialog() != true || !IsStillMounted(vm) || !IsStillMounted(target))
             {
                 return;
             }
@@ -1697,7 +1697,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             Owner = Application.Current.MainWindow
         };
 
-        if (dialog.ShowDialog() != true)
+        if (dialog.ShowDialog() != true || !IsStillMounted(vm))
         {
             return;
         }
@@ -1717,7 +1717,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
                 Owner = Application.Current.MainWindow
             };
 
-            if (confirmRemove.ShowDialog() != true)
+            if (confirmRemove.ShowDialog() != true || !IsStillMounted(vm))
             {
                 return;
             }
@@ -1742,7 +1742,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
                 Owner = Application.Current.MainWindow
             };
 
-            if (confirm.ShowDialog() != true)
+            if (confirm.ShowDialog() != true || !IsStillMounted(vm))
             {
                 return;
             }
@@ -1870,7 +1870,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             Owner = Application.Current.MainWindow
         };
 
-        if (confirm.ShowDialog() != true)
+        if (confirm.ShowDialog() != true || !IsStillMounted(vm))
         {
             return;
         }
@@ -2074,6 +2074,11 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         }
 
         var snapshots = await Task.Run(() => SnapshotManager.ListSnapshots(imagePath));
+        if (!IsStillMounted(vm))
+        {
+            return;
+        }
+
         if (snapshots.Count == 0)
         {
             ShowInfo(Loc.Get("Msg.NoSnapshotsAvailable"));
@@ -2085,7 +2090,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             Owner = Application.Current.MainWindow
         };
 
-        if (dialog.ShowDialog() != true || dialog.SelectedSnapshotPath is not { } selectedPath)
+        if (dialog.ShowDialog() != true || dialog.SelectedSnapshotPath is not { } selectedPath || !IsStillMounted(vm))
         {
             return;
         }
@@ -2097,7 +2102,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             Owner = Application.Current.MainWindow
         };
 
-        if (confirm.ShowDialog() != true)
+        if (confirm.ShowDialog() != true || !IsStillMounted(vm))
         {
             return;
         }
@@ -2135,7 +2140,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
                 OverwritePrompt = true,
             };
 
-            if (dlg.ShowDialog() != true)
+            if (dlg.ShowDialog() != true || !IsStillMounted(vm))
             {
                 return;
             }
@@ -2252,7 +2257,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
                 {
                     Owner = Application.Current.MainWindow
                 };
-                if (warn.ShowDialog() != true)
+                if (warn.ShowDialog() != true || !IsStillMounted(vm))
                 {
                     return;
                 }
@@ -2301,7 +2306,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             confirm.ShowOption(Loc.Get("Msg.DeleteImageOption"));
         }
 
-        if (confirm.ShowDialog() != true)
+        if (confirm.ShowDialog() != true || !IsStillMounted(vm))
         {
             return;
         }
@@ -2327,6 +2332,27 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         SaveSettings();
         StatusText = Loc.Format("Status.Unmounted", mountPoint);
         _logger.LogInformation("Unmount completed for {MountPoint}.", mountPoint);
+    }
+
+    /// <summary>
+    /// Returns whether <paramref name="vm"/> is still in <see cref="Disks"/>. A modal dialog keeps
+    /// pumping the dispatcher, so a CLI command or tray action can unmount the disk while one is
+    /// open; a handler that acts on a disk after a dialog (or an await) must re-check, or it would
+    /// operate on a disposed disk, or, for unmount/remount, on whatever disk has since been
+    /// mounted at the same drive letter. Surfaces the reason via <see cref="StatusText"/>.
+    /// </summary>
+    /// <param name="vm">The disk the pending action targets.</param>
+    /// <returns><c>true</c> if the disk is still mounted; otherwise <c>false</c>.</returns>
+    private bool IsStillMounted(DiskViewModel vm)
+    {
+        if (Disks.Contains(vm))
+        {
+            return true;
+        }
+
+        _logger.LogInformation("Disk {MountPoint} was unmounted while a dialog was open; dropping the pending action.", vm.MountPoint);
+        StatusText = Loc.Format("Status.DiskNoLongerMounted", vm.MountPoint);
+        return false;
     }
 
     private void ExecuteViewDiskContents(DiskViewModel? vm)
