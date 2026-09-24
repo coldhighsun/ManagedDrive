@@ -561,6 +561,30 @@ public sealed class DiskImageSerializerTests
         }
     }
 
+    [Fact]
+    public void Load_UncompressedImageTruncatedInsideFileData_ThrowsInvalidDataException()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid()}.mdr");
+        try
+        {
+            var map = new FileNodeMap();
+            map.Add("\\", MakeDir());
+            map.Add("\\File.txt", MakeFile(new byte[1000]));
+            DiskImageSerializer.Save(map, capacityBytes: 1024 * 1024, "MyLabel", path, ImageCompressionLevel.None);
+            using (var stream = new FileStream(path, FileMode.Open, FileAccess.Write))
+            {
+                stream.SetLength(stream.Length - 100);
+            }
+
+            Assert.Throws<InvalidDataException>(() =>
+                DiskImageSerializer.Load(path, out _, out _, password: null, out _));
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
     private static FileNode MakeDir() => new()
     {
         FileInfo = { FileAttributes = (uint)FileAttributes.Directory },

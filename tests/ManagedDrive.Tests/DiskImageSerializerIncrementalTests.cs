@@ -385,6 +385,42 @@ public sealed class DiskImageSerializerIncrementalTests
         }
     }
 
+    [Fact]
+    public void Save_ExistingImageTruncated_FallsBackToFullRewriteAndStillLoads()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid()}.mdr");
+        try
+        {
+            var map = new FileNodeMap();
+            map.Add("\\", MakeDir());
+            for (var i = 0; i < 4; i++)
+            {
+                map.Add($"\\File{i}.txt", MakeFile(System.Text.Encoding.UTF8.GetBytes($"content {i}")));
+            }
+
+            DiskImageSerializer.SaveSegmentedIncrementalForTest(map, 1024 * 1024, "Label", path,
+                ImageCompressionLevel.Fastest, encryption: null, segmentTargetBytes: 1);
+            using (var stream = new FileStream(path, FileMode.Open, FileAccess.Write))
+            {
+                stream.SetLength(stream.Length - 10);
+            }
+
+            // Every node is still clean, so without the size check this would try to copy every
+            // old segment verbatim and hit EOF in the last one — on this save and every one after.
+            DiskImageSerializer.SaveSegmentedIncrementalForTest(map, 1024 * 1024, "Label", path,
+                ImageCompressionLevel.Fastest, encryption: null, segmentTargetBytes: 1);
+
+            var loaded = DiskImageSerializer.Load(path, out _, out _, password: null, out _);
+            Assert.Equal(5, loaded.Count);
+            Assert.True(loaded.TryGet("\\File3.txt", out var node));
+            Assert.Equal("content 3"u8.ToArray(), node!.FileData!.ToArray((long)node.FileInfo.FileSize));
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
     private static FileNode MakeDir() => new()
     {
         FileInfo = { FileAttributes = (uint)FileAttributes.Directory },
