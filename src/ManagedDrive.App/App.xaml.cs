@@ -116,7 +116,14 @@ public partial class App
             return;
         }
 
-        CheckWinFspPrerequisite();
+        if (!CheckWinFspPrerequisite())
+        {
+            // Shutdown() only queues the exit; return so nothing below runs — in particular no
+            // MainViewModel gets created, so App_Exit has no (empty) disk list to save over the
+            // user's settings.
+            Shutdown();
+            return;
+        }
 
         _mountManager = new();
         _sessionEndingSaveHandler = new(
@@ -228,11 +235,17 @@ public partial class App
         }
     }
 
-    private void CheckWinFspPrerequisite()
+    /// <summary>
+    /// Verifies WinFsp is installed; if not, tells the user and offers to open its download page.
+    /// </summary>
+    /// <returns>
+    /// <c>true</c> if WinFsp is installed and startup can continue; <c>false</c> if the app must exit.
+    /// </returns>
+    private static bool CheckWinFspPrerequisite()
     {
         if (WinFspPrerequisite.IsInstalled())
         {
-            return;
+            return true;
         }
 
         var result = MessageBox.Show(
@@ -246,7 +259,7 @@ public partial class App
             Process.Start(new ProcessStartInfo("https://github.com/winfsp/winfsp/releases/tag/v2.2B4") { UseShellExecute = true });
         }
 
-        Shutdown();
+        return false;
     }
 
     /// <summary>
