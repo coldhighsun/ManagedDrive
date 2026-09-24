@@ -1,4 +1,5 @@
 using ManagedDrive.Cli.Core;
+using ManagedDrive.HelperProtocol;
 using System.IO.Pipes;
 
 namespace ManagedDrive.App.Cli;
@@ -13,6 +14,16 @@ namespace ManagedDrive.App.Cli;
 /// </summary>
 public sealed class CliPipeServer(MainViewModel mainViewModel) : IDisposable
 {
+    /// <summary>
+    /// Upper bound on reading the request line and writing the response line of a single
+    /// connection — not on the command execution in between, which may legitimately take a while
+    /// (e.g. exporting a large disk) and is bounded instead by the client's own read timeout. Guards
+    /// the single-instance accept loop against a connected client that never sends anything (or
+    /// never reads the reply), which would otherwise wedge every other local CLI invocation behind
+    /// it until this process exits.
+    /// </summary>
+    private static readonly TimeSpan PerIoTimeout = TimeSpan.FromSeconds(30);
+
     private readonly CancellationTokenSource _cts = new();
     private readonly ICliDiskController _diskController = new MainViewModelCliDiskController(mainViewModel);
     private Task? _acceptLoop;
@@ -88,7 +99,10 @@ public sealed class CliPipeServer(MainViewModel mainViewModel) : IDisposable
         await using var writer = new StreamWriter(pipe, leaveOpen: true);
         writer.AutoFlush = true;
 
-        var requestJson = await reader.ReadLineAsync(ct);
+        // Either the connected client never sent a request within PerIoTimeout, or the accept
+        // loop itself is shutting down — either way, drop this connection without blocking the
+        // next one.
+        var requestJson = await PipeIo.ReadLineWithTimeoutAsync(reader, PerIoTimeout, ct);
         if (requestJson == null)
         {
             return;
@@ -98,10 +112,15 @@ public sealed class CliPipeServer(MainViewModel mainViewModel) : IDisposable
 
         // Marshal onto the UI thread: CliCommandProcessor calls into MainViewModel (via
         // _diskController), which mutates the WPF-bound Disks collection and must not be
-        // touched from this pipe thread.
+        // touched from this pipe thread. Not subject to PerIoTimeout — command execution itself
+        // can legitimately run long.
         var result = await Application.Current.Dispatcher.InvokeAsync(
             () => CliCommandProcessor.ExecuteAsync(args, _diskController)).Task.Unwrap();
 
-        await writer.WriteLineAsync(CliPipeProtocol.SerializeResponse(new(result.Success, result.Message, result.Disks, result.ExitCode, result.Snapshots, result.Json)));
+        await PipeIo.WriteLineWithTimeoutAsync(
+            writer,
+            CliPipeProtocol.SerializeResponse(new(result.Success, result.Message, result.Disks, result.ExitCode, result.Snapshots, result.Json)),
+            PerIoTimeout,
+            ct);
     }
 }
