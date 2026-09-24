@@ -130,7 +130,7 @@ public static class ArchiveNodeMapBuilder
             {
                 if (!entry.IsDirectory)
                 {
-                    total += (ulong)entry.Size;
+                    total += (ulong)RequireNonNegativeSize(entry);
                 }
             }
 
@@ -146,7 +146,9 @@ public static class ArchiveNodeMapBuilder
 
     private static void AddFile(FileNodeMap nodeMap, string path, Func<Stream> openEntryStream, IEntry entry, ulong timestamp)
     {
-        var size = (ulong)entry.Size;
+        RequireNoTypeConflict(nodeMap, path, expectDirectory: false);
+
+        var size = (ulong)RequireNonNegativeSize(entry);
         var allocationSize = FileNode.AlignToAllocationUnit(size);
         var data = FileContent.CreateZeroed(allocationSize);
 
@@ -175,6 +177,22 @@ public static class ArchiveNodeMapBuilder
         nodeMap.Add(path, node);
     }
 
+    /// <summary>
+    /// Returns <see cref="IEntry.Size"/>, rejecting a negative value up front. A negative size
+    /// (from a corrupted or maliciously crafted archive header) would otherwise wrap to a huge
+    /// <see cref="ulong"/> once cast, triggering a multi-exabyte allocation attempt instead of a
+    /// clean "invalid archive" error.
+    /// </summary>
+    private static long RequireNonNegativeSize(IEntry entry)
+    {
+        if (entry.Size < 0)
+        {
+            throw new InvalidDataException($"Archive entry '{entry.Key}' has an invalid negative size ({entry.Size}).");
+        }
+
+        return entry.Size;
+    }
+
     private static void EnsureAncestorDirectories(FileNodeMap nodeMap, string path, ulong timestamp)
     {
         var separatorIndex = path.IndexOf('\\', 1);
@@ -187,12 +205,33 @@ public static class ArchiveNodeMapBuilder
 
     private static void EnsureDirectory(FileNodeMap nodeMap, string path, ulong timestamp)
     {
-        if (nodeMap.TryGet(path, out _))
+        if (RequireNoTypeConflict(nodeMap, path, expectDirectory: true) is not null)
         {
+            // Already exists and is a directory (RequireNoTypeConflict would have thrown
+            // otherwise) — nothing to do.
             return;
         }
 
         nodeMap.Add(path, NewDirectoryNode(timestamp));
+    }
+
+    /// <summary>
+    /// Throws if a node already exists at <paramref name="path"/> whose <see cref="FileNode.IsDirectory"/>
+    /// doesn't match <paramref name="expectDirectory"/> — an archive that uses the same path as both
+    /// a file and a directory. Returns the existing node (or <see langword="null"/> if nothing is
+    /// there yet) so callers that also need to know whether something already exists don't have to
+    /// look it up a second time.
+    /// </summary>
+    private static FileNode? RequireNoTypeConflict(FileNodeMap nodeMap, string path, bool expectDirectory)
+    {
+        nodeMap.TryGet(path, out var existing);
+
+        if (existing is { } node && node.IsDirectory != expectDirectory)
+        {
+            throw new InvalidDataException($"Archive entry '{path}' is used as both a file and a directory.");
+        }
+
+        return existing;
     }
 
     private static void EnsureRoot(FileNodeMap nodeMap, ulong timestamp)
