@@ -585,6 +585,38 @@ public sealed class DiskImageSerializerTests
         }
     }
 
+    [Fact]
+    public void Unwrap_SeveralWorkersCancelled_ThrowsSingleOperationCanceledException()
+    {
+        var aggregate = new AggregateException(new OperationCanceledException(), new OperationCanceledException());
+
+        Assert.Throws<OperationCanceledException>(() => DiskImageSerializer.Unwrap(aggregate));
+    }
+
+    [Fact]
+    public void Unwrap_CancellationAlongsideOneFailure_ThrowsTheFailure()
+    {
+        var failure = new IOException("disk full");
+        var aggregate = new AggregateException(new OperationCanceledException(), failure);
+
+        var thrown = Assert.Throws<IOException>(() => DiskImageSerializer.Unwrap(aggregate));
+
+        Assert.Same(failure, thrown);
+    }
+
+    [Fact]
+    public void Unwrap_SeveralFailures_ReturnsAggregateWithoutCancellations()
+    {
+        var aggregate = new AggregateException(
+            new IOException("a"), new OperationCanceledException(), new IOException("b"));
+
+        var result = DiskImageSerializer.Unwrap(aggregate);
+
+        var returned = Assert.IsType<AggregateException>(result);
+        Assert.Equal(2, returned.InnerExceptions.Count);
+        Assert.All(returned.InnerExceptions, e => Assert.IsType<IOException>(e));
+    }
+
     private static FileNode MakeDir() => new()
     {
         FileInfo = { FileAttributes = (uint)FileAttributes.Directory },
