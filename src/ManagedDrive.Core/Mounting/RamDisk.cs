@@ -384,7 +384,7 @@ public sealed class RamDisk : IDisposable
     /// <summary>
     /// Unmounts the disk and releases all resources. After disposal the disk is no longer
     /// accessible from the Windows shell. If an image path is configured, a final save is
-    /// performed before unmounting, unless nothing has changed since the last save.
+    /// performed once unmounted (so no late write is missed), unless nothing has changed since the last save.
     /// </summary>
     public void Dispose() => Dispose(null);
 
@@ -407,39 +407,28 @@ public sealed class RamDisk : IDisposable
             _autoSaveTimer?.Dispose();
             _autoSaveTimer = null;
 
-            if (Options.PersistImagePath != null)
+            try
             {
-                // Wait for any in-flight periodic save (or a SaveToImage() call that read
-                // _disposed as 0 just before the Exchange above) to finish, then perform the
-                // final save, so two saves never write to the image file at the same time.
-                lock (_autoSaveLock)
-                {
-                    try
-                    {
-                        if (NeedsExitSave())
-                        {
-                            SaveToImageCore(progress, CancellationToken.None);
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        // SaveToImage already raised SaveFailed before rethrowing, so UI
-                        // subscribers are notified; this is best-effort and must not throw
-                        // out of Dispose.
-                        Logger.LogWarning(ex, "Final save to '{ImagePath}' failed during Dispose", Options.PersistImagePath);
-                    }
-                }
+                // Unmount before the final save, not after: while the volume is still mounted,
+                // WinFsp callbacks can keep writing after the save has captured the tree, and
+                // those writes would be silently lost once the node map is disposed below.
+                //
+                // Deliberately not under _autoSaveLock: unmounting can block for as long as WinFsp
+                // takes to drain outstanding I/O (or an external process to release a handle on the
+                // volume), and holding the lock across that would stall every other _autoSaveLock-
+                // guarded operation on this disk (SetPassword, TryApplyOptions, a manual save, ...)
+                // for the same duration. Nothing here touches _fs.NodeMap or _cek/_password, so a
+                // SaveToImage() call that's still running (or starts) while this is in flight is
+                // safe — the save and cleanup below, which do touch them, wait for the same lock.
+                _host.Unmount();
+                _host.Dispose();
             }
-
-            // Deliberately not under _autoSaveLock: unmounting can block for as long as WinFsp
-            // takes to drain outstanding I/O (or an external process to release a handle on the
-            // volume), and holding the lock across that would stall every other _autoSaveLock-
-            // guarded operation on this disk (SetPassword, TryApplyOptions, a manual save, ...)
-            // for the same duration. Nothing here touches _fs.NodeMap or _cek/_password, so a
-            // SaveToImage() call that's still running (or starts) while this is in flight is
-            // safe — the finally block below, which does touch them, waits for the same lock.
-            _host.Unmount();
-            _host.Dispose();
+            finally
+            {
+                // Runs even if unmounting threw, so a failed unmount doesn't also cost the user
+                // their unsaved changes.
+                SaveOnDispose(progress);
+            }
         }
         finally
         {
@@ -462,6 +451,39 @@ public sealed class RamDisk : IDisposable
                 }
 
                 _password = null;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Performs <see cref="Dispose(IProgress{double}?)"/>'s final save, if an image path is
+    /// configured and <see cref="NeedsExitSave"/> says one is needed. Waits for any in-flight
+    /// periodic save (or a <see cref="SaveToImage"/> call that read <see cref="_disposed"/> as 0
+    /// just before Dispose set it) to finish first, so two saves never write to the image file at
+    /// the same time. Best-effort: a failure is logged, never thrown out of Dispose.
+    /// </summary>
+    /// <param name="progress">Optional progress reporter, updated with a fraction in [0, 1].</param>
+    private void SaveOnDispose(IProgress<double>? progress)
+    {
+        if (Options.PersistImagePath == null)
+        {
+            return;
+        }
+
+        lock (_autoSaveLock)
+        {
+            try
+            {
+                if (NeedsExitSave())
+                {
+                    SaveToImageCore(progress, CancellationToken.None);
+                }
+            }
+            catch (Exception ex)
+            {
+                // SaveToImageCore already raised SaveFailed before rethrowing, so UI subscribers
+                // are notified.
+                Logger.LogWarning(ex, "Final save to '{ImagePath}' failed during Dispose", Options.PersistImagePath);
             }
         }
     }
