@@ -231,7 +231,8 @@ public sealed class MemoryFileSystem : FileSystemBase
     /// Creates a new file or directory node.
     /// </summary>
     /// <returns>
-    /// STATUS_SUCCESS, STATUS_OBJECT_NAME_COLLISION, or STATUS_DISK_FULL.
+    /// STATUS_SUCCESS, STATUS_OBJECT_NAME_COLLISION, STATUS_OBJECT_PATH_NOT_FOUND,
+    /// STATUS_NOT_A_DIRECTORY, or STATUS_DISK_FULL.
     /// </returns>
     public override int Create(
         string fileName,
@@ -296,12 +297,20 @@ public sealed class MemoryFileSystem : FileSystemBase
             node.FileData = FileContent.CreateZeroed(aligned);
         }
 
-        // Checking headroom and adding the node happen under one NodeMap write-lock acquisition
-        // (see TryAddWithinCapacity), so two concurrent creates can't both pass a stale capacity
-        // check and together push the real total past _maxCapacity.
-        if (!NodeMap.TryAddWithinCapacity(fileName, node, _maxCapacity))
+        // Checking for a collision, the parent directory, and headroom, and adding the node, all
+        // happen under one NodeMap write-lock acquisition (see TryCreate): a concurrent create of
+        // the same name can't be replaced, a node can't land under a directory being deleted, and
+        // two concurrent creates can't both pass a stale capacity check.
+        switch (NodeMap.TryCreate(fileName, node, _maxCapacity))
         {
-            return STATUS_DISK_FULL;
+            case FileNodeMap.CreateResult.NameCollision:
+                return STATUS_OBJECT_NAME_COLLISION;
+            case FileNodeMap.CreateResult.ParentNotFound:
+                return STATUS_OBJECT_PATH_NOT_FOUND;
+            case FileNodeMap.CreateResult.ParentNotDirectory:
+                return STATUS_NOT_A_DIRECTORY;
+            case FileNodeMap.CreateResult.CapacityExceeded:
+                return STATUS_DISK_FULL;
         }
 
         MarkDirty();

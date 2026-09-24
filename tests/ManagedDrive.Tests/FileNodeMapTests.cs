@@ -625,6 +625,70 @@ public sealed class FileNodeMapTests
         Assert.Same(root, stored);
     }
 
+    [Fact]
+    public void TryCreate_ParentMissing_ReturnsParentNotFoundAndAddsNothing()
+    {
+        var map = new FileNodeMap();
+        map.Add("\\", MakeDir());
+
+        var result = map.TryCreate("\\gone\\child.txt", MakeFile(), ulong.MaxValue);
+
+        Assert.Equal(FileNodeMap.CreateResult.ParentNotFound, result);
+        Assert.Equal(1, map.Count);
+    }
+
+    [Fact]
+    public void TryCreate_ParentIsFile_ReturnsParentNotDirectory()
+    {
+        var map = new FileNodeMap();
+        map.Add("\\file.txt", MakeFile());
+
+        var result = map.TryCreate("\\file.txt\\child.txt", MakeFile(), ulong.MaxValue);
+
+        Assert.Equal(FileNodeMap.CreateResult.ParentNotDirectory, result);
+    }
+
+    [Fact]
+    public void TryCreate_PathAlreadyExists_ReturnsNameCollisionAndKeepsExistingNode()
+    {
+        var map = new FileNodeMap();
+        var existing = MakeFile();
+        map.Add("\\f", existing);
+
+        var result = map.TryCreate("\\f", MakeFile(), ulong.MaxValue);
+
+        Assert.Equal(FileNodeMap.CreateResult.NameCollision, result);
+        Assert.True(map.TryGet("\\f", out var stored));
+        Assert.Same(existing, stored);
+    }
+
+    [Fact]
+    public void TryCreate_ExceedingCapacity_ReturnsCapacityExceeded()
+    {
+        var map = new FileNodeMap();
+        var node = MakeFile();
+        node.FileInfo.AllocationSize = 8192;
+
+        var result = map.TryCreate("\\f", node, 4096);
+
+        Assert.Equal(FileNodeMap.CreateResult.CapacityExceeded, result);
+        Assert.Equal(0, map.Count);
+    }
+
+    [Fact]
+    public void TryCreate_UnderExistingDirectory_AddsNode()
+    {
+        var map = new FileNodeMap();
+        map.Add("\\d", MakeDir());
+        var node = MakeFile();
+
+        var result = map.TryCreate("\\d\\f", node, ulong.MaxValue);
+
+        Assert.Equal(FileNodeMap.CreateResult.Created, result);
+        Assert.True(map.TryGet("\\d\\f", out var stored));
+        Assert.Same(node, stored);
+    }
+
     private static FileNode MakeDir() => new()
     {
         FileInfo = { FileAttributes = (uint)FileAttributes.Directory },

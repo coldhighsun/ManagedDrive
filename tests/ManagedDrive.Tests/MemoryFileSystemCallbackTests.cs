@@ -42,6 +42,18 @@ public sealed class MemoryFileSystemCallbackTests
     }
 
     [Fact]
+    public void Create_ParentDirectoryMissing_ReturnsObjectPathNotFound()
+    {
+        var fs = new MemoryFileSystem(1024 * 1024, "Label");
+
+        var status = fs.Create("\\missing\\child.bin", 0, 0, (uint)FileAttributes.Normal, [], 0,
+            out _, out _, out _, out _);
+
+        Assert.Equal(unchecked((int)0xC000003A), status); // STATUS_OBJECT_PATH_NOT_FOUND
+        Assert.False(fs.NodeMap.TryGet("\\missing\\child.bin", out _));
+    }
+
+    [Fact]
     public void SetFileSize_ThroughHandleOpenedBeforeFormat_LeavesTotalAllocatedUnchanged()
     {
         var fs = new MemoryFileSystem(1024 * 1024, "Label");

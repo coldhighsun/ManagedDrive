@@ -77,30 +77,126 @@ public sealed class FileNodeMap : IDisposable
     }
 
     /// <summary>
-    /// Capacity-checked counterpart to <see cref="Add"/>: atomically verifies that
-    /// <paramref name="node"/>'s allocation size would not push the running total past
-    /// <paramref name="maxCapacity"/> and only then adds it, under one write-lock acquisition —
-    /// closing the same check-then-apply race <see cref="TryUpdateAllocationSizeWithinCapacity"/>
-    /// closes for growing an existing node.
+    /// Checked counterpart to <see cref="Add"/> for creating a new node: under one write-lock
+    /// acquisition, verifies that nothing already exists at <paramref name="filePath"/>, that its
+    /// parent directory exists, and that <paramref name="node"/>'s allocation size would not push
+    /// the running total past <paramref name="maxCapacity"/>, and only then adds it. Checking these
+    /// separately from the add would let a concurrent create of the same name be silently
+    /// replaced, a node be added under a directory being deleted (leaving it an unreachable
+    /// orphan), or two creates both pass a stale capacity check — the same check-then-apply race
+    /// <see cref="TryUpdateAllocationSizeWithinCapacity"/> closes for growing an existing node.
     /// </summary>
-    /// <returns><c>true</c> if added; <c>false</c> if it would have exceeded capacity (nothing changed).</returns>
-    public bool TryAddWithinCapacity(string filePath, FileNode node, ulong maxCapacity)
+    /// <param name="filePath">Absolute file-system path of the new node.</param>
+    /// <param name="node">The file node to store.</param>
+    /// <param name="maxCapacity">The volume's capacity ceiling, in bytes.</param>
+    /// <returns><see cref="CreateResult.Created"/> if added; otherwise why not (nothing changed).</returns>
+    public CreateResult TryCreate(string filePath, FileNode node, ulong maxCapacity)
     {
         _syncRoot.EnterWriteLock();
         try
         {
+            if (_map.ContainsKey(filePath))
+            {
+                return CreateResult.NameCollision;
+            }
+
+            switch (GetParentStateCore(filePath))
+            {
+                case ParentState.Missing:
+                    return CreateResult.ParentNotFound;
+                case ParentState.NotDirectory:
+                    return CreateResult.ParentNotDirectory;
+            }
+
             if ((ulong)Interlocked.Read(ref _totalAllocated) + node.FileInfo.AllocationSize > maxCapacity)
             {
-                return false;
+                return CreateResult.CapacityExceeded;
             }
 
             AddCore(filePath, node);
-            return true;
+            return CreateResult.Created;
         }
         finally
         {
             _syncRoot.ExitWriteLock();
         }
+    }
+
+    /// <summary>
+    /// Outcome of <see cref="TryCreate"/>, mirroring the cases <c>MemoryFileSystem.Create</c> must
+    /// translate into distinct NTSTATUS codes.
+    /// </summary>
+    public enum CreateResult
+    {
+        /// <summary>
+        /// The node was added.
+        /// </summary>
+        Created,
+
+        /// <summary>
+        /// A node already exists at the path.
+        /// </summary>
+        NameCollision,
+
+        /// <summary>
+        /// The parent directory doesn't exist (e.g. it was just deleted).
+        /// </summary>
+        ParentNotFound,
+
+        /// <summary>
+        /// The parent path names a file, not a directory.
+        /// </summary>
+        ParentNotDirectory,
+
+        /// <summary>
+        /// Adding the node would exceed the volume's capacity.
+        /// </summary>
+        CapacityExceeded,
+    }
+
+    /// <summary>
+    /// Whether the directory that would contain a given path exists, as reported by
+    /// <see cref="GetParentStateCore"/>.
+    /// </summary>
+    private enum ParentState
+    {
+        /// <summary>
+        /// The parent exists and is a directory.
+        /// </summary>
+        Directory,
+
+        /// <summary>
+        /// Nothing exists at the parent path.
+        /// </summary>
+        Missing,
+
+        /// <summary>
+        /// The parent path names a file.
+        /// </summary>
+        NotDirectory,
+    }
+
+    /// <summary>
+    /// Looks up the directory that would contain <paramref name="filePath"/>. The volume root always
+    /// counts as present: it is created when the file system initializes, before any path beneath it
+    /// can be created, and is never removed. Caller must hold the read (or write) lock.
+    /// </summary>
+    /// <param name="filePath">Absolute file-system path whose parent to check.</param>
+    /// <returns>The parent's state.</returns>
+    private ParentState GetParentStateCore(string filePath)
+    {
+        var lastSeparator = filePath.LastIndexOf('\\');
+        if (lastSeparator <= 0)
+        {
+            return ParentState.Directory;
+        }
+
+        if (!_map.TryGetValue(filePath[..lastSeparator], out var parent))
+        {
+            return ParentState.Missing;
+        }
+
+        return parent.IsDirectory ? ParentState.Directory : ParentState.NotDirectory;
     }
 
     /// <summary>
