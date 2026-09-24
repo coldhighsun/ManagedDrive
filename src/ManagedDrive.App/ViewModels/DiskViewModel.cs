@@ -575,8 +575,15 @@ public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
         }
     }
 
+    /// <summary>
+    /// Handler for <see cref="RamDisk.SaveFailed"/>, re-raised as <see cref="SaveFailed"/> on the
+    /// UI thread. Posted rather than invoked synchronously: <see cref="RamDisk"/> raises the event
+    /// while holding its auto-save lock (on a timer or save thread), and the UI thread itself
+    /// takes that lock for Format/SetPassword/TryApplyOptions/clone/restore — blocking here until
+    /// the UI thread is free would deadlock both threads whenever one of those is in flight.
+    /// </summary>
     private void OnDiskSaveFailed(object? sender, Exception ex) =>
-        Application.Current?.Dispatcher.Invoke(() => SaveFailed?.Invoke(this, ex));
+        Application.Current?.Dispatcher.InvokeAsync(() => SaveFailed?.Invoke(this, ex));
 
     private void OnPropertyChanged(string propertyName) =>
         PropertyChanged?.Invoke(this, new(propertyName));
