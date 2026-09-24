@@ -863,6 +863,14 @@ public sealed class MemoryFileSystem : FileSystemBase
             length = (uint)Math.Min(length, available);
         }
 
+        if (writeOffset > ulong.MaxValue - length)
+        {
+            // An offset this close to ulong.MaxValue can never fit within any real capacity;
+            // reject it before the addition below wraps around and is mistaken for a small,
+            // already-covered write.
+            return STATUS_DISK_FULL;
+        }
+
         var writeEnd = writeOffset + length;
         var originalFileSize = node.FileInfo.FileSize;
 
