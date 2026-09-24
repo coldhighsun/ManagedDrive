@@ -602,16 +602,26 @@ public static class DiskImageSerializer
     /// Unwraps an <see cref="AggregateException"/> thrown out of a <see cref="Parallel.For(int,int,Action{int})"/>
     /// segment-compression loop back down to the single original exception a caller of the old,
     /// sequential per-segment loop would have seen, preserving its original stack trace.
+    /// Cancellation is raised through progress reports, so several workers typically observe it at
+    /// once; their <see cref="OperationCanceledException"/>s are collapsed into one (or dropped in
+    /// favor of a single genuine failure alongside them), so callers that treat cancellation
+    /// differently from failure still see a plain cancellation rather than an aggregate.
     /// </summary>
-    private static Exception Unwrap(AggregateException ex)
+    internal static Exception Unwrap(AggregateException ex)
     {
-        var flattened = ex.Flatten();
-        if (flattened.InnerExceptions.Count == 1)
+        var inner = ex.Flatten().InnerExceptions;
+        var failures = inner.Where(e => e is not OperationCanceledException).ToList();
+        if (failures.Count == 0)
         {
-            ExceptionDispatchInfo.Capture(flattened.InnerExceptions[0]).Throw();
+            ExceptionDispatchInfo.Capture(inner[0]).Throw();
         }
 
-        return flattened;
+        if (failures.Count == 1)
+        {
+            ExceptionDispatchInfo.Capture(failures[0]).Throw();
+        }
+
+        return new AggregateException(failures);
     }
 
     /// <summary>
