@@ -305,6 +305,7 @@
     <sys:String x:Key="Msg.ExitConfirmTitle">ManagedDrive</sys:String>
     <sys:String x:Key="Msg.ExitConfirmBody">All mounted RAM disks will be unmounted and any unimaged data will be lost.&#x0a;&#x0a;Exit anyway?</sys:String>
     <sys:String x:Key="Msg.MountFailed">Failed to mount disk:&#x0a;{0}</sys:String>
+    <sys:String x:Key="Msg.SetPasswordFailed">Failed to set the password:&#x0a;{0}</sys:String>
     <sys:String x:Key="Msg.SaveImageFailed">Failed to save image:&#x0a;{0}</sys:String>
     <sys:String x:Key="Msg.SaveImageNoPath">No image path is configured for this disk.</sys:String>
     <sys:String x:Key="Msg.ImagePathOverwriteConfirmTitle">File Already Exists</sys:String>

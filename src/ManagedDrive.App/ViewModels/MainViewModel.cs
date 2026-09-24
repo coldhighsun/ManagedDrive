@@ -19,10 +19,14 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     private readonly SettingsStore _settingsStore;
 
     /// <summary>
-    /// Saved auto-mount profiles that failed to mount this session (image on an unplugged drive,
-    /// cancelled password prompt, drive letter taken, ...). <see cref="SaveSettings"/> keeps
-    /// writing them back so one failed startup doesn't permanently delete the disk's profile;
-    /// a profile is dropped once a mounted disk supersedes it (see <see cref="MergeProfiles"/>).
+    /// Saved profiles that are not mounted right now: every profile loaded at startup until it
+    /// mounts (see <see cref="RetainSavedProfiles"/>) — including auto-mount profiles still
+    /// waiting their turn and profiles with auto-mount turned off, which are never mounted at
+    /// startup — plus auto-mount profiles that failed to mount this session (image on an
+    /// unplugged drive, cancelled password prompt, drive letter taken, ...).
+    /// <see cref="SaveSettings"/> keeps writing them back so a save that happens before (or
+    /// instead of) their mount doesn't permanently delete the disk's profile; a profile is
+    /// dropped once a mounted disk supersedes it (see <see cref="MergeProfiles"/>).
     /// Only touched on the UI thread.
     /// </summary>
     private readonly List<DiskProfile> _unmountedProfiles = [];
@@ -33,11 +37,22 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     /// <param name="mountManager">The application-wide mount manager.</param>
     /// <param name="settingsStore">The settings store used by the Settings dialog.</param>
     /// <param name="logger">Logger resolved from the DI container built in <see cref="App"/>.</param>
-    public MainViewModel(MountManager mountManager, SettingsStore settingsStore, ILogger<MainViewModel> logger)
+    /// <param name="savedProfiles">
+    /// The disk profiles of the settings the caller loaded at startup, none of which is mounted yet.
+    /// </param>
+    public MainViewModel(
+        MountManager mountManager,
+        SettingsStore settingsStore,
+        ILogger<MainViewModel> logger,
+        IEnumerable<DiskProfile> savedProfiles)
     {
         _mountManager = mountManager;
         _settingsStore = settingsStore;
         _logger = logger;
+
+        // Before anything can call SaveSettings (startup dialogs, tray commands, the auto-mount
+        // loop): none of these profiles is mounted yet.
+        RetainSavedProfiles(savedProfiles);
 
         StatusText = Loc.Get("Status.Ready");
 
@@ -473,14 +488,18 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     public IEnumerable<DiskProfile> GetProfiles() => Disks.Select(vm => ToProfile(vm.Disk.Options));
 
     /// <summary>
-    /// Combines the profiles of the mounted disks with saved profiles that failed to mount, so the
+    /// Combines the profiles of the mounted disks with saved profiles that aren't mounted, so the
     /// latter survive a settings save. A not-mounted profile is dropped when a mounted disk
-    /// supersedes it: same mount point (the drive letter now belongs to that disk, and keeping
-    /// both would make them race for it on the next startup), or same backing image or archive
-    /// (the same disk was mounted again, possibly at another letter).
+    /// supersedes it: same backing image or archive (the same disk was mounted again, possibly at
+    /// another letter), or same mount point when the profile is identified by its letter — it
+    /// auto-mounts (keeping both would make them race for the letter on the next startup), or has
+    /// no backing file (a non-persistent disk has nothing but its letter to tell it apart, so
+    /// keeping it would pile up a copy per session). A backed profile with auto-mount off is kept
+    /// even when another disk now uses its letter: it never claims the letter by itself, and
+    /// dropping it would silently lose the options remembered for its image.
     /// </summary>
     /// <param name="mounted">Profiles of the currently mounted disks; always kept, in order.</param>
-    /// <param name="unmounted">Saved profiles that failed to mount.</param>
+    /// <param name="unmounted">Saved profiles that aren't mounted.</param>
     /// <returns>
     /// <paramref name="mounted"/> followed by every profile in <paramref name="unmounted"/> that
     /// isn't superseded by one of them.
@@ -496,15 +515,47 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             }
         }
         return merged;
+    }
 
-        static bool Supersedes(DiskProfile kept, DiskProfile candidate) =>
-            string.Equals(kept.MountPoint, candidate.MountPoint, StringComparison.OrdinalIgnoreCase) ||
-            SamePath(kept.PersistImagePath, candidate.PersistImagePath) ||
-            SamePath(kept.SourceArchivePath, candidate.SourceArchivePath);
+    /// <summary>
+    /// Drops from <paramref name="unmounted"/> every profile that <paramref name="mounted"/>
+    /// supersedes (by the rules of <see cref="MergeProfiles"/>). Called whenever a disk is added,
+    /// however it was mounted, so a superseded profile doesn't come back once that disk is
+    /// unmounted again (e.g. with its image deleted).
+    /// </summary>
+    /// <param name="unmounted">Saved profiles that aren't mounted; modified in place.</param>
+    /// <param name="mounted">Profile of the disk that was just mounted.</param>
+    internal static void RemoveSupersededProfiles(List<DiskProfile> unmounted, DiskProfile mounted) =>
+        unmounted.RemoveAll(profile => Supersedes(mounted, profile));
+
+    /// <summary>
+    /// Whether the mounted disk's profile <paramref name="kept"/> makes the not-mounted
+    /// <paramref name="candidate"/> obsolete; see <see cref="MergeProfiles"/>.
+    /// </summary>
+    /// <param name="kept">Profile of a mounted disk.</param>
+    /// <param name="candidate">A saved profile that isn't mounted.</param>
+    /// <returns><c>true</c> if <paramref name="candidate"/> should no longer be saved.</returns>
+    private static bool Supersedes(DiskProfile kept, DiskProfile candidate)
+    {
+        return SamePath(kept.PersistImagePath, candidate.PersistImagePath) ||
+            SamePath(kept.SourceArchivePath, candidate.SourceArchivePath) ||
+            (IsIdentifiedByLetter(candidate) &&
+                string.Equals(kept.MountPoint, candidate.MountPoint, StringComparison.OrdinalIgnoreCase));
+
+        static bool IsIdentifiedByLetter(DiskProfile profile) =>
+            profile.AutoMount || !HasBackingFile(profile);
 
         static bool SamePath(string? a, string? b) =>
             a != null && b != null && string.Equals(a, b, StringComparison.OrdinalIgnoreCase);
     }
+
+    /// <summary>
+    /// Whether <paramref name="profile"/> is backed by an image or a source archive.
+    /// </summary>
+    /// <param name="profile">The profile to check.</param>
+    /// <returns><c>true</c> if the profile has an image or archive path.</returns>
+    private static bool HasBackingFile(DiskProfile profile) =>
+        profile.PersistImagePath is not null || profile.SourceArchivePath is not null;
 
     /// <summary>
     /// Maps a live disk's <see cref="DiskOptions"/> to its persistable <see cref="DiskProfile"/>
@@ -641,10 +692,13 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
                 _logger.LogWarning("Auto-mount failed for {MountPoint}.", profile.MountPoint);
                 StatusText = Loc.Format("Status.AutoMountFailed", profile.MountPoint, Loc.Get("Status.MountFailed"));
                 ResetTempIfPointingAt(profile.MountPoint);
-                _unmountedProfiles.Add(profile);
+                RetainSavedProfiles([profile]);
                 return false;
             }
 
+            // The mounted disk now carries this profile; keeping it as not-mounted too would let
+            // it outlive an unmount that happens before the next save supersedes it.
+            _unmountedProfiles.Remove(profile);
             AddDiskSorted(new(disk));
             StatusText = Loc.Format("Status.Mounted", disk.MountPoint, profile.VolumeLabel);
             return true;
@@ -654,8 +708,35 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             _logger.LogError(ex, "Auto-mount failed for {MountPoint}.", profile.MountPoint);
             StatusText = Loc.Format("Status.AutoMountFailed", profile.MountPoint, ex.Message);
             ResetTempIfPointingAt(profile.MountPoint);
-            _unmountedProfiles.Add(profile);
+            RetainSavedProfiles([profile]);
             return false;
+        }
+    }
+
+    /// <summary>
+    /// Keeps <paramref name="profiles"/> in the saved settings until a mounted disk supersedes
+    /// them. Called from the constructor with every saved profile before any of them is mounted, so a
+    /// settings save during the sequential auto-mount (e.g. exiting or creating a disk from the
+    /// tray while a password prompt is open) doesn't drop the profiles not yet reached, and so
+    /// profiles with auto-mount turned off survive the session instead of being deleted by its
+    /// first save. Manual profiles without an image or archive are not kept.
+    /// </summary>
+    /// <param name="profiles">The saved profiles to keep.</param>
+    private void RetainSavedProfiles(IEnumerable<DiskProfile> profiles)
+    {
+        foreach (var profile in profiles)
+        {
+            // A manual profile without an image or archive is never mounted again and has no
+            // image options to remember, so keeping it would only pile up stale letters.
+            if (!profile.AutoMount && !HasBackingFile(profile))
+            {
+                continue;
+            }
+
+            if (!_unmountedProfiles.Contains(profile))
+            {
+                _unmountedProfiles.Add(profile);
+            }
         }
     }
 
@@ -1000,8 +1081,8 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     /// <param name="mountPoint">The mount point to change, e.g. <c>"R:"</c>.</param>
     /// <param name="newPassword">The new password, or <see langword="null"/> to remove protection.</param>
     /// <returns>
-    /// <c>(true, message)</c> on success; or <c>(false, string.Empty)</c> if no disk is currently
-    /// mounted at <paramref name="mountPoint"/>.
+    /// <c>(true, message)</c> on success; <c>(false, error)</c> if the password could not be set;
+    /// or <c>(false, string.Empty)</c> if no disk is currently mounted at <paramref name="mountPoint"/>.
     /// </returns>
     public Task<(bool Success, string Message)> SetPasswordByMountPointAsync(string mountPoint, string? newPassword)
     {
@@ -1013,11 +1094,37 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             return Task.FromResult((false, string.Empty));
         }
 
-        vm.Disk.SetPassword(newPassword);
+        if (TrySetPassword(vm.Disk, newPassword) is { } error)
+        {
+            return Task.FromResult((false, error));
+        }
+
         _logger.LogInformation("CLI set-password completed for {MountPoint}.", mountPoint);
         return Task.FromResult((true, newPassword is null
             ? Loc.Format("Status.PasswordRemoved", mountPoint)
             : Loc.Format("Status.PasswordSet", mountPoint)));
+    }
+
+    /// <summary>
+    /// Calls <see cref="RamDisk.SetPassword"/>, turning the expected failure (plaintext snapshots
+    /// that could not be deleted before encrypting) into a user-facing message instead of an
+    /// exception. Safe to call off the UI thread.
+    /// </summary>
+    /// <param name="disk">The disk whose password is changed.</param>
+    /// <param name="newPassword">The new password, or <see langword="null"/> to remove protection.</param>
+    /// <returns>The localized error message, or <see langword="null"/> on success.</returns>
+    private string? TrySetPassword(RamDisk disk, string? newPassword)
+    {
+        try
+        {
+            disk.SetPassword(newPassword);
+            return null;
+        }
+        catch (IOException ex)
+        {
+            _logger.LogWarning(ex, "Setting the password of {MountPoint} failed.", disk.Options.MountPoint);
+            return Loc.Format("Msg.SetPasswordFailed", ex.Message);
+        }
     }
 
     /// <summary>
@@ -1450,7 +1557,8 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 
     /// <summary>
     /// Persists the application settings, including a profile for every mounted disk plus every
-    /// auto-mount profile that failed to mount this session and hasn't been superseded since.
+    /// saved profile that isn't mounted (not reached yet, auto-mount off, or failed to mount) and
+    /// hasn't been superseded since.
     /// </summary>
     internal void SaveSettings()
     {
@@ -1524,8 +1632,15 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         }
     }
 
+    /// <summary>
+    /// Inserts <paramref name="vm"/> into <see cref="Disks"/> in mount-point order, and stops
+    /// keeping any not-mounted saved profile the disk supersedes.
+    /// </summary>
+    /// <param name="vm">The view model of a disk that was just mounted.</param>
     private void AddDiskSorted(DiskViewModel vm)
     {
+        RemoveSupersededProfiles(_unmountedProfiles, ToProfile(vm.Disk.Options));
+
         var i = 0;
         while (i < Disks.Count &&
                string.Compare(Disks[i].MountPoint, vm.MountPoint, StringComparison.OrdinalIgnoreCase) < 0)
@@ -1779,12 +1894,15 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 
             try
             {
+                // A password failure must not escape the lambda: the disk is already mounted by
+                // then, and the catch below would drop it from Disks while it stays mounted.
+                string? passwordError = null;
                 var disk = await Task.Run(() =>
                 {
                     var mounted = _mountManager.Mount(newOptions, currentPassword);
                     if (dialog.PasswordChanged)
                     {
-                        mounted.SetPassword(dialog.Password);
+                        passwordError = TrySetPassword(mounted, dialog.Password);
                     }
                     return mounted;
                 });
@@ -1794,6 +1912,10 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
                 AddDiskSorted(new(disk));
                 SaveSettings();
                 StatusText = Loc.Format("Status.MountedWithCapacity", disk.MountPoint, newOptions.VolumeLabel, newOptions.CapacityBytes / (1024 * 1024));
+                if (passwordError != null)
+                {
+                    ShowError(passwordError);
+                }
                 _logger.LogInformation("Edit disk remount succeeded: {OldMountPoint} -> {NewMountPoint}.", oldMountPoint, disk.MountPoint);
             }
             catch (Exception ex)
@@ -1807,6 +1929,9 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         }
         else
         {
+            // Kept apart from the apply error: once the options are applied live they must be
+            // refreshed and saved even if the password change then fails.
+            string? passwordError = null;
             var error = await Task.Run(() =>
             {
                 if (!vm.Disk.TryApplyOptions(newOptions, out var applyError))
@@ -1816,7 +1941,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 
                 if (dialog.PasswordChanged)
                 {
-                    vm.Disk.SetPassword(dialog.Password);
+                    passwordError = TrySetPassword(vm.Disk, dialog.Password);
                 }
 
                 return null;
@@ -1836,6 +1961,10 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             vm.Refresh();
             SaveSettings();
             StatusText = Loc.Format("Status.MountedWithCapacity", vm.MountPoint, newOptions.VolumeLabel, newOptions.CapacityBytes / (1024 * 1024));
+            if (passwordError != null)
+            {
+                ShowError(passwordError);
+            }
             _logger.LogInformation("Edit disk applied live for {MountPoint}.", vm.MountPoint);
         }
     }
