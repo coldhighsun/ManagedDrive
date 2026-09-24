@@ -25,6 +25,8 @@ public partial class RestoreSnapshotDialog
         _mainImagePath = target.Disk.Options.PersistImagePath!;
         SourceDescriptionText.Text = Loc.Format("RestoreSnapshot.Description", target.MountPoint, target.VolumeLabel);
 
+        CloseOnDisposing(target);
+
         RefreshSnapshotList(snapshots);
     }
 
@@ -72,7 +74,7 @@ public partial class RestoreSnapshotDialog
         OkButton.IsEnabled = false;
         try
         {
-            await Task.Run(() => SnapshotManager.DeleteSnapshot(_mainImagePath, item.Path));
+            await Task.Run(() => _target.Disk.DeleteSnapshot(item.Path));
             RefreshSnapshotList(SnapshotManager.ListSnapshots(_mainImagePath));
         }
         catch (Exception ex)

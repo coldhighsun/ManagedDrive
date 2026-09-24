@@ -94,6 +94,17 @@ public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
     /// </summary>
     public event EventHandler? HighUsageWarning;
 
+    /// <summary>
+    /// Occurs at the start of <see cref="Dispose"/> — i.e. the disk this view model represents is
+    /// being unmounted (see <c>MainViewModel.ExecuteUnmount</c>). A modal dialog that was shown over
+    /// the main window and holds a reference to this disk (e.g. <c>DiskContentDialog</c>) can't rely
+    /// on WPF's modal-disable to prevent that: it only blocks input to the owner window, not to the
+    /// tray icon's WinForms context menu, which stays fully interactive and can unmount the very
+    /// disk such a dialog is showing. Subscribers should close themselves rather than keep operating
+    /// on a disk that's about to become unmounted/disposed.
+    /// </summary>
+    public event EventHandler? Disposing;
+
     /// <inheritdoc />
     public event PropertyChangedEventHandler? PropertyChanged;
 
@@ -362,6 +373,7 @@ public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
     /// <inheritdoc />
     public void Dispose()
     {
+        Disposing?.Invoke(this, EventArgs.Empty);
         _refreshTimer.Stop();
         _refreshTimer.Tick -= OnRefreshTick;
         _activityThrottleTimer.Stop();

@@ -314,7 +314,20 @@ public sealed class RamDisk : IDisposable
             // A brand-new disk (or one loaded from an unencrypted image) whose caller wants it
             // encrypted going forward: generate the CEK now, before the auto-save timer below can
             // possibly fire an unencrypted first save.
-            disk.SetPassword(password);
+            try
+            {
+                disk.SetPassword(password);
+            }
+            catch
+            {
+                // The WinFsp volume is already mounted and disk owns host/fs at this point, so a
+                // failure here (e.g. the RNG call inside CEK generation) must tear both down the
+                // same way DisposeFailedMount does for the earlier failure branches above —
+                // otherwise the drive letter stays mounted forever with no RamDisk ever registered
+                // in MountManager._disks to unmount it through.
+                disk.Dispose();
+                throw;
+            }
         }
 
         disk.ConfigureAutoSaveTimer();
@@ -349,6 +362,22 @@ public sealed class RamDisk : IDisposable
         lock (_autoSaveLock)
         {
             return SnapshotManager.DiffAgainstCurrent(snapshotPath, _fs.NodeMap);
+        }
+    }
+
+    /// <summary>
+    /// Deletes the snapshot at <paramref name="snapshotPath"/> and garbage-collects any blobs it
+    /// left as the only referent, under <see cref="_autoSaveLock"/> so this can't race a concurrent
+    /// <see cref="TryWriteSnapshot"/> (periodic auto-save or a manual <see cref="SaveToImageWithSnapshot"/>)
+    /// on this same disk — without that, the blob GC could delete a blob a write in flight had
+    /// already committed to the shared blob directory but whose owning snapshot index file hadn't
+    /// yet been renamed into place, leaving that snapshot referencing a blob that no longer exists.
+    /// </summary>
+    public void DeleteSnapshot(string snapshotPath)
+    {
+        lock (_autoSaveLock)
+        {
+            SnapshotManager.DeleteSnapshot(Options.PersistImagePath!, snapshotPath);
         }
     }
 
