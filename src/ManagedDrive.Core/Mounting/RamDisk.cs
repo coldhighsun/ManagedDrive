@@ -798,6 +798,10 @@ public sealed class RamDisk : IDisposable
     /// effect on the next save.
     /// </summary>
     /// <param name="newPassword">The new password, or <see langword="null"/> to remove protection.</param>
+    /// <exception cref="IOException">
+    /// Thrown when encrypting a previously unencrypted disk and any of its plaintext snapshots
+    /// cannot be deleted; the disk is left unencrypted.
+    /// </exception>
     public void SetPassword(string? newPassword)
     {
         lock (_autoSaveLock)
@@ -810,13 +814,31 @@ public sealed class RamDisk : IDisposable
             {
                 if (RamDiskSaveDecisions.ShouldGenerateNewCek(_cek))
                 {
-                    _cek = DiskImageSerializer.GenerateCek();
-                    _cekRotatedSinceLastSave = true;
-
-                    if (Options.PersistImagePath is { } plaintextPath)
+                    // Nothing is committed until the plaintext snapshots are gone: if deleting
+                    // them fails, a CEK assigned first would leave the disk holding a key but no
+                    // password, so later saves stay plaintext while new snapshots are encrypted
+                    // under a key nothing wraps, and a retry would skip the deletion entirely.
+                    // DeleteAllSnapshots only logs individual failures, so a leftover (e.g. a
+                    // locked index file) must be turned into an error here; otherwise the disk
+                    // would report itself encrypted while plaintext snapshot data stays on disk.
+                    var newCek = DiskImageSerializer.GenerateCek();
+                    try
                     {
-                        SnapshotManager.DeleteAllSnapshots(plaintextPath);
+                        if (Options.PersistImagePath is { } plaintextPath &&
+                            !SnapshotManager.DeleteAllSnapshots(plaintextPath))
+                        {
+                            throw new IOException(
+                                $"Could not delete the existing unencrypted snapshots of '{plaintextPath}'; the password was not set.");
+                        }
                     }
+                    catch
+                    {
+                        System.Security.Cryptography.CryptographicOperations.ZeroMemory(newCek);
+                        throw;
+                    }
+
+                    _cek = newCek;
+                    _cekRotatedSinceLastSave = true;
                 }
 
                 _password = newPassword;
