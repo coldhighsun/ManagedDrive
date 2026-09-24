@@ -1182,7 +1182,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         }
 
         var target = ordered[index - 1];
-        await Task.Run(() => SnapshotManager.DeleteSnapshot(imagePath, target.Path));
+        await Task.Run(() => vm.Disk.DeleteSnapshot(target.Path));
 
         _logger.LogInformation("CLI delete snapshot completed for {MountPoint}.", mountPoint);
         return (true, Loc.Format("Status.SnapshotDeleted", mountPoint));

@@ -63,6 +63,8 @@ public partial class DiskContentDialog
         // the common point they all funnel through.
         Closing += (_, _) => _busyCts?.Cancel();
 
+        CloseOnDisposing(target);
+
         var nodes = target.Disk.GetAllNodes();
         var root = BuildTree(nodes);
         _rootNodes = root.Children.Values.Select(child => ToNode(child, "\\" + child.Name)).ToList();
