@@ -502,6 +502,56 @@ public sealed class MemoryFileSystemCallbackTests
         Assert.Equal(data.Length, fs.TotalBytesWritten);
     }
 
+    [Fact]
+    public void SetFileSize_TruncateThenExtendWithinAllocation_ReadsZerosInsteadOfOldData()
+    {
+        var fs = new MemoryFileSystem(1024 * 1024, "Label");
+        fs.Create("\\file.bin", 0, 0, (uint)FileAttributes.Normal, [], 0,
+            out var fileNode, out _, out _, out _);
+        WriteBytes(fs, fileNode!, Enumerable.Repeat((byte)0xAA, 1000).ToArray(), offset: 0);
+
+        fs.SetFileSize(fileNode!, null!, 10, setAllocationSize: false, out _);
+        fs.SetFileSize(fileNode!, null!, 1000, setAllocationSize: false, out _);
+
+        var bytes = ReadBytes(fs, fileNode!, 1000, offset: 0);
+        Assert.All(bytes[..10], b => Assert.Equal(0xAA, b));
+        Assert.All(bytes[10..], b => Assert.Equal(0, b));
+    }
+
+    [Fact]
+    public void Write_PastTruncatedEnd_ReadsZerosInTheGap()
+    {
+        var fs = new MemoryFileSystem(1024 * 1024, "Label");
+        fs.Create("\\file.bin", 0, 0, (uint)FileAttributes.Normal, [], 0,
+            out var fileNode, out _, out _, out _);
+        WriteBytes(fs, fileNode!, Enumerable.Repeat((byte)0xAA, 1000).ToArray(), offset: 0);
+        fs.SetFileSize(fileNode!, null!, 10, setAllocationSize: false, out _);
+
+        WriteBytes(fs, fileNode!, [0xBB], offset: 900);
+
+        var bytes = ReadBytes(fs, fileNode!, 901, offset: 0);
+        Assert.All(bytes[10..900], b => Assert.Equal(0, b));
+        Assert.Equal(0xBB, bytes[900]);
+    }
+
+    [Fact]
+    public void SetFileSize_ExtendAfterTruncateAndAllocationTrim_ReadsZerosInsteadOfOldData()
+    {
+        // Closing trims the allocation to 512 but keeps the chunk, so bytes 100..511 survive the
+        // close unless the truncation itself cleared them.
+        var fs = new MemoryFileSystem(1024 * 1024, "Label");
+        fs.Create("\\file.bin", 0, 0, (uint)FileAttributes.Normal, [], 0,
+            out var fileNode, out _, out _, out _);
+        WriteBytes(fs, fileNode!, Enumerable.Repeat((byte)0xAA, 1000).ToArray(), offset: 0);
+        fs.SetFileSize(fileNode!, null!, 100, setAllocationSize: false, out _);
+        fs.Cleanup(fileNode!, null!, "\\file.bin", MemoryFileSystem.CleanupSetAllocationSize);
+
+        fs.SetFileSize(fileNode!, null!, 400, setAllocationSize: false, out _);
+
+        var bytes = ReadBytes(fs, fileNode!, 400, offset: 0);
+        Assert.All(bytes[100..], b => Assert.Equal(0, b));
+    }
+
     private static byte[] ReadBytes(MemoryFileSystem fs, object fileNode, int length, ulong offset)
     {
         var ptr = Marshal.AllocHGlobal(Math.Max(length, 1));

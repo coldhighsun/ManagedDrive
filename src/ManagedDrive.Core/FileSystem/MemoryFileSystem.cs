@@ -1193,6 +1193,13 @@ public sealed class MemoryFileSystem : FileSystemBase
                     return result;
                 }
             }
+            else if (newSize < node.FileInfo.FileSize)
+            {
+                // The allocation (and the bytes in it) outlives a truncation, so clear the cut-off
+                // tail now; otherwise a later extension within the same allocation would expose
+                // the old data instead of zeros.
+                node.FileData?.DiscardRange(newSize, node.FileInfo.FileSize - newSize);
+            }
 
             node.FileInfo.FileSize = newSize;
         }
