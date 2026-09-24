@@ -42,6 +42,24 @@ public sealed class RamDiskSaveDecisionsTests : IDisposable
     }
 
     [Fact]
+    public void ShouldGenerateNewCek_NoCurrentCek_ReturnsTrue()
+    {
+        // Mirrors RamDisk.SetPassword's guard: no CEK (unencrypted, or a password was removed
+        // since the last save) means the caller must generate a fresh one and treat it as a
+        // rotation — an existing on-disk image may still hold segments encrypted under a
+        // discarded key.
+        Assert.True(RamDiskSaveDecisions.ShouldGenerateNewCek(currentCek: null));
+    }
+
+    [Fact]
+    public void ShouldGenerateNewCek_ExistingCek_ReturnsFalse()
+    {
+        // An already-encrypted disk changing its password only re-wraps the existing CEK — no
+        // rotation, so segment reuse across the change remains safe.
+        Assert.False(RamDiskSaveDecisions.ShouldGenerateNewCek(currentCek: [1, 2, 3]));
+    }
+
+    [Fact]
     public void NeedsExitSave_SaveOnExitDisabled_ReturnsFalseEvenWhenNeedsSaveTrue()
     {
         Assert.False(RamDiskSaveDecisions.NeedsExitSave(saveImageOnExit: false, needsSave: true));

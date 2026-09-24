@@ -342,6 +342,68 @@ public sealed class DiskImageSerializerV6Tests
         }
     }
 
+    [Fact]
+    public void SaveIncremental_ReusedSegmentAcrossRotatedCek_BecomesUnreadableWithNewPassword()
+    {
+        // Documents the hazard SaveIncremental's forceFullRewrite parameter exists to avoid:
+        // segment reuse only compares the encrypted/unencrypted flag, not content-encryption-key
+        // identity, so an unchanged node's segment can be copied verbatim from an image encrypted
+        // under a since-rotated key.
+        var path = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid()}.mdr");
+        try
+        {
+            var map = new FileNodeMap();
+            map.Add("\\", MakeDir());
+            map.Add("\\File.txt", MakeFile("hello world"u8.ToArray()));
+
+            DiskImageSerializer.SaveIncremental(map, capacityBytes: 1024 * 1024, "Label", path,
+                ImageCompressionLevel.Fastest, new ImageEncryptionInfo("old-pw", DiskImageSerializer.GenerateCek()));
+
+            // Same node content (nothing dirtied it), but a brand-new CEK — as happens when a
+            // password is removed and re-added between saves — and forceFullRewrite left false.
+            DiskImageSerializer.SaveIncremental(map, capacityBytes: 1024 * 1024, "Label", path,
+                ImageCompressionLevel.Fastest, new ImageEncryptionInfo("new-pw", DiskImageSerializer.GenerateCek()));
+
+            Assert.Throws<ImagePasswordIncorrectException>(() =>
+                DiskImageSerializer.Load(path, out _, out _, "new-pw", out _));
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void SaveIncremental_ForceFullRewrite_SkipsSegmentReuseAcrossRotatedCek()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid()}.mdr");
+        try
+        {
+            var map = new FileNodeMap();
+            map.Add("\\", MakeDir());
+            map.Add("\\File.txt", MakeFile("hello world"u8.ToArray()));
+
+            DiskImageSerializer.SaveIncremental(map, capacityBytes: 1024 * 1024, "Label", path,
+                ImageCompressionLevel.Fastest, new ImageEncryptionInfo("old-pw", DiskImageSerializer.GenerateCek()));
+
+            // Same unchanged node, but forceFullRewrite forces a full rewrite under the new CEK
+            // instead of copying the previous save's segment bytes.
+            DiskImageSerializer.SaveIncremental(map, capacityBytes: 1024 * 1024, "Label", path,
+                ImageCompressionLevel.Fastest, new ImageEncryptionInfo("new-pw", DiskImageSerializer.GenerateCek()),
+                forceFullRewrite: true);
+
+            var loaded = DiskImageSerializer.Load(path, out _, out _, "new-pw", out var cek);
+
+            Assert.NotNull(cek);
+            Assert.True(loaded.TryGet("\\File.txt", out var node));
+            Assert.Equal("hello world"u8.ToArray(), node!.FileData!.ToArray((long)node.FileInfo.FileSize));
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
     private static FileNode MakeDir() => new()
     {
         FileInfo = { FileAttributes = (uint)FileAttributes.Directory },
