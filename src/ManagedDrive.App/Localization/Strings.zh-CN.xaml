@@ -305,6 +305,7 @@
     <sys:String x:Key="Msg.ExitConfirmTitle">ManagedDrive</sys:String>
     <sys:String x:Key="Msg.ExitConfirmBody">所有已挂载的 RAM 磁盘将被卸载，其中未挂载镜像的数据将丢失。&#x0a;&#x0a;确认退出？</sys:String>
     <sys:String x:Key="Msg.MountFailed">挂载磁盘失败：&#x0a;{0}</sys:String>
+    <sys:String x:Key="Msg.SetPasswordFailed">设置密码失败：&#x0a;{0}</sys:String>
     <sys:String x:Key="Msg.SaveImageFailed">保存镜像失败：&#x0a;{0}</sys:String>
     <sys:String x:Key="Msg.SaveImageNoPath">该磁盘未配置镜像路径。</sys:String>
     <sys:String x:Key="Msg.ImagePathOverwriteConfirmTitle">文件已存在</sys:String>
