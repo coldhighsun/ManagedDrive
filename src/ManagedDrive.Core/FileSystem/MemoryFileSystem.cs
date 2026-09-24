@@ -641,7 +641,9 @@ public sealed class MemoryFileSystem : FileSystemBase
     /// <returns>
     /// STATUS_SUCCESS, STATUS_OBJECT_NAME_COLLISION, STATUS_DIRECTORY_NOT_EMPTY,
     /// STATUS_ACCESS_DENIED (renaming a directory into its own subtree), or
-    /// STATUS_FILE_IS_A_DIRECTORY/STATUS_NOT_A_DIRECTORY (replacing across the file/directory kind).
+    /// STATUS_FILE_IS_A_DIRECTORY/STATUS_NOT_A_DIRECTORY (replacing across the file/directory kind),
+    /// STATUS_OBJECT_NAME_NOT_FOUND (the handle's node was replaced, e.g. by a format or restore),
+    /// or STATUS_OBJECT_PATH_NOT_FOUND/STATUS_NOT_A_DIRECTORY (the destination's parent is gone or a file).
     /// </returns>
     public override int Rename(
         object fileNode,
@@ -681,6 +683,12 @@ public sealed class MemoryFileSystem : FileSystemBase
                 return STATUS_NOT_A_DIRECTORY;
             case FileNodeMap.RenameConflict.DirectoryNotEmpty:
                 return STATUS_DIRECTORY_NOT_EMPTY;
+            case FileNodeMap.RenameConflict.SourceNotFound:
+                return STATUS_OBJECT_NAME_NOT_FOUND;
+            case FileNodeMap.RenameConflict.ParentNotFound:
+                return STATUS_OBJECT_PATH_NOT_FOUND;
+            case FileNodeMap.RenameConflict.ParentNotDirectory:
+                return STATUS_NOT_A_DIRECTORY;
         }
 
         node.MetadataVersion++;

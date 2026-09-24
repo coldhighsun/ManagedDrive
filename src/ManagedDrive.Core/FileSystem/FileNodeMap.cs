@@ -651,6 +651,22 @@ public sealed class FileNodeMap : IDisposable
         /// The destination is a file but the node being renamed is a directory.
         /// </summary>
         TargetIsFile,
+
+        /// <summary>
+        /// The node is no longer the one at the source path (e.g. a handle opened before the disk
+        /// was formatted or restored), so renaming it would clobber whatever lives there now.
+        /// </summary>
+        SourceNotFound,
+
+        /// <summary>
+        /// The destination's parent directory doesn't exist (e.g. it was just deleted).
+        /// </summary>
+        ParentNotFound,
+
+        /// <summary>
+        /// The destination's parent path names a file, not a directory.
+        /// </summary>
+        ParentNotDirectory,
     }
 
     /// <summary>
@@ -678,6 +694,19 @@ public sealed class FileNodeMap : IDisposable
         _syncRoot.EnterWriteLock();
         try
         {
+            if (!_map.TryGetValue(fileName, out var current) || !ReferenceEquals(current, node))
+            {
+                return RenameConflict.SourceNotFound;
+            }
+
+            switch (GetParentStateCore(newFileName))
+            {
+                case ParentState.Missing:
+                    return RenameConflict.ParentNotFound;
+                case ParentState.NotDirectory:
+                    return RenameConflict.ParentNotDirectory;
+            }
+
             if (_map.TryGetValue(newFileName, out var existing) && !ReferenceEquals(existing, node))
             {
                 if (!replaceIfExists)
