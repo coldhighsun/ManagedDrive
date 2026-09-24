@@ -2145,10 +2145,27 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
                 return;
             }
 
-            vm.Disk.TryApplyOptions(vm.Disk.Options with
+            var pathError = CreateDiskOptionsBuilder.ValidateImagePath(dlg.FileName, vm.Disk.Options.MountPoint, GetOtherDiskOptions(excluding: vm));
+            if (pathError != CreateDiskValidationError.None)
             {
-                PersistImagePath = dlg.FileName
-            }, out _);
+                _logger.LogWarning("Save image path rejected for {MountPoint}: {ImagePath} ({Error}).", vm.MountPoint, dlg.FileName, pathError);
+                ShowWarning(pathError switch
+                {
+                    CreateDiskValidationError.ImagePathIsSnapshot => Loc.Get("Val.ImagePathIsSnapshot"),
+                    CreateDiskValidationError.ImagePathInUse => Loc.Get("Val.ImagePathInUse"),
+                    CreateDiskValidationError.ImagePathOnRamDisk => Loc.Get("Val.ImagePathOnRamDisk"),
+                    _ => Loc.Get("Val.BadImagePath"),
+                });
+                return;
+            }
+
+            if (!vm.Disk.TryApplyOptions(vm.Disk.Options with { PersistImagePath = dlg.FileName }, out var applyError))
+            {
+                _logger.LogWarning("Save image path could not be applied for {MountPoint}: {Error}", vm.MountPoint, applyError);
+                ShowWarning(applyError);
+                return;
+            }
+
             SaveSettings();
         }
 
