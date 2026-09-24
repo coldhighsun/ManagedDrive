@@ -262,18 +262,42 @@ public static class ArchiveNodeMapBuilder
     }
 
     /// <summary>
-    /// Converts an archive entry key (<c>/</c>-separated, possibly with a trailing slash for
-    /// directory entries) into an absolute WinFsp path (<c>\</c>-separated, rooted at <c>\</c>).
+    /// Converts an archive entry key (<c>/</c>- or <c>\</c>-separated, possibly with a trailing
+    /// slash for directory entries) into an absolute WinFsp path (<c>\</c>-separated, rooted at
+    /// <c>\</c>). Empty and <c>.</c> segments are dropped and <c>..</c> pops the previous segment,
+    /// clamped at the root — otherwise keys like <c>./a.txt</c>, <c>a//b</c> or <c>a/../..</c>
+    /// would become empty-named nodes or nodes literally named <c>.</c> or <c>..</c>, which Windows can't
+    /// address, or even resolve onto the root itself and replace it with a file.
     /// </summary>
-    /// <returns><c>null</c> if the entry key is empty (nothing to add).</returns>
-    private static string? NormalizeEntryPath(string? entryKey)
+    /// <returns><c>null</c> if the entry key resolves to the root (nothing to add).</returns>
+    internal static string? NormalizeEntryPath(string? entryKey)
     {
         if (string.IsNullOrEmpty(entryKey))
         {
             return null;
         }
 
-        var normalized = entryKey.Replace('/', '\\').Trim('\\');
-        return normalized.Length == 0 ? null : "\\" + normalized;
+        var segments = new List<string>();
+        foreach (var segment in entryKey.Split(['/', '\\'], StringSplitOptions.RemoveEmptyEntries))
+        {
+            if (segment == ".")
+            {
+                continue;
+            }
+
+            if (segment == "..")
+            {
+                if (segments.Count > 0)
+                {
+                    segments.RemoveAt(segments.Count - 1);
+                }
+
+                continue;
+            }
+
+            segments.Add(segment);
+        }
+
+        return segments.Count == 0 ? null : "\\" + string.Join('\\', segments);
     }
 }

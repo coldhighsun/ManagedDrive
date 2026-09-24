@@ -191,6 +191,69 @@ public sealed class ArchiveNodeMapBuilderTests
         }
     }
 
+    [Theory]
+    [InlineData("a.txt", "\\a.txt")]
+    [InlineData("Folder/File.txt", "\\Folder\\File.txt")]
+    [InlineData("Folder/", "\\Folder")]
+    [InlineData("./a.txt", "\\a.txt")]
+    [InlineData("Folder//File.txt", "\\Folder\\File.txt")]
+    [InlineData("Folder/./File.txt", "\\Folder\\File.txt")]
+    [InlineData("Folder\\File.txt", "\\Folder\\File.txt")]
+    [InlineData("Folder/Sub/../File.txt", "\\Folder\\File.txt")]
+    [InlineData("../../evil.txt", "\\evil.txt")]
+    [InlineData("/abs/path.txt", "\\abs\\path.txt")]
+    public void NormalizeEntryPath_VariousKeys_ReturnsCanonicalRootedPath(string key, string expected)
+    {
+        var actual = ArchiveNodeMapBuilder.NormalizeEntryPath(key);
+
+        Assert.Equal(expected, actual);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("/")]
+    [InlineData(".")]
+    [InlineData("./")]
+    [InlineData("..")]
+    [InlineData("a/..")]
+    [InlineData("a/../../")]
+    public void NormalizeEntryPath_KeyResolvingToRoot_ReturnsNull(string? key)
+    {
+        var actual = ArchiveNodeMapBuilder.NormalizeEntryPath(key);
+
+        Assert.Null(actual);
+    }
+
+    [Fact]
+    public void BuildNodeMap_EntriesWithDotSegments_KeepsRootDirectoryAndCanonicalPaths()
+    {
+        var path = CreateZip(entries =>
+        {
+            entries.Add("./a.txt", "a"u8.ToArray());
+            entries.Add("x/..", "not a root"u8.ToArray());
+            entries.Add("Folder/../../b.txt", "b"u8.ToArray());
+        });
+
+        try
+        {
+            var nodeMap = ArchiveNodeMapBuilder.BuildNodeMap(path);
+
+            Assert.True(nodeMap.TryGet("\\", out var root));
+            Assert.True(root!.IsDirectory);
+            Assert.True(nodeMap.TryGet("\\a.txt", out var a));
+            Assert.Equal("a"u8.ToArray(), a!.FileData!.ToArray(1));
+            Assert.True(nodeMap.TryGet("\\b.txt", out var b));
+            Assert.Equal("b"u8.ToArray(), b!.FileData!.ToArray(1));
+            Assert.False(nodeMap.TryGet("\\.", out _));
+            Assert.False(nodeMap.TryGet("\\..", out _));
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
     private static string CreateZip(Action<Dictionary<string, byte[]>> configure)
     {
         var entries = new Dictionary<string, byte[]>();
