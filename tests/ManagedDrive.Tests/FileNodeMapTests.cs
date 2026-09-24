@@ -562,6 +562,21 @@ public sealed class FileNodeMapTests
     }
 
     [Fact]
+    public void TryUpdateAllocationSizeWithinCapacity_SizeAtLeast2Pow63_ReturnsFalseAndLeavesTotalUnchanged()
+    {
+        var map = new FileNodeMap();
+        var file = MakeFile();
+        file.FileInfo.AllocationSize = 4096;
+        map.Add("\\f", file);
+
+        var applied = map.TryUpdateAllocationSizeWithinCapacity(file, 1UL << 63, 1024 * 1024);
+
+        Assert.False(applied);
+        Assert.Equal(4096UL, file.FileInfo.AllocationSize);
+        Assert.Equal(4096UL, map.GetTotalAllocated());
+    }
+
+    [Fact]
     public void UpdateAllocationSize_NodeReaddedByRename_CountsTowardTotal()
     {
         var map = new FileNodeMap();

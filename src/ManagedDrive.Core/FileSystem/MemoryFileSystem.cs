@@ -264,6 +264,13 @@ public sealed class MemoryFileSystem : FileSystemBase
             return STATUS_OBJECT_NAME_COLLISION;
         }
 
+        if (allocationSize > _maxCapacity)
+        {
+            // Can never fit; also keeps a size near ulong.MaxValue from wrapping around to a small
+            // value when aligned below.
+            return STATUS_DISK_FULL;
+        }
+
         var aligned = FileNode.AlignToAllocationUnit(allocationSize);
 
         var now = FileTimeNow();
@@ -523,6 +530,14 @@ public sealed class MemoryFileSystem : FileSystemBase
         }
 
         var node = (FileNode)fileNode;
+        if (allocationSize > _maxCapacity)
+        {
+            // Can never fit; also keeps a size near ulong.MaxValue from wrapping around to a small
+            // value when aligned below.
+            fileInfo = node.FileInfo;
+            return STATUS_DISK_FULL;
+        }
+
         var aligned = FileNode.AlignToAllocationUnit(allocationSize);
 
         // Checking headroom and applying the growth happen atomically (see
@@ -1142,6 +1157,14 @@ public sealed class MemoryFileSystem : FileSystemBase
     /// </returns>
     private int SetFileSizeCore(FileNode node, ulong newSize, bool setAllocationSize)
     {
+        if (newSize > _maxCapacity)
+        {
+            // No single file can outgrow the volume. Rejecting this up front also keeps a size
+            // near ulong.MaxValue from wrapping around to a small value when aligned below — which
+            // would drop the file's data while its FileSize claimed the huge size.
+            return STATUS_DISK_FULL;
+        }
+
         if (setAllocationSize)
         {
             var aligned = FileNode.AlignToAllocationUnit(newSize);

@@ -41,4 +41,57 @@ public sealed class MemoryFileSystemCapacityTests
 
         Assert.True(ok);
     }
+
+    [Theory]
+    [InlineData(ulong.MaxValue, false)]
+    [InlineData(ulong.MaxValue, true)]
+    [InlineData(1UL << 63, false)]
+    [InlineData(1UL << 63, true)]
+    public void SetFileSize_SizeFarBeyondCapacity_ReturnsDiskFullAndLeavesFileUnchanged(ulong newSize, bool setAllocationSize)
+    {
+        var fs = new MemoryFileSystem(1024 * 1024, "Label");
+        fs.Create("\\file.bin", 0, 0, (uint)FileAttributes.Normal, [], 0,
+            out var fileNode, out _, out _, out _);
+        fs.SetFileSize(fileNode!, null!, 4096, setAllocationSize: false, out _);
+        var node = (FileNode)fileNode!;
+        var totalBefore = fs.NodeMap.GetTotalAllocated();
+
+        var status = fs.SetFileSize(fileNode!, null!, newSize, setAllocationSize, out _);
+
+        Assert.Equal(DiskFull, status);
+        Assert.Equal(4096UL, node.FileInfo.FileSize);
+        Assert.Equal(4096UL, node.FileInfo.AllocationSize);
+        Assert.NotNull(node.FileData);
+        Assert.Equal(totalBefore, fs.NodeMap.GetTotalAllocated());
+    }
+
+    [Fact]
+    public void Create_AllocationSizeNearUlongMax_ReturnsDiskFull()
+    {
+        var fs = new MemoryFileSystem(1024 * 1024, "Label");
+
+        var status = fs.Create("\\file.bin", 0, 0, (uint)FileAttributes.Normal, [], ulong.MaxValue - 1,
+            out _, out _, out _, out _);
+
+        Assert.Equal(DiskFull, status);
+        Assert.False(fs.NodeMap.TryGet("\\file.bin", out _));
+    }
+
+    [Fact]
+    public void Overwrite_AllocationSizeNearUlongMax_ReturnsDiskFull()
+    {
+        var fs = new MemoryFileSystem(1024 * 1024, "Label");
+        fs.Create("\\file.bin", 0, 0, (uint)FileAttributes.Normal, [], 0,
+            out var fileNode, out _, out _, out _);
+
+        var status = fs.Overwrite(fileNode!, null!, (uint)FileAttributes.Normal, false, ulong.MaxValue - 1, out _);
+
+        Assert.Equal(DiskFull, status);
+        Assert.Equal(0UL, fs.NodeMap.GetTotalAllocated());
+    }
+
+    /// <summary>
+    /// NTSTATUS <c>STATUS_DISK_FULL</c>.
+    /// </summary>
+    private const int DiskFull = unchecked((int)0xC000007F);
 }
