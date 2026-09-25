@@ -12,7 +12,7 @@ namespace ManagedDrive.Service;
 
 /// <summary>
 /// The service's background worker: reconciles stale symlinks at startup, then serves the named
-/// pipe (one connection at a time, mirroring the app's CLI pipe server) so the user-mode app can
+/// pipe (several connections at once, like the app's CLI pipe server) so the user-mode app can
 /// request publish/unpublish operations. A <see cref="PeriodicTimer"/> re-runs reconciliation to
 /// reclaim letters leaked by an app that crashed without unpublishing.
 /// </summary>
@@ -22,18 +22,24 @@ public sealed class HelperPipeService(GlobalMountManager mountManager, ILogger<H
     private static readonly TimeSpan ReconcileInterval = TimeSpan.FromSeconds(60);
 
     /// <summary>
-    /// Upper bound on reading the request line and writing the response line of a single
-    /// connection. Publish/unpublish requests are quick, so unlike the CLI pipe server's timeout
-    /// this also effectively bounds the whole exchange. Guards the single-instance accept loop
-    /// against a connected client that never sends anything (or never reads the reply), which
-    /// would otherwise wedge every other local caller (the app's publish/unpublish requests) behind
-    /// it until the service restarts.
+    /// Most pipe instances alive at once: one listening for the next client, the others serving
+    /// connected clients. Any local user can connect, so a single client that connects and then
+    /// stalls must not be able to keep the app's own requests from getting through.
     /// </summary>
-    private static readonly TimeSpan PerIoTimeout = TimeSpan.FromSeconds(30);
+    internal const int MaxInstances = 8;
 
     /// <summary>
-    /// Pause before retrying after the pipe couldn't be created or a connection couldn't be
-    /// accepted, so a persistent failure doesn't turn the accept loop into a busy spin.
+    /// Upper bound on reading the request line and writing the response line of a single
+    /// connection. Publish/unpublish requests are quick and clients send theirs right after
+    /// connecting, so this also effectively bounds the whole exchange — and how long a connected
+    /// client that never sends anything (or never reads the reply) can hold one of the
+    /// <see cref="MaxInstances"/> pipe instances.
+    /// </summary>
+    private static readonly TimeSpan PerIoTimeout = TimeSpan.FromSeconds(5);
+
+    /// <summary>
+    /// Pause before retrying after the pipe couldn't be created, so a persistent failure doesn't
+    /// turn the accept loop into a busy spin.
     /// </summary>
     private static readonly TimeSpan AcceptRetryDelay = TimeSpan.FromSeconds(1);
 
@@ -54,61 +60,47 @@ public sealed class HelperPipeService(GlobalMountManager mountManager, ILogger<H
     internal const string AdministratorsOnlyMessage =
         $@"Only administrators may publish global drive letters. To allow every user, set the DWORD HKLM\{SettingsKeyPath}\{AllowNonAdminPublishValueName} to 1.";
 
+    /// <summary>
+    /// Reconciles stale symlinks, then serves the pipe until the service stops.
+    /// </summary>
+    /// <param name="stoppingToken">Signals that the service is stopping.</param>
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         mountManager.Reconcile();
 
         _ = Task.Run(() => ReconcileLoopAsync(stoppingToken), stoppingToken);
 
-        while (!stoppingToken.IsCancellationRequested)
-        {
-            var connected = false;
-            try
-            {
-                await using var pipe = CreatePipe();
-                await pipe.WaitForConnectionAsync(stoppingToken);
-                connected = true;
-                await HandleConnectionAsync(pipe, stoppingToken);
-            }
-            catch (OperationCanceledException)
-            {
-                return;
-            }
-            catch (Exception ex)
-            {
-                // Best-effort — a malformed or interrupted request must not take down the loop.
-                logger.LogWarningThrottled(
-                    "pipe-connection-failed", TimeSpan.FromMinutes(5),
-                    "Pipe connection handling failed: {Error}", ex.Message);
-
-                if (!connected)
-                {
-                    // Failing before any client connected (e.g. another process holds the pipe
-                    // name) will most likely fail again right away; without a pause this loop
-                    // would spin a core at 100% for as long as the condition lasts.
-                    try
-                    {
-                        await Task.Delay(AcceptRetryDelay, stoppingToken);
-                    }
-                    catch (OperationCanceledException)
-                    {
-                        return;
-                    }
-                }
-            }
-        }
+        var listener = new PipeListener(
+            MaxInstances,
+            CreatePipe,
+            HandleConnectionAsync,
+            ex => logger.LogWarningThrottled(
+                "pipe-create-failed", TimeSpan.FromMinutes(5),
+                "Failed to create the pipe (another process may be holding its name); retrying: {Error}", ex.Message),
+            ex => logger.LogWarningThrottled(
+                "pipe-connection-failed", TimeSpan.FromMinutes(5),
+                "Pipe connection handling failed: {Error}", ex.Message),
+            AcceptRetryDelay);
+        await listener.RunAsync(stoppingToken);
     }
 
     /// <summary>
-    /// Creates the service's pipe, secured by <see cref="CreatePipeSecurity"/>.
+    /// Creates a listening instance of the service's pipe, secured by
+    /// <see cref="CreatePipeSecurity"/>.
     /// </summary>
-    private static NamedPipeServerStream CreatePipe() =>
+    /// <param name="firstInstance">
+    /// Whether no other instance of the service's pipe exists. The pipe is then created as the
+    /// name's first instance, failing if another process already holds the name: joining that
+    /// process's pipe would let it take over some of the service's clients.
+    /// </param>
+    /// <returns>The pipe, waiting for a connection.</returns>
+    private static NamedPipeServerStream CreatePipe(bool firstInstance) =>
         NamedPipeServerStreamAcl.Create(
             HelperPipeProtocol.PipeName,
             PipeDirection.InOut,
-            maxNumberOfServerInstances: 1,
+            MaxInstances,
             PipeTransmissionMode.Byte,
-            PipeOptions.Asynchronous,
+            firstInstance ? PipeOptions.Asynchronous | PipeOptions.FirstPipeInstance : PipeOptions.Asynchronous,
             inBufferSize: 0,
             outBufferSize: 0,
             CreatePipeSecurity());
@@ -200,6 +192,11 @@ public sealed class HelperPipeService(GlobalMountManager mountManager, ILogger<H
         }
     }
 
+    /// <summary>
+    /// Reads one request from <paramref name="pipe"/>, executes it, and writes the response back.
+    /// </summary>
+    /// <param name="pipe">The connected pipe instance.</param>
+    /// <param name="ct">Stops handling the request.</param>
     private async Task HandleConnectionAsync(NamedPipeServerStream pipe, CancellationToken ct)
     {
         logger.LogDebug("Client connected. PID={Pid}", NativeMethods.GetClientProcessId(pipe.SafePipeHandle));
