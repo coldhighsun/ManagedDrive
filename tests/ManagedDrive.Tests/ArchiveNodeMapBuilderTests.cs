@@ -226,6 +226,34 @@ public sealed class ArchiveNodeMapBuilderTests
     }
 
     [Fact]
+    public void ToFileTimeOrFallback_DateBefore1601_ReturnsFallback()
+    {
+        var lastModified = new DateTime(1500, 6, 1, 0, 0, 0, DateTimeKind.Utc);
+
+        var actual = ArchiveNodeMapBuilder.ToFileTimeOrFallback(lastModified, 42);
+
+        Assert.Equal(42UL, actual);
+    }
+
+    [Fact]
+    public void ToFileTimeOrFallback_NoDate_ReturnsFallback()
+    {
+        var actual = ArchiveNodeMapBuilder.ToFileTimeOrFallback(null, 42);
+
+        Assert.Equal(42UL, actual);
+    }
+
+    [Fact]
+    public void ToFileTimeOrFallback_RepresentableDate_ReturnsFileTime()
+    {
+        var lastModified = new DateTime(2026, 1, 2, 3, 4, 5, DateTimeKind.Utc);
+
+        var actual = ArchiveNodeMapBuilder.ToFileTimeOrFallback(lastModified, 42);
+
+        Assert.Equal((ulong)lastModified.ToFileTimeUtc(), actual);
+    }
+
+    [Fact]
     public void BuildNodeMap_EntriesWithDotSegments_KeepsRootDirectoryAndCanonicalPaths()
     {
         var path = CreateZip(entries =>
