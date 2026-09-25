@@ -41,15 +41,10 @@ public static class Program
             return 1;
         }
 
-        var deadline = Environment.TickCount64 + (long)LaunchWaitTimeout.TotalMilliseconds;
-        while (Environment.TickCount64 < deadline)
+        await Task.Delay(RetryInterval);
+        if (await CliPipeClient.SendWithRetryAsync(args, LaunchWaitTimeout, RetryInterval) is { } delivered)
         {
-            await Task.Delay(RetryInterval);
-
-            if (CliPipeClient.TrySend(args, out response))
-            {
-                return CliOutputRenderer.Render(response);
-            }
+            return CliOutputRenderer.Render(delivered);
         }
 
         await Console.Error.WriteLineAsync(alreadyRunning

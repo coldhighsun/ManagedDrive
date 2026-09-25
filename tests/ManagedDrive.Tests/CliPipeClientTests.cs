@@ -256,6 +256,66 @@ public sealed class CliPipeClientTests : IDisposable
         Assert.Null(await serverTask);
     }
 
+    /// <summary>
+    /// Verifies a server that only starts listening after the first attempts still gets the
+    /// request, once it is up.
+    /// </summary>
+    [Fact(Timeout = 20_000)]
+    public async Task SendWithRetryAsync_ServerStartsListeningLate_DeliversOnceItIsUp()
+    {
+        var pipeName = CliPipeClient.TestPipeNameOverride!;
+        var expected = new CliResponse(true, "Mounted R:.", null, 0);
+        var serverTask = Task.Run(async () =>
+        {
+            await Task.Delay(TimeSpan.FromMilliseconds(500), TestContext.Current.CancellationToken);
+            await using var server = new EchoingCliServer(pipeName, expected);
+            await server.RunOnceAsync();
+        }, TestContext.Current.CancellationToken);
+
+        var response = await CliPipeClient.SendWithRetryAsync(
+            ["mount", "R:"], TimeSpan.FromSeconds(10), TimeSpan.FromMilliseconds(50));
+
+        await serverTask;
+        Assert.NotNull(response);
+        Assert.Equal(expected.Message, response.Message);
+    }
+
+    /// <summary>
+    /// Verifies retrying stops as soon as the keep-trying check fails, without waiting out the
+    /// timeout.
+    /// </summary>
+    [Fact(Timeout = 20_000)]
+    public async Task SendWithRetryAsync_KeepTryingReturnsFalse_ReturnsNullWithoutWaitingOutTheTimeout()
+    {
+        var checks = 0;
+        var stopwatch = Stopwatch.StartNew();
+
+        var response = await CliPipeClient.SendWithRetryAsync(
+            ["list"], TimeSpan.FromMinutes(1), TimeSpan.FromMilliseconds(50), () =>
+            {
+                checks++;
+                return false;
+            }).WaitAsync(TestContext.Current.CancellationToken);
+
+        stopwatch.Stop();
+        Assert.Null(response);
+        Assert.Equal(1, checks);
+        Assert.True(stopwatch.Elapsed < TimeSpan.FromSeconds(10), $"Retrying took {stopwatch.Elapsed}.");
+    }
+
+    /// <summary>
+    /// Verifies retrying gives up once the timeout passes with nothing listening.
+    /// </summary>
+    [Fact(Timeout = 20_000)]
+    public async Task SendWithRetryAsync_NothingListensBeforeTheTimeout_ReturnsNull()
+    {
+        var response = await CliPipeClient.SendWithRetryAsync(
+            ["list"], TimeSpan.FromMilliseconds(300), TimeSpan.FromMilliseconds(50))
+            .WaitAsync(TestContext.Current.CancellationToken);
+
+        Assert.Null(response);
+    }
+
     private static async Task AwaitIgnoringCancellationAsync(Task task)
     {
         try

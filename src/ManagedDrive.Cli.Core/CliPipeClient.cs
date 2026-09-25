@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.IO.Pipes;
 using System.Security.Principal;
 using System.Text;
@@ -175,6 +176,44 @@ public static class CliPipeClient
         {
             try { reader.Dispose(); } catch (Exception) { }
             try { writer.Dispose(); } catch (Exception) { }
+        }
+    }
+
+    /// <summary>
+    /// Calls <see cref="TrySend"/> until the request is delivered, <paramref name="timeout"/> has
+    /// passed, or <paramref name="keepTrying"/> reports there's no point waiting any longer — for
+    /// when the instance is still starting up (or busy serving other clients) and hasn't opened its
+    /// pipe yet.
+    /// </summary>
+    /// <param name="args">The command-line arguments to forward.</param>
+    /// <param name="timeout">How long to keep retrying after the first attempt.</param>
+    /// <param name="retryInterval">Delay between attempts.</param>
+    /// <param name="keepTrying">
+    /// Checked after each failed attempt; returning <see langword="false"/> stops retrying (e.g.
+    /// once the instance being waited for has exited). <see langword="null"/> retries until
+    /// <paramref name="timeout"/>.
+    /// </param>
+    /// <returns>
+    /// The response, as <see cref="TrySend"/> reports it once the request was delivered, or
+    /// <see langword="null"/> if it never was.
+    /// </returns>
+    public static async Task<CliResponse?> SendWithRetryAsync(
+        string[] args, TimeSpan timeout, TimeSpan retryInterval, Func<bool>? keepTrying = null)
+    {
+        var elapsed = Stopwatch.StartNew();
+        while (true)
+        {
+            if (TrySend(args, out var response))
+            {
+                return response;
+            }
+
+            if (elapsed.Elapsed >= timeout || keepTrying?.Invoke() == false)
+            {
+                return null;
+            }
+
+            await Task.Delay(retryInterval);
         }
     }
 

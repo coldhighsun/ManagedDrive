@@ -299,6 +299,7 @@
 
     <!-- MessageBox bodies -->
     <sys:String x:Key="Msg.AlreadyRunning">ManagedDrive is already running.</sys:String>
+    <sys:String x:Key="Msg.CommandNotDelivered">The command could not be handed to the running ManagedDrive instance. It may still be starting up or busy; try again shortly.</sys:String>
     <sys:String x:Key="Msg.UnexpectedErrorTitle">ManagedDrive – Unexpected Error</sys:String>
     <sys:String x:Key="Msg.UnexpectedErrorBody">An unexpected error occurred and has been logged:&#x0a;&#x0a;{0}&#x0a;&#x0a;ManagedDrive will attempt to continue running.</sys:String>
     <sys:String x:Key="Msg.StartupFailedBody">ManagedDrive failed to start and has been closed. The error has been logged:&#x0a;&#x0a;{0}</sys:String>
