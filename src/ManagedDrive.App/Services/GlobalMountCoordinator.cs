@@ -18,9 +18,15 @@ public sealed class GlobalMountCoordinator
 {
     private readonly ILogger<GlobalMountCoordinator> _logger;
 
+    /// <summary>
+    /// Sends the helper-service requests in the order the TEMP state changed.
+    /// </summary>
+    private readonly GlobalMountRequestQueue _requests;
+
     public GlobalMountCoordinator(MainViewModel mainViewModel, ILogger<GlobalMountCoordinator> logger)
     {
         _logger = logger;
+        _requests = new(logger);
 
         mainViewModel.Disks.CollectionChanged += (_, e) =>
         {
@@ -76,7 +82,7 @@ public sealed class GlobalMountCoordinator
         var letter = vm.MountPoint;
 
         // Pipe I/O blocks briefly; the property change fires on the UI thread, so offload it.
-        Task.Run(() =>
+        _requests.Enqueue(() =>
         {
             if (HelperPipeClient.TryPublish(letter, devicePath, out var response))
             {
@@ -91,7 +97,7 @@ public sealed class GlobalMountCoordinator
 
     private void UnpublishAsync(string letter)
     {
-        Task.Run(() =>
+        _requests.Enqueue(() =>
         {
             if (HelperPipeClient.TryUnpublish(letter, out var response))
             {
