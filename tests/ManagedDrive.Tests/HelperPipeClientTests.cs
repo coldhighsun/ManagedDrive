@@ -115,6 +115,37 @@ public sealed class HelperPipeClientTests : IDisposable
         await AwaitIgnoringCancellationAsync(serverTask);
     }
 
+    [Fact(Timeout = 10_000)]
+    public async Task IsServiceAvailable_ServiceNeverReadsRequest_ReturnsFalseWithWriteTimeoutReasonWithoutHanging()
+    {
+        var pipeName = HelperPipeClient.TestPipeNameOverride!;
+
+        // A zero-size inbound buffer, as the real service uses, makes the client's write complete
+        // only once the service reads. The client can connect to this instance without the service
+        // ever waiting for a connection, so nothing ever reads the request.
+        using var server = new NamedPipeServerStream(
+            pipeName, PipeDirection.InOut, 1, PipeTransmissionMode.Byte, PipeOptions.Asynchronous, 0, 0);
+
+        var stopwatch = Stopwatch.StartNew();
+
+        // On a dedicated thread so a regression that blocks the write forever still lets the test
+        // time out instead of hanging the run.
+        var (available, failureReason) = await Task.Factory.StartNew(
+            () => (HelperPipeClient.IsServiceAvailable(out var reason), reason),
+            CancellationToken.None,
+            TaskCreationOptions.LongRunning,
+            TaskScheduler.Default).WaitAsync(TestContext.Current.CancellationToken);
+
+        stopwatch.Stop();
+
+        Assert.False(available);
+        Assert.NotNull(failureReason);
+        Assert.Contains("write timed out", failureReason);
+        Assert.True(
+            stopwatch.Elapsed < TimeSpan.FromSeconds(5),
+            $"IsServiceAvailable blocked for {stopwatch.Elapsed}; the overridden 200ms timeout should have abandoned the write.");
+    }
+
     [Fact]
     public void IsServiceAvailable_NoListener_ReturnsFalseWithConnectFailureReason()
     {

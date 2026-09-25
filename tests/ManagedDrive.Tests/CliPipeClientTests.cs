@@ -82,6 +82,39 @@ public sealed class CliPipeClientTests : IDisposable
     }
 
     [Fact(Timeout = 10_000)]
+    public async Task TrySend_ServerNeverReadsRequest_ReturnsTrueWithNoResponseFailureWithoutHanging()
+    {
+        var pipeName = CliPipeClient.TestPipeNameOverride!;
+
+        // A zero-size inbound buffer, as the real server uses, makes the client's write complete
+        // only once the server reads. The client can connect to this instance without the server
+        // ever waiting for a connection, so nothing ever reads the request.
+        using var server = new NamedPipeServerStream(
+            pipeName, PipeDirection.InOut, 1, PipeTransmissionMode.Byte, PipeOptions.Asynchronous, 0, 0);
+
+        var stopwatch = Stopwatch.StartNew();
+
+        // On a dedicated thread so a regression that blocks the write forever still lets the test
+        // time out instead of hanging the run.
+        var (answered, response) = await Task.Factory.StartNew(
+            () => (CliPipeClient.TrySend(["list"], out var r), r),
+            CancellationToken.None,
+            TaskCreationOptions.LongRunning,
+            TaskScheduler.Default).WaitAsync(TestContext.Current.CancellationToken);
+
+        stopwatch.Stop();
+
+        // The request may still be read and run later, so it must not be reported as undelivered.
+        Assert.True(answered);
+        Assert.False(response.Success);
+        Assert.Equal(1, response.ExitCode);
+        Assert.Equal(CliPipeClient.NoResponseMessage, response.Message);
+        Assert.True(
+            stopwatch.Elapsed < TimeSpan.FromSeconds(5),
+            $"TrySend blocked for {stopwatch.Elapsed}; the overridden 200ms timeout should have abandoned the write.");
+    }
+
+    [Fact(Timeout = 10_000)]
     public async Task TrySend_ServerClosesAfterReadingRequest_ReturnsTrueWithConnectionClosedFailure()
     {
         var pipeName = CliPipeClient.TestPipeNameOverride!;
