@@ -105,6 +105,40 @@ public sealed class ParallelZstdTests
     }
 
     /// <summary>
+    /// A long run of frames that decompress to nothing, as a crafted image could hold, is skipped
+    /// without exhausting the stack, and the data after it still comes through.
+    /// </summary>
+    [Theory]
+    [InlineData(1)]
+    [InlineData(4)]
+    public void ReadStream_ManyEmptyFramesBeforeData_SkipsThemAndReadsData(int maxDegreeOfParallelism)
+    {
+        using var compressor = new ZstdSharp.Compressor(3);
+        var emptyFrame = compressor.Wrap(ReadOnlySpan<byte>.Empty).ToArray();
+        var dataFrame = compressor.Wrap("data"u8).ToArray();
+        using var framed = new MemoryStream();
+        using (var writer = new BinaryWriter(framed, System.Text.Encoding.UTF8, leaveOpen: true))
+        {
+            for (var i = 0; i < 200_000; i++)
+            {
+                writer.Write(emptyFrame.Length);
+                writer.Write(emptyFrame);
+            }
+
+            writer.Write(dataFrame.Length);
+            writer.Write(dataFrame);
+            writer.Write(0);
+        }
+
+        framed.Position = 0;
+        using var reader = new ParallelZstd.ReadStream(framed, maxDegreeOfParallelism);
+        using var decompressed = new MemoryStream();
+        reader.CopyTo(decompressed);
+
+        Assert.Equal("data"u8.ToArray(), decompressed.ToArray());
+    }
+
+    /// <summary>
     /// Alternating runs of random (incompressible) and zero (highly compressible) bytes, so
     /// consecutive chunks compress to very different sizes.
     /// </summary>

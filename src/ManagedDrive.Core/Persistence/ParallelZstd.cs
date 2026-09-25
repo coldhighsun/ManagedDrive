@@ -282,56 +282,65 @@ internal static class ParallelZstd
 
         private bool TryAdvanceChunk()
         {
-            // The current chunk has been fully consumed, so its buffer is free for a later chunk.
-            // Zeroed before returning to the pool: it held this chunk's decompressed plaintext, and
-            // an oversized buffer kept around from an earlier, larger chunk would otherwise leave
-            // that plaintext resident beyond the current chunk's own length.
-            if (_currentChunk.Length > 0)
+            // A loop rather than recursing on an empty chunk: a crafted image can hold any number
+            // of frames that decompress to nothing, and recursing once per frame would overflow
+            // the stack.
+            while (true)
             {
-                SecureZero.All(_currentChunk);
-                _freeDecompressed.Push(_currentChunk);
-                _currentChunk = [];
-                _currentChunkLength = 0;
+                // The current chunk has been fully consumed, so its buffer is free for a later chunk.
+                // Zeroed before returning to the pool: it held this chunk's decompressed plaintext, and
+                // an oversized buffer kept around from an earlier, larger chunk would otherwise leave
+                // that plaintext resident beyond the current chunk's own length.
+                if (_currentChunk.Length > 0)
+                {
+                    SecureZero.All(_currentChunk);
+                    _freeDecompressed.Push(_currentChunk);
+                    _currentChunk = [];
+                    _currentChunkLength = 0;
+                    _positionInChunk = 0;
+                }
+
+                FillPending();
+
+                if (_pending.Count == 0)
+                {
+                    _endOfStream = true;
+                    return false;
+                }
+
+                var (task, decompressor) = _pending.Dequeue();
+                DecodedChunk decoded;
+                try
+                {
+                    decoded = task.GetAwaiter().GetResult();
+                }
+                catch
+                {
+                    // The task never produced a DecodedChunk to recover the decompressor from, so
+                    // it has to be disposed directly here instead of via the usual pool-push below.
+                    decompressor.Dispose();
+                    throw;
+                }
+
+                // Zeroed like _currentChunk below: for an encrypted image this buffer held the
+                // already-decrypted, still-Zstd-compressed bytes of this chunk's plaintext content, so
+                // it shouldn't linger in the pool unscrubbed any more than the decompressed form does.
+                SecureZero.All(decoded.Compressed);
+                _freeCompressed.Push(decoded.Compressed);
+                _freeDecompressors.Push(decompressor);
+                _currentChunk = decoded.Decompressed;
+                _currentChunkLength = decoded.Length;
                 _positionInChunk = 0;
+
+                // Immediately queue the next chunk so decompression of what's now the tail of the
+                // pending queue overlaps with the caller consuming _currentChunk.
+                FillPending();
+
+                if (_currentChunkLength > 0)
+                {
+                    return true;
+                }
             }
-
-            FillPending();
-
-            if (_pending.Count == 0)
-            {
-                _endOfStream = true;
-                return false;
-            }
-
-            var (task, decompressor) = _pending.Dequeue();
-            DecodedChunk decoded;
-            try
-            {
-                decoded = task.GetAwaiter().GetResult();
-            }
-            catch
-            {
-                // The task never produced a DecodedChunk to recover the decompressor from, so
-                // it has to be disposed directly here instead of via the usual pool-push below.
-                decompressor.Dispose();
-                throw;
-            }
-
-            // Zeroed like _currentChunk below: for an encrypted image this buffer held the
-            // already-decrypted, still-Zstd-compressed bytes of this chunk's plaintext content, so
-            // it shouldn't linger in the pool unscrubbed any more than the decompressed form does.
-            SecureZero.All(decoded.Compressed);
-            _freeCompressed.Push(decoded.Compressed);
-            _freeDecompressors.Push(decompressor);
-            _currentChunk = decoded.Decompressed;
-            _currentChunkLength = decoded.Length;
-            _positionInChunk = 0;
-
-            // Immediately queue the next chunk so decompression of what's now the tail of the
-            // pending queue overlaps with the caller consuming _currentChunk.
-            FillPending();
-
-            return _currentChunkLength > 0 || TryAdvanceChunk();
         }
 
         private bool TryQueueNextChunk()
