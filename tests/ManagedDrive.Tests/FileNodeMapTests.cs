@@ -558,6 +558,63 @@ public sealed class FileNodeMapTests
         Assert.Equal(1UL, file.MetadataVersion);
     }
 
+    /// <summary>
+    /// Renaming a node bumps its own metadata version, not just its descendants', so a save
+    /// can't take its old segment for still up to date.
+    /// </summary>
+    [Fact]
+    public void Rename_RenamedNode_BumpsItsMetadataVersion()
+    {
+        var map = new FileNodeMap();
+        map.Add("\\", MakeDir());
+        var file = MakeFile();
+        map.Add("\\a.txt", file);
+
+        map.Rename("\\a.txt", "\\b.txt", file, replaceIfExists: false);
+
+        Assert.Equal(1UL, file.MetadataVersion);
+    }
+
+    /// <summary>
+    /// A rename refused because the target exists leaves the node's metadata version alone.
+    /// </summary>
+    [Fact]
+    public void Rename_TargetExists_DoesNotBumpMetadataVersion()
+    {
+        var map = new FileNodeMap();
+        map.Add("\\", MakeDir());
+        var file = MakeFile();
+        map.Add("\\a.txt", file);
+        map.Add("\\b.txt", MakeFile());
+
+        var conflict = map.Rename("\\a.txt", "\\b.txt", file, replaceIfExists: false);
+
+        Assert.Equal(FileNodeMap.RenameConflict.NameCollision, conflict);
+        Assert.Equal(0UL, file.MetadataVersion);
+    }
+
+    /// <summary>
+    /// The metadata versions returned alongside the snapshot line up with its nodes.
+    /// </summary>
+    [Fact]
+    public void GetAllNodes_WithMetadataVersions_ReturnsEachNodesVersionAtItsIndex()
+    {
+        var map = new FileNodeMap();
+        map.Add("\\", MakeDir());
+        var a = MakeFile();
+        a.MetadataVersion = 5;
+        map.Add("\\a.txt", a);
+        var b = MakeFile();
+        b.MetadataVersion = 9;
+        map.Add("\\b.txt", b);
+
+        var nodes = map.GetAllNodes(out var versions);
+
+        Assert.Equal(nodes.Count, versions.Length);
+        Assert.Equal(nodes.Select(kvp => kvp.Value.MetadataVersion), versions);
+        Assert.Equal(9UL, versions[nodes.ToList().FindIndex(kvp => kvp.Key == "\\b.txt")]);
+    }
+
     [Fact]
     public void UpdateAllocationSize_NodeRemovedByClearAll_LeavesTotalUnchanged()
     {

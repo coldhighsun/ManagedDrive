@@ -691,7 +691,7 @@ public sealed class MemoryFileSystem : FileSystemBase
                 return STATUS_NOT_A_DIRECTORY;
         }
 
-        node.MetadataVersion++;
+        // NodeMap.Rename already bumped the node's MetadataVersion under its write lock.
         MarkDirty();
         return STATUS_SUCCESS;
     }
