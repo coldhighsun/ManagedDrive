@@ -342,6 +342,37 @@ public sealed class DiskImageSerializerV6Tests
         }
     }
 
+    /// <summary>
+    /// A damaged segment in an encrypted image is reported as corruption, not as a wrong
+    /// password: the password did unwrap the CEK, so retrying it can't help.
+    /// </summary>
+    [Fact]
+    public void Load_SegmentedEncryptedImageWithTamperedSegment_ThrowsInvalidData()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid()}.mdr");
+        try
+        {
+            var map = new FileNodeMap();
+            map.Add("\\", MakeDir());
+            map.Add("\\File.txt", MakeFile("hello world"u8.ToArray()));
+            DiskImageSerializer.SaveSegmentedForTest(map, capacityBytes: 1024 * 1024, "Label", path,
+                ImageCompressionLevel.Fastest, new ImageEncryptionInfo("s3cret", DiskImageSerializer.GenerateCek()),
+                segmentTargetBytes: 4096);
+            var bytes = File.ReadAllBytes(path);
+            bytes[^1] ^= 0xFF;
+            File.WriteAllBytes(path, bytes);
+
+            var ex = Assert.Throws<InvalidDataException>(() =>
+                DiskImageSerializer.Load(path, out _, out _, "s3cret", out _));
+
+            Assert.IsAssignableFrom<System.Security.Cryptography.CryptographicException>(ex.InnerException);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
     [Fact]
     public void SaveIncremental_ReusedSegmentAcrossRotatedCek_BecomesUnreadableWithNewPassword()
     {
@@ -364,7 +395,9 @@ public sealed class DiskImageSerializerV6Tests
             DiskImageSerializer.SaveIncremental(map, capacityBytes: 1024 * 1024, "Label", path,
                 ImageCompressionLevel.Fastest, new ImageEncryptionInfo("new-pw", DiskImageSerializer.GenerateCek()));
 
-            Assert.Throws<ImagePasswordIncorrectException>(() =>
+            // The new password unwraps the new CEK fine; it's the reused segment, still
+            // encrypted under the old CEK, that fails — so it reads as corruption.
+            Assert.Throws<InvalidDataException>(() =>
                 DiskImageSerializer.Load(path, out _, out _, "new-pw", out _));
         }
         finally

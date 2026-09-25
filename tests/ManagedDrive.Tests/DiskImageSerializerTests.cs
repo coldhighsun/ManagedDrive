@@ -26,6 +26,39 @@ public sealed class DiskImageSerializerTests
         }
     }
 
+    /// <summary>
+    /// Damaged encrypted data in a version 5 image is reported as corruption, not as a wrong
+    /// password: the password did unwrap the CEK, so retrying it can't help.
+    /// </summary>
+    [Fact]
+    public void Load_EncryptedImageWithTamperedData_ThrowsInvalidData()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid()}.mdr");
+        try
+        {
+            var map = new FileNodeMap();
+            map.Add("\\", MakeDir());
+            map.Add("\\File.txt", MakeFile("hello world"u8.ToArray()));
+            DiskImageSerializer.Save(map, capacityBytes: 1024 * 1024, "MyLabel", path, ImageCompressionLevel.Fastest,
+                new ImageEncryptionInfo("s3cret", DiskImageSerializer.GenerateCek()));
+            var bytes = File.ReadAllBytes(path);
+
+            // The last ciphertext byte of the data chunk, just before the 20-byte end-of-stream
+            // chunk (length + tag), which loading never needs to read.
+            bytes[^21] ^= 0xFF;
+            File.WriteAllBytes(path, bytes);
+
+            var ex = Assert.Throws<InvalidDataException>(() =>
+                DiskImageSerializer.Load(path, out _, out _, "s3cret", out _));
+
+            Assert.IsAssignableFrom<System.Security.Cryptography.CryptographicException>(ex.InnerException);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
     [Fact]
     public void Load_EncryptedImageWithWrongPassword_ThrowsPasswordIncorrect()
     {
