@@ -57,6 +57,18 @@ public sealed class CloneDiskDialogTests
     }
 
     /// <summary>
+    /// A directory mount point only covers paths inside that directory, not a sibling whose name
+    /// merely starts with the same text.
+    /// </summary>
+    [Fact]
+    public void GetExportPathError_SiblingOfDirectoryMountPoint_ReturnsNull()
+    {
+        var error = CloneDiskDialog.GetExportPathError(@"C:\ram2\backup.mdr", [], [@"C:\ram"]);
+
+        Assert.Null(error);
+    }
+
+    /// <summary>
     /// Creates the options of an active disk mounted at <paramref name="mountPoint"/>.
     /// </summary>
     /// <param name="mountPoint">The disk's drive letter.</param>

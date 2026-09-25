@@ -115,4 +115,29 @@ public sealed class MountPointValidatorTests : IDisposable
         Assert.True(MountPointValidator.TryValidateDirectoryMountPoint(sibling2, [sibling1], out var error));
         Assert.Null(error);
     }
+
+    [Theory]
+    [InlineData(@"R:\file.mdr", "R:")]
+    [InlineData(@"r:\dir\file.mdr", "R:")]
+    [InlineData(@"R:", "R:")]
+    [InlineData(@"C:\ram\file.mdr", @"C:\ram")]
+    [InlineData(@"C:\ram", @"C:\ram\")]
+    [InlineData(@"C:/ram/file.mdr", @"C:\ram")]
+    [InlineData(@"C:\other\..\ram\file.mdr", @"C:\ram")]
+    public void IsPathOnMountPoint_PathInsideMountPoint_ReturnsTrue(string path, string mountPoint)
+    {
+        Assert.True(MountPointValidator.IsPathOnMountPoint(path, mountPoint));
+    }
+
+    [Theory]
+    [InlineData(@"C:\ram2\file.mdr", @"C:\ram")]
+    [InlineData(@"C:\ram\..\file.mdr", @"C:\ram")]
+    [InlineData(@"S:\file.mdr", "R:")]
+    [InlineData(@"C:\ram", @"C:\ram\sub")]
+    [InlineData("", "R:")]
+    [InlineData("C:\\bad\0name.mdr", "C:")]
+    public void IsPathOnMountPoint_PathOutsideMountPointOrMalformed_ReturnsFalse(string path, string mountPoint)
+    {
+        Assert.False(MountPointValidator.IsPathOnMountPoint(path, mountPoint));
+    }
 }

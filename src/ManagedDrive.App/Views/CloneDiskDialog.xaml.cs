@@ -165,7 +165,7 @@ public partial class CloneDiskDialog
     /// </returns>
     internal static string? GetExportPathError(string path, IReadOnlyList<DiskOptions> otherDisks, IReadOnlyList<string> activeMountPoints)
     {
-        if (activeMountPoints.Any(mp => path.StartsWith(mp, StringComparison.OrdinalIgnoreCase)))
+        if (activeMountPoints.Any(mp => MountPointValidator.IsPathOnMountPoint(path, mp)))
         {
             return "Val.ImagePathOnRamDisk";
         }

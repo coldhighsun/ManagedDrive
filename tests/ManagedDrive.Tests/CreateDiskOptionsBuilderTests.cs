@@ -160,6 +160,17 @@ public sealed class CreateDiskOptionsBuilderTests
     }
 
     [Fact]
+    public void ValidateImagePath_SiblingOfDirectoryMountPoint_ReturnsNone()
+    {
+        var mountPoint = Path.Combine(Path.GetTempPath(), "ram");
+        var imagePath = Path.Combine(Path.GetTempPath(), "ram2.mdr");
+
+        var error = CreateDiskOptionsBuilder.ValidateImagePath(imagePath, mountPoint, []);
+
+        Assert.Equal(CreateDiskValidationError.None, error);
+    }
+
+    [Fact]
     public void ValidateImagePath_AnotherDisksImage_ReturnsImagePathInUse()
     {
         var imagePath = Path.Combine(Path.GetTempPath(), "shared.mdr");

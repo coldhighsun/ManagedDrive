@@ -70,6 +70,40 @@ public static class MountPointValidator
     }
 
     /// <summary>
+    /// Returns <c>true</c> when <paramref name="path"/> is <paramref name="mountPoint"/> itself or
+    /// lies inside it. Both sides are normalized first, so a raw prefix match can't be fooled by
+    /// a sibling sharing the prefix (<c>C:\ram2</c> vs. mount point <c>C:\ram</c>), forward
+    /// slashes, or <c>..</c> segments.
+    /// </summary>
+    /// <param name="path">The path to classify; relative paths resolve against the current directory.</param>
+    /// <param name="mountPoint">A drive letter (<c>X:</c>) or directory mount point.</param>
+    /// <returns>
+    /// <c>true</c> if <paramref name="path"/> is on the disk mounted at <paramref name="mountPoint"/>;
+    /// <c>false</c> otherwise, including when either path is malformed.
+    /// </returns>
+    public static bool IsPathOnMountPoint(string path, string mountPoint)
+    {
+        if (string.IsNullOrWhiteSpace(path) || string.IsNullOrWhiteSpace(mountPoint))
+        {
+            return false;
+        }
+
+        string normalizedPath;
+        string normalizedMountPoint;
+        try
+        {
+            normalizedPath = NormalizeForPrefixCheck(path);
+            normalizedMountPoint = NormalizeForPrefixCheck(mountPoint);
+        }
+        catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException)
+        {
+            return false;
+        }
+
+        return normalizedPath.StartsWith(normalizedMountPoint, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
     /// Normalizes a mount point to an absolute, trailing-backslash-terminated path suitable for
     /// an <see cref="string.StartsWith(string, StringComparison)"/> containment check.
     /// </summary>

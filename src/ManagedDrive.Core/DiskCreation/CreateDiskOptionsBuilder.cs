@@ -427,7 +427,7 @@ public static class CreateDiskOptionsBuilder
         // Depends on the currently selected drive letter (which may change after the image
         // file is picked), so this check runs at build time rather than at selection time.
         var allMountPoints = otherDisks.Select(d => d.MountPoint).Append(mountPoint);
-        if (allMountPoints.Any(mp => imagePath.StartsWith(mp, StringComparison.OrdinalIgnoreCase)))
+        if (allMountPoints.Any(mp => MountPointValidator.IsPathOnMountPoint(imagePath, mp)))
         {
             return CreateDiskValidationError.ImagePathOnRamDisk;
         }

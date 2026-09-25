@@ -1626,7 +1626,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         if (!string.IsNullOrEmpty(userTemp))
         {
             var expanded = Environment.ExpandEnvironmentVariables(userTemp);
-            if (expanded.StartsWith(mountPoint, StringComparison.OrdinalIgnoreCase))
+            if (MountPointValidator.IsPathOnMountPoint(expanded, mountPoint))
             {
                 TempDirResetService.Reset();
             }
