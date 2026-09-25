@@ -25,6 +25,10 @@ public static class Program
     // directory along with the args, and the app resolves paths against it.
     public static async Task<int> Main(string[] args)
     {
+        // File names and volume labels can hold any Unicode character, which the console's
+        // legacy code page would print as '?'.
+        ConsoleUnicodeOutput.Enable();
+
         if (CliPipeClient.TrySend(args, out var response))
         {
             return CliOutputRenderer.Render(response);
