@@ -1,3 +1,5 @@
+using YamlDotNet.Core;
+
 namespace ManagedDrive.WingetExtension;
 
 // Routes an `install`/`upgrade` request through `winget download` + a manual launch of the
@@ -9,14 +11,31 @@ namespace ManagedDrive.WingetExtension;
 // (msix, appx, zip, portable, ...) are left for the caller to hand off to plain `winget install`.
 internal static class SilentInstaller
 {
-    // Returns true if this call fully handled the request (exitCode is authoritative).
-    // Returns false if the package's installer type isn't one this class knows how to run
-    // directly, and the caller should fall back to a plain `winget install`/`winget upgrade`.
+    /// <summary>
+    /// Downloads the package with <c>winget download</c> to a real (non-WinFsp) directory and
+    /// runs its installer directly.
+    /// </summary>
+    /// <param name="packageSelectorArgs">
+    /// The arguments to pass on to <c>winget download</c>; must only hold arguments it accepts
+    /// (see <see cref="WingetInstallArguments"/>).
+    /// </param>
+    /// <param name="useFullSilent">
+    /// Whether to use the installer's fully silent switches rather than silent-with-progress.
+    /// </param>
+    /// <param name="exitCode">The exit code to return, when this returns <c>true</c>.</param>
+    /// <returns>
+    /// <c>true</c> if this call fully handled the request (<paramref name="exitCode"/> is
+    /// authoritative); <c>false</c> if the package's installer type isn't one this class knows
+    /// how to run directly, and the caller should fall back to a plain
+    /// <c>winget install</c>/<c>winget upgrade</c>.
+    /// </returns>
     public static bool TryInstall(IReadOnlyList<string> packageSelectorArgs, bool useFullSilent, out int exitCode)
     {
-        var downloadDirectory = CreateRealTempDirectory();
+        string? downloadDirectory = null;
         try
         {
+            downloadDirectory = CreateRealTempDirectory();
+
             Console.WriteLine($"wingetx: downloading {string.Join(' ', packageSelectorArgs)} installer...");
 
             var downloadArgs = new List<string>
@@ -73,7 +92,13 @@ internal static class SilentInstaller
             exitCode = 0;
             return false;
         }
-        catch (Exception ex) when (ex is InvalidOperationException or NotSupportedException)
+        catch (Exception ex) when (ShouldFallBack(ex))
+        {
+            Console.Error.WriteLine($"wingetx: {ex.Message} Falling back to `winget install`.");
+            exitCode = 0;
+            return false;
+        }
+        catch (Exception ex) when (IsInstallFailure(ex))
         {
             Console.Error.WriteLine($"wingetx: {ex.Message}");
             exitCode = 1;
@@ -81,9 +106,32 @@ internal static class SilentInstaller
         }
         finally
         {
-            TryDeleteDirectory(downloadDirectory);
+            if (downloadDirectory is not null)
+            {
+                TryDeleteDirectory(downloadDirectory);
+            }
         }
     }
+
+    /// <summary>
+    /// Returns whether an exception thrown while handling a request means this class can't run
+    /// the package's installer, so the caller should fall back to a plain <c>winget install</c>:
+    /// the manifest names an installer type with no known default switches and doesn't specify
+    /// its own (e.g. a plain <c>exe</c>, or a <c>zip</c>/<c>msix</c> this class never runs).
+    /// </summary>
+    /// <param name="exception">The exception thrown.</param>
+    /// <returns><c>true</c> if the caller should fall back to a plain <c>winget install</c>.</returns>
+    internal static bool ShouldFallBack(Exception exception) => exception is NotSupportedException;
+
+    /// <summary>
+    /// Returns whether an exception thrown while handling a request is an expected failure to
+    /// report as exit code 1 (an unusable or unreadable manifest or download directory), rather
+    /// than a bug to let crash the process.
+    /// </summary>
+    /// <param name="exception">The exception thrown.</param>
+    /// <returns><c>true</c> if the failure should be reported and the request treated as handled.</returns>
+    internal static bool IsInstallFailure(Exception exception) =>
+        exception is InvalidOperationException or YamlException or IOException or UnauthorizedAccessException;
 
     // %LOCALAPPDATA%\Temp is the OS default location %TEMP%/%TMP% normally point to before any
     // WinFsp redirection — it's on the real system volume (satisfying the same Mount-Manager /

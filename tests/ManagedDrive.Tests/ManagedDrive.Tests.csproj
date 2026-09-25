@@ -28,6 +28,7 @@
     <ProjectReference Include="..\..\src\ManagedDrive.App\ManagedDrive.App.csproj" />
     <ProjectReference Include="..\..\src\ManagedDrive.Service\ManagedDrive.Service.csproj" />
     <ProjectReference Include="..\..\src\ManagedDrive.Cli\ManagedDrive.Cli.csproj" />
+    <ProjectReference Include="..\..\src\ManagedDrive.WingetExtension\ManagedDrive.WingetExtension.csproj" />
   </ItemGroup>
 
   <ItemGroup>
