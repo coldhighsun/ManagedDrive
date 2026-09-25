@@ -819,23 +819,8 @@ public static class DiskImageSerializer
             cek = resolvedCek;
         }
 
-        var segmentCount = reader.ReadInt32();
-        var segments = new SegmentIndexEntry[segmentCount];
-        for (var i = 0; i < segmentCount; i++)
-        {
-            var nodeCount = reader.ReadInt32();
-            var payloadLength = reader.ReadInt64();
-            var contentHash = reader.ReadBytes(Sha256Size);
-            byte[]? nonce = null;
-            byte[]? tag = null;
-            if (isEncrypted)
-            {
-                nonce = reader.ReadBytes(NonceSize);
-                tag = reader.ReadBytes(TagSize);
-            }
-
-            segments[i] = new(nodeCount, payloadLength, contentHash, nonce, tag);
-        }
+        var segments = TryReadSegmentIndex(reader, isEncrypted)
+            ?? throw new InvalidDataException("The image's segment index doesn't match its size; the image is truncated or corrupted.");
 
         // Segments are independent, so they're decoded (decrypted, decompressed and parsed) on the
         // thread pool, while this thread keeps reading payloads off the file in order and adds the
@@ -1701,25 +1686,7 @@ public static class DiskImageSerializer
                 candidateReader.ReadBytes(CekSize);
             }
 
-            var segmentCount = candidateReader.ReadInt32();
-            var entries = new SegmentIndexEntry[segmentCount];
-            for (var i = 0; i < segmentCount; i++)
-            {
-                var nodeCount = candidateReader.ReadInt32();
-                var payloadLength = candidateReader.ReadInt64();
-                var contentHash = candidateReader.ReadBytes(Sha256Size);
-                byte[]? nonce = null;
-                byte[]? tag = null;
-                if (isEncrypted)
-                {
-                    nonce = candidateReader.ReadBytes(NonceSize);
-                    tag = candidateReader.ReadBytes(TagSize);
-                }
-
-                entries[i] = new(nodeCount, payloadLength, contentHash, nonce, tag);
-            }
-
-            if (!SegmentIndexMatchesPayloadRegion(entries, candidateStream.Length - candidateStream.Position))
+            if (TryReadSegmentIndex(candidateReader, isEncrypted) is not { } entries)
             {
                 // A truncated (or otherwise damaged) old image: reusing it would fail mid-copy on
                 // every save, forever, since the file never gets replaced. A full rewrite from
@@ -1906,6 +1873,50 @@ public static class DiskImageSerializer
                 payloadStream.Dispose();
             }
         }
+    }
+
+    /// <summary>
+    /// Reads a version 6 image's segment index, starting at its segment count, and checks it
+    /// against the rest of the file before anything trusts it. The count is bounded by the bytes
+    /// left before any array is sized from it, so a damaged or crafted count can't trigger a huge
+    /// allocation; the entries must then describe exactly the payload region that follows (see
+    /// <see cref="SegmentIndexMatchesPayloadRegion"/>).
+    /// </summary>
+    /// <param name="reader">
+    /// Reader over a seekable image stream, positioned at the segment count. Left at the start of
+    /// the payload region when the index is valid.
+    /// </param>
+    /// <param name="isEncrypted">Whether the entries carry a nonce and tag.</param>
+    /// <returns>The entries, or <see langword="null"/> if the index doesn't fit the file.</returns>
+    /// <exception cref="EndOfStreamException">The file ends before the segment count.</exception>
+    private static SegmentIndexEntry[]? TryReadSegmentIndex(BinaryReader reader, bool isEncrypted)
+    {
+        var stream = reader.BaseStream;
+        var segmentCount = reader.ReadInt32();
+        var entrySize = sizeof(int) + sizeof(long) + Sha256Size + (isEncrypted ? NonceSize + TagSize : 0);
+        if (segmentCount < 0 || segmentCount > (stream.Length - stream.Position) / entrySize)
+        {
+            return null;
+        }
+
+        var entries = new SegmentIndexEntry[segmentCount];
+        for (var i = 0; i < segmentCount; i++)
+        {
+            var nodeCount = reader.ReadInt32();
+            var payloadLength = reader.ReadInt64();
+            var contentHash = reader.ReadBytes(Sha256Size);
+            byte[]? nonce = null;
+            byte[]? tag = null;
+            if (isEncrypted)
+            {
+                nonce = reader.ReadBytes(NonceSize);
+                tag = reader.ReadBytes(TagSize);
+            }
+
+            entries[i] = new(nodeCount, payloadLength, contentHash, nonce, tag);
+        }
+
+        return SegmentIndexMatchesPayloadRegion(entries, stream.Length - stream.Position) ? entries : null;
     }
 
     /// <summary>

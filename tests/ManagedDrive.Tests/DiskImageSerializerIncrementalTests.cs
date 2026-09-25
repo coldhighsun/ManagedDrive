@@ -472,6 +472,42 @@ public sealed class DiskImageSerializerIncrementalTests
     }
 
     /// <summary>
+    /// An existing image whose segment count the file can't hold is rewritten in full instead of
+    /// having an index array sized from the bogus count.
+    /// </summary>
+    [Fact]
+    public void Save_ExistingImageWithOversizedSegmentCount_FallsBackToFullRewriteAndStillLoads()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid()}.mdr");
+        try
+        {
+            var map = new FileNodeMap();
+            map.Add("\\", MakeDir());
+            map.Add("\\A.txt", MakeFile("a"u8.ToArray()));
+            DiskImageSerializer.SaveSegmentedIncrementalForTest(map, 1024 * 1024, "Label", path,
+                ImageCompressionLevel.None, encryption: null, segmentTargetBytes: 1);
+
+            // Magic, version, level, encryption flag, capacity, then "Label" with its length byte.
+            const int segmentCountOffset = 4 + sizeof(int) + 1 + 1 + sizeof(ulong) + 1 + 5;
+            var bytes = File.ReadAllBytes(path);
+            Assert.True(BitConverter.ToInt32(bytes, segmentCountOffset) > 0);
+            BitConverter.TryWriteBytes(bytes.AsSpan(segmentCountOffset), int.MaxValue);
+            File.WriteAllBytes(path, bytes);
+
+            DiskImageSerializer.SaveSegmentedIncrementalForTest(map, 1024 * 1024, "Label", path,
+                ImageCompressionLevel.None, encryption: null, segmentTargetBytes: 1);
+
+            var loaded = DiskImageSerializer.Load(path, out _, out _, password: null, out _);
+            Assert.True(loaded.TryGet("\\A.txt", out var node));
+            Assert.Equal("a"u8.ToArray(), node!.FileData!.ToArray((long)node.FileInfo.FileSize));
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    /// <summary>
     /// Progress sink that runs a callback synchronously on the reporting thread, unlike
     /// <see cref="Progress{T}"/>, so a test can act at an exact point in a save.
     /// </summary>
