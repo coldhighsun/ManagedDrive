@@ -202,12 +202,16 @@ public sealed class FileNodeMap : IDisposable
     /// <summary>
     /// Lock-free core of <see cref="Add"/> and <see cref="TryAddWithinCapacity"/>: inserts or
     /// replaces the node at <paramref name="filePath"/>, updates <see cref="_sortedKeys"/>, and
-    /// adjusts <see cref="_totalAllocated"/>. Caller must already hold the write lock.
+    /// adjusts <see cref="_totalAllocated"/>. Also reserves the node's index number (see
+    /// <see cref="FileNode.ReserveIndexNumber"/>) — every loaded image, snapshot, and archive
+    /// node passes through here. Caller must already hold the write lock.
     /// </summary>
     /// <param name="filePath">Absolute file-system path (e.g. <c>\Folder\File.txt</c>).</param>
     /// <param name="node">The file node to store.</param>
     private void AddCore(string filePath, FileNode node)
     {
+        FileNode.ReserveIndexNumber(node.FileInfo.IndexNumber);
+
         if (_map.TryGetValue(filePath, out var existing))
         {
             Interlocked.Add(ref _totalAllocated, -(long)existing.FileInfo.AllocationSize);
