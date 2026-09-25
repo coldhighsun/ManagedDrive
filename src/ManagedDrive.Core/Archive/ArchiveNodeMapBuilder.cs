@@ -13,6 +13,11 @@ namespace ManagedDrive.Core.Archive;
 public static class ArchiveNodeMapBuilder
 {
     /// <summary>
+    /// 1601-01-01 UTC, the earliest instant a Windows FILETIME can represent.
+    /// </summary>
+    private static readonly DateTime FileTimeEpoch = DateTime.FromFileTimeUtc(0);
+
+    /// <summary>
     /// Extracts every entry in <paramref name="archivePath"/> into a new <see cref="FileNodeMap"/>,
     /// synthesizing any directory nodes an archive doesn't explicitly list.
     /// </summary>
@@ -49,9 +54,7 @@ public static class ArchiveNodeMapBuilder
                     return;
                 }
 
-                var timestamp = entry.LastModifiedTime is { } lastModified
-                    ? (ulong)lastModified.ToUniversalTime().ToFileTimeUtc()
-                    : now;
+                var timestamp = ToFileTimeOrFallback(entry.LastModifiedTime, now);
 
                 EnsureAncestorDirectories(nodeMap, path, timestamp);
 
@@ -259,6 +262,25 @@ public static class ArchiveNodeMapBuilder
                 IndexNumber = FileNode.NewIndexNumber(),
             },
         };
+    }
+
+    /// <summary>
+    /// Converts an archive entry's last-modified time to a Windows FILETIME. Formats such as tar
+    /// can store dates before 1601, which <see cref="DateTime.ToFileTimeUtc"/> rejects; such an
+    /// entry gets <paramref name="fallback"/> instead of failing the whole extraction.
+    /// </summary>
+    /// <param name="lastModified">The entry's last-modified time, if the archive records one.</param>
+    /// <param name="fallback">The FILETIME to use when there is no representable time.</param>
+    /// <returns>The entry's FILETIME, or <paramref name="fallback"/>.</returns>
+    internal static ulong ToFileTimeOrFallback(DateTime? lastModified, ulong fallback)
+    {
+        if (lastModified is not { } value)
+        {
+            return fallback;
+        }
+
+        var utc = value.ToUniversalTime();
+        return utc < FileTimeEpoch ? fallback : (ulong)utc.ToFileTimeUtc();
     }
 
     /// <summary>
