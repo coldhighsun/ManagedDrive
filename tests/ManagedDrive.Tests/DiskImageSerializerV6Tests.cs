@@ -438,6 +438,45 @@ public sealed class DiskImageSerializerV6Tests
     }
 
     /// <summary>
+    /// Encrypted segments round-trip both compressed and uncompressed: scrubbing each segment's
+    /// plaintext buffer once it's encrypted must not reach the ciphertext that gets written.
+    /// </summary>
+    /// <param name="level">The compression level to save with.</param>
+    [Theory]
+    [InlineData(ImageCompressionLevel.None)]
+    [InlineData(ImageCompressionLevel.Fastest)]
+    public void SaveSegmented_EncryptedImage_RoundTripsAtCompressionLevel(ImageCompressionLevel level)
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid()}.mdr");
+        try
+        {
+            var map = new FileNodeMap();
+            map.Add("\\", MakeDir());
+            for (var i = 0; i < 5; i++)
+            {
+                map.Add($"\\File{i}.txt", MakeFile(System.Text.Encoding.UTF8.GetBytes($"content {i}")));
+            }
+
+            DiskImageSerializer.SaveSegmentedForTest(map, capacityBytes: 1024 * 1024, "Label", path,
+                level, new ImageEncryptionInfo("s3cret", DiskImageSerializer.GenerateCek()), segmentTargetBytes: 1);
+
+            var loaded = DiskImageSerializer.Load(path, out _, out _, "s3cret", out _);
+            Assert.Equal(6, loaded.Count);
+            for (var i = 0; i < 5; i++)
+            {
+                Assert.True(loaded.TryGet($"\\File{i}.txt", out var node));
+                Assert.Equal(
+                    System.Text.Encoding.UTF8.GetBytes($"content {i}"),
+                    node!.FileData!.ToArray((long)node.FileInfo.FileSize));
+            }
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    /// <summary>
     /// A key-derivation iteration count outside the accepted range is rejected as corruption
     /// before any key derivation, so a crafted image can't stall the load in PBKDF2 or surface as
     /// an argument error.

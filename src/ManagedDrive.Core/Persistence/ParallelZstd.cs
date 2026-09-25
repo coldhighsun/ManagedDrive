@@ -92,6 +92,7 @@ internal static class ParallelZstd
 
                     // Trim now so all chunks' compress-bound buffers aren't alive at once.
                     compressed[i] = (buffer.AsSpan(0, written).ToArray(), written);
+                    SecureZero.Range(buffer, 0, written);
                     return compressor;
                 },
                 compressor => compressor.Dispose());
@@ -109,6 +110,10 @@ internal static class ParallelZstd
         {
             BinaryPrimitives.WriteInt32LittleEndian(result.AsSpan(position), written);
             buffer.AsSpan(0, written).CopyTo(result.AsSpan(position + sizeof(int)));
+
+            // Compressed data is as good as plaintext; only the returned copy (which the caller
+            // encrypts in place for an encrypted image) should outlive this call.
+            SecureZero.Range(buffer, 0, written);
             position += sizeof(int) + written;
         }
 
