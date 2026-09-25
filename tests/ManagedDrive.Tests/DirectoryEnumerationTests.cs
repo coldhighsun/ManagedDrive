@@ -3,19 +3,21 @@ namespace ManagedDrive.Tests;
 public sealed class DirectoryEnumerationTests
 {
     [Fact]
-    public void Build_IncludesDotAndDotDotFirst()
+    public void Build_Root_OmitsDotAndDotDot()
     {
+        // The root has no parent, matching how NTFS/FAT never carry "." / ".." for a volume's
+        // root — only subdirectories do.
         var map = new FileNodeMap();
         map.Add("\\", MakeDir());
         map.Add("\\file.txt", MakeFile());
 
         var names = Enumerate(map, "\\", pattern: null, marker: null);
 
-        Assert.Equal(new[] { ".", "..", "file.txt" }, names);
+        Assert.Equal(new[] { "file.txt" }, names);
     }
 
     [Fact]
-    public void Build_ListsOnlyDirectChildren()
+    public void Build_Root_ListsOnlyDirectChildren()
     {
         var map = new FileNodeMap();
         map.Add("\\", MakeDir());
@@ -25,11 +27,11 @@ public sealed class DirectoryEnumerationTests
 
         var names = Enumerate(map, "\\", pattern: null, marker: null);
 
-        Assert.Equal(new[] { ".", "..", "Sub", "top.txt" }, names);
+        Assert.Equal(new[] { "Sub", "top.txt" }, names);
     }
 
     [Fact]
-    public void Build_AppliesGlobPatternToChildren()
+    public void Build_Root_AppliesGlobPatternToChildren()
     {
         var map = new FileNodeMap();
         map.Add("\\", MakeDir());
@@ -39,6 +41,34 @@ public sealed class DirectoryEnumerationTests
 
         var names = Enumerate(map, "\\", pattern: "*.txt", marker: null);
 
+        Assert.Equal(new[] { "a.txt", "c.txt" }, names);
+    }
+
+    [Fact]
+    public void Build_NonRootDirectory_IncludesDotAndDotDotFirst()
+    {
+        var map = new FileNodeMap();
+        map.Add("\\", MakeDir());
+        map.Add("\\Sub", MakeDir());
+        map.Add("\\Sub\\file.txt", MakeFile());
+
+        var names = Enumerate(map, "\\Sub", pattern: null, marker: null);
+
+        Assert.Equal(new[] { ".", "..", "file.txt" }, names);
+    }
+
+    [Fact]
+    public void Build_NonRootDirectory_AppliesGlobPatternToChildrenOnly()
+    {
+        var map = new FileNodeMap();
+        map.Add("\\", MakeDir());
+        map.Add("\\Sub", MakeDir());
+        map.Add("\\Sub\\a.txt", MakeFile());
+        map.Add("\\Sub\\b.doc", MakeFile());
+        map.Add("\\Sub\\c.txt", MakeFile());
+
+        var names = Enumerate(map, "\\Sub", pattern: "*.txt", marker: null);
+
         Assert.Equal(new[] { ".", "..", "a.txt", "c.txt" }, names);
     }
 
@@ -47,9 +77,10 @@ public sealed class DirectoryEnumerationTests
     {
         var map = new FileNodeMap();
         map.Add("\\", MakeDir());
-        map.Add("\\file.txt", MakeFile());
+        map.Add("\\Sub", MakeDir());
+        map.Add("\\Sub\\file.txt", MakeFile());
 
-        var names = Enumerate(map, "\\", pattern: null, marker: "..");
+        var names = Enumerate(map, "\\Sub", pattern: null, marker: "..");
 
         Assert.Equal(new[] { "file.txt" }, names);
     }
@@ -59,10 +90,11 @@ public sealed class DirectoryEnumerationTests
     {
         var map = new FileNodeMap();
         map.Add("\\", MakeDir());
-        map.Add("\\-early.txt", MakeFile());
-        map.Add("\\file.txt", MakeFile());
+        map.Add("\\Sub", MakeDir());
+        map.Add("\\Sub\\-early.txt", MakeFile());
+        map.Add("\\Sub\\file.txt", MakeFile());
 
-        var names = Enumerate(map, "\\", pattern: null, marker: ".");
+        var names = Enumerate(map, "\\Sub", pattern: null, marker: ".");
 
         Assert.Equal(new[] { "..", "-early.txt", "file.txt" }, names);
     }
@@ -78,10 +110,11 @@ public sealed class DirectoryEnumerationTests
         // child marker, or the next page restarts from the top and paging never ends.
         var map = new FileNodeMap();
         map.Add("\\", MakeDir());
-        map.Add("\\" + earlyName, MakeFile());
-        map.Add("\\file.txt", MakeFile());
+        map.Add("\\Sub", MakeDir());
+        map.Add("\\Sub\\" + earlyName, MakeFile());
+        map.Add("\\Sub\\file.txt", MakeFile());
 
-        var names = Enumerate(map, "\\", pattern: null, marker: earlyName);
+        var names = Enumerate(map, "\\Sub", pattern: null, marker: earlyName);
 
         Assert.Equal(new[] { "file.txt" }, names);
     }
