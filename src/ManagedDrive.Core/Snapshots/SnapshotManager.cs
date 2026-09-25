@@ -133,7 +133,7 @@ public static partial class SnapshotManager
         }
 
         var remaining = ListSnapshotEntries(mainImagePath);
-        GarbageCollectBlobs(mainImagePath, remaining.Select(e => e.Summary));
+        GarbageCollectBlobsIfSafe(mainImagePath, remaining);
     }
 
     /// <summary>
@@ -258,8 +258,10 @@ public static partial class SnapshotManager
     /// One snapshot's cheap metadata (<see cref="SnapshotInfo"/>) paired with its full
     /// <see cref="SnapshotStore.SnapshotSummary"/> (which also carries the referenced blob
     /// hashes), so a single index-file parse can serve both a listing and blob garbage collection.
+    /// <paramref name="IsReadable"/> is <c>false</c> when the index could not be parsed; its
+    /// summary is then empty, since the blobs it references are unknown.
     /// </summary>
-    private readonly record struct SnapshotListEntry(SnapshotInfo Info, SnapshotStore.SnapshotSummary Summary);
+    private readonly record struct SnapshotListEntry(SnapshotInfo Info, SnapshotStore.SnapshotSummary Summary, bool IsReadable);
 
     /// <summary>
     /// Scans <paramref name="mainImagePath"/>'s directory for its snapshot index files, parsing
@@ -282,8 +284,26 @@ public static partial class SnapshotManager
                 ? parsed
                 : new(File.GetLastWriteTimeUtc(path), TimeSpan.Zero);
 
-            var summary = SnapshotStore.ReadSummary(path);
-            entries.Add(new(new(path, timestamp, summary.LogicalSizeBytes), summary));
+            // One unreadable index must not fail the whole listing: that would also fail every
+            // Prune (so snapshots would pile up with each auto-save) and every Delete, leaving
+            // no way to get rid of the bad file. It is listed with size 0 instead, so it can
+            // still be pruned or deleted; restoring it fails on its own.
+            SnapshotStore.SnapshotSummary summary;
+            var isReadable = true;
+            try
+            {
+                summary = SnapshotStore.ReadSummary(path);
+            }
+            catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException or FormatException)
+            {
+                Logger.LogWarningThrottled(
+                    $"snapshot-unreadable:{path}", TimeSpan.FromMinutes(10),
+                    "Failed to read snapshot index '{Path}': {Error}", path, ex.Message);
+                summary = new(0, new HashSet<string>());
+                isReadable = false;
+            }
+
+            entries.Add(new(new(path, timestamp, summary.LogicalSizeBytes), summary, isReadable));
         }
 
         entries.Sort((a, b) => a.Info.TimestampUtc.CompareTo(b.Info.TimestampUtc));
@@ -405,7 +425,7 @@ public static partial class SnapshotManager
             }
         }
 
-        GarbageCollectBlobs(mainImagePath, entries.Select(e => e.Summary));
+        GarbageCollectBlobsIfSafe(mainImagePath, entries);
     }
 
     /// <summary>
@@ -498,6 +518,27 @@ public static partial class SnapshotManager
         node.CachedContentHash = hash;
         node.CachedContentHashVersion = version;
         return hash;
+    }
+
+    /// <summary>
+    /// Runs <see cref="GarbageCollectBlobs"/> over <paramref name="remaining"/>, unless one of them
+    /// could not be read: the blobs such a snapshot references are unknown, so sweeping would
+    /// delete them if its index was only transiently unreadable (e.g. locked by a scanner).
+    /// Collection resumes once the unreadable snapshot has been pruned or deleted.
+    /// </summary>
+    /// <param name="mainImagePath">The main image whose blob store is collected.</param>
+    /// <param name="remaining">Every snapshot of the image still on disk.</param>
+    private static void GarbageCollectBlobsIfSafe(string mainImagePath, List<SnapshotListEntry> remaining)
+    {
+        if (remaining.Any(e => !e.IsReadable))
+        {
+            Logger.LogWarningThrottled(
+                $"blob-gc-skipped:{mainImagePath}", TimeSpan.FromMinutes(10),
+                "Skipped snapshot blob cleanup for '{Path}': a snapshot index could not be read", mainImagePath);
+            return;
+        }
+
+        GarbageCollectBlobs(mainImagePath, remaining.Select(e => e.Summary));
     }
 
     /// <summary>

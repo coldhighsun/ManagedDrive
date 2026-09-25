@@ -580,6 +580,61 @@ public sealed class SnapshotManagerTests : IDisposable
         Assert.Single(remaining);
     }
 
+    /// <summary>
+    /// A corrupt index must not fail the whole listing; it is listed with size 0 so it can still
+    /// be pruned or deleted.
+    /// </summary>
+    [Fact]
+    public void ListSnapshots_CorruptIndex_ListedWithZeroSize()
+    {
+        WriteSnapshotWithFile(new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), "\\a.txt", [1, 2, 3]);
+        var corrupt = SnapshotManager.BuildSnapshotPath(_mainImagePath, new(2026, 1, 2, 0, 0, 0, TimeSpan.Zero));
+        File.WriteAllBytes(corrupt, [0xDE, 0xAD, 0xBE, 0xEF]);
+
+        var snapshots = SnapshotManager.ListSnapshots(_mainImagePath);
+
+        Assert.Equal(2, snapshots.Count);
+        Assert.Equal(3, snapshots[0].SizeBytes);
+        Assert.Equal(corrupt, snapshots[1].Path);
+        Assert.Equal(0, snapshots[1].SizeBytes);
+    }
+
+    [Fact]
+    public void Prune_CorruptOldestIndex_IsPrunedLikeAnyOther()
+    {
+        var corrupt = SnapshotManager.BuildSnapshotPath(_mainImagePath, new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero));
+        File.WriteAllBytes(corrupt, [0xDE, 0xAD, 0xBE, 0xEF]);
+        WriteSnapshotWithFile(new(2026, 1, 2, 0, 0, 0, TimeSpan.Zero), "\\a.txt", [1]);
+        WriteSnapshotWithFile(new(2026, 1, 3, 0, 0, 0, TimeSpan.Zero), "\\b.txt", [2]);
+
+        SnapshotManager.Prune(_mainImagePath, maxCount: 2, maxTotalBytes: null);
+
+        Assert.False(File.Exists(corrupt));
+        Assert.Equal(2, SnapshotManager.ListSnapshots(_mainImagePath).Count);
+        Assert.Equal(2, BlobCount);
+    }
+
+    /// <summary>
+    /// The blobs an unreadable index references are unknown, so blob collection must wait until
+    /// that index is gone rather than delete blobs it may still need.
+    /// </summary>
+    [Fact]
+    public void DeleteSnapshot_CorruptIndexRemaining_SkipsBlobGcUntilItIsGone()
+    {
+        WriteSnapshotWithFile(new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), "\\a.txt", [3, 3, 3]);
+        var valid = Assert.Single(SnapshotManager.ListSnapshots(_mainImagePath));
+        var corrupt = SnapshotManager.BuildSnapshotPath(_mainImagePath, new(2026, 1, 2, 0, 0, 0, TimeSpan.Zero));
+        File.WriteAllBytes(corrupt, [0xDE, 0xAD, 0xBE, 0xEF]);
+
+        SnapshotManager.DeleteSnapshot(_mainImagePath, valid.Path);
+
+        Assert.Equal(1, BlobCount);
+
+        SnapshotManager.DeleteSnapshot(_mainImagePath, corrupt);
+
+        Assert.Equal(0, BlobCount);
+    }
+
     [Fact]
     public void Prune_CountOnly_DeletesOldestFirst()
     {
