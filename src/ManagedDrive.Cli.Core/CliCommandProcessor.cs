@@ -531,6 +531,10 @@ public static class CliCommandProcessor
             Description = "Path to a file whose first line is the password to encrypt the exported .mdr image with. Mutually exclusive with --password.",
         };
 
+        var exportForceOption = new Option<bool>("--force", "-f")
+        {
+            Description = "Overwrite the output file if it already exists.",
+        };
         var exportCommand = new Command("export", "Exports a mounted disk to a standalone .mdr image or archive file.");
         exportCommand.Arguments.Add(exportDriveArgument);
         exportCommand.Arguments.Add(exportOutputArgument);
@@ -538,6 +542,7 @@ public static class CliCommandProcessor
         exportCommand.Options.Add(exportCompressionOption);
         exportCommand.Options.Add(exportPasswordOption);
         exportCommand.Options.Add(exportPasswordFileOption);
+        exportCommand.Options.Add(exportForceOption);
         exportCommand.SetAction(async (parseResult, _) =>
         {
             var format = parseResult.GetValue(exportFormatOption);
@@ -568,6 +573,7 @@ public static class CliCommandProcessor
                 format,
                 parseResult.GetValue(exportCompressionOption),
                 password,
+                parseResult.GetValue(exportForceOption),
                 diskController,
                 o => outcome = o);
             return exitCode;
@@ -741,9 +747,17 @@ public static class CliCommandProcessor
 
     private static async Task<int> ExportAsync(
         string driveLetter, string outputPath, ArchiveExportFormat? archiveFormat, ImageCompressionLevel compressionLevel,
-        string? password, ICliDiskController diskController, Action<CliOutcome> setOutcome)
+        string? password, bool overwrite, ICliDiskController diskController, Action<CliOutcome> setOutcome)
     {
         driveLetter = NormalizeDriveLetter(driveLetter);
+
+        // A script re-run with the same arguments would otherwise silently replace an earlier
+        // export (or any unrelated file that happens to have that name).
+        if (!overwrite && File.Exists(outputPath))
+        {
+            setOutcome(new(false, $"'{outputPath}' already exists. Re-run with --force to overwrite it.", null, 1));
+            return 1;
+        }
 
         var (success, message) = await diskController.ExportAsync(driveLetter, outputPath, archiveFormat, compressionLevel, password);
         setOutcome(new(

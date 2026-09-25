@@ -1230,6 +1230,15 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             return (false, string.Empty);
         }
 
+        // Same destination rules as the Clone Disk dialog: never overwrite a live disk's own image
+        // (its auto-save may be writing it) or write onto a RAM disk.
+        var otherDisks = GetOtherDiskOptions(excluding: null);
+        if (CloneDiskDialog.GetExportPathError(outputPath, otherDisks, [.. otherDisks.Select(d => d.MountPoint)]) is { } errorKey)
+        {
+            _logger.LogWarning("CLI export rejected: {MountPoint} -> {OutputPath} ({Reason}).", mountPoint, outputPath, errorKey);
+            return (false, Loc.Get(errorKey));
+        }
+
         try
         {
             if (archiveFormat is { } format)

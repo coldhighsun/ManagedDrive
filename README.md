@@ -123,7 +123,7 @@ mdrive exit
 | `format <drive-letter> --yes` | Deletes all files on a mounted disk. Requires `--yes`/`-y` to confirm. |
 | `save <drive-letter>` | Saves a mounted disk's contents to its backing image immediately. |
 | `set-password <drive-letter> [options]` | Sets or removes a mounted disk's encryption password, taking effect on the next save. Exactly one of `--password`, `--password-file` (reads the first line of a file; recommended over `--password` to avoid exposing it in shell history or the process list), or `--remove` (removes password protection) must be given. |
-| `export <drive-letter> <output-path> [options]` | Exports a mounted disk to a standalone `.mdr` image or archive file, without touching the disk's own persistence settings. Options: `--format <Zip\|SevenZip>` (exports an archive instead of a `.mdr` image), `--compression <None\|Fastest\|Optimal\|SmallestSize>`, `--password`, `--password-file` (encrypt the exported `.mdr` image; not valid together with `--format`, since archive formats don't support encryption). |
+| `export <drive-letter> <output-path> [options]` | Exports a mounted disk to a standalone `.mdr` image or archive file, without touching the disk's own persistence settings. Options: `--format <Zip\|SevenZip>` (exports an archive instead of a `.mdr` image), `--compression <None\|Fastest\|Optimal\|SmallestSize>`, `--password`, `--password-file` (encrypt the exported `.mdr` image; not valid together with `--format`, since archive formats don't support encryption), `--force`/`-f` (overwrite an existing output file; without it an existing file is an error). The output path must not be a mounted disk's own image, a snapshot file name, or on a RAM disk. |
 | `list [--json]` | Lists currently mounted disks with usage and capacity. `--json` outputs the list as JSON instead of a table, for scripting. |
 | `ls <drive-letter> [path]` | Lists the immediate children (name, type, size) of a directory on a mounted disk. `path` (e.g. `\Folder`) defaults to the root. |
 | `snapshot create <drive-letter>` | Writes a timestamped snapshot of a mounted disk right now, independent of a regular save. Requires an image path and snapshot retention (`--max-snapshot-count`/`--max-snapshot-size-mb`) to be configured. |
@@ -303,7 +303,7 @@ mdrive exit
 | `format <盘符> --yes` | 清空已挂载磁盘上的所有文件，须加 `--yes`/`-y` 确认。 |
 | `save <盘符>` | 立即将已挂载磁盘的内容保存到其绑定的镜像文件。 |
 | `set-password <盘符> [选项]` | 设置或移除已挂载磁盘的加密密码，下次保存时生效。`--password`、`--password-file`（读取文件首行作为密码，推荐使用以避免密码出现在 shell 历史或进程列表中）、`--remove`（移除密码保护）三者须指定且只能指定一个。 |
-| `export <盘符> <输出路径> [选项]` | 将已挂载磁盘导出为独立的 `.mdr` 镜像或压缩包文件，不影响该磁盘自身的持久化配置。可选项：`--format <Zip\|SevenZip>`（导出为压缩包而非 `.mdr` 镜像）、`--compression <None\|Fastest\|Optimal\|SmallestSize>`、`--password`、`--password-file`（为导出的 `.mdr` 镜像加密；与 `--format` 互斥，因为压缩包格式不支持加密）。 |
+| `export <盘符> <输出路径> [选项]` | 将已挂载磁盘导出为独立的 `.mdr` 镜像或压缩包文件，不影响该磁盘自身的持久化配置。可选项：`--format <Zip\|SevenZip>`（导出为压缩包而非 `.mdr` 镜像）、`--compression <None\|Fastest\|Optimal\|SmallestSize>`、`--password`、`--password-file`（为导出的 `.mdr` 镜像加密；与 `--format` 互斥，因为压缩包格式不支持加密）、`--force`/`-f`（覆盖已存在的输出文件；不加时目标文件已存在会报错）。输出路径不能是已挂载磁盘自身的镜像、快照文件名，也不能位于 RAM 盘上。 |
 | `list [--json]` | 列出当前已挂载的磁盘及其用量与容量。`--json` 以 JSON 而非表格形式输出，便于脚本处理。 |
 | `ls <盘符> [路径]` | 列出已挂载磁盘上某目录的直接子项（名称、类型、大小）。`路径`（如 `\Folder`）省略时列出根目录。 |
 | `snapshot create <盘符>` | 立即为已挂载磁盘写入一个带时间戳的快照，独立于常规保存。需要该磁盘已配置镜像路径及快照保留策略（`--max-snapshot-count`/`--max-snapshot-size-mb`）。 |
