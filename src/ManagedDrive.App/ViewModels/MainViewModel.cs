@@ -2508,7 +2508,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     private void ExecuteSettings()
     {
         var config = _settingsStore.Load();
-        var dialog = new SettingsDialog(config, UpdateCheckService) { Owner = Application.Current.MainWindow };
+        var dialog = new SettingsDialog(config) { Owner = Application.Current.MainWindow };
 
         if (dialog.ShowDialog() == true)
         {

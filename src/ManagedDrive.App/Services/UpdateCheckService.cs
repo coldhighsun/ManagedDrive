@@ -9,10 +9,10 @@ namespace ManagedDrive.App.Services;
 /// Checks the GitHub Releases API for a newer published version than the one currently running,
 /// gated by <see cref="AppConfiguration.AutoCheckForUpdates"/> and a once-per-<see cref="CheckInterval"/>
 /// throttle (both enforced by GitHubReleaseUpdater itself via <see cref="SettingsLastCheckStore"/>).
-/// Runs at startup (silent, fire-and-forget, tray balloon + dialog on a hit) and automatically
-/// whenever <see cref="AboutDialog"/> is opened (silent — just an inline link).
+/// Runs at startup (silent, fire-and-forget, tray balloon on a hit) and automatically whenever
+/// <see cref="AboutDialog"/> is opened (silent — just an inline link).
 /// </summary>
-public sealed class UpdateCheckService(SettingsStore settings, TrayIconController trayIconController, Func<Window?> ownerWindowProvider)
+public sealed class UpdateCheckService(SettingsStore settings, TrayIconController trayIconController)
 {
     private const string RepoOwner = "coldhighsun";
     private const string RepoName = "ManagedDrive";
@@ -34,9 +34,8 @@ public sealed class UpdateCheckService(SettingsStore settings, TrayIconControlle
 
     /// <summary>
     /// Runs a check respecting <see cref="AppConfiguration.AutoCheckForUpdates"/> and the daily
-    /// throttle, showing a tray balloon (and, if the main window is visible, the update dialog)
-    /// when a newer version is found. Never throws; intended to be called fire-and-forget from
-    /// application startup.
+    /// throttle, showing a tray balloon when a newer version is found. Never throws; intended to
+    /// be called fire-and-forget from application startup.
     /// </summary>
     public async Task CheckOnStartupAsync(AppConfiguration config)
     {
@@ -53,7 +52,7 @@ public sealed class UpdateCheckService(SettingsStore settings, TrayIconControlle
             var result = await updater.CheckForUpdateAsync();
             if (!result.Throttled && result.IsUpdateAvailable && result.Update != null && ToUpdateInfo(result.Update) is { } info)
             {
-                await NotifyUpdateAvailableAsync(info, lastCheckStore);
+                NotifyUpdateAvailable(info);
             }
         }
         catch
@@ -104,30 +103,9 @@ public sealed class UpdateCheckService(SettingsStore settings, TrayIconControlle
     private static UpdateInfo? ToUpdateInfo(AvailableUpdate update) =>
         update.Release.HtmlUrl == null ? null : new(update.Version.ToString(), new(update.Release.HtmlUrl));
 
-    private async Task NotifyUpdateAvailableAsync(UpdateInfo info, SettingsLastCheckStore lastCheckStore)
-    {
-        // A dialog when the user is looking at the window; otherwise a balloon, rather than a
-        // modal dialog popping up over whatever they're doing while the app sits minimized.
-        if (!WindowVisibility.IsShownToUser(ownerWindowProvider()))
-        {
-            trayIconController.ShowBalloonTip(
-                "ManagedDrive",
-                Loc.Format("Update.BalloonBody", info.Version),
-                System.Windows.Forms.ToolTipIcon.Info);
-            return;
-        }
-
-        var dialog = new UpdateAvailableDialog(info);
-        if (ownerWindowProvider() is { } owner)
-        {
-            dialog.Owner = owner;
-        }
-
-        dialog.ShowDialog();
-
-        if (dialog.Action == UpdateDialogAction.Skip && SemanticVersion.TryParse(info.Version, out var version))
-        {
-            await lastCheckStore.SetSkippedVersionAsync(version);
-        }
-    }
+    private void NotifyUpdateAvailable(UpdateInfo info) =>
+        trayIconController.ShowBalloonTip(
+            "ManagedDrive",
+            Loc.Format("Update.BalloonBody", info.Version),
+            System.Windows.Forms.ToolTipIcon.Info);
 }

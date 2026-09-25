@@ -244,7 +244,7 @@ public partial class App
 
         _tempDirCompatChecker.CheckOnStartup(config);
 
-        _updateCheckService = new(settings, _trayIconController, () => _mainWindow is { IsLoaded: true } ? _mainWindow : null);
+        _updateCheckService = new(settings, _trayIconController);
         _mainViewModel.UpdateCheckService = _updateCheckService;
         _ = _updateCheckService.CheckOnStartupAsync(config);
 
