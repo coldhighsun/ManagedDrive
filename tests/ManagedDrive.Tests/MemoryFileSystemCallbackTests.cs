@@ -138,6 +138,50 @@ public sealed class MemoryFileSystemCallbackTests
     }
 
     [Fact]
+    public void Cleanup_WithSetArchiveBitFlagOnFile_SetsArchiveAttribute()
+    {
+        var fs = new MemoryFileSystem(1024 * 1024, "Label");
+        fs.Create("\\file.bin", 0, 0, (uint)FileAttributes.Normal, [], 0,
+            out var fileNode, out _, out _, out _);
+        var node = (FileNode)fileNode!;
+        var versionBefore = node.MetadataVersion;
+
+        fs.Cleanup(fileNode!, null!, "\\file.bin", MemoryFileSystem.CleanupSetArchiveBit);
+
+        Assert.Equal((uint)FileAttributes.Archive, node.FileInfo.FileAttributes & (uint)FileAttributes.Archive);
+        Assert.True(node.MetadataVersion > versionBefore);
+    }
+
+    [Fact]
+    public void Cleanup_WithSetArchiveBitFlagAlreadySet_LeavesDiskClean()
+    {
+        var fs = new MemoryFileSystem(1024 * 1024, "Label");
+        fs.Create("\\file.bin", 0, 0, (uint)FileAttributes.Normal | (uint)FileAttributes.Archive, [], 0,
+            out var fileNode, out _, out _, out _);
+        var node = (FileNode)fileNode!;
+        fs.ClearDirty();
+        var versionBefore = node.MetadataVersion;
+
+        fs.Cleanup(fileNode!, null!, "\\file.bin", MemoryFileSystem.CleanupSetArchiveBit);
+
+        Assert.Equal(versionBefore, node.MetadataVersion);
+        Assert.False(fs.IsDirty);
+    }
+
+    [Fact]
+    public void Cleanup_WithSetArchiveBitFlagOnDirectory_DoesNotSetArchiveAttribute()
+    {
+        var fs = new MemoryFileSystem(1024 * 1024, "Label");
+        fs.Create("\\dir", 0, 0, (uint)FileAttributes.Directory, [], 0,
+            out var dirNode, out _, out _, out _);
+        var node = (FileNode)dirNode!;
+
+        fs.Cleanup(dirNode!, null!, "\\dir", MemoryFileSystem.CleanupSetArchiveBit);
+
+        Assert.Equal(0u, node.FileInfo.FileAttributes & (uint)FileAttributes.Archive);
+    }
+
+    [Fact]
     public void ClearDirty_AfterMarkDirty_ResetsIsDirty()
     {
         var fs = new MemoryFileSystem(1024 * 1024, "Label");
@@ -280,6 +324,74 @@ public sealed class MemoryFileSystemCallbackTests
     }
 
     [Fact]
+    public void Open_MissingIntermediateDirectory_ReturnsObjectPathNotFound()
+    {
+        var fs = new MemoryFileSystem(1024 * 1024, "Label");
+
+        var status = fs.Open("\\missing\\file.bin", 0, 0, out _, out _, out _, out _);
+
+        Assert.Equal(unchecked((int)0xC000003A), status); // STATUS_OBJECT_PATH_NOT_FOUND
+    }
+
+    [Fact]
+    public void Open_IntermediateComponentIsFile_ReturnsNotADirectory()
+    {
+        var fs = new MemoryFileSystem(1024 * 1024, "Label");
+        fs.Create("\\file.bin", 0, 0, (uint)FileAttributes.Normal, [], 0, out _, out _, out _, out _);
+
+        var status = fs.Open("\\file.bin\\child.bin", 0, 0, out _, out _, out _, out _);
+
+        Assert.Equal(unchecked((int)0xC0000103), status); // STATUS_NOT_A_DIRECTORY
+    }
+
+    [Fact]
+    public void GetSecurityByName_ExistingPath_ReturnsAttributes()
+    {
+        var fs = new MemoryFileSystem(1024 * 1024, "Label");
+        fs.Create("\\file.bin", 0, 0, (uint)FileAttributes.ReadOnly, [], 0, out _, out _, out _, out _);
+        byte[] securityDescriptor = null!;
+
+        var status = fs.GetSecurityByName("\\file.bin", out var fileAttributes, ref securityDescriptor);
+
+        Assert.Equal(0, status);
+        Assert.Equal((uint)FileAttributes.ReadOnly, fileAttributes);
+    }
+
+    [Fact]
+    public void GetSecurityByName_MissingPath_ReturnsObjectNameNotFound()
+    {
+        var fs = new MemoryFileSystem(1024 * 1024, "Label");
+        byte[] securityDescriptor = null!;
+
+        var status = fs.GetSecurityByName("\\missing.bin", out _, ref securityDescriptor);
+
+        Assert.Equal(unchecked((int)0xC0000034), status); // STATUS_OBJECT_NAME_NOT_FOUND
+    }
+
+    [Fact]
+    public void GetSecurityByName_MissingIntermediateDirectory_ReturnsObjectPathNotFound()
+    {
+        var fs = new MemoryFileSystem(1024 * 1024, "Label");
+        byte[] securityDescriptor = null!;
+
+        var status = fs.GetSecurityByName("\\missing\\file.bin", out _, ref securityDescriptor);
+
+        Assert.Equal(unchecked((int)0xC000003A), status); // STATUS_OBJECT_PATH_NOT_FOUND
+    }
+
+    [Fact]
+    public void GetSecurityByName_IntermediateComponentIsFile_ReturnsNotADirectory()
+    {
+        var fs = new MemoryFileSystem(1024 * 1024, "Label");
+        fs.Create("\\file.bin", 0, 0, (uint)FileAttributes.Normal, [], 0, out _, out _, out _, out _);
+        byte[] securityDescriptor = null!;
+
+        var status = fs.GetSecurityByName("\\file.bin\\child.bin", out _, ref securityDescriptor);
+
+        Assert.Equal(unchecked((int)0xC0000103), status); // STATUS_NOT_A_DIRECTORY
+    }
+
+    [Fact]
     public void Overwrite_ResetsContentAndBumpsContentVersion()
     {
         var fs = new MemoryFileSystem(1024 * 1024, "Label");
@@ -377,8 +489,10 @@ public sealed class MemoryFileSystemCallbackTests
     }
 
     [Fact]
-    public void Rename_ReplacingEmptyDirectory_RemovesOldTargetAndSucceeds()
+    public void Rename_ReplacingEmptyDirectory_ReturnsNameCollisionAndLeavesBothInPlace()
     {
+        // ReplaceIfExists never applies to a directory target on Windows, even an empty one —
+        // only a file target can be replaced by a rename.
         var fs = new MemoryFileSystem(1024 * 1024, "Label");
         fs.Create("\\source", 0, 0, (uint)FileAttributes.Directory, [], 0,
             out var sourceNode, out _, out _, out _);
@@ -387,11 +501,10 @@ public sealed class MemoryFileSystemCallbackTests
 
         var status = fs.Rename(sourceNode!, null!, "\\source", "\\target", replaceIfExists: true);
 
-        Assert.Equal(0, status);
-        Assert.False(fs.NodeMap.TryGet("\\source", out _));
-        Assert.True(fs.NodeMap.TryGet("\\target", out var moved));
-        Assert.Same(sourceNode, moved);
-        Assert.True(fs.NodeMap.TryGet("\\target\\child.bin", out _));
+        Assert.Equal(unchecked((int)0xC0000035), status); // STATUS_OBJECT_NAME_COLLISION
+        Assert.True(fs.NodeMap.TryGet("\\source", out _));
+        Assert.True(fs.NodeMap.TryGet("\\source\\child.bin", out _));
+        Assert.True(fs.NodeMap.TryGet("\\target", out _));
     }
 
     [Fact]

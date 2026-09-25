@@ -670,6 +670,13 @@ public sealed class FileNodeMap : IDisposable
         TargetIsDirectory,
 
         /// <summary>
+        /// The destination is an empty directory of the same kind as the node being renamed.
+        /// <c>replaceIfExists</c> never applies to a directory target on Windows, even an empty
+        /// one, regardless of its value — only a file target can be replaced by a rename.
+        /// </summary>
+        CannotReplaceDirectory,
+
+        /// <summary>
         /// The destination is a file but the node being renamed is a directory.
         /// </summary>
         TargetIsFile,
@@ -741,13 +748,16 @@ public sealed class FileNodeMap : IDisposable
                     return existing.IsDirectory ? RenameConflict.TargetIsDirectory : RenameConflict.TargetIsFile;
                 }
 
-                if (existing.IsDirectory && ScanImmediateChildren(newFileName, marker: null, matches: null))
+                if (existing.IsDirectory)
                 {
-                    return RenameConflict.DirectoryNotEmpty;
+                    if (ScanImmediateChildren(newFileName, marker: null, matches: null))
+                    {
+                        return RenameConflict.DirectoryNotEmpty;
+                    }
+
+                    return RenameConflict.CannotReplaceDirectory;
                 }
 
-                // Directories are already verified empty above, but RemoveSubtreeCore also clears
-                // any descendants left behind by an earlier inconsistency instead of orphaning them.
                 RemoveSubtreeCore(newFileName);
             }
 
@@ -785,6 +795,68 @@ public sealed class FileNodeMap : IDisposable
         try
         {
             return _map.TryGetValue(filePath, out node);
+        }
+        finally
+        {
+            _syncRoot.ExitReadLock();
+        }
+    }
+
+    /// <summary>
+    /// Outcome of <see cref="TryGetForLookup"/>, mirroring the cases a WinFsp callback that
+    /// resolves a path by name (as opposed to an already-open handle, whose parent is known to
+    /// exist) must translate into distinct NTSTATUS codes.
+    /// </summary>
+    public enum LookupResult
+    {
+        /// <summary>
+        /// The node was found.
+        /// </summary>
+        Found,
+
+        /// <summary>
+        /// The parent exists and is a directory, but nothing exists at <c>filePath</c> itself.
+        /// </summary>
+        NotFound,
+
+        /// <summary>
+        /// Nothing exists at the parent path.
+        /// </summary>
+        ParentNotFound,
+
+        /// <summary>
+        /// The parent path names a file.
+        /// </summary>
+        ParentNotDirectory,
+    }
+
+    /// <summary>
+    /// Looks up the node at <paramref name="filePath"/>, distinguishing a missing leaf (the
+    /// parent exists and is a directory) from a missing or non-directory parent — the
+    /// distinction between <c>STATUS_OBJECT_NAME_NOT_FOUND</c> and
+    /// <c>STATUS_OBJECT_PATH_NOT_FOUND</c>/<c>STATUS_NOT_A_DIRECTORY</c> that a WinFsp callback
+    /// resolving an arbitrary path (rather than a child of an already-open directory handle)
+    /// must report.
+    /// </summary>
+    /// <param name="filePath">Absolute file-system path.</param>
+    /// <param name="node">The node found, when this returns <see cref="LookupResult.Found"/>.</param>
+    /// <returns>The outcome of the lookup.</returns>
+    public LookupResult TryGetForLookup(string filePath, out FileNode? node)
+    {
+        _syncRoot.EnterReadLock();
+        try
+        {
+            if (_map.TryGetValue(filePath, out node))
+            {
+                return LookupResult.Found;
+            }
+
+            return GetParentStateCore(filePath) switch
+            {
+                ParentState.Missing => LookupResult.ParentNotFound,
+                ParentState.NotDirectory => LookupResult.ParentNotDirectory,
+                _ => LookupResult.NotFound,
+            };
         }
         finally
         {
