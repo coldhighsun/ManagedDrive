@@ -185,8 +185,9 @@ public static class DiskImageSerializer
     /// A <see cref="FileNodeMap"/> pre-populated with the nodes from the image.
     /// </returns>
     /// <exception cref="InvalidDataException">
-    /// Thrown when the file does not contain a valid ManagedDrive image or the version is
-    /// unsupported.
+    /// Thrown when the file does not contain a valid ManagedDrive image, the version is
+    /// unsupported, or the image is corrupted (including encrypted data failing integrity
+    /// verification once the password has been accepted).
     /// </exception>
     /// <exception cref="ImagePasswordRequiredException">
     /// Thrown when the image is encrypted but <paramref name="password"/> is <see langword="null"/>.
@@ -646,9 +647,11 @@ public static class DiskImageSerializer
             using var chunkedStream = new ChunkedGcm.ReadStream(stream, cek, baseNonce);
             return ReadNodeRegion(chunkedStream, compressed, useZstd, reportTick);
         }
-        catch (CryptographicException)
+        catch (CryptographicException ex)
         {
-            throw new ImagePasswordIncorrectException();
+            // The password already unwrapped the CEK, so it's right: a chunk failing
+            // authentication under that CEK means the image itself is damaged.
+            throw CorruptEncryptedData(ex);
         }
     }
 
@@ -757,9 +760,10 @@ public static class DiskImageSerializer
             using var aesGcm = new AesGcm(cek, TagSize);
             aesGcm.Decrypt(dataNonce, ciphertext, dataTag, plaintext);
         }
-        catch (CryptographicException)
+        catch (CryptographicException ex)
         {
-            throw new ImagePasswordIncorrectException();
+            // See LoadChunkedEncrypted: past the CEK unwrap, a failure means damage, not a wrong password.
+            throw CorruptEncryptedData(ex);
         }
 
         try
@@ -950,9 +954,10 @@ public static class DiskImageSerializer
             using var aesGcm = new AesGcm(cek, TagSize);
             aesGcm.Decrypt(segment.Nonce!, payload, segment.Tag!, payload);
         }
-        catch (CryptographicException)
+        catch (CryptographicException ex)
         {
-            throw new ImagePasswordIncorrectException();
+            // See LoadChunkedEncrypted: past the CEK unwrap, a failure means damage, not a wrong password.
+            throw CorruptEncryptedData(ex);
         }
 
         try
@@ -1737,6 +1742,16 @@ public static class DiskImageSerializer
             return false;
         }
     }
+
+    /// <summary>
+    /// Creates the exception for encrypted image data failing authentication under a CEK the
+    /// password already unwrapped. That can only mean the data was damaged or tampered with;
+    /// reporting it as a wrong password would send the user retrying passwords that can't help.
+    /// </summary>
+    /// <param name="inner">The authentication failure.</param>
+    /// <returns>The exception to throw.</returns>
+    private static InvalidDataException CorruptEncryptedData(CryptographicException inner) =>
+        new("The image is corrupted: its encrypted data failed integrity verification.", inner);
 
     private static byte[] UnwrapCek(
             byte[] wrappedCek,

@@ -442,6 +442,19 @@ internal static class SnapshotStore
     }
 
     /// <summary>
+    /// Creates the exception for an encrypted blob failing authentication. Blobs are encrypted
+    /// under the disk's CEK, which the password has already unwrapped (snapshots are discarded
+    /// whenever the disk gets a new CEK), so a failure means the blob is damaged, not that the
+    /// password is wrong.
+    /// </summary>
+    /// <param name="nodePath">Path of the node whose content the blob holds.</param>
+    /// <param name="hash">The blob's content hash.</param>
+    /// <param name="inner">The authentication failure.</param>
+    /// <returns>The exception to throw.</returns>
+    private static InvalidDataException CorruptBlob(string nodePath, byte[] hash, CryptographicException inner) =>
+        new($"Snapshot blob for '{nodePath}' (hash {Convert.ToHexStringLower(hash)}) is corrupted: its encrypted data failed integrity verification.", inner);
+
+    /// <summary>
     /// Reads the blob for <paramref name="hash"/> straight into a <see cref="FileContent"/> via
     /// <see cref="FileContent.FillFromStream"/>, decrypting (chunked or legacy whole-blob, see
     /// <see cref="WriteBlob"/>) and decompressing on the fly rather than materializing the
@@ -510,9 +523,9 @@ internal static class SnapshotStore
                     using var aesGcm = new AesGcm(cek, BlobTagSize);
                     aesGcm.Decrypt(nonce, ciphertext, tag, plaintext);
                 }
-                catch (CryptographicException)
+                catch (CryptographicException ex)
                 {
-                    throw new ImagePasswordIncorrectException();
+                    throw CorruptBlob(nodePath, hash, ex);
                 }
 
                 legacyPlaintext = plaintext;
@@ -546,9 +559,9 @@ internal static class SnapshotStore
         {
             filled = content.FillFromStream(sourceStream, (long)fileSize);
         }
-        catch (CryptographicException)
+        catch (CryptographicException ex)
         {
-            throw new ImagePasswordIncorrectException();
+            throw CorruptBlob(nodePath, hash, ex);
         }
         finally
         {

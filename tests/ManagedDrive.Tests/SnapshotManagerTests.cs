@@ -339,7 +339,7 @@ public sealed class SnapshotManagerTests : IDisposable
     }
 
     [Fact]
-    public void LoadSnapshot_EncryptedBlobWithWrongCek_ThrowsPasswordIncorrect()
+    public void LoadSnapshot_EncryptedBlobWithWrongCek_ThrowsInvalidData()
     {
         var cek = DiskImageSerializer.GenerateCek();
         var wrongCek = DiskImageSerializer.GenerateCek();
@@ -351,7 +351,7 @@ public sealed class SnapshotManagerTests : IDisposable
 
         var snapshot = Assert.Single(SnapshotManager.ListSnapshots(_mainImagePath));
 
-        Assert.Throws<ImagePasswordIncorrectException>(() =>
+        Assert.Throws<InvalidDataException>(() =>
             SnapshotManager.LoadSnapshot(snapshot.Path, out _, out _, wrongCek));
     }
 
@@ -385,7 +385,7 @@ public sealed class SnapshotManagerTests : IDisposable
     }
 
     [Fact]
-    public void LoadSnapshot_EncryptedAcrossMultipleChunksWithWrongCek_ThrowsPasswordIncorrect()
+    public void LoadSnapshot_EncryptedAcrossMultipleChunksWithWrongCek_ThrowsInvalidData()
     {
         ChunkedGcm.TestChunkSizeOverride = 64;
         try
@@ -402,7 +402,7 @@ public sealed class SnapshotManagerTests : IDisposable
 
             var snapshot = Assert.Single(SnapshotManager.ListSnapshots(_mainImagePath));
 
-            Assert.Throws<ImagePasswordIncorrectException>(() =>
+            Assert.Throws<InvalidDataException>(() =>
                 SnapshotManager.LoadSnapshot(snapshot.Path, out _, out _, wrongCek));
         }
         finally
@@ -450,6 +450,43 @@ public sealed class SnapshotManagerTests : IDisposable
 
         Assert.True(loaded.TryGet("\\a.txt", out var node));
         Assert.Equal(content, node!.FileData!.ToArray(content.Length));
+    }
+
+    /// <summary>
+    /// A legacy whole-blob encrypted blob failing authentication reads as corruption, like a
+    /// chunked one.
+    /// </summary>
+    [Fact]
+    public void LoadSnapshot_LegacyWholeBlobEncryptedBlobWithWrongCek_ThrowsInvalidData()
+    {
+        var cek = DiskImageSerializer.GenerateCek();
+        var content = new byte[] { 7, 7, 7 };
+        var nodeMap = new FileNodeMap();
+        nodeMap.Add("\\", MakeDir());
+        nodeMap.Add("\\a.txt", MakeFile(content));
+        SnapshotManager.WriteSnapshot(nodeMap, 1024, "Label", _mainImagePath,
+            new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), ImageCompressionLevel.None, cek);
+        var blobPath = Directory.EnumerateFiles(BlobDirectory, "*.blob", SearchOption.AllDirectories).Single();
+        var nonce = RandomNumberGenerator.GetBytes(12);
+        var ciphertext = new byte[content.Length];
+        var tag = new byte[16];
+        using (var aesGcm = new AesGcm(cek, 16))
+        {
+            aesGcm.Encrypt(nonce, content, ciphertext, tag);
+        }
+
+        using (var stream = new FileStream(blobPath, FileMode.Create, FileAccess.Write))
+        {
+            stream.WriteByte(0b010); // Encrypted, not Compressed, not Chunked
+            stream.Write(nonce);
+            stream.Write(tag);
+            stream.Write(ciphertext);
+        }
+
+        var snapshot = Assert.Single(SnapshotManager.ListSnapshots(_mainImagePath));
+
+        Assert.Throws<InvalidDataException>(() =>
+            SnapshotManager.LoadSnapshot(snapshot.Path, out _, out _, DiskImageSerializer.GenerateCek()));
     }
 
     [Fact]
