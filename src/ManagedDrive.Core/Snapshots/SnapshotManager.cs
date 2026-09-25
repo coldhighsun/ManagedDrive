@@ -15,13 +15,14 @@ public static partial class SnapshotManager
 
     /// <summary>
     /// Builds a unique snapshot file path in the same directory as <paramref name="mainImagePath"/>,
-    /// named <c>{baseName}.{yyyyMMdd-HHmmss}.mdr</c>. Appends <c>-N</c> when a file with the
+    /// named <c>{baseName}.{yyyyMMdd-HHmmss}.mdr</c>, where the base name comes from
+    /// <see cref="SnapshotStore.SnapshotBaseName"/>. Appends <c>-N</c> when a file with the
     /// same timestamp already exists (same-second collision).
     /// </summary>
     public static string BuildSnapshotPath(string mainImagePath, DateTimeOffset timestampUtc)
     {
         var directory = Path.GetDirectoryName(mainImagePath);
-        var baseName = Path.GetFileNameWithoutExtension(mainImagePath);
+        var baseName = SnapshotStore.SnapshotBaseName(mainImagePath);
         var timestamp = timestampUtc.ToString(TimestampFormat);
 
         var candidate = Path.Combine(directory ?? string.Empty, $"{baseName}.{timestamp}.mdr");
@@ -336,7 +337,7 @@ public static partial class SnapshotManager
             yield break;
         }
 
-        var baseName = Path.GetFileNameWithoutExtension(mainImagePath);
+        var baseName = SnapshotStore.SnapshotBaseName(mainImagePath);
 
         foreach (var path in Directory.EnumerateFiles(directory, $"{baseName}.*.mdr"))
         {

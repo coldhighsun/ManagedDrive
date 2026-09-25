@@ -717,6 +717,60 @@ public sealed class SnapshotManagerTests : IDisposable
     }
 
     [Fact]
+    public void BuildSnapshotPath_NonMdrImage_KeepsFullFileNameAsBase()
+    {
+        var imgPath = Path.Combine(_dir, "disk.img");
+
+        var path = SnapshotManager.BuildSnapshotPath(imgPath, new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero));
+
+        Assert.Equal("disk.img.20260101-000000.mdr", Path.GetFileName(path));
+    }
+
+    [Fact]
+    public void ListSnapshots_MdrAndImgWithSameStem_DoNotSeeEachOthersSnapshots()
+    {
+        var imgPath = Path.Combine(_dir, "disk.img");
+        WriteSnapshotWithFile(new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), "\\mdr.txt", new byte[10]);
+        WriteSnapshotFor(imgPath, new(2026, 1, 2, 0, 0, 0, TimeSpan.Zero), "\\img.txt", new byte[10]);
+
+        var mdrSnapshot = Assert.Single(SnapshotManager.ListSnapshots(_mainImagePath));
+        var imgSnapshot = Assert.Single(SnapshotManager.ListSnapshots(imgPath));
+
+        Assert.Equal("disk.20260101-000000.mdr", Path.GetFileName(mdrSnapshot.Path));
+        Assert.Equal("disk.img.20260102-000000.mdr", Path.GetFileName(imgSnapshot.Path));
+        Assert.True(Directory.Exists(Path.Combine(_dir, "disk.img.snapblobs")));
+    }
+
+    [Fact]
+    public void Prune_ImgImage_LeavesSameStemMdrSnapshotsAndBlobs()
+    {
+        var imgPath = Path.Combine(_dir, "disk.img");
+        WriteSnapshotWithFile(new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), "\\mdr.txt", [1, 2, 3]);
+        WriteSnapshotFor(imgPath, new(2026, 1, 2, 0, 0, 0, TimeSpan.Zero), "\\img.txt", [4, 5, 6]);
+
+        SnapshotManager.Prune(imgPath, maxCount: 0, maxTotalBytes: null);
+
+        Assert.Empty(SnapshotManager.ListSnapshots(imgPath));
+        var remaining = Assert.Single(SnapshotManager.ListSnapshots(_mainImagePath));
+        var loaded = SnapshotManager.LoadSnapshot(remaining.Path, out _, out _);
+        Assert.True(loaded.TryGet("\\mdr.txt", out _));
+    }
+
+    [Fact]
+    public void DeleteAllSnapshots_ImgImage_LeavesSameStemMdrSnapshots()
+    {
+        var imgPath = Path.Combine(_dir, "disk.img");
+        WriteSnapshotWithFile(new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), "\\mdr.txt", new byte[10]);
+        WriteSnapshotFor(imgPath, new(2026, 1, 2, 0, 0, 0, TimeSpan.Zero), "\\img.txt", new byte[10]);
+
+        Assert.True(SnapshotManager.DeleteAllSnapshots(imgPath));
+
+        Assert.Empty(SnapshotManager.ListSnapshots(imgPath));
+        Assert.Single(SnapshotManager.ListSnapshots(_mainImagePath));
+        Assert.True(Directory.Exists(BlobDirectory));
+    }
+
+    [Fact]
     public void Prune_DeletesUnreferencedBlob_KeepsBlobStillReferencedByAnotherSnapshot()
     {
         var shared = new byte[] { 1, 1, 1 };
@@ -975,11 +1029,15 @@ public sealed class SnapshotManagerTests : IDisposable
     }
 
     private void WriteSnapshotWithFile(DateTimeOffset timestampUtc, string path, byte[] content,
+        ImageCompressionLevel level = ImageCompressionLevel.None) =>
+        WriteSnapshotFor(_mainImagePath, timestampUtc, path, content, level);
+
+    private static void WriteSnapshotFor(string mainImagePath, DateTimeOffset timestampUtc, string path, byte[] content,
         ImageCompressionLevel level = ImageCompressionLevel.None)
     {
         var nodeMap = new FileNodeMap();
         nodeMap.Add("\\", MakeDir());
         nodeMap.Add(path, MakeFile(content));
-        SnapshotManager.WriteSnapshot(nodeMap, 1024, "Label", _mainImagePath, timestampUtc, level);
+        SnapshotManager.WriteSnapshot(nodeMap, 1024, "Label", mainImagePath, timestampUtc, level);
     }
 }
