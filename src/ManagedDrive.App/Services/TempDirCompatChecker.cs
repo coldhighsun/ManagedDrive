@@ -34,7 +34,7 @@ public sealed class TempDirCompatChecker
         }
 
         var expanded = Environment.ExpandEnvironmentVariables(userTemp);
-        return disks.Any(d => expanded.StartsWith(d.MountPoint, StringComparison.OrdinalIgnoreCase));
+        return disks.Any(d => MountPointValidator.IsPathOnMountPoint(expanded, d.MountPoint));
     }
 
     /// <summary>
