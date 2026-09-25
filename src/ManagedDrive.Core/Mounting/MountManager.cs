@@ -23,6 +23,13 @@ public sealed class MountManager : IDisposable
     private readonly Lock _syncRoot = new();
 
     /// <summary>
+    /// Set under <see cref="_syncRoot"/> by <see cref="Dispose(Action{RamDisk, double, double, ulong}?)"/>.
+    /// A <see cref="Mount"/> still in flight when it's set disposes its own disk instead of
+    /// registering it, since the disposal has already taken the list of disks to unmount.
+    /// </summary>
+    private bool _disposed;
+
+    /// <summary>
     /// How often <see cref="_activityPollTimer"/> checks for activity recorded by
     /// <see cref="OnDiskContentAccessed"/> and, if any, raises <see cref="ActivityDetected"/>.
     /// </summary>
@@ -99,6 +106,7 @@ public sealed class MountManager : IDisposable
 
         lock (_syncRoot)
         {
+            _disposed = true;
             all = [.. _disks.Values];
             _disks.Clear();
         }
@@ -196,6 +204,9 @@ public sealed class MountManager : IDisposable
     /// <exception cref="InvalidOperationException">
     /// A disk is already registered at <see cref="DiskOptions.MountPoint"/>.
     /// </exception>
+    /// <exception cref="ObjectDisposedException">
+    /// The manager was disposed, before or during the mount; a disk created meanwhile is unmounted.
+    /// </exception>
     public RamDisk Mount(
         DiskOptions options,
         string? password = null,
@@ -208,6 +219,7 @@ public sealed class MountManager : IDisposable
         // WinFsp volume — against this call.
         lock (_syncRoot)
         {
+            ObjectDisposedException.ThrowIf(_disposed, this);
             if (_disks.ContainsKey(options.MountPoint) || !_reservedMountPoints.Add(options.MountPoint))
             {
                 throw new InvalidOperationException($"A disk is already mounted at '{options.MountPoint}'.");
@@ -227,11 +239,23 @@ public sealed class MountManager : IDisposable
             }
         }
 
-        disk.ContentAccessed += OnDiskContentAccessed;
-
+        bool disposed;
         lock (_syncRoot)
         {
-            _disks[options.MountPoint] = disk;
+            disposed = _disposed;
+            if (!disposed)
+            {
+                disk.ContentAccessed += OnDiskContentAccessed;
+                _disks[options.MountPoint] = disk;
+            }
+        }
+
+        if (disposed)
+        {
+            // Dispose ran while this disk was being created and has already unmounted the rest;
+            // registering it now would leave it mounted with nothing left to unmount it.
+            disk.Dispose();
+            throw new ObjectDisposedException(nameof(MountManager));
         }
 
         DiskMounted?.Invoke(this, disk);
