@@ -100,11 +100,28 @@ public sealed class HelperPipeService(GlobalMountManager mountManager, ILogger<H
     }
 
     /// <summary>
-    /// Creates a pipe whose DACL explicitly allows medium-integrity user processes to connect —
-    /// required because this SYSTEM-hosted pipe would otherwise be inaccessible to the user-mode
-    /// app across the integrity boundary.
+    /// Creates the service's pipe, secured by <see cref="CreatePipeSecurity"/>.
     /// </summary>
-    private static NamedPipeServerStream CreatePipe()
+    private static NamedPipeServerStream CreatePipe() =>
+        NamedPipeServerStreamAcl.Create(
+            HelperPipeProtocol.PipeName,
+            PipeDirection.InOut,
+            maxNumberOfServerInstances: 1,
+            PipeTransmissionMode.Byte,
+            PipeOptions.Asynchronous,
+            inBufferSize: 0,
+            outBufferSize: 0,
+            CreatePipeSecurity());
+
+    /// <summary>
+    /// Creates a security descriptor whose DACL explicitly allows medium-integrity user processes
+    /// to connect — required because this SYSTEM-hosted pipe would otherwise be inaccessible to
+    /// the user-mode app across the integrity boundary — but denies remote clients. The pipe is
+    /// explicitly owned by <c>LocalSystem</c>, which is how clients tell it from one another user
+    /// created under the same name.
+    /// </summary>
+    /// <returns>The security descriptor to create the pipe with.</returns>
+    internal static PipeSecurity CreatePipeSecurity()
     {
         var security = new PipeSecurity();
 
@@ -123,15 +140,9 @@ public sealed class HelperPipeService(GlobalMountManager mountManager, ILogger<H
             PipeAccessRights.FullControl,
             AccessControlType.Allow));
 
-        return NamedPipeServerStreamAcl.Create(
-            HelperPipeProtocol.PipeName,
-            PipeDirection.InOut,
-            maxNumberOfServerInstances: 1,
-            PipeTransmissionMode.Byte,
-            PipeOptions.Asynchronous,
-            inBufferSize: 0,
-            outBufferSize: 0,
-            security);
+        PipeSecurityRules.DenyRemoteClients(security);
+        security.SetOwner(new SecurityIdentifier(WellKnownSidType.LocalSystemSid, null));
+        return security;
     }
 
     /// <summary>
