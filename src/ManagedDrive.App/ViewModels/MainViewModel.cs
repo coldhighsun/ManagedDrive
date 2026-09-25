@@ -1895,10 +1895,13 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 
             var currentPassword = vm.Disk.CurrentPassword;
             var oldMountPoint = old.MountPoint;
-            await Task.Run(() => _mountManager.Unmount(oldMountPoint));
 
             try
             {
+                // Inside the try: MountManager.Unmount drops the disk from its list before
+                // disposing it, so a throw here leaves it just as unmounted as a Mount failure.
+                await Task.Run(() => _mountManager.Unmount(oldMountPoint));
+
                 // A password failure must not escape the lambda: the disk is already mounted by
                 // then, and the catch below would drop it from Disks while it stays mounted.
                 string? passwordError = null;
@@ -1928,6 +1931,12 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
                 _logger.LogError(ex, "Edit disk remount failed: {OldMountPoint} -> {NewMountPoint}.", oldMountPoint, newOptions.MountPoint);
                 vm.Dispose();
                 Disks.Remove(vm);
+
+                // Keep the disk's profile (with its pre-edit options, which still match the image
+                // on disk — the new drive letter may be the very reason the mount failed) so it is
+                // not silently dropped from the settings the next time they are saved.
+                RetainSavedProfiles([ToProfile(old)]);
+                SaveSettings();
                 ShowError(Loc.Format("Msg.MountFailed", ex.Message));
                 StatusText = Loc.Get("Status.MountFailed");
             }
