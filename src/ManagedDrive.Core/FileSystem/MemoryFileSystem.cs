@@ -178,7 +178,7 @@ public sealed class MemoryFileSystem : FileSystemBase
     /// <summary>
     /// Called when the last handle to a file is closed.
     /// Removes the node from the map if the <c>CleanupDelete</c> flag is set, and
-    /// updates timestamps when the corresponding flags are present.
+    /// updates timestamps and the archive bit when the corresponding flags are present.
     /// </summary>
     public override void Cleanup(
         object fileNode,
@@ -205,6 +205,20 @@ public sealed class MemoryFileSystem : FileSystemBase
             node.FileInfo.ChangeTime = now;
             node.MetadataVersion++;
             MarkDirty();
+        }
+
+        // NTFS and FAT set a file's archive bit whenever it's modified, so backup tools can find
+        // what changed since the last backup cleared it. Skipped for a node deleted above (no
+        // attribute to persist) and for directories (Windows doesn't archive-track them).
+        if ((flags & CleanupSetArchiveBit) != 0 && !node.IsDirectory && !_readOnly && !deleted)
+        {
+            const uint ArchiveAttribute = (uint)FileAttributes.Archive;
+            if ((node.FileInfo.FileAttributes & ArchiveAttribute) == 0)
+            {
+                node.FileInfo.FileAttributes |= ArchiveAttribute;
+                node.MetadataVersion++;
+                MarkDirty();
+            }
         }
 
         // Skipped for a node deleted above: it's no longer in the map, so trimming it would
@@ -407,20 +421,23 @@ public sealed class MemoryFileSystem : FileSystemBase
     /// Called by WinFsp during Create/Open to resolve the target path before the operation.
     /// </summary>
     /// <returns>
-    /// STATUS_SUCCESS or STATUS_OBJECT_NAME_NOT_FOUND.
+    /// STATUS_SUCCESS, STATUS_OBJECT_NAME_NOT_FOUND (the leaf itself doesn't exist),
+    /// STATUS_OBJECT_PATH_NOT_FOUND (an intermediate component doesn't exist), or
+    /// STATUS_NOT_A_DIRECTORY (an intermediate component names a file).
     /// </returns>
     public override int GetSecurityByName(
         string fileName,
         out uint fileAttributes,
         ref byte[] securityDescriptor)
     {
-        if (!NodeMap.TryGet(fileName, out var node) || node == null)
+        var lookup = NodeMap.TryGetForLookup(fileName, out var node);
+        if (LookupFailureStatus(lookup) is int failureStatus)
         {
             fileAttributes = 0;
-            return STATUS_OBJECT_NAME_NOT_FOUND;
+            return failureStatus;
         }
 
-        fileAttributes = node.FileInfo.FileAttributes;
+        fileAttributes = node!.FileInfo.FileAttributes;
 
         if (securityDescriptor != null)
         {
@@ -482,7 +499,9 @@ public sealed class MemoryFileSystem : FileSystemBase
     /// Opens an existing file or directory node.
     /// </summary>
     /// <returns>
-    /// STATUS_SUCCESS or STATUS_OBJECT_NAME_NOT_FOUND.
+    /// STATUS_SUCCESS, STATUS_OBJECT_NAME_NOT_FOUND (the leaf itself doesn't exist),
+    /// STATUS_OBJECT_PATH_NOT_FOUND (an intermediate component doesn't exist), or
+    /// STATUS_NOT_A_DIRECTORY (an intermediate component names a file).
     /// </returns>
     public override int Open(
         string fileName,
@@ -498,15 +517,34 @@ public sealed class MemoryFileSystem : FileSystemBase
         fileInfo = default;
         normalizedName = fileName;
 
-        if (!NodeMap.TryGet(fileName, out var node) || node == null)
+        var lookup = NodeMap.TryGetForLookup(fileName, out var node);
+        if (LookupFailureStatus(lookup) is int failureStatus)
         {
-            return STATUS_OBJECT_NAME_NOT_FOUND;
+            return failureStatus;
         }
 
         fileNode = node;
-        fileInfo = node.FileInfo;
+        fileInfo = node!.FileInfo;
         return STATUS_SUCCESS;
     }
+
+    /// <summary>
+    /// Translates a <see cref="FileNodeMap.LookupResult"/> from resolving a path by name (as
+    /// opposed to an already-open handle) into the NTSTATUS <see cref="GetSecurityByName"/> and
+    /// <see cref="Open"/> both report for it.
+    /// </summary>
+    /// <param name="lookup">The outcome of <see cref="FileNodeMap.TryGetForLookup"/>.</param>
+    /// <returns>
+    /// The NTSTATUS to return for a failed lookup, or <c>null</c> if <paramref name="lookup"/> is
+    /// <see cref="FileNodeMap.LookupResult.Found"/> (the caller should proceed with the node).
+    /// </returns>
+    private static int? LookupFailureStatus(FileNodeMap.LookupResult lookup) => lookup switch
+    {
+        FileNodeMap.LookupResult.NotFound => STATUS_OBJECT_NAME_NOT_FOUND,
+        FileNodeMap.LookupResult.ParentNotFound => STATUS_OBJECT_PATH_NOT_FOUND,
+        FileNodeMap.LookupResult.ParentNotDirectory => STATUS_NOT_A_DIRECTORY,
+        _ => null,
+    };
 
     /// <summary>
     /// Overwrites an existing file, either replacing or merging its file attributes,
@@ -676,6 +714,7 @@ public sealed class MemoryFileSystem : FileSystemBase
         switch (conflict)
         {
             case FileNodeMap.RenameConflict.NameCollision:
+            case FileNodeMap.RenameConflict.CannotReplaceDirectory:
                 return STATUS_OBJECT_NAME_COLLISION;
             case FileNodeMap.RenameConflict.TargetIsDirectory:
                 return STATUS_FILE_IS_A_DIRECTORY;

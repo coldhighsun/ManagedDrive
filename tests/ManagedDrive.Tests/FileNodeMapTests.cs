@@ -594,6 +594,26 @@ public sealed class FileNodeMapTests
     }
 
     /// <summary>
+    /// Replacing an empty directory target is a distinct conflict from a plain name collision,
+    /// even though both are reported as the same NTSTATUS by <c>MemoryFileSystem.Rename</c> —
+    /// <c>replaceIfExists</c> never applies to a directory target on Windows, unlike a file
+    /// target, which a plain name collision can still describe.
+    /// </summary>
+    [Fact]
+    public void Rename_ReplacingEmptyDirectory_ReturnsCannotReplaceDirectory()
+    {
+        var map = new FileNodeMap();
+        map.Add("\\", MakeDir());
+        var source = MakeDir();
+        map.Add("\\source", source);
+        map.Add("\\target", MakeDir());
+
+        var conflict = map.Rename("\\source", "\\target", source, replaceIfExists: true);
+
+        Assert.Equal(FileNodeMap.RenameConflict.CannotReplaceDirectory, conflict);
+    }
+
+    /// <summary>
     /// The metadata versions returned alongside the snapshot line up with its nodes.
     /// </summary>
     [Fact]
