@@ -56,9 +56,21 @@ internal static class SnapshotStore
     internal static string ComputeBlobDirectory(string mainImagePath)
     {
         var directory = Path.GetDirectoryName(mainImagePath);
-        var baseName = Path.GetFileNameWithoutExtension(mainImagePath);
-        return Path.Combine(directory ?? string.Empty, baseName + ".snapblobs");
+        return Path.Combine(directory ?? string.Empty, SnapshotBaseName(mainImagePath) + ".snapblobs");
     }
+
+    /// <summary>
+    /// Returns the name that prefixes every snapshot file and the blob directory of
+    /// <paramref name="mainImagePath"/>: the file name without its <c>.mdr</c> extension, or the
+    /// full file name for any other extension, so <c>disk.mdr</c> and <c>disk.img</c> in the
+    /// same folder don't share (and prune or garbage-collect) each other's snapshots.
+    /// </summary>
+    /// <param name="mainImagePath">The main image the snapshots belong to.</param>
+    /// <returns>The snapshot base name.</returns>
+    internal static string SnapshotBaseName(string mainImagePath) =>
+        string.Equals(Path.GetExtension(mainImagePath), ".mdr", StringComparison.OrdinalIgnoreCase)
+            ? Path.GetFileNameWithoutExtension(mainImagePath)
+            : Path.GetFileName(mainImagePath);
 
     /// <summary>
     /// Returns the on-disk path for the blob with the given content hash, sharded into a

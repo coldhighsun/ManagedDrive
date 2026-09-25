@@ -183,6 +183,8 @@ public sealed class SnapshotStoreTests : IDisposable
     [InlineData(@"C:\disks\disk.mdr", @"C:\disks\disk.snapblobs")]
     [InlineData(@"C:\disks\my.image.mdr", @"C:\disks\my.image.snapblobs")]
     [InlineData(@"C:\disks\noext", @"C:\disks\noext.snapblobs")]
+    [InlineData(@"C:\disks\disk.img", @"C:\disks\disk.img.snapblobs")]
+    [InlineData(@"C:\disks\DISK.MDR", @"C:\disks\DISK.snapblobs")]
     public void ComputeBlobDirectory_AppendsSnapblobsSuffixNextToImage(string mainImagePath, string expected)
     {
         var result = SnapshotStore.ComputeBlobDirectory(mainImagePath);
