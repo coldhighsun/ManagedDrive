@@ -220,6 +220,7 @@ public partial class App
         _mainWindow = new(_mainViewModel);
         _mainWindow.Closing += MainWindow_Closing;
         _mainWindow.IsVisibleChanged += OnMainWindowVisibleChanged;
+        _mainWindow.StateChanged += (_, _) => UpdateForMainWindowShownState();
 
         // Force the HWND to exist now (on the UI thread) so SessionEndingSaveHandler can reference
         // it from the SystemEvents thread even when the window stays hidden in the tray.
@@ -233,7 +234,7 @@ public partial class App
         _tempDirCompatChecker = new(settings, _trayIconController, () => _mainWindow is { IsLoaded: true } ? _mainWindow : null);
         _mountManager.ActivityDetected += _trayIconController.OnActivityDetected;
         _diskNotificationService = new(
-            _mainViewModel, _trayIconController, () => _mainWindow!.IsVisible,
+            _mainViewModel, _trayIconController, () => WindowVisibility.IsShownToUser(_mainWindow),
             _serviceProvider!.GetRequiredService<ILogger<DiskNotificationService>>());
 
         // Constructed before AutoMountDisksAsync so that an auto-mounted disk which is already the
@@ -450,21 +451,33 @@ public partial class App
     }
 
     /// <summary>
-    /// Fires whenever the main window is hidden (minimized to tray) or shown again. Toggles each
-    /// disk's <see cref="DiskViewModel.SetActivityTrackingEnabled"/> to match, since nothing is
-    /// bound to the status bar while the window is hidden.
+    /// Fires whenever the main window is hidden (minimized to tray) or shown again.
     /// </summary>
-    private void OnMainWindowVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)
+    private void OnMainWindowVisibleChanged(object sender, DependencyPropertyChangedEventArgs e) =>
+        UpdateForMainWindowShownState();
+
+    /// <summary>
+    /// Runs whenever the main window is hidden, shown, minimized or restored. Toggles each disk's
+    /// <see cref="DiskViewModel.SetActivityTrackingEnabled"/> to match, since nobody sees the
+    /// status bar while the window is hidden or minimized, and once the window is back in view
+    /// hides a tray icon that was only shown for a balloon tip.
+    /// </summary>
+    private void UpdateForMainWindowShownState()
     {
         if (_mainViewModel == null)
         {
             return;
         }
 
-        var isVisible = _mainWindow!.IsVisible;
+        var isShown = WindowVisibility.IsShownToUser(_mainWindow);
         foreach (var vm in _mainViewModel.Disks)
         {
-            vm.SetActivityTrackingEnabled(isVisible);
+            vm.SetActivityTrackingEnabled(isShown);
+        }
+
+        if (isShown)
+        {
+            _trayIconController?.HideIfShownForBalloonOnly();
         }
     }
 

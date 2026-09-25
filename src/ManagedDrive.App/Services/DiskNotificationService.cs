@@ -10,7 +10,11 @@ namespace ManagedDrive.App.Services;
 public sealed class DiskNotificationService
 {
     private readonly HashSet<DiskViewModel> _highUsageDisks = [];
-    private readonly Func<bool> _isMainWindowVisible;
+    /// <summary>
+    /// Returns whether the main window (and so its status bar) is in front of the user, i.e. shown
+    /// and not minimized; see <see cref="WindowVisibility.IsShownToUser(Window?)"/>.
+    /// </summary>
+    private readonly Func<bool> _isMainWindowShown;
     private readonly ILogger<DiskNotificationService> _logger;
     private readonly MainViewModel _mainViewModel;
     private readonly TrayIconController _trayIconController;
@@ -21,17 +25,21 @@ public sealed class DiskNotificationService
     /// </summary>
     /// <param name="mainViewModel">The view model owning the disk collection.</param>
     /// <param name="trayIconController">Used to show balloon tips for warnings/failures.</param>
-    /// <param name="isMainWindowVisible">Queried to set initial activity tracking on newly added disks.</param>
+    /// <param name="isMainWindowShown">
+    /// Returns whether the main window is shown and not minimized. Decides between reporting a
+    /// problem in the status bar only or also with a balloon tip, and sets initial activity
+    /// tracking on newly added disks.
+    /// </param>
     /// <param name="logger">Used to record throttled high-usage warnings.</param>
     public DiskNotificationService(
         MainViewModel mainViewModel,
         TrayIconController trayIconController,
-        Func<bool> isMainWindowVisible,
+        Func<bool> isMainWindowShown,
         ILogger<DiskNotificationService> logger)
     {
         _mainViewModel = mainViewModel;
         _trayIconController = trayIconController;
-        _isMainWindowVisible = isMainWindowVisible;
+        _isMainWindowShown = isMainWindowShown;
         _logger = logger;
 
         _mainViewModel.Disks.CollectionChanged += (_, e) =>
@@ -45,7 +53,7 @@ public sealed class DiskNotificationService
                     vm.SaveCompleted += OnDiskSaveCompleted;
                     vm.ActivityObserved += OnDiskActivityObserved;
                     vm.PropertyChanged += OnDiskPropertyChanged;
-                    vm.SetActivityTrackingEnabled(_isMainWindowVisible());
+                    vm.SetActivityTrackingEnabled(_isMainWindowShown());
 
                     if (vm is { CapacityAdjustedOnLoad: true, Disk.Options.SourceArchivePath: null })
                     {
@@ -74,6 +82,11 @@ public sealed class DiskNotificationService
                     {
                         _trayIconController.SetHighUsageWarningActive(_highUsageDisks.Count > 0);
                     }
+
+                    if (_mainViewModel.ClearStickyStatus(vm.MountPoint))
+                    {
+                        ShowRemainingHighUsageStatus();
+                    }
                 }
             }
         };
@@ -94,11 +107,14 @@ public sealed class DiskNotificationService
         var originalMb = vm.OriginalCapacityBytesOnLoad!.Value / (1024 * 1024);
         var newMb = vm.Disk.TotalBytes / (1024 * 1024);
 
-        var title = Loc.Get("Tray.CapacityAdjustedTitle");
-        var body = Loc.Format("Tray.CapacityAdjustedBody", vm.VolumeLabel, vm.MountPoint, originalMb, newMb);
-        _trayIconController.ShowBalloonTip(title, body, System.Windows.Forms.ToolTipIcon.Warning);
-
-        _mainViewModel.StatusText = Loc.Format("Status.CapacityAdjusted", vm.MountPoint, originalMb, newMb);
+        _mainViewModel.ShowStickyStatus(
+            Loc.Format("Status.CapacityAdjusted", vm.MountPoint, originalMb, newMb),
+            vm.MountPoint,
+            nameof(DiskViewModel.CapacityAdjustedOnLoad));
+        ShowBalloonTipUnlessWindowShown(
+            Loc.Get("Tray.CapacityAdjustedTitle"),
+            Loc.Format("Tray.CapacityAdjustedBody", vm.VolumeLabel, vm.MountPoint, originalMb, newMb),
+            System.Windows.Forms.ToolTipIcon.Warning);
     }
 
     private void OnDiskHighUsageWarning(object? sender, EventArgs e)
@@ -108,9 +124,8 @@ public sealed class DiskNotificationService
             return;
         }
 
-        var title = Loc.Get("Tray.HighUsageTitle");
-        var body = Loc.Format("Tray.HighUsageBody", vm.VolumeLabel, vm.MountPoint, vm.UsedPercent);
-        _trayIconController.ShowBalloonTip(title, body, System.Windows.Forms.ToolTipIcon.Warning);
+        var body = ShowHighUsageStatus(vm);
+        ShowBalloonTipUnlessWindowShown(Loc.Get("Tray.HighUsageTitle"), body, System.Windows.Forms.ToolTipIcon.Warning);
 
         _logger.LogWarningThrottled(
             $"high-usage:{vm.MountPoint}", TimeSpan.FromMinutes(10),
@@ -123,7 +138,8 @@ public sealed class DiskNotificationService
     /// fires on both the rising and falling edge, unlike the one-shot <see cref="DiskViewModel.HighUsageWarning"/>
     /// event used for the balloon tip below) and reduces it to a single tray blink call: the tray
     /// icon has no per-disk concept, so it only needs to know whether any disk is currently over
-    /// its threshold.
+    /// its threshold. The falling edge also clears the disk's high-usage report from the status bar,
+    /// falling back to the report of another disk that is still over its threshold.
     /// </summary>
     private void OnDiskPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
@@ -139,9 +155,38 @@ public sealed class DiskNotificationService
         else
         {
             _highUsageDisks.Remove(vm);
+            if (_mainViewModel.ClearStickyStatus(vm.MountPoint, nameof(DiskViewModel.IsHighUsage)))
+            {
+                ShowRemainingHighUsageStatus();
+            }
         }
 
         _trayIconController.SetHighUsageWarningActive(_highUsageDisks.Count > 0);
+    }
+
+    /// <summary>
+    /// Shows <paramref name="vm"/>'s high-usage report as a sticky status.
+    /// </summary>
+    /// <param name="vm">A disk over its high-usage threshold.</param>
+    /// <returns>The report text, also used for the balloon tip.</returns>
+    private string ShowHighUsageStatus(DiskViewModel vm)
+    {
+        var body = Loc.Format("Tray.HighUsageBody", vm.VolumeLabel, vm.MountPoint, vm.UsedPercent);
+        _mainViewModel.ShowStickyStatus(body, vm.MountPoint, nameof(DiskViewModel.IsHighUsage));
+        return body;
+    }
+
+    /// <summary>
+    /// After a disk's report was cleared from the status bar, shows the high-usage report of a
+    /// disk that is still over its threshold instead of <c>Status.Ready</c>, so a resolved (or
+    /// removed) disk doesn't hide another one that is still nearly full.
+    /// </summary>
+    private void ShowRemainingHighUsageStatus()
+    {
+        if (_highUsageDisks.FirstOrDefault() is { } remaining)
+        {
+            ShowHighUsageStatus(remaining);
+        }
     }
 
     /// <summary>
@@ -152,7 +197,7 @@ public sealed class DiskNotificationService
     /// </summary>
     private void OnDiskSaveCompleted(object? sender, EventArgs e)
     {
-        if (sender is not DiskViewModel vm || _isMainWindowVisible())
+        if (sender is not DiskViewModel vm || _isMainWindowShown())
         {
             return;
         }
@@ -169,10 +214,28 @@ public sealed class DiskNotificationService
             return;
         }
 
-        var title = Loc.Get("Tray.SaveFailedTitle");
-        var body = Loc.Format("Tray.SaveFailedBody", vm.VolumeLabel, vm.MountPoint, ex.Message);
-        _trayIconController.ShowBalloonTip(title, body, System.Windows.Forms.ToolTipIcon.Error);
+        _mainViewModel.ShowStickyStatus(
+            Loc.Format("Status.SaveFailed", vm.MountPoint, ex.Message),
+            vm.MountPoint,
+            nameof(DiskViewModel.SaveFailed));
+        ShowBalloonTipUnlessWindowShown(
+            Loc.Get("Tray.SaveFailedTitle"),
+            Loc.Format("Tray.SaveFailedBody", vm.VolumeLabel, vm.MountPoint, ex.Message),
+            System.Windows.Forms.ToolTipIcon.Error);
+    }
 
-        _mainViewModel.StatusText = Loc.Format("Status.SaveFailed", vm.MountPoint, ex.Message);
+    /// <summary>
+    /// Also reports a problem with a balloon tip when the main window's status bar, which already
+    /// shows it, isn't in front of the user (window hidden to the tray or minimized).
+    /// </summary>
+    /// <param name="title">The balloon tip title.</param>
+    /// <param name="body">The balloon tip text.</param>
+    /// <param name="icon">The balloon tip icon.</param>
+    private void ShowBalloonTipUnlessWindowShown(string title, string body, System.Windows.Forms.ToolTipIcon icon)
+    {
+        if (!_isMainWindowShown())
+        {
+            _trayIconController.ShowBalloonTip(title, body, icon);
+        }
     }
 }

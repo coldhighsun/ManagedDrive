@@ -23,6 +23,12 @@ public sealed class TrayIconController : IDisposable
     /// </summary>
     private static readonly TimeSpan HighUsageBlinkInterval = TimeSpan.FromMilliseconds(800);
 
+    /// <summary>
+    /// How long a balloon tip stays up. Windows 10+ ignores this in favour of the system's
+    /// notification duration, but older shells still honour it.
+    /// </summary>
+    private static readonly TimeSpan BalloonTipTimeout = TimeSpan.FromSeconds(5);
+
     private readonly Dispatcher _dispatcher;
     private readonly DispatcherTimer _timerActivityFlash = new()
     {
@@ -41,6 +47,12 @@ public sealed class TrayIconController : IDisposable
     private readonly Icon?[] _trayActivityIcons = new Icon?[4];
 
     private readonly MainViewModel _mainViewModel;
+
+    /// <summary>
+    /// Tracks whether the tray icon is only visible so balloon tips could be shown (see
+    /// <see cref="ShowBalloonTip"/>) and must be hidden again once the last of them closes.
+    /// </summary>
+    private readonly BalloonOnlyIconTracker _balloonOnlyIcon = new();
     private readonly System.Windows.Forms.ToolStripMenuItem _menuShow;
     private readonly System.Windows.Forms.ToolStripMenuItem _menuNewDisk;
     private readonly System.Windows.Forms.ToolStripMenuItem _menuResetTempDirs;
@@ -117,6 +129,8 @@ public sealed class TrayIconController : IDisposable
             Visible = false,
         };
         _trayIcon.DoubleClick += (_, _) => dispatcher.Invoke(onShow);
+        _trayIcon.BalloonTipClosed += (_, _) => OnBalloonTipClosed();
+        _trayIcon.BalloonTipClicked += (_, _) => OnBalloonTipClosed();
         _trayIcon.MouseMove += (_, _) =>
         {
             var point = System.Windows.Forms.Cursor.Position;
@@ -165,7 +179,11 @@ public sealed class TrayIconController : IDisposable
     public bool Visible
     {
         get => _trayIcon.Visible;
-        set => _trayIcon.Visible = value;
+        set
+        {
+            _balloonOnlyIcon.Reset();
+            _trayIcon.Visible = value;
+        }
     }
 
     /// <summary>
@@ -266,10 +284,47 @@ public sealed class TrayIconController : IDisposable
     }
 
     /// <summary>
-    /// Shows a balloon tip from the tray icon.
+    /// Shows a balloon tip from the tray icon. Windows only shows balloons for a visible icon, and
+    /// the icon is hidden while the main window is open — including when that window is
+    /// minimized to the taskbar, where its status bar can't be seen either — so a hidden icon is
+    /// shown for the balloon's lifetime and hidden again when the last open balloon closes.
     /// </summary>
-    public void ShowBalloonTip(string title, string body, System.Windows.Forms.ToolTipIcon icon, int timeout = 5000) =>
-        _trayIcon.ShowBalloonTip(timeout, title, body, icon);
+    /// <param name="title">The balloon tip title.</param>
+    /// <param name="body">The balloon tip text.</param>
+    /// <param name="icon">The balloon tip icon.</param>
+    public void ShowBalloonTip(string title, string body, System.Windows.Forms.ToolTipIcon icon)
+    {
+        if (_balloonOnlyIcon.OnBalloonShowing(_trayIcon.Visible))
+        {
+            _trayIcon.Visible = true;
+        }
+
+        _trayIcon.ShowBalloonTip((int)BalloonTipTimeout.TotalMilliseconds, title, body, icon);
+    }
+
+    /// <summary>
+    /// Hides the tray icon again if <see cref="ShowBalloonTip"/> only showed it for balloons.
+    /// Called when the main window comes back into view, in case a balloon's close notification
+    /// never arrives.
+    /// </summary>
+    public void HideIfShownForBalloonOnly()
+    {
+        if (_balloonOnlyIcon.Reset())
+        {
+            _trayIcon.Visible = false;
+        }
+    }
+
+    /// <summary>
+    /// Hides the tray icon once the last balloon it was only shown for has closed or been clicked.
+    /// </summary>
+    private void OnBalloonTipClosed()
+    {
+        if (_balloonOnlyIcon.OnBalloonClosed())
+        {
+            _trayIcon.Visible = false;
+        }
+    }
 
     [DllImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]

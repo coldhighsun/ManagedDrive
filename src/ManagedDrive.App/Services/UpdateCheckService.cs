@@ -106,13 +106,14 @@ public sealed class UpdateCheckService(SettingsStore settings, TrayIconControlle
 
     private async Task NotifyUpdateAvailableAsync(UpdateInfo info, SettingsLastCheckStore lastCheckStore)
     {
-        trayIconController.ShowBalloonTip(
-            "ManagedDrive",
-            Loc.Format("Update.BalloonBody", info.Version),
-            System.Windows.Forms.ToolTipIcon.Info);
-
-        if (ownerWindowProvider() is not { IsVisible: true })
+        // A dialog when the user is looking at the window; otherwise a balloon, rather than a
+        // modal dialog popping up over whatever they're doing while the app sits minimized.
+        if (!WindowVisibility.IsShownToUser(ownerWindowProvider()))
         {
+            trayIconController.ShowBalloonTip(
+                "ManagedDrive",
+                Loc.Format("Update.BalloonBody", info.Version),
+                System.Windows.Forms.ToolTipIcon.Info);
             return;
         }
 
