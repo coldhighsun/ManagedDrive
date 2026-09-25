@@ -12,7 +12,9 @@ internal static class DirectoryEnumeration
 {
     /// <summary>
     /// Builds the full directory-entry list for <paramref name="dir"/> at the start of a
-    /// <c>ReadDirectoryEntry</c> sequence, including <c>.</c> and <c>..</c>.
+    /// <c>ReadDirectoryEntry</c> sequence, including <c>.</c> and <c>..</c> for any directory
+    /// but the root — matching how NTFS/FAT never carry dot entries for a volume's root, only
+    /// for subdirectories.
     /// </summary>
     /// <param name="nodeMap">The map to resolve children and the parent directory from.</param>
     /// <param name="dir">The directory node being enumerated.</param>
@@ -24,6 +26,7 @@ internal static class DirectoryEnumeration
     internal static DirContext Build(FileNodeMap nodeMap, FileNode dir, string? pattern, string? marker)
     {
         var entries = new List<(string Name, FileInfo Info)>();
+        var isRoot = dir.FilePath.Length == 1;
 
         // The marker is matched against "." and ".." exactly, not by sort order: children are
         // ordered case-insensitively, so a real child can sort before "." or ".." (e.g. names
@@ -32,28 +35,20 @@ internal static class DirectoryEnumeration
         // a paged enumeration return the same page forever.
 
         // "." — current directory
-        var addDot = marker == null;
+        var addDot = marker == null && !isRoot;
         if (addDot)
         {
             entries.Add((".", dir.FileInfo));
         }
 
         // ".." — parent directory
-        var addDotDot = marker is null or ".";
+        var addDotDot = (marker is null or ".") && !isRoot;
         if (addDotDot)
         {
-            var parentNode = dir;
-            if (dir.FilePath.Length > 1)
+            var parentPath = Path.GetDirectoryName(dir.FilePath)!;
+            if (!nodeMap.TryGet(parentPath, out var parentNode) || parentNode == null)
             {
-                var parentPath = Path.GetDirectoryName(dir.FilePath)!;
-                if (!nodeMap.TryGet(parentPath, out var p) || p == null)
-                {
-                    parentNode = dir;
-                }
-                else
-                {
-                    parentNode = p;
-                }
+                parentNode = dir;
             }
 
             entries.Add(("..", parentNode.FileInfo));
