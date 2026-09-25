@@ -301,6 +301,7 @@
     <sys:String x:Key="Msg.AlreadyRunning">ManagedDrive 已在运行。</sys:String>
     <sys:String x:Key="Msg.UnexpectedErrorTitle">ManagedDrive – 发生意外错误</sys:String>
     <sys:String x:Key="Msg.UnexpectedErrorBody">发生了一个意外错误，已记录到日志：&#x0a;&#x0a;{0}&#x0a;&#x0a;ManagedDrive 将尝试继续运行。</sys:String>
+    <sys:String x:Key="Msg.StartupFailedBody">ManagedDrive 启动失败，已退出。错误已记录到日志：&#x0a;&#x0a;{0}</sys:String>
     <sys:String x:Key="Msg.StartupTempReset">您的 Windows 临时目录指向了：&#x0a;&#x0a;  {0}&#x0a;&#x0a;该内存盘未配置自动挂载，临时目录将无法访问，已自动重置为系统默认临时目录。</sys:String>
     <sys:String x:Key="Msg.StartupTempResetDangling">您的 Windows 临时目录指向了：&#x0a;&#x0a;  {0}&#x0a;&#x0a;该内存盘当前未挂载（可能自动挂载失败，或对应的磁盘配置已不存在），临时目录无法访问，已自动重置为系统默认临时目录。</sys:String>
     <sys:String x:Key="Msg.WinFspMissingTitle">ManagedDrive – 缺少必要组件</sys:String>

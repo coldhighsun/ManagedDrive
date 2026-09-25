@@ -301,6 +301,7 @@
     <sys:String x:Key="Msg.AlreadyRunning">ManagedDrive is already running.</sys:String>
     <sys:String x:Key="Msg.UnexpectedErrorTitle">ManagedDrive – Unexpected Error</sys:String>
     <sys:String x:Key="Msg.UnexpectedErrorBody">An unexpected error occurred and has been logged:&#x0a;&#x0a;{0}&#x0a;&#x0a;ManagedDrive will attempt to continue running.</sys:String>
+    <sys:String x:Key="Msg.StartupFailedBody">ManagedDrive failed to start and has been closed. The error has been logged:&#x0a;&#x0a;{0}</sys:String>
     <sys:String x:Key="Msg.StartupTempReset">Your Windows Temp directory was pointing to:&#x0a;&#x0a;  {0}&#x0a;&#x0a;This RAM disk is not configured to auto-mount, so the directory would not be available. It has been automatically reset to the system default.</sys:String>
     <sys:String x:Key="Msg.StartupTempResetDangling">Your Windows Temp directory was pointing to:&#x0a;&#x0a;  {0}&#x0a;&#x0a;This RAM disk is not currently mounted (it may have failed to auto-mount, or its profile no longer exists), so the directory was not available. It has been automatically reset to the system default.</sys:String>
     <sys:String x:Key="Msg.WinFspMissingTitle">ManagedDrive – Missing Prerequisite</sys:String>
