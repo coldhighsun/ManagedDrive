@@ -89,7 +89,9 @@ public sealed class TempDirCompatChecker
                     MessageBoxButton.OK,
                     MessageBoxImage.Warning);
 
-                _settings.Save(config with
+                // Not `config with { ... }`: config is the startup snapshot, and auto-mount has
+                // saved newer disk profiles since.
+                _settings.Update(current => current with
                 {
                     TempDirCompatWarningShown = true
                 });

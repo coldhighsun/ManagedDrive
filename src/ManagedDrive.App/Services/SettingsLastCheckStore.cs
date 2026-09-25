@@ -17,7 +17,7 @@ internal sealed class SettingsLastCheckStore(SettingsStore settings) : ILastChec
 
     public Task SetLastCheckedAtAsync(DateTimeOffset checkedAt, CancellationToken cancellationToken = default)
     {
-        settings.Save(settings.Load() with { LastUpdateCheckUtc = checkedAt });
+        settings.Update(current => current with { LastUpdateCheckUtc = checkedAt });
         return Task.CompletedTask;
     }
 
@@ -29,7 +29,7 @@ internal sealed class SettingsLastCheckStore(SettingsStore settings) : ILastChec
 
     public Task SetSkippedVersionAsync(SemanticVersion? version, CancellationToken cancellationToken = default)
     {
-        settings.Save(settings.Load() with { SkippedVersion = version?.ToString() });
+        settings.Update(current => current with { SkippedVersion = version?.ToString() });
         return Task.CompletedTask;
     }
 

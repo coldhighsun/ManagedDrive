@@ -117,6 +117,25 @@ public sealed class SettingsStore
     }
 
     /// <summary>
+    /// Atomically reads the current configuration, applies <paramref name="change"/> to it and
+    /// saves the result, so a concurrent writer (e.g. an update check's continuation recording its
+    /// check time) can't slip a save in between the read and the write and have it overwritten
+    /// with the stale value read here.
+    /// </summary>
+    /// <param name="change">
+    /// Produces the configuration to save from the one currently on disk. Runs under the store's
+    /// lock, so it must not call back into this store from another thread.
+    /// </param>
+    public void Update(Func<AppConfiguration, AppConfiguration> change)
+    {
+        // Lock is reentrant, so Load/Save taking it again on this thread is fine.
+        lock (_ioLock)
+        {
+            Save(change(Load()));
+        }
+    }
+
+    /// <summary>
     /// Copies an unreadable settings file to a timestamped <c>.corrupt</c> sibling. Best-effort:
     /// failing to make the copy is logged and otherwise ignored, since startup must proceed.
     /// </summary>
