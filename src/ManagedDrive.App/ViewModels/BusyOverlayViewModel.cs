@@ -1,5 +1,6 @@
 using ManagedDrive.App.Infrastructure;
 using ManagedDrive.Cli.Core;
+using System.Windows.Input;
 
 namespace ManagedDrive.App.ViewModels;
 
@@ -41,6 +42,9 @@ public sealed class BusyOverlayViewModel : INotifyPropertyChanged
 
             field = value;
             OnPropertyChanged(nameof(IsBusy));
+
+            // Commands that start an operation of their own are disabled while one runs.
+            CommandManager.InvalidateRequerySuggested();
         }
     }
 
@@ -213,6 +217,30 @@ public sealed class BusyOverlayViewModel : INotifyPropertyChanged
         CanCancel = cancellationSource is not null;
         IsCancellationRequested = false;
         IsBusy = true;
+    }
+
+    /// <summary>
+    /// Shows the overlay for a new operation like <see cref="Start"/>, unless another operation is
+    /// already showing it — the overlay tracks a single operation, so a second one would take over
+    /// its progress and Cancel button and hide the overlay when it finished first.
+    /// </summary>
+    /// <param name="statusText">Status text to display above the progress bar.</param>
+    /// <param name="indeterminate">Whether the operation has no computable total.</param>
+    /// <param name="totalBytes">Total byte count for the operation; see <see cref="Start"/>.</param>
+    /// <param name="cancellationSource">The operation's cancellation source; see <see cref="Start"/>.</param>
+    /// <returns>
+    /// <see langword="true"/> if the overlay now shows this operation, which must then call
+    /// <see cref="Stop"/> when done; <see langword="false"/> if another operation is running.
+    /// </returns>
+    public bool TryStart(string statusText, bool indeterminate = false, ulong? totalBytes = null, CancellationTokenSource? cancellationSource = null)
+    {
+        if (IsBusy)
+        {
+            return false;
+        }
+
+        Start(statusText, indeterminate, totalBytes, cancellationSource);
+        return true;
     }
 
     private static string FormatDetail(ulong soFar, ulong total) =>

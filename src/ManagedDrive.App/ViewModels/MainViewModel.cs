@@ -62,8 +62,8 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         Disks.CollectionChanged += (_, _) => OnPropertyChanged(nameof(IsEmpty));
 
         CreateDiskCommand = new(_ => ExecuteCreateDisk());
-        ImportDiskCommand = new(_ => ExecuteImportDisk());
-        ImportArchiveCommand = new(_ => ExecuteImportArchive());
+        ImportDiskCommand = new(_ => ExecuteImportDisk(), _ => !BusyOverlay.IsBusy);
+        ImportArchiveCommand = new(_ => ExecuteImportArchive(), _ => !BusyOverlay.IsBusy);
         EditDiskCommand = new(
             p => ExecuteEditDisk(ResolveTarget(p)),
             p => ResolveTarget(p) != null);
@@ -73,13 +73,13 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             p => ResolveTarget(p) != null);
         SaveImageCommand = new(
             p => ExecuteSaveImage(ResolveTarget(p)),
-            p => ResolveTarget(p) != null);
+            p => !BusyOverlay.IsBusy && ResolveTarget(p) != null);
         CreateSnapshotNowCommand = new(
             p => ExecuteCreateSnapshotNow(ResolveTarget(p)),
             p =>
             {
                 var vm = ResolveTarget(p);
-                return vm is { SnapshotsEnabled: true, HasImagePath: true };
+                return !BusyOverlay.IsBusy && vm is { SnapshotsEnabled: true, HasImagePath: true };
             });
         FormatDiskCommand = new(
             p => ExecuteFormatDisk(ResolveTarget(p)),
@@ -90,7 +90,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             });
         CloneDiskCommand = new(
             p => ExecuteCloneDisk(ResolveTarget(p)),
-            p => ResolveTarget(p) != null);
+            p => !BusyOverlay.IsBusy && ResolveTarget(p) != null);
         RestoreSnapshotCommand = new(
             p => ExecuteRestoreSnapshot(ResolveTarget(p)),
             p =>
@@ -1698,7 +1698,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 
     private async void ExecuteCloneDisk(DiskViewModel? vm)
     {
-        if (vm == null)
+        if (vm == null || RejectIfBusy())
         {
             return;
         }
@@ -1747,7 +1747,11 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         {
             _logger.LogInformation("Disk export requested: {Source} -> {ExportPath}.", vm.MountPoint, exportPath);
             using var cts = new CancellationTokenSource();
-            BusyOverlay.Start(Loc.Get("Busy.ExportingImage"), totalBytes: vm.Disk.UsedBytes, cancellationSource: cts);
+            if (!TryStartBusyOverlay(Loc.Get("Busy.ExportingImage"), totalBytes: vm.Disk.UsedBytes, cancellationSource: cts))
+            {
+                return;
+            }
+
             try
             {
                 var progress = new Progress<double>(BusyOverlay.Report);
@@ -2053,6 +2057,11 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 
     private async void ExecuteImportArchive()
     {
+        if (RejectIfBusy())
+        {
+            return;
+        }
+
         var openDialog = new OpenFileDialog
         {
             Title = Loc.Get("ImportArchiveDlg.Title"),
@@ -2070,6 +2079,11 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 
     private async void ExecuteImportDisk()
     {
+        if (RejectIfBusy())
+        {
+            return;
+        }
+
         var openDialog = new OpenFileDialog
         {
             Title = Loc.Get("ImportDlg.Title"),
@@ -2122,7 +2136,11 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 
         _logger.LogInformation("Import archive requested: {ArchivePath} -> {MountPoint}.", archivePath, dialog.Result!.MountPoint);
         using var cts = new CancellationTokenSource();
-        BusyOverlay.Start(Loc.Get("Busy.ImportingArchive"), indeterminate: totalBytes == 0, totalBytes: totalBytes > 0 ? totalBytes : null, cancellationSource: cts);
+        if (!TryStartBusyOverlay(Loc.Get("Busy.ImportingArchive"), indeterminate: totalBytes == 0, totalBytes: totalBytes > 0 ? totalBytes : null, cancellationSource: cts))
+        {
+            return;
+        }
+
         try
         {
             var progress = new Progress<double>(BusyOverlay.Report);
@@ -2174,7 +2192,11 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 
         var fileSizeBytes = (ulong)new FileInfo(imagePath).Length;
         using var cts = new CancellationTokenSource();
-        BusyOverlay.Start(Loc.Get("Busy.ImportingImage"), totalBytes: fileSizeBytes, cancellationSource: cts);
+        if (!TryStartBusyOverlay(Loc.Get("Busy.ImportingImage"), totalBytes: fileSizeBytes, cancellationSource: cts))
+        {
+            return;
+        }
+
         try
         {
             var progress = new Progress<double>(BusyOverlay.Report);
@@ -2286,7 +2308,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 
     private async void ExecuteSaveImage(DiskViewModel? vm)
     {
-        if (vm == null)
+        if (vm == null || RejectIfBusy())
         {
             return;
         }
@@ -2341,7 +2363,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     /// </summary>
     private async void ExecuteCreateSnapshotNow(DiskViewModel? vm)
     {
-        if (vm is not { SnapshotsEnabled: true, HasImagePath: true })
+        if (vm is not { SnapshotsEnabled: true, HasImagePath: true } || RejectIfBusy())
         {
             return;
         }
@@ -2360,9 +2382,13 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     /// <param name="logVerb">The action name used in log messages (e.g. <c>"Save image"</c>).</param>
     private async Task SaveImageWithSnapshotAsync(DiskViewModel vm, string busyText, string logVerb)
     {
-        vm.IsSaving = true;
         using var cts = new CancellationTokenSource();
-        BusyOverlay.Start(busyText, totalBytes: vm.Disk.UsedBytes, cancellationSource: cts);
+        if (!TryStartBusyOverlay(busyText, totalBytes: vm.Disk.UsedBytes, cancellationSource: cts))
+        {
+            return;
+        }
+
+        vm.IsSaving = true;
         try
         {
             var progress = new Progress<double>(BusyOverlay.Report);
@@ -2531,6 +2557,50 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 
         _logger.LogInformation("Disk {MountPoint} was unmounted while a dialog was open; dropping the pending action.", vm.MountPoint);
         StatusText = Loc.Format("Status.DiskNoLongerMounted", vm.MountPoint);
+        return false;
+    }
+
+    /// <summary>
+    /// Refuses to begin an operation that shows the busy overlay while another one is showing it,
+    /// reporting why in the status bar. Checked by those operations' entry points before any
+    /// dialog opens, since the tray menu calls <c>Execute</c> directly without checking
+    /// <c>CanExecute</c>.
+    /// </summary>
+    /// <returns><see langword="true"/> if another operation is running and the caller must stop.</returns>
+    private bool RejectIfBusy()
+    {
+        if (!BusyOverlay.IsBusy)
+        {
+            return false;
+        }
+
+        StatusText = Loc.Get("Status.OtherOperationInProgress");
+        return true;
+    }
+
+    /// <summary>
+    /// Shows the busy overlay for a new operation via <see cref="BusyOverlayViewModel.TryStart"/>,
+    /// or reports in the status bar that another operation is still running — one may have
+    /// started (e.g. from the CLI) while this operation's dialogs were open.
+    /// </summary>
+    /// <param name="statusText">Status text to display above the progress bar.</param>
+    /// <param name="indeterminate">Whether the operation has no computable total.</param>
+    /// <param name="totalBytes">Total byte count for the operation, if known.</param>
+    /// <param name="cancellationSource">The operation's cancellation source, if it can be cancelled.</param>
+    /// <returns>
+    /// <see langword="true"/> if the overlay now shows this operation, which must stop it when
+    /// done; <see langword="false"/> if the caller must not run.
+    /// </returns>
+    private bool TryStartBusyOverlay(
+        string statusText, bool indeterminate = false, ulong? totalBytes = null, CancellationTokenSource? cancellationSource = null)
+    {
+        if (BusyOverlay.TryStart(statusText, indeterminate, totalBytes, cancellationSource))
+        {
+            return true;
+        }
+
+        _logger.LogInformation("Refused to start '{StatusText}' while another operation is running", statusText);
+        StatusText = Loc.Get("Status.OtherOperationInProgress");
         return false;
     }
 
