@@ -382,6 +382,39 @@ public sealed class CreateDiskOptionsBuilderTests
         Assert.Null(result.Password);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Build_EditEncryptedReadOnly_KeepsPasswordRegardlessOfCheckbox(bool encryptChecked)
+    {
+        var dir = Directory.CreateTempSubdirectory();
+        try
+        {
+            var imagePath = Path.Combine(dir.FullName, "disk.mdr");
+            File.WriteAllBytes(imagePath, []);
+            var input = ValidCreateInput() with
+            {
+                ImagePathText = imagePath,
+                IsReadOnly = true,
+                EncryptChecked = encryptChecked,
+                Password1 = "stale-one",
+                Password2 = "stale-two",
+                WasEncrypted = true,
+                OriginalPassword = "password123",
+            };
+
+            var result = CreateDiskOptionsBuilder.Build(input);
+
+            Assert.True(result.Success);
+            Assert.False(result.PasswordChanged);
+            Assert.Null(result.Password);
+        }
+        finally
+        {
+            dir.Delete(recursive: true);
+        }
+    }
+
     private static CreateDiskInput EncryptedInput(out DirectoryInfo dir, string p1, string p2)
     {
         dir = Directory.CreateTempSubdirectory();
