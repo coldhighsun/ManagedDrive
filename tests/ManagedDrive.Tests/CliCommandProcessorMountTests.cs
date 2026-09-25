@@ -214,6 +214,55 @@ public class CliCommandProcessorMountTests
         Assert.Null(controller.LastExportOutputPath);
     }
 
+    /// <summary>
+    /// Without <c>--force</c>, an existing output file is reported instead of being overwritten.
+    /// </summary>
+    [Fact]
+    public async Task Export_OutputFileExistsWithoutForce_ReturnsErrorWithoutCallingController()
+    {
+        var outputPath = CreateTempImageFile();
+        try
+        {
+            var controller = new FakeCliDiskController();
+
+            var outcome = await CliCommandProcessor.ExecuteAsync(["export", "R:", outputPath], controller);
+
+            Assert.False(outcome.Success);
+            Assert.Equal(1, outcome.ExitCode);
+            Assert.Contains("--force", outcome.Message);
+            Assert.Null(controller.LastExportOutputPath);
+        }
+        finally
+        {
+            File.Delete(outputPath);
+        }
+    }
+
+    /// <summary>
+    /// <c>--force</c> and its <c>-f</c> alias let the export overwrite an existing output file.
+    /// </summary>
+    /// <param name="forceOption">The spelling of the force option to pass.</param>
+    [Theory]
+    [InlineData("--force")]
+    [InlineData("-f")]
+    public async Task Export_OutputFileExistsWithForce_ForwardsToController(string forceOption)
+    {
+        var outputPath = CreateTempImageFile();
+        try
+        {
+            var controller = new FakeCliDiskController { ExportSuccess = true };
+
+            var outcome = await CliCommandProcessor.ExecuteAsync(["export", "R:", outputPath, forceOption], controller);
+
+            Assert.True(outcome.Success);
+            Assert.Equal(outputPath, controller.LastExportOutputPath);
+        }
+        finally
+        {
+            File.Delete(outputPath);
+        }
+    }
+
     [Fact]
     public async Task Export_ControllerReturnsEmptyMessage_ReturnsNotMountedMessage()
     {
