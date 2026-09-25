@@ -299,6 +299,7 @@
 
     <!-- MessageBox bodies -->
     <sys:String x:Key="Msg.AlreadyRunning">ManagedDrive 已在运行。</sys:String>
+    <sys:String x:Key="Msg.CommandNotDelivered">无法将命令交给正在运行的 ManagedDrive 实例，它可能仍在启动或正忙，请稍后重试。</sys:String>
     <sys:String x:Key="Msg.UnexpectedErrorTitle">ManagedDrive – 发生意外错误</sys:String>
     <sys:String x:Key="Msg.UnexpectedErrorBody">发生了一个意外错误，已记录到日志：&#x0a;&#x0a;{0}&#x0a;&#x0a;ManagedDrive 将尝试继续运行。</sys:String>
     <sys:String x:Key="Msg.StartupFailedBody">ManagedDrive 启动失败，已退出。错误已记录到日志：&#x0a;&#x0a;{0}</sys:String>

@@ -17,6 +17,17 @@ public partial class App
 {
     private static readonly TimeSpan ExitDisposeTimeout = TimeSpan.FromSeconds(20);
 
+    /// <summary>
+    /// How long a second instance launched with a command keeps trying to hand it to the running
+    /// instance, which may still be starting up (its CLI pipe only opens once its window is up).
+    /// </summary>
+    private static readonly TimeSpan HandOffTimeout = TimeSpan.FromSeconds(30);
+
+    /// <summary>
+    /// Delay between a second instance's attempts to hand its command to the running instance.
+    /// </summary>
+    private static readonly TimeSpan HandOffRetryInterval = TimeSpan.FromMilliseconds(250);
+
     private CliPipeServer? _cliPipeServer;
     private DiskNotificationService? _diskNotificationService;
     private GlobalMountCoordinator? _globalMountCoordinator;
@@ -86,7 +97,17 @@ public partial class App
         {
             _settings = new();
             config = _settings.Load();
-            if (!StartUi(e.Args, _settings, config))
+            LanguageManager.Instance.ApplyDefault(config.Language);
+            ThemeManager.Instance.ApplyDefault(config.Theme);
+
+            if (!AppInstance.TryAcquire(out _singleInstanceMutex))
+            {
+                await HandOffToRunningInstanceAsync(e.Args);
+                Shutdown();
+                return;
+            }
+
+            if (!StartUi(_settings, config))
             {
                 return;
             }
@@ -106,11 +127,22 @@ public partial class App
             return;
         }
 
-        await AutoMountDisksAsync();
-        _tempDirCompatChecker!.CheckAfterAutoMount(config, _mainViewModel!.Disks);
-
-        _cliPipeServer = new(_mainViewModel);
+        // Listening before auto-mount so a command sent meanwhile (e.g. from the Explorer context
+        // menu) is queued rather than refused, but not run until auto-mount has finished.
+        var autoMountDone = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        _cliPipeServer = new(_mainViewModel!, autoMountDone.Task);
         _cliPipeServer.Start();
+
+        try
+        {
+            await AutoMountDisksAsync();
+        }
+        finally
+        {
+            autoMountDone.SetResult();
+        }
+
+        _tempDirCompatChecker!.CheckAfterAutoMount(config, _mainViewModel!.Disks);
 
         if (e.Args.Length > 0)
         {
@@ -126,47 +158,48 @@ public partial class App
     }
 
     /// <summary>
-    /// Runs the synchronous part of startup: takes the single-instance mutex (or hands the command
-    /// line to the instance already running), builds the view model, window and tray services, and
-    /// shows the window or tray icon.
+    /// Hands this second instance's command line to the instance already running, or tells the
+    /// user it is already running if there is no command to hand over.
     /// </summary>
     /// <param name="args">The process's command-line arguments.</param>
+    private static async Task HandOffToRunningInstanceAsync(string[] args)
+    {
+        if (args.Length == 0)
+        {
+            MessageBox.Show(
+                Loc.Get("Msg.AlreadyRunning"),
+                "ManagedDrive",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
+            return;
+        }
+
+        // Launched with CLI-style args (e.g. from the Explorer context menu) while another instance
+        // is running: forward the command to it instead of showing the "already running" dialog.
+        // Retried because that instance may still be starting up and not listening yet.
+        var response = await CliPipeClient.SendWithRetryAsync(args, HandOffTimeout, HandOffRetryInterval, AppInstance.IsRunning);
+        if (response == null)
+        {
+            MessageBox.Show(Loc.Get("Msg.CommandNotDelivered"), "ManagedDrive", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+        else if (response.ExitCode != 0)
+        {
+            MessageBox.Show(response.Message, "ManagedDrive", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+    }
+
+    /// <summary>
+    /// Runs the synchronous part of the first instance's startup: builds the view model, window
+    /// and tray services, and shows the window or tray icon.
+    /// </summary>
     /// <param name="settings">The app's settings store.</param>
     /// <param name="config">The settings loaded at startup.</param>
     /// <returns>
     /// <see langword="true"/> once the UI is up; <see langword="false"/> if startup stopped early,
     /// in which case the exit has already been requested.
     /// </returns>
-    private bool StartUi(string[] args, SettingsStore settings, AppConfiguration config)
+    private bool StartUi(SettingsStore settings, AppConfiguration config)
     {
-        LanguageManager.Instance.ApplyDefault(config.Language);
-        ThemeManager.Instance.ApplyDefault(config.Theme);
-
-        if (!AppInstance.TryAcquire(out _singleInstanceMutex))
-        {
-            if (args.Length > 0)
-            {
-                // Launched with CLI-style args (e.g. from the Explorer context menu) while
-                // another instance is already running: forward the command to it instead of
-                // showing the "already running" dialog.
-                if (CliPipeClient.TrySend(args, out var response) && response.ExitCode != 0)
-                {
-                    MessageBox.Show(response.Message, "ManagedDrive", MessageBoxButton.OK, MessageBoxImage.Warning);
-                }
-
-                Shutdown();
-                return false;
-            }
-
-            MessageBox.Show(
-                Loc.Get("Msg.AlreadyRunning"),
-                "ManagedDrive",
-                MessageBoxButton.OK,
-                MessageBoxImage.Information);
-            Shutdown();
-            return false;
-        }
-
         if (!CheckWinFspPrerequisite())
         {
             // Shutdown() only queues the exit; return so nothing below runs — in particular no

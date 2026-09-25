@@ -86,6 +86,11 @@ public sealed class CliPipeServer : IDisposable
     private readonly TimeSpan _executionQueueTimeout;
 
     /// <summary>
+    /// Completes once the app is ready to run commands; requests received before then wait for it.
+    /// </summary>
+    private readonly Task _ready;
+
+    /// <summary>
     /// Held while a command executes, so commands from concurrent clients run one at a time as
     /// they did when the pipe only served one client at a time.
     /// </summary>
@@ -110,8 +115,13 @@ public sealed class CliPipeServer : IDisposable
     /// Initializes a server that executes commands against <paramref name="mainViewModel"/>.
     /// </summary>
     /// <param name="mainViewModel">The view model whose disks commands operate on.</param>
-    public CliPipeServer(MainViewModel mainViewModel)
-        : this(CliPipeProtocol.PipeName, CreateUiThreadExecutor(new MainViewModelCliDiskController(mainViewModel)))
+    /// <param name="ready">
+    /// Completes once commands may run (e.g. after startup auto-mount). Connections are accepted
+    /// before then, so a client isn't turned away while the app is starting, but their commands
+    /// wait for it.
+    /// </param>
+    public CliPipeServer(MainViewModel mainViewModel, Task ready)
+        : this(CliPipeProtocol.PipeName, CreateUiThreadExecutor(new MainViewModelCliDiskController(mainViewModel)), ready: ready)
     {
     }
 
@@ -125,10 +135,18 @@ public sealed class CliPipeServer : IDisposable
     /// Upper bound on a command waiting for the one before it, or <c>null</c> for
     /// <see cref="DefaultExecutionQueueTimeout"/>.
     /// </param>
-    internal CliPipeServer(string pipeName, Func<CliRequest, Task<CliOutcome>> execute, TimeSpan? executionQueueTimeout = null)
+    /// <param name="ready">
+    /// Completes once commands may run, or <c>null</c> if they may run right away.
+    /// </param>
+    internal CliPipeServer(
+        string pipeName,
+        Func<CliRequest, Task<CliOutcome>> execute,
+        TimeSpan? executionQueueTimeout = null,
+        Task? ready = null)
     {
         _execute = execute;
         _executionQueueTimeout = executionQueueTimeout ?? DefaultExecutionQueueTimeout;
+        _ready = ready ?? Task.CompletedTask;
         _listener = new(
             MaxInstances,
             firstInstance => CreatePipe(pipeName, firstInstance),
@@ -220,8 +238,8 @@ public sealed class CliPipeServer : IDisposable
             () => CliCommandProcessor.ExecuteAsync(request.Args, diskController, request.WorkingDirectory)).Task.Unwrap();
 
     /// <summary>
-    /// Reads one request from <paramref name="pipe"/>, executes it once the commands queued ahead
-    /// of it have finished, and writes the response back.
+    /// Reads one request from <paramref name="pipe"/>, executes it once the app is ready and the
+    /// commands queued ahead of it have finished, and writes the response back.
     /// </summary>
     /// <param name="pipe">The connected pipe instance.</param>
     /// <param name="ct">Stops handling the request.</param>
@@ -240,6 +258,10 @@ public sealed class CliPipeServer : IDisposable
         }
 
         var request = CliPipeProtocol.DeserializeRequest(requestJson);
+
+        // Not counted against _executionQueueTimeout: startup auto-mount can legitimately take
+        // longer than that, and the client's own read timeout still bounds the wait.
+        await _ready.WaitAsync(ct);
 
         CliResponse response;
         if (!await _executionGate.WaitAsync(_executionQueueTimeout, ct))

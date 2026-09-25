@@ -155,6 +155,46 @@ public sealed class CliPipeServerTests
     }
 
     /// <summary>
+    /// A command received before the server is ready waits for it — however long past the queue
+    /// timeout — and then runs, instead of being refused.
+    /// </summary>
+    [Fact(Timeout = 20_000)]
+    public async Task Start_CommandSentBeforeReady_RunsOnceReadyWithoutBeingRefused()
+    {
+        var ready = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var executed = new List<string>();
+        using var server = new CliPipeServer(
+            _pipeName,
+            request =>
+            {
+                lock (executed)
+                {
+                    executed.Add(request.Args[0]);
+                }
+
+                return Task.FromResult(new CliOutcome(true, $"ran {request.Args[0]}", null, 0));
+            },
+            executionQueueTimeout: TimeSpan.FromMilliseconds(200),
+            ready: ready.Task);
+        server.Start();
+
+        await using var client = await ConnectAsync();
+        var response = SendAsync(client, "early");
+        await Task.Delay(TimeSpan.FromMilliseconds(500), TestContext.Current.CancellationToken);
+        lock (executed)
+        {
+            Assert.Empty(executed);
+        }
+
+        ready.SetResult();
+
+        var result = await response;
+        Assert.True(result.Success);
+        Assert.Equal("ran early", result.Message);
+        Assert.Equal(["early"], executed);
+    }
+
+    /// <summary>
     /// Connects a raw client to the server under test. Deliberately not <see cref="CliPipeClient"/>:
     /// its pipe-name override is static and shared with tests running in parallel.
     /// </summary>
