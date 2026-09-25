@@ -97,6 +97,54 @@ public sealed class HelperPipeClientTests : IDisposable
         Assert.Null(failureReason);
     }
 
+    [Fact(Timeout = 10_000)]
+    public async Task IsServiceAvailable_ServiceRespondsWithMalformedJson_ReturnsFalseWithRequestFailureReason()
+    {
+        var pipeName = HelperPipeClient.TestPipeNameOverride!;
+
+        using var server = new NamedPipeServerStream(
+            pipeName, PipeDirection.InOut, 1, PipeTransmissionMode.Byte, PipeOptions.Asynchronous);
+        var serverTask = Task.Run(async () =>
+        {
+            await server.WaitForConnectionAsync(TestContext.Current.CancellationToken);
+
+            using var reader = new StreamReader(server, leaveOpen: true);
+            await using var writer = new StreamWriter(server, leaveOpen: true) { AutoFlush = true };
+            await reader.ReadLineAsync(TestContext.Current.CancellationToken);
+            await writer.WriteLineAsync("{not json");
+        }, TestContext.Current.CancellationToken);
+
+        var available = HelperPipeClient.IsServiceAvailable(out var failureReason);
+
+        await serverTask;
+        Assert.False(available);
+        Assert.NotNull(failureReason);
+        Assert.Contains("request failed", failureReason);
+    }
+
+    [Fact(Timeout = 10_000)]
+    public async Task IsServiceAvailable_ServiceDropsConnectionRightAfterAccepting_ReturnsFalseWithoutThrowing()
+    {
+        var pipeName = HelperPipeClient.TestPipeNameOverride!;
+
+        using var server = new NamedPipeServerStream(
+            pipeName, PipeDirection.InOut, 1, PipeTransmissionMode.Byte, PipeOptions.Asynchronous);
+        var serverTask = Task.Run(async () =>
+        {
+            await server.WaitForConnectionAsync(TestContext.Current.CancellationToken);
+            server.Disconnect();
+        }, TestContext.Current.CancellationToken);
+
+        var available = true;
+        string? failureReason = null;
+        var exception = Record.Exception(() => available = HelperPipeClient.IsServiceAvailable(out failureReason));
+
+        await serverTask;
+        Assert.Null(exception);
+        Assert.False(available);
+        Assert.NotNull(failureReason);
+    }
+
     private static async Task RunEchoingServerOnceAsync(string pipeName, HelperResponse response)
     {
         using var server = new NamedPipeServerStream(
