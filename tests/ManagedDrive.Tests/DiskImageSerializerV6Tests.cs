@@ -438,6 +438,43 @@ public sealed class DiskImageSerializerV6Tests
     }
 
     /// <summary>
+    /// A key-derivation iteration count outside the accepted range is rejected as corruption
+    /// before any key derivation, so a crafted image can't stall the load in PBKDF2 or surface as
+    /// an argument error.
+    /// </summary>
+    /// <param name="iterations">The iteration count written into the header.</param>
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    [InlineData(int.MaxValue)]
+    public void Load_EncryptedImageWithIterationCountOutOfRange_ThrowsInvalidData(int iterations)
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid()}.mdr");
+        try
+        {
+            var map = new FileNodeMap();
+            map.Add("\\", MakeDir());
+            DiskImageSerializer.SaveSegmentedForTest(map, capacityBytes: 1024 * 1024, "Label", path,
+                ImageCompressionLevel.None, new ImageEncryptionInfo("s3cret", DiskImageSerializer.GenerateCek()),
+                segmentTargetBytes: 4096);
+
+            // The iteration count follows the 16-byte salt, which follows the label.
+            const int iterationsOffset = SegmentCountOffset + 16;
+            var bytes = File.ReadAllBytes(path);
+            Assert.Equal(210_000, BitConverter.ToInt32(bytes, iterationsOffset));
+            BitConverter.TryWriteBytes(bytes.AsSpan(iterationsOffset), iterations);
+            File.WriteAllBytes(path, bytes);
+
+            Assert.Throws<InvalidDataException>(() =>
+                DiskImageSerializer.Load(path, out _, out _, "s3cret", out _));
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    /// <summary>
     /// A segment count the rest of the file can't hold is rejected as corruption before any
     /// array is sized from it, rather than failing with an overflow or out-of-memory error.
     /// </summary>
