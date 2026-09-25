@@ -437,6 +437,83 @@ public sealed class DiskImageSerializerV6Tests
         }
     }
 
+    /// <summary>
+    /// A segment count the rest of the file can't hold is rejected as corruption before any
+    /// array is sized from it, rather than failing with an overflow or out-of-memory error.
+    /// </summary>
+    /// <param name="segmentCount">The segment count written into the index.</param>
+    [Theory]
+    [InlineData(-1)]
+    [InlineData(int.MaxValue)]
+    public void Load_SegmentCountNotFittingFile_ThrowsInvalidData(int segmentCount)
+    {
+        var path = SaveSingleSegmentImage();
+        try
+        {
+            var bytes = File.ReadAllBytes(path);
+            BitConverter.TryWriteBytes(bytes.AsSpan(SegmentCountOffset), segmentCount);
+            File.WriteAllBytes(path, bytes);
+
+            Assert.Throws<InvalidDataException>(() =>
+                DiskImageSerializer.Load(path, out _, out _, password: null, out _));
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    /// <summary>
+    /// A segment payload length that doesn't match the bytes actually following the index is
+    /// rejected as corruption instead of overflowing or reading past the end.
+    /// </summary>
+    /// <param name="payloadLength">The payload length written into the only index entry.</param>
+    [Theory]
+    [InlineData(-1L)]
+    [InlineData(long.MaxValue)]
+    [InlineData(1L)]
+    public void Load_SegmentPayloadLengthNotMatchingFile_ThrowsInvalidData(long payloadLength)
+    {
+        var path = SaveSingleSegmentImage();
+        try
+        {
+            var bytes = File.ReadAllBytes(path);
+            BitConverter.TryWriteBytes(bytes.AsSpan(SegmentCountOffset + sizeof(int) + sizeof(int)), payloadLength);
+            File.WriteAllBytes(path, bytes);
+
+            Assert.Throws<InvalidDataException>(() =>
+                DiskImageSerializer.Load(path, out _, out _, password: null, out _));
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    /// <summary>
+    /// Offset of the segment count in an unencrypted image saved by
+    /// <see cref="SaveSingleSegmentImage"/>: magic, version, level and encryption flag, capacity,
+    /// then the one-byte-length-prefixed label.
+    /// </summary>
+    private const int SegmentCountOffset = 4 + sizeof(int) + 1 + 1 + sizeof(ulong) + 1 + 5;
+
+    /// <summary>
+    /// Saves an unencrypted, uncompressed version 6 image labelled "Label" holding a root and one
+    /// file in a single segment.
+    /// </summary>
+    /// <returns>Path of the image, for the caller to delete.</returns>
+    private static string SaveSingleSegmentImage()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid()}.mdr");
+        var map = new FileNodeMap();
+        map.Add("\\", MakeDir());
+        map.Add("\\File.txt", MakeFile("hello world"u8.ToArray()));
+        DiskImageSerializer.SaveSegmentedForTest(map, capacityBytes: 1024 * 1024, "Label", path,
+            ImageCompressionLevel.None, encryption: null, segmentTargetBytes: 1024 * 1024);
+        Assert.Equal(1, BitConverter.ToInt32(File.ReadAllBytes(path), SegmentCountOffset));
+        return path;
+    }
+
     private static FileNode MakeDir() => new()
     {
         FileInfo = { FileAttributes = (uint)FileAttributes.Directory },
