@@ -1,5 +1,7 @@
 using System.Diagnostics;
 using System.IO.Pipes;
+using System.Security.AccessControl;
+using System.Security.Principal;
 using ManagedDrive.HelperProtocol;
 
 namespace ManagedDrive.Tests;
@@ -10,12 +12,51 @@ public sealed class HelperPipeClientTests : IDisposable
     {
         HelperPipeClient.TestPipeNameOverride = $"ManagedDrive-Test-Helper-{Guid.NewGuid()}";
         HelperPipeClient.TestReadTimeoutOverride = TimeSpan.FromMilliseconds(200);
+
+        // The fake services below are owned by this process's token owner, not LocalSystem.
+        using var identity = WindowsIdentity.GetCurrent();
+        HelperPipeClient.TestTrustedOwnerOverride = identity.Owner;
     }
 
     public void Dispose()
     {
         HelperPipeClient.TestPipeNameOverride = null;
         HelperPipeClient.TestReadTimeoutOverride = null;
+        HelperPipeClient.TestTrustedOwnerOverride = null;
+    }
+
+    [Fact(Timeout = 10_000)]
+    public async Task IsServiceAvailable_PipeNotOwnedByTheService_ReturnsFalseWithUntrustedOwnerReasonWithoutSendingRequest()
+    {
+        var pipeName = HelperPipeClient.TestPipeNameOverride!;
+        using var identity = WindowsIdentity.GetCurrent();
+        HelperPipeClient.TestTrustedOwnerOverride = null;
+        var security = new PipeSecurity();
+        security.AddAccessRule(new(identity.User!, PipeAccessRights.FullControl, AccessControlType.Allow));
+        security.SetOwner(identity.User!);
+        using var server = NamedPipeServerStreamAcl.Create(
+            pipeName, PipeDirection.InOut, 1, PipeTransmissionMode.Byte, PipeOptions.Asynchronous, 0, 0, security);
+        var serverTask = Task.Run(async () =>
+        {
+            try
+            {
+                await server.WaitForConnectionAsync(TestContext.Current.CancellationToken);
+            }
+            catch (IOException)
+            {
+                // The client may already have hung up before the wait began.
+                return null;
+            }
+
+            using var reader = new StreamReader(server, leaveOpen: true);
+            return await reader.ReadLineAsync(TestContext.Current.CancellationToken);
+        }, TestContext.Current.CancellationToken);
+
+        var connected = HelperPipeClient.IsServiceAvailable(out var failureReason);
+
+        Assert.False(connected);
+        Assert.Contains("not by LocalSystem", failureReason);
+        Assert.Null(await serverTask);
     }
 
     [Fact]

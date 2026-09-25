@@ -44,6 +44,14 @@ public static class HelperPipeClient
     private static string PipeName => TestPipeNameOverride ?? HelperPipeProtocol.PipeName;
 
     /// <summary>
+    /// Test-only extra pipe owner to trust besides <c>LocalSystem</c> and
+    /// <c>BUILTIN\Administrators</c>; <see langword="null"/> means trust only those. Lets tests
+    /// stand up a fake service without running as SYSTEM. Set via
+    /// <c>InternalsVisibleTo("ManagedDrive.Tests")</c>.
+    /// </summary>
+    internal static SecurityIdentifier? TestTrustedOwnerOverride;
+
+    /// <summary>
     /// Upper bound on the response line read by <see cref="ReadBoundedLineAsync"/>, mirroring
     /// <c>PipeIo.MaxLineLength</c>'s guard against an unbounded buffer — this pipe's server side
     /// already caps its own request read the same way, and the service is itself a peer this
@@ -103,6 +111,16 @@ public static class HelperPipeClient
         catch (Exception ex) when (ex is TimeoutException or IOException or UnauthorizedAccessException)
         {
             failureReason = $"connect failed: {ex.GetType().Name}: {ex.Message}";
+            return false;
+        }
+
+        var owner = PipeSecurityRules.TryGetOwner(pipe);
+        if (!PipeSecurityRules.IsTrustedOwner(owner, TestTrustedOwnerOverride))
+        {
+            // The real service runs as LocalSystem. Any local user can create a pipe under this
+            // well-known name while it isn't running, and would then see — and answer — every
+            // request, e.g. to make the app believe a letter was published.
+            failureReason = $"the helper pipe is owned by {owner?.Value ?? "an unknown owner"}, not by LocalSystem";
             return false;
         }
 
