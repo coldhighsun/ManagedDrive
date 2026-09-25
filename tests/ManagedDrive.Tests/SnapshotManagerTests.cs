@@ -687,6 +687,36 @@ public sealed class SnapshotManagerTests : IDisposable
     }
 
     [Fact]
+    public void ListSnapshots_SameSecondSnapshots_OrdersBySequenceNumber()
+    {
+        var timestamp = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
+        for (var i = 0; i <= 10; i++)
+        {
+            WriteSnapshotWithFile(timestamp, $"\\file{i}.txt", new byte[10]);
+        }
+
+        var names = SnapshotManager.ListSnapshots(_mainImagePath).Select(s => Path.GetFileName(s.Path)).ToList();
+
+        string[] expected = ["disk.20260101-000000.mdr", .. Enumerable.Range(1, 10).Select(i => $"disk.20260101-000000-{i}.mdr")];
+        Assert.Equal(expected, names);
+    }
+
+    [Fact]
+    public void Prune_SameSecondSnapshots_KeepsHighestSequenceNumber()
+    {
+        var timestamp = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
+        for (var i = 0; i <= 10; i++)
+        {
+            WriteSnapshotWithFile(timestamp, $"\\file{i}.txt", new byte[10]);
+        }
+
+        SnapshotManager.Prune(_mainImagePath, maxCount: 1, maxTotalBytes: null);
+
+        var remaining = Assert.Single(SnapshotManager.ListSnapshots(_mainImagePath));
+        Assert.Equal("disk.20260101-000000-10.mdr", Path.GetFileName(remaining.Path));
+    }
+
+    [Fact]
     public void Prune_DeletesUnreferencedBlob_KeepsBlobStillReferencedByAnotherSnapshot()
     {
         var shared = new byte[] { 1, 1, 1 };

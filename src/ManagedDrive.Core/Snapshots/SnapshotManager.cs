@@ -260,8 +260,10 @@ public static partial class SnapshotManager
     /// hashes), so a single index-file parse can serve both a listing and blob garbage collection.
     /// <paramref name="IsReadable"/> is <c>false</c> when the index could not be parsed; its
     /// summary is then empty, since the blobs it references are unknown.
+    /// <paramref name="Sequence"/> is the file name's same-second collision suffix (<c>-N</c>),
+    /// or 0 without one; it orders snapshots taken within the same second.
     /// </summary>
-    private readonly record struct SnapshotListEntry(SnapshotInfo Info, SnapshotStore.SnapshotSummary Summary, bool IsReadable);
+    private readonly record struct SnapshotListEntry(SnapshotInfo Info, SnapshotStore.SnapshotSummary Summary, bool IsReadable, int Sequence);
 
     /// <summary>
     /// Scans <paramref name="mainImagePath"/>'s directory for its snapshot index files, parsing
@@ -303,10 +305,20 @@ public static partial class SnapshotManager
                 isReadable = false;
             }
 
-            entries.Add(new(new(path, timestamp, summary.LogicalSizeBytes), summary, isReadable));
+            // BuildSnapshotPath numbers same-second collisions -1, -2, ...; comparing the number
+            // (not the file name) keeps "-10" after "-9".
+            var sequence = match.Groups["seq"].Success && int.TryParse(match.Groups["seq"].ValueSpan, out var parsedSequence)
+                ? parsedSequence
+                : 0;
+
+            entries.Add(new(new(path, timestamp, summary.LogicalSizeBytes), summary, isReadable, sequence));
         }
 
-        entries.Sort((a, b) => a.Info.TimestampUtc.CompareTo(b.Info.TimestampUtc));
+        entries.Sort((a, b) =>
+        {
+            var byTimestamp = a.Info.TimestampUtc.CompareTo(b.Info.TimestampUtc);
+            return byTimestamp != 0 ? byTimestamp : a.Sequence.CompareTo(b.Sequence);
+        });
         return entries;
     }
 
@@ -587,7 +599,7 @@ public static partial class SnapshotManager
         }
     }
 
-    [GeneratedRegex(@"^(?<base>.+)\.(?<ts>\d{8}-\d{6})(-\d+)?\.mdr$", RegexOptions.IgnoreCase)]
+    [GeneratedRegex(@"^(?<base>.+)\.(?<ts>\d{8}-\d{6})(-(?<seq>\d+))?\.mdr$", RegexOptions.IgnoreCase)]
     private static partial Regex SnapshotPattern();
 
     /// <summary>
