@@ -296,6 +296,7 @@
     <sys:String x:Key="Status.DiskRead">{0} 正在读取 "{1}"...</sys:String>
     <sys:String x:Key="Status.DiskWrite">{0} 正在写入 "{1}"...</sys:String>
     <sys:String x:Key="Status.OperationCancelled">已取消</sys:String>
+    <sys:String x:Key="Status.OtherOperationInProgress">另一项操作仍在进行中，请等待其完成后再试。</sys:String>
 
     <!-- MessageBox bodies -->
     <sys:String x:Key="Msg.AlreadyRunning">ManagedDrive 已在运行。</sys:String>

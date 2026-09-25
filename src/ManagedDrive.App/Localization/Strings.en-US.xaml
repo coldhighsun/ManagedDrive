@@ -296,6 +296,7 @@
     <sys:String x:Key="Status.DiskRead">{0} reading "{1}"...</sys:String>
     <sys:String x:Key="Status.DiskWrite">{0} writing "{1}"...</sys:String>
     <sys:String x:Key="Status.OperationCancelled">Cancelled</sys:String>
+    <sys:String x:Key="Status.OtherOperationInProgress">Another operation is still in progress; try again once it finishes.</sys:String>
 
     <!-- MessageBox bodies -->
     <sys:String x:Key="Msg.AlreadyRunning">ManagedDrive is already running.</sys:String>

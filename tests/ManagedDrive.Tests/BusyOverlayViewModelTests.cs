@@ -90,4 +90,55 @@ public sealed class BusyOverlayViewModelTests
 
         Assert.False(overlay.IsCancellationRequested);
     }
+
+    /// <summary>
+    /// A second operation must not take over the overlay while the first one still shows it.
+    /// </summary>
+    [Fact]
+    public void TryStart_WhileAnotherOperationIsShown_ReturnsFalseAndKeepsTheFirstOperation()
+    {
+        var overlay = new BusyOverlayViewModel();
+        using var first = new CancellationTokenSource();
+        using var second = new CancellationTokenSource();
+        overlay.Start("First...", cancellationSource: first);
+
+        var started = overlay.TryStart("Second...", cancellationSource: second);
+
+        Assert.False(started);
+        Assert.Equal("First...", overlay.StatusText);
+        overlay.CancelCommand.Execute(null);
+        Assert.True(first.IsCancellationRequested);
+        Assert.False(second.IsCancellationRequested);
+    }
+
+    /// <summary>
+    /// An idle overlay starts the operation.
+    /// </summary>
+    [Fact]
+    public void TryStart_WhenIdle_ReturnsTrueAndShowsTheOperation()
+    {
+        var overlay = new BusyOverlayViewModel();
+
+        var started = overlay.TryStart("Working...");
+
+        Assert.True(started);
+        Assert.True(overlay.IsBusy);
+        Assert.Equal("Working...", overlay.StatusText);
+    }
+
+    /// <summary>
+    /// Once the previous operation has stopped, the next one can take the overlay.
+    /// </summary>
+    [Fact]
+    public void TryStart_AfterThePreviousOperationStopped_ReturnsTrue()
+    {
+        var overlay = new BusyOverlayViewModel();
+        overlay.Start("First...");
+        overlay.Stop();
+
+        var started = overlay.TryStart("Second...");
+
+        Assert.True(started);
+        Assert.Equal("Second...", overlay.StatusText);
+    }
 }
