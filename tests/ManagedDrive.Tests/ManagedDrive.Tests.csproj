@@ -4,6 +4,13 @@
     <IsPackable>false</IsPackable>
     <MinVerSkip>true</MinVerSkip>
     <TestingPlatformDotnetTestSupport>true</TestingPlatformDotnetTestSupport>
+    <!--
+      Many tests block a pool thread synchronously (sync-over-async pipe clients, Parallel.For
+      saves) while a fake server's Task.Run needs another one to make progress. On a small CI
+      runner the pool starts at one thread per core and only grows slowly, so those tests could
+      starve each other for tens of seconds and trip their timeouts.
+    -->
+    <ThreadPoolMinThreads>64</ThreadPoolMinThreads>
   </PropertyGroup>
 
   <ItemGroup>
