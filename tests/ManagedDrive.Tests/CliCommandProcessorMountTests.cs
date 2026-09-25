@@ -105,6 +105,68 @@ public class CliCommandProcessorMountTests
         Assert.Equal("D:\\work\\out\\disk.mdr", controller.LastExportOutputPath);
     }
 
+    /// <summary>
+    /// A high-usage warning percentage outside (0, 100] (or not a number) is rejected before
+    /// anything reaches the controller, instead of being saved into the disk's profile.
+    /// </summary>
+    /// <param name="percent">The option value.</param>
+    [Theory]
+    [InlineData("0")]
+    [InlineData("-5")]
+    [InlineData("100.5")]
+    [InlineData("150")]
+    [InlineData("NaN")]
+    public async Task Mount_HighUsageWarnPercentOutOfRange_ReturnsErrorWithoutCallingController(string percent)
+    {
+        var imagePath = CreateTempImageFile();
+        try
+        {
+            var controller = new FakeCliDiskController { MountSuccess = true };
+
+            var outcome = await CliCommandProcessor.ExecuteAsync(
+                ["mount", imagePath, "R:", "--high-usage-warn-percent", percent],
+                controller);
+
+            Assert.False(outcome.Success);
+            Assert.NotEqual(0, outcome.ExitCode);
+            Assert.Contains("--high-usage-warn-percent", outcome.Message);
+            Assert.Null(controller.LastImagePath);
+        }
+        finally
+        {
+            File.Delete(imagePath);
+        }
+    }
+
+    /// <summary>
+    /// A high-usage warning percentage in (0, 100], fractional or not, is forwarded as-is.
+    /// </summary>
+    /// <param name="percent">The option value.</param>
+    /// <param name="expected">The expected forwarded percentage.</param>
+    [Theory]
+    [InlineData("0.5", 0.5)]
+    [InlineData("85.5", 85.5)]
+    [InlineData("100", 100.0)]
+    public async Task Mount_HighUsageWarnPercentInRange_ForwardsItToController(string percent, double expected)
+    {
+        var imagePath = CreateTempImageFile();
+        try
+        {
+            var controller = new FakeCliDiskController { MountSuccess = true };
+
+            var outcome = await CliCommandProcessor.ExecuteAsync(
+                ["mount", imagePath, "R:", "--high-usage-warn-percent", percent],
+                controller);
+
+            Assert.True(outcome.Success);
+            Assert.Equal(expected, controller.LastOverrides?.HighUsageWarnPercent);
+        }
+        finally
+        {
+            File.Delete(imagePath);
+        }
+    }
+
     [Fact]
     public async Task Mount_Failure_ReturnsErrorMessageAndNonZeroExitCode()
     {

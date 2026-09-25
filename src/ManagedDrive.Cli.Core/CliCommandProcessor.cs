@@ -65,7 +65,7 @@ public static class CliCommandProcessor
         };
         var mountHighUsageWarnPercentOption = new Option<double?>("--high-usage-warn-percent")
         {
-            Description = "Usage percentage (0-100) at which a high-usage warning is raised. If omitted, keeps the saved profile's value (or the default: 90).",
+            Description = "Usage percentage (greater than 0, at most 100) at which a high-usage warning is raised. If omitted, keeps the saved profile's value (or the default: 90).",
         };
         var mountPasswordOption = new Option<string?>("--password")
         {
@@ -93,12 +93,20 @@ public static class CliCommandProcessor
         {
             var maxSnapshotSizeMb = parseResult.GetValue(mountMaxSnapshotSizeMbOption);
             var customZstdLevel = parseResult.GetValue(mountCustomZstdLevelOption);
+            var highUsageWarnPercent = parseResult.GetValue(mountHighUsageWarnPercentOption);
             var password = parseResult.GetValue(mountPasswordOption);
             var passwordFile = parseResult.GetValue(mountPasswordFileOption);
 
             if (customZstdLevel is < 1 or > 22)
             {
                 outcome = new(false, "--custom-zstd-level must be between 1 and 22.", null, 1);
+                return 1;
+            }
+
+            // 0 would warn on an empty disk; NaN fails both comparisons.
+            if (highUsageWarnPercent is { } percent && percent is not (> 0 and <= 100))
+            {
+                outcome = new(false, "--high-usage-warn-percent must be greater than 0 and at most 100.", null, 1);
                 return 1;
             }
 
@@ -123,7 +131,7 @@ public static class CliCommandProcessor
                 CustomZstdLevel = customZstdLevel,
                 MaxSnapshotCount = parseResult.GetValue(mountMaxSnapshotCountOption),
                 MaxSnapshotSizeBytes = maxSnapshotSizeMb * 1024UL * 1024UL,
-                HighUsageWarnPercent = parseResult.GetValue(mountHighUsageWarnPercentOption),
+                HighUsageWarnPercent = highUsageWarnPercent,
                 Password = password,
             };
 
