@@ -1,9 +1,11 @@
 using System.IO.Pipes;
 using System.Security.AccessControl;
 using System.Security.Principal;
+using System.Security;
 using ManagedDrive.HelperProtocol;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Microsoft.Win32;
 using ThrottledLogging;
 
 namespace ManagedDrive.Service;
@@ -34,6 +36,23 @@ public sealed class HelperPipeService(GlobalMountManager mountManager, ILogger<H
     /// accepted, so a persistent failure doesn't turn the accept loop into a busy spin.
     /// </summary>
     private static readonly TimeSpan AcceptRetryDelay = TimeSpan.FromSeconds(1);
+
+    /// <summary>
+    /// The <c>HKLM</c> key holding the service's settings.
+    /// </summary>
+    internal const string SettingsKeyPath = @"SOFTWARE\ManagedDrive\Helper";
+
+    /// <summary>
+    /// DWORD value under <see cref="SettingsKeyPath"/> that, when nonzero, lets every user (not
+    /// just administrators) publish and unpublish global drive letters.
+    /// </summary>
+    internal const string AllowNonAdminPublishValueName = "AllowNonAdminPublish";
+
+    /// <summary>
+    /// Failure message sent to a caller refused by <see cref="GlobalMountPolicy.MayChangeGlobalMounts"/>.
+    /// </summary>
+    internal const string AdministratorsOnlyMessage =
+        $@"Only administrators may publish global drive letters. To allow every user, set the DWORD HKLM\{SettingsKeyPath}\{AllowNonAdminPublishValueName} to 1.";
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -119,17 +138,28 @@ public sealed class HelperPipeService(GlobalMountManager mountManager, ILogger<H
     /// Executes <paramref name="request"/> on behalf of the connected user.
     /// </summary>
     /// <param name="request">The decoded request.</param>
-    /// <param name="callerSid">
-    /// SID of the connected user, or <c>null</c> if it couldn't be determined — publish and
-    /// unpublish are refused then, since ownership decides who may change which letter.
+    /// <param name="caller">
+    /// The connected user, or <c>null</c> if it couldn't be determined — publish and unpublish
+    /// are refused then, since group membership and ownership decide who may change which letter.
     /// </param>
     /// <returns>The response to send back.</returns>
-    private HelperResponse Handle(HelperRequest request, string? callerSid)
+    private HelperResponse Handle(HelperRequest request, PipeClientIdentity? caller)
     {
-        if (request.Op is HelperPipeProtocol.OpPublish or HelperPipeProtocol.OpUnpublish && callerSid is null)
+        if (request.Op is HelperPipeProtocol.OpPublish or HelperPipeProtocol.OpUnpublish)
         {
-            return new(false, "Could not identify the calling user.");
+            if (caller is null)
+            {
+                return new(false, "Could not identify the calling user.");
+            }
+
+            if (!GlobalMountPolicy.MayChangeGlobalMounts(caller.GroupSids, AllowsNonAdminChanges()))
+            {
+                logger.LogWarning("Refused {Op} from non-administrator {Sid}", request.Op, caller.UserSid);
+                return new(false, AdministratorsOnlyMessage);
+            }
         }
+
+        var callerSid = caller?.UserSid;
 
         switch (request.Op)
         {
@@ -177,14 +207,14 @@ public sealed class HelperPipeService(GlobalMountManager mountManager, ILogger<H
 
         var request = HelperPipeProtocol.DeserializeRequest(requestJson);
 
-        // Impersonating the caller (via GetCallerSid) is only meaningful for publish/unpublish,
-        // which need it for the ownership check in Handle(). Skip it for ping — the far more
+        // Impersonating the caller (via GetCaller) is only meaningful for publish/unpublish,
+        // which need it for the authorization checks in Handle(). Skip it for ping — the far more
         // frequent op (e.g. the Settings dialog's helper-service status check) — so a liveness
         // check never pays for an impersonate/revert round trip it doesn't use.
-        var callerSid = request.Op is HelperPipeProtocol.OpPublish or HelperPipeProtocol.OpUnpublish
-            ? GetCallerSid(pipe)
+        var caller = request.Op is HelperPipeProtocol.OpPublish or HelperPipeProtocol.OpUnpublish
+            ? GetCaller(pipe)
             : null;
-        var response = Handle(request, callerSid);
+        var response = Handle(request, caller);
 
         await PipeIo.WriteLineWithTimeoutAsync(writer, HelperPipeProtocol.SerializeResponse(response), PerIoTimeout, ct);
     }
@@ -193,12 +223,12 @@ public sealed class HelperPipeService(GlobalMountManager mountManager, ILogger<H
     /// Identifies the user on the other end of <paramref name="pipe"/>, after the request has been read.
     /// </summary>
     /// <param name="pipe">The connected pipe.</param>
-    /// <returns>The caller's SID, or <c>null</c> if impersonation failed.</returns>
-    private string? GetCallerSid(NamedPipeServerStream pipe)
+    /// <returns>The caller, or <c>null</c> if impersonation failed.</returns>
+    private PipeClientIdentity? GetCaller(NamedPipeServerStream pipe)
     {
         try
         {
-            return NativeMethods.GetClientUserSid(pipe);
+            return NativeMethods.GetClientIdentity(pipe);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -208,6 +238,37 @@ public sealed class HelperPipeService(GlobalMountManager mountManager, ILogger<H
             return null;
         }
     }
+
+    /// <summary>
+    /// Reads whether an administrator has let every user change global drive letters. Read on
+    /// each request, so toggling the setting takes effect without restarting the service. Fails
+    /// closed: a setting that can't be read counts as not set.
+    /// </summary>
+    /// <returns>
+    /// <c>true</c> if <see cref="AllowNonAdminPublishValueName"/> is set to a nonzero DWORD.
+    /// </returns>
+    private bool AllowsNonAdminChanges()
+    {
+        try
+        {
+            using var key = Registry.LocalMachine.OpenSubKey(SettingsKeyPath, writable: false);
+            return IsEnabledSetting(key?.GetValue(AllowNonAdminPublishValueName));
+        }
+        catch (Exception ex) when (ex is SecurityException or IOException or UnauthorizedAccessException)
+        {
+            logger.LogWarningThrottled(
+                "settings-read-failed", TimeSpan.FromMinutes(5),
+                "Could not read the helper settings; allowing administrators only: {Error}", ex.Message);
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Decodes an on/off registry setting.
+    /// </summary>
+    /// <param name="value">The registry value, or <c>null</c> if it isn't set.</param>
+    /// <returns><c>true</c> only for a nonzero DWORD.</returns>
+    internal static bool IsEnabledSetting(object? value) => value is int dword && dword != 0;
 
     private async Task ReconcileLoopAsync(CancellationToken stoppingToken)
     {

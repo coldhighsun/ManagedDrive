@@ -269,4 +269,33 @@ public sealed class GlobalMountPolicyTests
         Assert.Null(GlobalMountManager.ParseRegistryValue(42));
         Assert.Null(GlobalMountManager.ParseRegistryValue(Array.Empty<string>()));
     }
+
+    /// <summary>
+    /// An administrator may change global drive letters, even through a UAC-filtered token whose
+    /// Administrators group is deny-only (the caller passes deny-only groups too).
+    /// </summary>
+    [Fact]
+    public void MayChangeGlobalMounts_CallerInAdministrators_ReturnsTrue()
+    {
+        Assert.True(GlobalMountPolicy.MayChangeGlobalMounts(["S-1-1-0", "S-1-5-32-544"], allowNonAdmins: false));
+    }
+
+    /// <summary>
+    /// A standard user may not change global drive letters by default.
+    /// </summary>
+    [Fact]
+    public void MayChangeGlobalMounts_StandardUser_ReturnsFalse()
+    {
+        Assert.False(GlobalMountPolicy.MayChangeGlobalMounts(["S-1-1-0", "S-1-5-32-545", "S-1-5-11"], allowNonAdmins: false));
+    }
+
+    /// <summary>
+    /// Once an administrator opens global drive letters up to every user, a standard user may
+    /// change them too.
+    /// </summary>
+    [Fact]
+    public void MayChangeGlobalMounts_StandardUserWithNonAdminsAllowed_ReturnsTrue()
+    {
+        Assert.True(GlobalMountPolicy.MayChangeGlobalMounts(["S-1-1-0", "S-1-5-32-545"], allowNonAdmins: true));
+    }
 }

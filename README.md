@@ -169,6 +169,10 @@ WinFsp mounts a drive letter into the **current logon session's** device namespa
   sc start ManagedDriveHelper
   ```
   Remove later with `sc stop ManagedDriveHelper` then `sc delete ManagedDriveHelper`. Entirely optional — ManagedDrive works normally without it; skipping it just leaves failure mode 1 unresolved.
+- A global drive letter is visible to every user and service on the machine, so by default the service only publishes one for members of the Administrators group (ManagedDrive itself doesn't need to run elevated). To let standard users publish too, an administrator can set it from an elevated terminal:
+  ```
+  reg add HKLM\SOFTWARE\ManagedDrive\Helper /v AllowNonAdminPublish /t REG_DWORD /d 1 /f
+  ```
 
 **Fixing MSI installs:** reset TEMP to the Windows default (toolbar button) before installing MSI-based software, then retry — or download the installer from the vendor and run it manually. Or use [`wingetx`](#wingetx-winget-wrapper) in place of `winget`, which works around both failure modes without touching TEMP.
 
