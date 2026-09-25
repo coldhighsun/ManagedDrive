@@ -1,5 +1,6 @@
 using System.IO.Pipes;
 using System.Text;
+using System.Text.Json;
 
 namespace ManagedDrive.Cli.Core;
 
@@ -55,14 +56,39 @@ public static class CliPipeClient
         "Access to the running ManagedDrive instance was denied. It may be running as administrator or as another user; run mdrive the same way.";
 
     /// <summary>
+    /// Failure message reported when the request was delivered but no response arrived within
+    /// <see cref="ReadTimeout"/>.
+    /// </summary>
+    internal const string NoResponseMessage =
+        "ManagedDrive did not respond in time. The command may still be running there; check its result before retrying.";
+
+    /// <summary>
+    /// Failure message reported when the request was delivered but the running instance closed
+    /// the connection without sending a response line.
+    /// </summary>
+    internal const string ConnectionClosedMessage =
+        "ManagedDrive closed the connection without responding. The command may or may not have run; check its result before retrying.";
+
+    /// <summary>
+    /// Failure message reported when the running instance's response line is not a valid
+    /// response.
+    /// </summary>
+    internal const string InvalidResponseMessage = "ManagedDrive returned a response that could not be read.";
+
+    /// <summary>
     /// Tries to connect to a running instance's CLI pipe and execute <paramref name="args"/>
     /// there.
     /// </summary>
     /// <returns>
-    /// <c>true</c> if a running instance answered the request (regardless of the command's own
-    /// exit code), or refused this process access to its pipe (<paramref name="response"/> then
-    /// carries a failure explaining that); <c>false</c> if no instance is currently listening on
-    /// the pipe.
+    /// <c>true</c> once the request has been delivered to a running instance, whether or not an
+    /// answer came back: an answer (regardless of the command's own exit code) is returned as-is,
+    /// while a read timeout, a connection closed before the response, or an unreadable response
+    /// is reported as a failure <paramref name="response"/> — the instance may already be
+    /// executing the command, so the caller must not resend it and risk running a side-effecting
+    /// command twice. Also <c>true</c> if a running instance refused this process access to its
+    /// pipe (<paramref name="response"/> then carries a failure explaining that). <c>false</c>
+    /// only if the request was never delivered — no instance accepted the connection in time, or
+    /// the connection broke before the request was written — so retrying is safe.
     /// </returns>
     public static bool TrySend(string[] args, out CliResponse response)
     {
@@ -105,10 +131,27 @@ public static class CliPipeClient
         }
     }
 
+    /// <summary>
+    /// Writes the request over the connected <paramref name="pipe"/> and reads the response. See
+    /// <see cref="TrySend"/> for the meaning of the return value; never throws for a pipe that
+    /// breaks mid-exchange.
+    /// </summary>
     private static bool TrySendCore(
         NamedPipeClientStream pipe, StreamReader reader, StreamWriter writer, string[] args, ref CliResponse response)
     {
-        writer.WriteLine(CliPipeProtocol.SerializeRequest(args, Environment.CurrentDirectory));
+        try
+        {
+            writer.WriteLine(CliPipeProtocol.SerializeRequest(args, Environment.CurrentDirectory));
+        }
+        catch (Exception ex) when (ex is IOException or ObjectDisposedException)
+        {
+            // The instance dropped the connection before taking the request (e.g. it is shutting
+            // down), so nothing ran there and the caller may safely retry.
+            return false;
+        }
+
+        // From here on the request has been delivered: every outcome below returns true so the
+        // caller reports it instead of resending the command.
 
         // Deliberately not `new CancellationTokenSource(ReadTimeout)`: that schedules its Cancel()
         // call on the ThreadPool, whose timer callback can be delayed well past ReadTimeout if the
@@ -132,17 +175,35 @@ public static class CliPipeClient
             // ReadTimeout — the very hang this path exists to bound. Nothing reads the abandoned
             // task's result; just observe its fault so it isn't reported as unobserved.
             ObserveAbandonedRead(readTask);
-            return false;
+            response = new(false, NoResponseMessage, null, 1);
+            return true;
         }
 
-        var responseJson = readTask.GetAwaiter().GetResult();
+        string? responseJson;
+        try
+        {
+            responseJson = readTask.GetAwaiter().GetResult();
+        }
+        catch (Exception ex) when (ex is IOException or ObjectDisposedException)
+        {
+            responseJson = null;
+        }
 
         if (responseJson == null)
         {
-            return false;
+            response = new(false, ConnectionClosedMessage, null, 1);
+            return true;
         }
 
-        response = CliPipeProtocol.DeserializeResponse(responseJson);
+        try
+        {
+            response = CliPipeProtocol.DeserializeResponse(responseJson);
+        }
+        catch (JsonException)
+        {
+            response = new(false, InvalidResponseMessage, null, 1);
+        }
+
         return true;
     }
 
