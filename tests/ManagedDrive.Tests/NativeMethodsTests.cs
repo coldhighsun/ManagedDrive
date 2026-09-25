@@ -1,3 +1,5 @@
+using System.Security.Claims;
+using System.Security.Principal;
 using ManagedDrive.Service;
 
 namespace ManagedDrive.Tests;
@@ -79,5 +81,22 @@ public sealed class NativeMethodsTests
     public void IsDeviceNotFoundError_OtherError_ReturnsFalse()
     {
         Assert.False(NativeMethods.IsDeviceNotFoundError(ErrorAccessDenied));
+    }
+
+    /// <summary>
+    /// Deny-only groups (e.g. Administrators in an unelevated administrator's token) are included
+    /// alongside enabled ones, and the user's own SID is not mistaken for a group.
+    /// </summary>
+    [Fact]
+    public void GetGroupSids_CurrentIdentity_ReturnsEnabledAndDenyOnlyGroups()
+    {
+        using var identity = WindowsIdentity.GetCurrent();
+        var denyOnly = identity.Claims.Where(c => c.Type == ClaimTypes.DenyOnlySid).Select(c => c.Value).ToList();
+
+        var groups = NativeMethods.GetGroupSids(identity);
+
+        Assert.Contains("S-1-1-0", groups);
+        Assert.All(denyOnly, sid => Assert.Contains(sid, groups));
+        Assert.DoesNotContain(identity.User!.Value, groups);
     }
 }

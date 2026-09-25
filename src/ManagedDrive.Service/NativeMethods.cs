@@ -1,9 +1,17 @@
 using System.IO.Pipes;
 using System.Runtime.InteropServices;
+using System.Security.Claims;
 using System.Security.Principal;
 using Microsoft.Win32.SafeHandles;
 
 namespace ManagedDrive.Service;
+
+/// <summary>
+/// The user on the other end of a pipe connection.
+/// </summary>
+/// <param name="UserSid">SID of the user.</param>
+/// <param name="GroupSids">SIDs of the user's groups, both enabled and deny-only.</param>
+internal sealed record PipeClientIdentity(string UserSid, IReadOnlyList<string> GroupSids);
 
 /// <summary>
 /// P/Invoke surface for the privileged DOS-device operations. Because this process runs as
@@ -95,13 +103,13 @@ internal static class NativeMethods
         GetNamedPipeClientProcessId(pipeHandle.DangerousGetHandle(), out var pid) ? (int)pid : -1;
 
     /// <summary>
-    /// Returns the SID of the user connected to <paramref name="pipe"/>, or <c>null</c> if it
-    /// cannot be determined. Must be called after data has been read from the pipe (a
+    /// Returns the identity of the user connected to <paramref name="pipe"/>, or <c>null</c> if
+    /// it cannot be determined. Must be called after data has been read from the pipe (a
     /// requirement of named-pipe impersonation). Only the impersonation token is opened while
     /// impersonating — the client connects at identification level, under which the thread can't
-    /// load assemblies or open files, so the SID is read after reverting.
+    /// load assemblies or open files, so the SIDs are read after reverting.
     /// </summary>
-    public static string? GetClientUserSid(NamedPipeServerStream pipe)
+    public static PipeClientIdentity? GetClientIdentity(NamedPipeServerStream pipe)
     {
         SafeAccessTokenHandle? token = null;
         pipe.RunAsClient(() =>
@@ -121,9 +129,21 @@ internal static class NativeMethods
         using (token)
         {
             using var identity = new WindowsIdentity(token.DangerousGetHandle());
-            return identity.User?.Value;
+            return identity.User is { } user ? new(user.Value, GetGroupSids(identity)) : null;
         }
     }
+
+    /// <summary>
+    /// Returns the SIDs of <paramref name="identity"/>'s groups, including deny-only ones (such
+    /// as <c>BUILTIN\Administrators</c> in a UAC-filtered token), which
+    /// <see cref="WindowsIdentity.Groups"/> leaves out.
+    /// </summary>
+    /// <param name="identity">The identity to read.</param>
+    /// <returns>The group SIDs.</returns>
+    internal static IReadOnlyList<string> GetGroupSids(WindowsIdentity identity) =>
+        [.. identity.Claims
+            .Where(c => c.Type is ClaimTypes.GroupSid or ClaimTypes.DenyOnlySid)
+            .Select(c => c.Value)];
 
     /// <summary>
     /// Returns every definition of <paramref name="letter"/>, current one first, followed by the

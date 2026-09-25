@@ -73,6 +73,27 @@ internal enum UnpublishDecision
 internal static class GlobalMountPolicy
 {
     /// <summary>
+    /// SID of the <c>BUILTIN\Administrators</c> group.
+    /// </summary>
+    private const string AdministratorsSid = "S-1-5-32-544";
+
+    /// <summary>
+    /// Whether a caller may publish or unpublish global drive letters at all. A global letter is
+    /// visible to every session and service on the machine, so by default only administrators may
+    /// change them. Membership counts even when UAC has filtered the group to deny-only: the app
+    /// normally runs unelevated, and an administrator could elevate anyway.
+    /// </summary>
+    /// <param name="callerGroupSids">
+    /// SIDs of the caller's groups, both enabled and deny-only.
+    /// </param>
+    /// <param name="allowNonAdmins">
+    /// Whether an administrator has opened global drive letters up to every user.
+    /// </param>
+    /// <returns><c>true</c> if the caller may change global drive letters.</returns>
+    public static bool MayChangeGlobalMounts(IEnumerable<string> callerGroupSids, bool allowNonAdmins) =>
+        allowNonAdmins || callerGroupSids.Contains(AdministratorsSid, StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
     /// Decides how to handle a publish request for a letter whose stale record (if any) has
     /// already been purged.
     /// </summary>
