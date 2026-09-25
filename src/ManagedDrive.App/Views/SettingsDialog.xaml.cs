@@ -22,20 +22,13 @@ public partial class SettingsDialog
         ImageCompressionLevel.SmallestSize,
     ];
 
-    private readonly UpdateCheckService? _updateCheckService;
-
     /// <summary>
     /// Initializes the dialog with the current application configuration.
     /// </summary>
     /// <param name="config">The current configuration to display.</param>
-    /// <param name="updateCheckService">
-    /// The update checker backing the "Check for Updates Now" button, or <see langword="null"/>
-    /// to disable that button (mirrors <see cref="AboutDialog"/>'s handling of a missing service).
-    /// </param>
-    public SettingsDialog(AppConfiguration config, UpdateCheckService? updateCheckService = null)
+    public SettingsDialog(AppConfiguration config)
     {
         InitializeComponent();
-        _updateCheckService = updateCheckService;
         RunAtStartupBox.IsChecked = StartupManager.IsEnabled;
         StartMinimizedBox.IsChecked = config.StartMinimized;
         CloseToTrayBox.IsChecked = config.CloseToTray;
@@ -161,8 +154,8 @@ public partial class SettingsDialog
     /// Returns <paramref name="latest"/> with the fields this dialog edits taken from
     /// <paramref name="edits"/>. Everything else — disk profiles, update-check state, the TEMP
     /// warning flag — may have been written while the dialog was open (a CLI command, the tray
-    /// menu, the dialog's own "Check for Updates Now"), so it must come from the configuration
-    /// read at save time, not from the snapshot the dialog was opened with.
+    /// menu), so it must come from the configuration read at save time, not from the snapshot the
+    /// dialog was opened with.
     /// </summary>
     /// <param name="latest">The configuration currently on disk.</param>
     /// <param name="edits">The dialog's <see cref="Result"/>.</param>
@@ -221,32 +214,4 @@ public partial class SettingsDialog
         Process.Start("explorer.exe", logDirectory);
     }
 
-    /// <summary>
-    /// Runs an immediate, user-initiated update check (bypassing the daily throttle, like
-    /// <see cref="AboutDialog"/>'s check) and reports the result via a message box.
-    /// </summary>
-    private async void CheckForUpdatesNow_Click(object sender, RoutedEventArgs e)
-    {
-        if (_updateCheckService == null)
-        {
-            return;
-        }
-
-        CheckForUpdatesNowButton.IsEnabled = false;
-        try
-        {
-            var (success, info) = await _updateCheckService.CheckSilentlyAsync();
-            var message = (success, info) switch
-            {
-                (true, not null) => Loc.Format("About.UpdateAvailable", info.Version),
-                (true, null) => Loc.Get("Settings.UpToDate"),
-                _ => Loc.Get("Settings.UpdateCheckFailed"),
-            };
-            MessageBox.Show(this, message, Title, MessageBoxButton.OK, MessageBoxImage.Information);
-        }
-        finally
-        {
-            CheckForUpdatesNowButton.IsEnabled = true;
-        }
-    }
 }

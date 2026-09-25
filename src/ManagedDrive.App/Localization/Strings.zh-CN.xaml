@@ -236,9 +236,6 @@
     <sys:String x:Key="Settings.AutoCheckForUpdates">自动检查更新</sys:String>
     <sys:String x:Key="Tip.AutoCheckForUpdates">启动时每天检查一次 GitHub 上是否有新版本</sys:String>
     <sys:String x:Key="Settings.OpenLogDirectory">打开日志目录</sys:String>
-    <sys:String x:Key="Settings.CheckForUpdatesNow">立即检查更新</sys:String>
-    <sys:String x:Key="Settings.UpToDate">当前已是最新版本。</sys:String>
-    <sys:String x:Key="Settings.UpdateCheckFailed">检查更新失败，请稍后重试。</sys:String>
     <sys:String x:Key="Settings.CloseToTray">关闭窗口时最小化到托盘，而不是退出程序</sys:String>
     <sys:String x:Key="Tip.CloseToTray">勾选时，标题栏关闭按钮会将窗口隐藏到托盘；不勾选时，会直接退出程序（等同于托盘菜单的"退出"）。</sys:String>
     <sys:String x:Key="Settings.DefaultCompressionLevel">默认压缩级别：</sys:String>
@@ -363,11 +360,6 @@
     <sys:String x:Key="About.UpdateAvailable">发现新版本 {0}，点击下载。</sys:String>
 
     <!-- Update available -->
-    <sys:String x:Key="Update.DialogTitle">发现新版本</sys:String>
-    <sys:String x:Key="Update.DialogBody">ManagedDrive 有新版本 ({0}) 可用。&#x0a;&#x0a;是否查看发布页面？</sys:String>
-    <sys:String x:Key="Update.ViewRelease">查看发布页面</sys:String>
-    <sys:String x:Key="Update.SkipThisVersion">跳过此版本</sys:String>
-    <sys:String x:Key="Update.RemindMeLater">稍后提醒</sys:String>
     <sys:String x:Key="Update.BalloonBody">ManagedDrive {0} 已发布，点击"关于"查看详情。</sys:String>
 
     <!-- SaveFileDialog -->

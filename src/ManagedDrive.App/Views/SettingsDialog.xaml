@@ -138,11 +138,6 @@
             <Button x:Name="OpenLogDirectoryButton"
                     Content="{DynamicResource Settings.OpenLogDirectory}"
                     Click="OpenLogDirectory_Click"
-                    Style="{StaticResource FlatButton}"
-                    Margin="0,0,8,0"/>
-            <Button x:Name="CheckForUpdatesNowButton"
-                    Content="{DynamicResource Settings.CheckForUpdatesNow}"
-                    Click="CheckForUpdatesNow_Click"
                     Style="{StaticResource FlatButton}"/>
         </StackPanel>
 

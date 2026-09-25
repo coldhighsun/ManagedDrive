@@ -236,9 +236,6 @@
     <sys:String x:Key="Settings.AutoCheckForUpdates">Automatically check for updates</sys:String>
     <sys:String x:Key="Tip.AutoCheckForUpdates">Check GitHub for a newer version once a day at startup</sys:String>
     <sys:String x:Key="Settings.OpenLogDirectory">Open Log Directory</sys:String>
-    <sys:String x:Key="Settings.CheckForUpdatesNow">Check for Updates Now</sys:String>
-    <sys:String x:Key="Settings.UpToDate">You're running the latest version.</sys:String>
-    <sys:String x:Key="Settings.UpdateCheckFailed">Couldn't check for updates. Please try again later.</sys:String>
     <sys:String x:Key="Settings.CloseToTray">Closing the window minimizes to tray instead of exiting</sys:String>
     <sys:String x:Key="Tip.CloseToTray">When checked, the title bar close button hides the window to the tray. When unchecked, it exits the application (same as the tray "Exit" menu item).</sys:String>
     <sys:String x:Key="Settings.DefaultCompressionLevel">Default compression:</sys:String>
@@ -363,11 +360,6 @@
     <sys:String x:Key="About.UpdateAvailable">A new version ({0}) is available. Click to download.</sys:String>
 
     <!-- Update available -->
-    <sys:String x:Key="Update.DialogTitle">Update Available</sys:String>
-    <sys:String x:Key="Update.DialogBody">A new version of ManagedDrive ({0}) is available.&#x0a;&#x0a;Would you like to view the release page?</sys:String>
-    <sys:String x:Key="Update.ViewRelease">View Release</sys:String>
-    <sys:String x:Key="Update.SkipThisVersion">Skip This Version</sys:String>
-    <sys:String x:Key="Update.RemindMeLater">Remind Me Later</sys:String>
     <sys:String x:Key="Update.BalloonBody">ManagedDrive {0} is available. Click About to view details.</sys:String>
 
     <!-- SaveFileDialog -->
