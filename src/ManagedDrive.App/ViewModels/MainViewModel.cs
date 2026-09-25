@@ -1,5 +1,6 @@
 using ManagedDrive.Cli.Core;
 using System.Collections.ObjectModel;
+using System.Windows.Input;
 using static ManagedDrive.App.ViewModels.MainViewModelHelpers;
 
 namespace ManagedDrive.App.ViewModels;
@@ -64,49 +65,49 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         ImportDiskCommand = new(_ => ExecuteImportDisk());
         ImportArchiveCommand = new(_ => ExecuteImportArchive());
         EditDiskCommand = new(
-            p => ExecuteEditDisk(p as DiskViewModel ?? SelectedDisk),
-            p => p is DiskViewModel || SelectedDisk != null);
+            p => ExecuteEditDisk(ResolveTarget(p)),
+            p => ResolveTarget(p) != null);
         ExitCommand = new(_ => ExecuteExit());
         UnmountCommand = new(
-            p => ExecuteUnmount(p as DiskViewModel ?? SelectedDisk),
-            p => p is DiskViewModel || SelectedDisk != null);
+            p => ExecuteUnmount(ResolveTarget(p)),
+            p => ResolveTarget(p) != null);
         SaveImageCommand = new(
-            p => ExecuteSaveImage(p as DiskViewModel ?? SelectedDisk),
-            p => p is DiskViewModel || SelectedDisk != null);
+            p => ExecuteSaveImage(ResolveTarget(p)),
+            p => ResolveTarget(p) != null);
         CreateSnapshotNowCommand = new(
-            p => ExecuteCreateSnapshotNow(p as DiskViewModel ?? SelectedDisk),
+            p => ExecuteCreateSnapshotNow(ResolveTarget(p)),
             p =>
             {
-                var vm = p as DiskViewModel ?? SelectedDisk;
+                var vm = ResolveTarget(p);
                 return vm is { SnapshotsEnabled: true, HasImagePath: true };
             });
         FormatDiskCommand = new(
-            p => ExecuteFormatDisk(p as DiskViewModel ?? SelectedDisk),
+            p => ExecuteFormatDisk(ResolveTarget(p)),
             p =>
             {
-                var vm = p as DiskViewModel ?? SelectedDisk;
+                var vm = ResolveTarget(p);
                 return vm is { Disk.Options.ReadOnly: false };
             });
         CloneDiskCommand = new(
-            p => ExecuteCloneDisk(p as DiskViewModel ?? SelectedDisk),
-            p => p is DiskViewModel || SelectedDisk != null);
+            p => ExecuteCloneDisk(ResolveTarget(p)),
+            p => ResolveTarget(p) != null);
         RestoreSnapshotCommand = new(
-            p => ExecuteRestoreSnapshot(p as DiskViewModel ?? SelectedDisk),
+            p => ExecuteRestoreSnapshot(ResolveTarget(p)),
             p =>
             {
-                var vm = p as DiskViewModel ?? SelectedDisk;
+                var vm = ResolveTarget(p);
                 return vm is { IsReadOnly: false, HasImagePath: true };
             });
         ViewDiskContentsCommand = new(
-            p => ExecuteViewDiskContents(p as DiskViewModel ?? SelectedDisk),
-            p => p is DiskViewModel || SelectedDisk != null);
+            p => ExecuteViewDiskContents(ResolveTarget(p)),
+            p => ResolveTarget(p) != null);
         RefreshCommand = new(_ => RefreshAll());
         ResetTempDirsCommand = new(_ => ExecuteResetTempDirs());
         ToggleTempDirCommand = new(
-            p => ExecuteToggleTempDir(p as DiskViewModel ?? SelectedDisk),
+            p => ExecuteToggleTempDir(ResolveTarget(p)),
             p =>
             {
-                var vm = p as DiskViewModel ?? SelectedDisk;
+                var vm = ResolveTarget(p);
                 return vm is { Disk.Options.ReadOnly: false };
             });
         SettingsCommand = new(_ => ExecuteSettings());
@@ -461,7 +462,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     {
         _logger.LogInformation("CLI format requested for {MountPoint}.", mountPoint);
 
-        var vm = Disks.FirstOrDefault(d => string.Equals(d.MountPoint, mountPoint, StringComparison.OrdinalIgnoreCase));
+        var vm = FindDisk(mountPoint);
         if (vm == null)
         {
             return Task.FromResult((false, string.Empty));
@@ -949,7 +950,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     {
         _logger.LogInformation("CLI edit requested for {MountPoint}.", mountPoint);
 
-        var vm = Disks.FirstOrDefault(d => string.Equals(d.MountPoint, mountPoint, StringComparison.OrdinalIgnoreCase));
+        var vm = FindDisk(mountPoint);
         if (vm == null)
         {
             return (false, string.Empty);
@@ -999,13 +1000,13 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     {
         _logger.LogInformation("CLI clone requested: {Source} -> {Target}.", sourceMountPoint, targetMountPoint);
 
-        var source = Disks.FirstOrDefault(d => string.Equals(d.MountPoint, sourceMountPoint, StringComparison.OrdinalIgnoreCase));
+        var source = FindDisk(sourceMountPoint);
         if (source == null)
         {
             return Task.FromResult((false, Loc.Format("Msg.CliMountPointNotMounted", sourceMountPoint)));
         }
 
-        var target = Disks.FirstOrDefault(d => string.Equals(d.MountPoint, targetMountPoint, StringComparison.OrdinalIgnoreCase));
+        var target = FindDisk(targetMountPoint);
         if (target == null)
         {
             return Task.FromResult((false, Loc.Format("Msg.CliMountPointNotMounted", targetMountPoint)));
@@ -1046,7 +1047,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     {
         _logger.LogInformation("CLI save requested for {MountPoint}.", mountPoint);
 
-        var vm = Disks.FirstOrDefault(d => string.Equals(d.MountPoint, mountPoint, StringComparison.OrdinalIgnoreCase));
+        var vm = FindDisk(mountPoint);
         if (vm == null)
         {
             return (false, string.Empty);
@@ -1088,7 +1089,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     {
         _logger.LogInformation("CLI set-password requested for {MountPoint}.", mountPoint);
 
-        var vm = Disks.FirstOrDefault(d => string.Equals(d.MountPoint, mountPoint, StringComparison.OrdinalIgnoreCase));
+        var vm = FindDisk(mountPoint);
         if (vm == null)
         {
             return Task.FromResult((false, string.Empty));
@@ -1143,7 +1144,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     {
         _logger.LogInformation("CLI ls requested for {MountPoint}, path {Path}.", mountPoint, path);
 
-        var vm = Disks.FirstOrDefault(d => string.Equals(d.MountPoint, mountPoint, StringComparison.OrdinalIgnoreCase));
+        var vm = FindDisk(mountPoint);
         if (vm == null)
         {
             return Task.FromResult<(bool, string, IReadOnlyList<CliFileEntry>?)>((false, string.Empty, null));
@@ -1223,7 +1224,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     {
         _logger.LogInformation("CLI export requested: {MountPoint} -> {OutputPath}.", mountPoint, outputPath);
 
-        var vm = Disks.FirstOrDefault(d => string.Equals(d.MountPoint, mountPoint, StringComparison.OrdinalIgnoreCase));
+        var vm = FindDisk(mountPoint);
         if (vm == null)
         {
             return (false, string.Empty);
@@ -1267,7 +1268,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     {
         _logger.LogInformation("CLI snapshot create requested for {MountPoint}.", mountPoint);
 
-        var vm = Disks.FirstOrDefault(d => string.Equals(d.MountPoint, mountPoint, StringComparison.OrdinalIgnoreCase));
+        var vm = FindDisk(mountPoint);
         if (vm == null)
         {
             return (false, string.Empty);
@@ -1316,7 +1317,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     {
         _logger.LogInformation("CLI delete snapshot requested for {MountPoint}, index {Index}.", mountPoint, index);
 
-        var vm = Disks.FirstOrDefault(d => string.Equals(d.MountPoint, mountPoint, StringComparison.OrdinalIgnoreCase));
+        var vm = FindDisk(mountPoint);
         if (vm == null)
         {
             return (false, string.Empty);
@@ -1354,7 +1355,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     {
         _logger.LogInformation("CLI snapshot list requested for {MountPoint}.", mountPoint);
 
-        var vm = Disks.FirstOrDefault(d => string.Equals(d.MountPoint, mountPoint, StringComparison.OrdinalIgnoreCase));
+        var vm = FindDisk(mountPoint);
         if (vm == null)
         {
             return (false, string.Empty, null);
@@ -1393,7 +1394,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     {
         _logger.LogInformation("CLI restore snapshot requested for {MountPoint}, index {Index}.", mountPoint, index);
 
-        var vm = Disks.FirstOrDefault(d => string.Equals(d.MountPoint, mountPoint, StringComparison.OrdinalIgnoreCase));
+        var vm = FindDisk(mountPoint);
         if (vm == null)
         {
             return (false, string.Empty);
@@ -1447,7 +1448,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     {
         _logger.LogInformation("CLI snapshot diff requested for {MountPoint}, index {Index}.", mountPoint, index);
 
-        var vm = Disks.FirstOrDefault(d => string.Equals(d.MountPoint, mountPoint, StringComparison.OrdinalIgnoreCase));
+        var vm = FindDisk(mountPoint);
         if (vm == null)
         {
             return (false, string.Empty, null);
@@ -1499,7 +1500,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     {
         _logger.LogInformation("CLI unmount requested for {MountPoint} (deleteImage: {DeleteImage}).", mountPoint, deleteImage);
 
-        var vm = Disks.FirstOrDefault(d => string.Equals(d.MountPoint, mountPoint, StringComparison.OrdinalIgnoreCase));
+        var vm = FindDisk(mountPoint);
         if (vm == null)
         {
             return false;
@@ -1703,7 +1704,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             return;
         }
 
-        var targets = Disks.Where(d => d != vm && !d.IsReadOnly).ToList();
+        var targets = Disks.Where(d => d != vm && !d.IsReadOnly && !d.IsRemounting).ToList();
 
         // Include the source disk's own options (excluding: null) so exporting to a path that
         // the source itself is already persisting to is also rejected — that file may be
@@ -1881,7 +1882,11 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
                 return;
             }
 
+            // From here on the disk is out of reach of every other command and CLI request (see
+            // ResolveTarget/FindDisk/IsStillMounted): its RamDisk is about to be disposed, and a
+            // second edit racing this one would otherwise mount the same image twice.
             vm.IsRemounting = true;
+            CommandManager.InvalidateRequerySuggested();
 
             if (vm.IsCurrentTempDir)
             {
@@ -2500,7 +2505,8 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     }
 
     /// <summary>
-    /// Returns whether <paramref name="vm"/> is still in <see cref="Disks"/>. A modal dialog keeps
+    /// Returns whether <paramref name="vm"/> is still in <see cref="Disks"/> and not being
+    /// remounted by an edit (its RamDisk is unmounted/disposed then). A modal dialog keeps
     /// pumping the dispatcher, so a CLI command or tray action can unmount the disk while one is
     /// open; a handler that acts on a disk after a dialog (or an await) must re-check, or it would
     /// operate on a disposed disk, or, for unmount/remount, on whatever disk has since been
@@ -2510,7 +2516,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     /// <returns><c>true</c> if the disk is still mounted; otherwise <c>false</c>.</returns>
     private bool IsStillMounted(DiskViewModel vm)
     {
-        if (Disks.Contains(vm))
+        if (Disks.Contains(vm) && !vm.IsRemounting)
         {
             return true;
         }
@@ -2519,6 +2525,26 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         StatusText = Loc.Format("Status.DiskNoLongerMounted", vm.MountPoint);
         return false;
     }
+
+    /// <summary>
+    /// Resolves the disk a command targets (its parameter, else <see cref="SelectedDisk"/>), or
+    /// <c>null</c> when that disk is being remounted by an edit — its RamDisk is already
+    /// unmounted/disposed then. Used by both the execute and can-execute side of every per-disk
+    /// command, since the tray menu calls <c>Execute</c> directly without checking <c>CanExecute</c>.
+    /// </summary>
+    /// <param name="parameter">The command parameter.</param>
+    /// <returns>The target disk, or <c>null</c> if there is none or it is being remounted.</returns>
+    private DiskViewModel? ResolveTarget(object? parameter) =>
+        (parameter as DiskViewModel ?? SelectedDisk) is { IsRemounting: false } vm ? vm : null;
+
+    /// <summary>
+    /// Finds the disk mounted at <paramref name="mountPoint"/> for a CLI request, skipping one
+    /// being remounted by an edit (see <see cref="ResolveTarget"/>).
+    /// </summary>
+    /// <param name="mountPoint">The drive letter (e.g. <c>R:</c>) to look up.</param>
+    /// <returns>The matching disk, or <c>null</c> if none is available.</returns>
+    private DiskViewModel? FindDisk(string mountPoint) =>
+        Disks.FirstOrDefault(d => !d.IsRemounting && string.Equals(d.MountPoint, mountPoint, StringComparison.OrdinalIgnoreCase));
 
     private void ExecuteViewDiskContents(DiskViewModel? vm)
     {
