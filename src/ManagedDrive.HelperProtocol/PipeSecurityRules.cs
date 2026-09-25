@@ -1,4 +1,5 @@
 using System.IO.Pipes;
+using System.Security.AccessControl;
 using System.Security.Principal;
 
 namespace ManagedDrive.HelperProtocol;
@@ -21,6 +22,37 @@ public static class PipeSecurityRules
     /// The <c>LocalSystem</c> account the helper service runs as.
     /// </summary>
     private static readonly SecurityIdentifier LocalSystemSid = new(WellKnownSidType.LocalSystemSid, null);
+
+    /// <summary>
+    /// The <c>NETWORK</c> group present in every network logon's token, i.e. in every client
+    /// connecting to a pipe remotely over SMB.
+    /// </summary>
+    private static readonly SecurityIdentifier NetworkSid = new(WellKnownSidType.NetworkSid, null);
+
+    /// <summary>
+    /// Creates the security descriptor for a pipe only <paramref name="owner"/> may use: full
+    /// control for <paramref name="owner"/>, which is also made the pipe's owner, and nothing for
+    /// anyone else, remote clients in particular.
+    /// </summary>
+    /// <param name="owner">The only principal allowed to connect.</param>
+    /// <returns>The security descriptor to create the pipe with.</returns>
+    public static PipeSecurity CreateOwnerOnlySecurity(SecurityIdentifier owner)
+    {
+        var security = new PipeSecurity();
+        security.AddAccessRule(new(owner, PipeAccessRights.FullControl, AccessControlType.Allow));
+        DenyRemoteClients(security);
+        security.SetOwner(owner);
+        return security;
+    }
+
+    /// <summary>
+    /// Adds a rule to <paramref name="security"/> that denies every remote (network logon)
+    /// client, which a named pipe otherwise accepts over SMB whenever its other rules allow the
+    /// remote user in.
+    /// </summary>
+    /// <param name="security">The security descriptor to add the rule to.</param>
+    public static void DenyRemoteClients(PipeSecurity security) =>
+        security.AddAccessRule(new(NetworkSid, PipeAccessRights.FullControl, AccessControlType.Deny));
 
     /// <summary>
     /// Whether a pipe owned by <paramref name="owner"/> may be trusted with a request. A standard
