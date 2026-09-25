@@ -145,6 +145,31 @@ public sealed class FileNode
     }
 
     /// <summary>
+    /// Raises the counter behind <see cref="NewIndexNumber"/> so it never again hands out
+    /// <paramref name="indexNumber"/> or anything below it. The counter restarts at 1 in every
+    /// process while loaded images and snapshots keep the index numbers they were saved with, so
+    /// without this a newly created file would reuse an existing file's ID — tools that compare
+    /// file IDs (Python's <c>samefile</c>, Node's <c>fs.cp</c>, backup software) would then
+    /// treat the two as the same file.
+    /// </summary>
+    /// <param name="indexNumber">An index number already in use by a node.</param>
+    public static void ReserveIndexNumber(ulong indexNumber)
+    {
+        var target = (long)Math.Min(indexNumber, long.MaxValue);
+        var current = Volatile.Read(ref _nextIndex);
+        while (current < target)
+        {
+            var observed = Interlocked.CompareExchange(ref _nextIndex, target, current);
+            if (observed == current)
+            {
+                return;
+            }
+
+            current = observed;
+        }
+    }
+
+    /// <summary>
     /// Returns a deep copy of this node (independent <see cref="FileData"/> and
     /// <see cref="FileSecurity"/> buffers), for copying a node into a different
     /// <see cref="FileNodeMap"/> without the two nodes sharing mutable state.

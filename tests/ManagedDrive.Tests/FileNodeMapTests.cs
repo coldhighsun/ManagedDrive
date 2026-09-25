@@ -22,6 +22,35 @@ public sealed class FileNodeMapTests
         Assert.Equal("file.txt", node.LeafName);
     }
 
+    /// <summary>
+    /// A node loaded from an image keeps the index number it was saved with; files created
+    /// afterwards must not be handed that same ID.
+    /// </summary>
+    [Fact]
+    public void Add_LoadedNodeIndexNumber_IsNeverReissued()
+    {
+        var map = new FileNodeMap();
+        var loaded = MakeFile();
+        loaded.FileInfo.IndexNumber = FileNode.NewIndexNumber() + 1_000_000;
+
+        map.Add("\\loaded.txt", loaded);
+
+        Assert.True(FileNode.NewIndexNumber() > loaded.FileInfo.IndexNumber);
+    }
+
+    [Fact]
+    public void Add_LowerIndexNumber_DoesNotMoveCounterBackwards()
+    {
+        var map = new FileNodeMap();
+        var before = FileNode.NewIndexNumber();
+        var node = MakeFile();
+        node.FileInfo.IndexNumber = 1;
+
+        map.Add("\\old.txt", node);
+
+        Assert.True(FileNode.NewIndexNumber() > before);
+    }
+
     [Fact]
     public void Add_UpdatesFilePathOnNode()
     {
