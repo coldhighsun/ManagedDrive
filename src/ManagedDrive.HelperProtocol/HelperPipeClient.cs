@@ -19,8 +19,10 @@ public static class HelperPipeClient
     /// Upper bound on waiting for the service's response line. The service only performs a quick
     /// DOS-device symlink publish/remove, so this is purely a deadlock guard against a wedged or
     /// unresponsive service — without it, a connected-but-silent service would block the caller
-    /// forever even though every call is documented as best-effort. Overridable by tests via
-    /// <see cref="TestReadTimeoutOverride"/> to exercise the timeout path without a real 5-second
+    /// forever even though every call is documented as best-effort. The same bound separately
+    /// applies to writing the request: the service's pipe has no inbound buffer, so the write
+    /// itself only completes once the service reads it. Overridable by tests via
+    /// <see cref="TestReadTimeoutOverride"/> to exercise the timeout paths without a real 5-second
     /// wait.
     /// </summary>
     private static readonly TimeSpan DefaultReadTimeout = TimeSpan.FromSeconds(5);
@@ -127,8 +129,8 @@ public static class HelperPipeClient
         var reader = new StreamReader(pipe, leaveOpen: true);
         var writer = new StreamWriter(pipe, leaveOpen: true) { AutoFlush = true };
 
-        // Disposed manually (not via `using`) because the timeout path below force-closes the
-        // underlying pipe to unblock a stuck read; disposing reader/writer afterwards would throw
+        // Disposed manually (not via `using`) because the timeout paths below force-close the
+        // underlying pipe to unblock a stuck write or read; disposing reader/writer afterwards would throw
         // trying to flush/close a stream on top of an already-closed pipe.
         try
         {
@@ -152,11 +154,31 @@ public static class HelperPipeClient
         }
     }
 
+    /// <summary>
+    /// Writes the request over the connected <paramref name="pipe"/> and reads the response,
+    /// bounding each by <see cref="ReadTimeout"/>. Returns <see langword="false"/> with
+    /// <paramref name="failureReason"/> set on a timeout or a connection closed before the
+    /// response; a pipe that breaks mid-exchange or an unreadable response throws, and is reported
+    /// by <see cref="TrySend"/>.
+    /// </summary>
     private static bool TrySendCore(
         NamedPipeClientStream pipe, StreamReader reader, StreamWriter writer, HelperRequest request,
         ref HelperResponse response, ref string? failureReason)
     {
-        writer.WriteLine(HelperPipeProtocol.SerializeRequest(request));
+        // Bounded like the read below, for the same reason: the service's pipe has no inbound
+        // buffer, so this write only completes once the service actually reads the request, and a
+        // connected service that never reads would otherwise block here forever.
+        var writeTask = writer.WriteLineAsync(HelperPipeProtocol.SerializeRequest(request));
+
+        if (Task.WaitAny([writeTask], ReadTimeout) == -1)
+        {
+            pipe.Dispose();
+            ObserveAbandoned(writeTask);
+            failureReason = $"write timed out after {ReadTimeout}";
+            return false;
+        }
+
+        writeTask.GetAwaiter().GetResult();
 
         // Deliberately not `new CancellationTokenSource(ReadTimeout)`: that schedules its Cancel()
         // call on the ThreadPool, whose timer callback can be delayed well past ReadTimeout if the
@@ -182,7 +204,7 @@ public static class HelperPipeClient
             // ThreadPool, so under pool starvation a wait here blocked for seconds past
             // ReadTimeout — the very hang this path exists to bound. Nothing reads the abandoned
             // task's result; just observe its fault so it isn't reported as unobserved.
-            ObserveAbandonedRead(readTask);
+            ObserveAbandoned(readTask);
             failureReason = $"read timed out after {ReadTimeout}";
             return false;
         }
@@ -199,8 +221,14 @@ public static class HelperPipeClient
         return true;
     }
 
-    private static void ObserveAbandonedRead(Task readTask) =>
-        readTask.ContinueWith(
+    /// <summary>
+    /// Observes the fault of a pipe I/O task this client stopped waiting for (after force-closing
+    /// the pipe under it), so the exception it eventually completes with isn't reported as
+    /// unobserved.
+    /// </summary>
+    /// <param name="task">The abandoned write or read task.</param>
+    private static void ObserveAbandoned(Task task) =>
+        task.ContinueWith(
             static t => _ = t.Exception,
             CancellationToken.None,
             TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,

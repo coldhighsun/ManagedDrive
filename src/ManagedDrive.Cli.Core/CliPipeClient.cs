@@ -19,9 +19,11 @@ public static class CliPipeClient
     /// not a throttle on legitimately slow commands (e.g. exporting a large disk) — the server
     /// dispatches the command onto the UI thread and awaits it there before writing back, so a
     /// generous ceiling avoids cutting off a real (if slow) response while still bounding how long
-    /// a wedged instance can hang the CLI. Overridable by tests via
-    /// <see cref="TestReadTimeoutOverride"/> to exercise the timeout path without a real 5-minute
-    /// wait.
+    /// a wedged instance can hang the CLI. The same bound separately applies to writing the
+    /// request: the server's pipe has no inbound buffer, so the write itself only completes once
+    /// the instance reads it, and a connected-but-wedged instance would otherwise block the write
+    /// forever. Overridable by tests via <see cref="TestReadTimeoutOverride"/> to exercise the
+    /// timeout paths without a real 5-minute wait.
     /// </summary>
     private static readonly TimeSpan DefaultReadTimeout = TimeSpan.FromMinutes(5);
 
@@ -90,8 +92,8 @@ public static class CliPipeClient
         "The ManagedDrive CLI pipe belongs to another user, so the command was not sent. Another program may be posing as ManagedDrive.";
 
     /// <summary>
-    /// Failure message reported when the request was delivered but no response arrived within
-    /// <see cref="ReadTimeout"/>.
+    /// Failure message reported when the request may have been delivered but writing it, or
+    /// waiting for the response, did not complete within <see cref="ReadTimeout"/>.
     /// </summary>
     internal const string NoResponseMessage =
         "ManagedDrive did not respond in time. The command may still be running there; check its result before retrying.";
@@ -116,14 +118,14 @@ public static class CliPipeClient
     /// <returns>
     /// <c>true</c> once the request has been delivered to a running instance, whether or not an
     /// answer came back: an answer (regardless of the command's own exit code) is returned as-is,
-    /// while a read timeout, a connection closed before the response, or an unreadable response
-    /// is reported as a failure <paramref name="response"/> — the instance may already be
+    /// while a write or read timeout, a connection closed before the response, or an unreadable
+    /// response is reported as a failure <paramref name="response"/> — the instance may already be
     /// executing the command, so the caller must not resend it and risk running a side-effecting
     /// command twice. Also <c>true</c> if a running instance refused this process access to its
     /// pipe, or the pipe was created by another user and so was never sent the request
     /// (<paramref name="response"/> then carries a failure explaining that). <c>false</c>
     /// only if the request was never delivered — no instance accepted the connection in time, or
-    /// the connection broke before the request was written — so retrying is safe.
+    /// the connection broke while the request was being written — so retrying is safe.
     /// </returns>
     public static bool TrySend(string[] args, out CliResponse response)
     {
@@ -162,8 +164,8 @@ public static class CliPipeClient
         var reader = new StreamReader(pipe, leaveOpen: true);
         var writer = new StreamWriter(pipe, leaveOpen: true) { AutoFlush = true };
 
-        // Disposed manually (not via `using`) because the timeout path below force-closes the
-        // underlying pipe to unblock a stuck read; disposing reader/writer afterwards would throw
+        // Disposed manually (not via `using`) because the timeout paths below force-close the
+        // underlying pipe to unblock a stuck write or read; disposing reader/writer afterwards would throw
         // trying to flush/close a stream on top of an already-closed pipe.
         try
         {
@@ -184,9 +186,27 @@ public static class CliPipeClient
     private static bool TrySendCore(
         NamedPipeClientStream pipe, StreamReader reader, StreamWriter writer, string[] args, ref CliResponse response)
     {
+        // Bounded like the read below, for the same reason: the server's pipe has no inbound
+        // buffer, so this write only completes once the instance actually reads the request, and a
+        // connected instance that never reads (e.g. its accept loop is wedged) would otherwise
+        // block here forever.
+        var writeTask = writer.WriteLineAsync(CliPipeProtocol.SerializeRequest(args, Environment.CurrentDirectory));
+
+        if (Task.WaitAny([writeTask], ReadTimeout) == -1)
+        {
+            pipe.Dispose();
+            ObserveAbandoned(writeTask);
+
+            // Part of the request may already sit in the instance's pipe, where it could still be
+            // read and run, so this is reported like a missing response rather than as "not
+            // delivered" — a resend could run a side-effecting command twice.
+            response = new(false, NoResponseMessage, null, 1);
+            return true;
+        }
+
         try
         {
-            writer.WriteLine(CliPipeProtocol.SerializeRequest(args, Environment.CurrentDirectory));
+            writeTask.GetAwaiter().GetResult();
         }
         catch (Exception ex) when (ex is IOException or ObjectDisposedException)
         {
@@ -219,7 +239,7 @@ public static class CliPipeClient
             // ThreadPool, so under pool starvation a wait here blocked for seconds past
             // ReadTimeout — the very hang this path exists to bound. Nothing reads the abandoned
             // task's result; just observe its fault so it isn't reported as unobserved.
-            ObserveAbandonedRead(readTask);
+            ObserveAbandoned(readTask);
             response = new(false, NoResponseMessage, null, 1);
             return true;
         }
@@ -252,8 +272,14 @@ public static class CliPipeClient
         return true;
     }
 
-    private static void ObserveAbandonedRead(Task readTask) =>
-        readTask.ContinueWith(
+    /// <summary>
+    /// Observes the fault of a pipe I/O task this client stopped waiting for (after force-closing
+    /// the pipe under it), so the exception it eventually completes with isn't reported as
+    /// unobserved.
+    /// </summary>
+    /// <param name="task">The abandoned write or read task.</param>
+    private static void ObserveAbandoned(Task task) =>
+        task.ContinueWith(
             static t => _ = t.Exception,
             CancellationToken.None,
             TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
