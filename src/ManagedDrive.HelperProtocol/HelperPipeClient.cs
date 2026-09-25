@@ -1,6 +1,7 @@
 using System.IO.Pipes;
 using System.Security.Principal;
 using System.Text;
+using System.Text.Json;
 
 namespace ManagedDrive.HelperProtocol;
 
@@ -114,6 +115,17 @@ public static class HelperPipeClient
         try
         {
             return TrySendCore(pipe, reader, writer, request, ref response, ref failureReason);
+        }
+        catch (Exception ex) when (ex is IOException or ObjectDisposedException or JsonException)
+        {
+            // The connect succeeded but the service dropped the connection (broken pipe on the
+            // write or read) or answered with a line that isn't a valid response. Every call here
+            // is documented as best-effort, so report it like any other failure instead of letting
+            // the exception escape into callers that (like the Settings dialog's status check)
+            // never expect one.
+            failureReason = $"request failed: {ex.GetType().Name}: {ex.Message}";
+            response = new(false, string.Empty);
+            return false;
         }
         finally
         {
