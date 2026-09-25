@@ -15,7 +15,6 @@ namespace ManagedDrive.App;
 /// </summary>
 public partial class App
 {
-    private const string SingleInstanceMutexName = "Global\\ManagedDrive-4A7C2E1B-9F3D-4B8A-A1C5-3E6D2F0B8C9A";
     private static readonly TimeSpan ExitDisposeTimeout = TimeSpan.FromSeconds(20);
 
     private CliPipeServer? _cliPipeServer;
@@ -87,7 +86,7 @@ public partial class App
         LanguageManager.Instance.ApplyDefault(config.Language);
         ThemeManager.Instance.ApplyDefault(config.Theme);
 
-        _singleInstanceMutex = new(true, SingleInstanceMutexName, out var createdNew);
+        _singleInstanceMutex = new(true, AppInstance.SingleInstanceMutexName, out var createdNew);
         if (!createdNew)
         {
             _singleInstanceMutex.Dispose();

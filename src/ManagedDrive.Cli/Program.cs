@@ -10,8 +10,16 @@ namespace ManagedDrive.Cli;
 /// </summary>
 public static class Program
 {
-    private const int LaunchWaitTimeoutMs = 10_000;
-    private const int RetryIntervalMs = 200;
+    /// <summary>
+    /// How long to keep retrying the connection after launching the app, or while an already
+    /// running instance is busy serving another connection.
+    /// </summary>
+    private static readonly TimeSpan LaunchWaitTimeout = TimeSpan.FromSeconds(10);
+
+    /// <summary>
+    /// Delay between connection attempts while waiting.
+    /// </summary>
+    private static readonly TimeSpan RetryInterval = TimeSpan.FromMilliseconds(200);
 
     // Relative path arguments need no rewriting here: CliPipeClient sends this process's working
     // directory along with the args, and the app resolves paths against it.
@@ -22,16 +30,21 @@ public static class Program
             return CliOutputRenderer.Render(response);
         }
 
-        if (!TryLaunchApp())
+        // The request was not delivered. Either no instance is running, or one is but didn't
+        // accept the connection in time — its pipe serves one connection at a time, so a long
+        // command from another mdrive keeps it busy. Launching the exe in the latter case would
+        // only pop the second instance's "already running" dialog, so just wait for it instead.
+        var alreadyRunning = AppInstance.IsRunning();
+        if (!alreadyRunning && !TryLaunchApp())
         {
             await Console.Error.WriteLineAsync("Could not find or start ManagedDrive.exe.");
             return 1;
         }
 
-        var deadline = Environment.TickCount64 + LaunchWaitTimeoutMs;
+        var deadline = Environment.TickCount64 + (long)LaunchWaitTimeout.TotalMilliseconds;
         while (Environment.TickCount64 < deadline)
         {
-            await Task.Delay(RetryIntervalMs);
+            await Task.Delay(RetryInterval);
 
             if (CliPipeClient.TrySend(args, out response))
             {
@@ -39,7 +52,9 @@ public static class Program
             }
         }
 
-        await Console.Error.WriteLineAsync("Timed out waiting for ManagedDrive to start.");
+        await Console.Error.WriteLineAsync(alreadyRunning
+            ? "Timed out waiting for ManagedDrive to accept the command; it may be busy with another one."
+            : "Timed out waiting for ManagedDrive to start.");
         return 1;
     }
 

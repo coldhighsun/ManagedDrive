@@ -37,7 +37,7 @@ public sealed class CliPipeClientTests : IDisposable
     }
 
     [Fact(Timeout = 10_000)]
-    public async Task TrySend_ServerAcceptsButNeverResponds_ReturnsFalseWithoutHangingPastTheOverriddenTimeout()
+    public async Task TrySend_ServerAcceptsButNeverResponds_ReturnsTrueWithNoResponseFailureWithoutHanging()
     {
         var pipeName = CliPipeClient.TestPipeNameOverride!;
 
@@ -63,18 +63,100 @@ public sealed class CliPipeClientTests : IDisposable
 
         var stopwatch = Stopwatch.StartNew();
 
-        var connected = CliPipeClient.TrySend(["list"], out var response);
+        var answered = CliPipeClient.TrySend(["list"], out var response);
 
         stopwatch.Stop();
 
-        Assert.False(connected);
+        // The request was delivered, so the caller must report the failure rather than resend it.
+        Assert.True(answered);
         Assert.False(response.Success);
+        Assert.Equal(1, response.ExitCode);
+        Assert.Equal(CliPipeClient.NoResponseMessage, response.Message);
         Assert.True(
             stopwatch.Elapsed < TimeSpan.FromSeconds(5),
             $"TrySend blocked for {stopwatch.Elapsed}; the overridden 200ms read timeout should have cancelled the read.");
 
         serverCts.Cancel();
         await AwaitIgnoringCancellationAsync(serverTask);
+    }
+
+    [Fact(Timeout = 10_000)]
+    public async Task TrySend_ServerClosesAfterReadingRequest_ReturnsTrueWithConnectionClosedFailure()
+    {
+        var pipeName = CliPipeClient.TestPipeNameOverride!;
+
+        using var server = new NamedPipeServerStream(
+            pipeName, PipeDirection.InOut, 1, PipeTransmissionMode.Byte, PipeOptions.Asynchronous);
+        var serverTask = Task.Run(async () =>
+        {
+            await server.WaitForConnectionAsync(TestContext.Current.CancellationToken);
+
+            using var reader = new StreamReader(server, leaveOpen: true);
+            await reader.ReadLineAsync(TestContext.Current.CancellationToken);
+            server.Disconnect();
+        }, TestContext.Current.CancellationToken);
+
+        var answered = CliPipeClient.TrySend(["unmount", "R:"], out var response);
+
+        await serverTask;
+        Assert.True(answered);
+        Assert.False(response.Success);
+        Assert.Equal(1, response.ExitCode);
+        Assert.Equal(CliPipeClient.ConnectionClosedMessage, response.Message);
+    }
+
+    [Fact(Timeout = 10_000)]
+    public async Task TrySend_ServerRespondsWithMalformedJson_ReturnsTrueWithInvalidResponseFailure()
+    {
+        var pipeName = CliPipeClient.TestPipeNameOverride!;
+
+        using var server = new NamedPipeServerStream(
+            pipeName, PipeDirection.InOut, 1, PipeTransmissionMode.Byte, PipeOptions.Asynchronous);
+        var serverTask = Task.Run(async () =>
+        {
+            await server.WaitForConnectionAsync(TestContext.Current.CancellationToken);
+
+            using var reader = new StreamReader(server, leaveOpen: true);
+            await using var writer = new StreamWriter(server, leaveOpen: true) { AutoFlush = true };
+            await reader.ReadLineAsync(TestContext.Current.CancellationToken);
+            await writer.WriteLineAsync("{not json");
+        }, TestContext.Current.CancellationToken);
+
+        var answered = CliPipeClient.TrySend(["list"], out var response);
+
+        await serverTask;
+        Assert.True(answered);
+        Assert.False(response.Success);
+        Assert.Equal(CliPipeClient.InvalidResponseMessage, response.Message);
+    }
+
+    [Fact(Timeout = 10_000)]
+    public async Task TrySend_ServerDropsConnectionRightAfterAccepting_DoesNotThrow()
+    {
+        var pipeName = CliPipeClient.TestPipeNameOverride!;
+
+        using var server = new NamedPipeServerStream(
+            pipeName, PipeDirection.InOut, 1, PipeTransmissionMode.Byte, PipeOptions.Asynchronous);
+        var serverTask = Task.Run(async () =>
+        {
+            await server.WaitForConnectionAsync(TestContext.Current.CancellationToken);
+            server.Disconnect();
+        }, TestContext.Current.CancellationToken);
+
+        var answered = false;
+        CliResponse? response = null;
+        var exception = Record.Exception(() =>
+        {
+            answered = CliPipeClient.TrySend(["list"], out var r);
+            response = r;
+        });
+
+        await serverTask;
+
+        // Depending on whether the drop lands before or after the request is written, this is
+        // either "not delivered" (false) or a delivered-but-unanswered failure — never a throw.
+        Assert.Null(exception);
+        Assert.False(answered && response!.Success);
     }
 
     [Fact]
