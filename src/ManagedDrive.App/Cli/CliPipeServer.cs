@@ -1,6 +1,7 @@
 using ManagedDrive.Cli.Core;
 using ManagedDrive.HelperProtocol;
 using System.IO.Pipes;
+using System.Security.Principal;
 using ThrottledLogging;
 
 namespace ManagedDrive.App.Cli;
@@ -99,18 +100,13 @@ public sealed class CliPipeServer(MainViewModel mainViewModel) : IDisposable
             NamedPipeServerStream pipe;
             try
             {
-                pipe = new(
-                    CliPipeProtocol.PipeName,
-                    PipeDirection.InOut,
-                    1,
-                    PipeTransmissionMode.Byte,
-                    PipeOptions.Asynchronous);
+                pipe = CreatePipe(CliPipeProtocol.PipeName);
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
                 Logger.LogWarningThrottled(
                     "cli-pipe-create-failed", TimeSpan.FromMinutes(5),
-                    "Failed to create the CLI pipe; retrying: {Error}", ex.Message);
+                    "Failed to create the CLI pipe (another process may be holding its name); retrying: {Error}", ex.Message);
                 if (!await DelayUnlessCancelledAsync(AcceptRetryDelay, ct))
                 {
                     return;
@@ -151,6 +147,32 @@ public sealed class CliPipeServer(MainViewModel mainViewModel) : IDisposable
                 }
             }
         }
+    }
+
+    /// <summary>
+    /// Creates the listening end of the CLI pipe. Only this process's token owner may connect —
+    /// the user, or <c>BUILTIN\Administrators</c> when elevated, so the same user's unelevated
+    /// processes can't drive an elevated instance — and never a remote client. Created as the
+    /// name's first instance, failing if another process already holds the name: joining that
+    /// process's pipe would let it take over some of this instance's clients.
+    /// </summary>
+    /// <param name="pipeName">The pipe name.</param>
+    /// <returns>The pipe, waiting for a connection.</returns>
+    /// <exception cref="UnauthorizedAccessException">Another process already holds the name.</exception>
+    internal static NamedPipeServerStream CreatePipe(string pipeName)
+    {
+        using var identity = WindowsIdentity.GetCurrent();
+        var owner = identity.Owner ?? identity.User!;
+
+        return NamedPipeServerStreamAcl.Create(
+            pipeName,
+            PipeDirection.InOut,
+            maxNumberOfServerInstances: 1,
+            PipeTransmissionMode.Byte,
+            PipeOptions.Asynchronous | PipeOptions.FirstPipeInstance,
+            inBufferSize: 0,
+            outBufferSize: 0,
+            PipeSecurityRules.CreateOwnerOnlySecurity(owner));
     }
 
     /// <summary>

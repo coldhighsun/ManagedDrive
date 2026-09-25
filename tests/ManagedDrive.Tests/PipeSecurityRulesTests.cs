@@ -79,6 +79,26 @@ public sealed class PipeSecurityRulesTests
     }
 
     /// <summary>
+    /// The descriptor admits only the owner, denies remote clients, and records the owner.
+    /// </summary>
+    [Fact]
+    public void CreateOwnerOnlySecurity_AnyOwner_AllowsOnlyThatOwnerDeniesRemoteClientsAndSetsOwner()
+    {
+        var security = PipeSecurityRules.CreateOwnerOnlySecurity(User);
+
+        var rules = security.GetAccessRules(includeExplicit: true, includeInherited: false, typeof(SecurityIdentifier))
+            .Cast<PipeAccessRule>()
+            .Select(r => (Sid: (SecurityIdentifier)r.IdentityReference, r.AccessControlType, r.PipeAccessRights))
+            .ToList();
+        Assert.Equal(2, rules.Count);
+        Assert.Contains((User, AccessControlType.Allow, PipeAccessRights.FullControl), rules);
+        Assert.Contains(
+            (new SecurityIdentifier(WellKnownSidType.NetworkSid, null), AccessControlType.Deny, PipeAccessRights.FullControl),
+            rules);
+        Assert.Equal(User, security.GetOwner(typeof(SecurityIdentifier)));
+    }
+
+    /// <summary>
     /// The client end of a connection reads the owner the server created the pipe with.
     /// </summary>
     [Fact]
