@@ -141,7 +141,14 @@ internal static class SnapshotStore
         _ = reader.ReadString(); // volumeLabel
 
         var count = reader.ReadInt32();
-        var entries = new List<SnapshotEntry>(count);
+        if (count < 0)
+        {
+            throw new InvalidDataException($"Invalid node count {count} in snapshot index.");
+        }
+
+        // Capped so a corrupt count can't force a huge up-front allocation; the reads below
+        // hit end-of-stream long before a bogus count is reached.
+        var entries = new List<SnapshotEntry>(Math.Min(count, 4096));
 
         for (var i = 0; i < count; i++)
         {
