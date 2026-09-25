@@ -123,8 +123,7 @@ public sealed class MountManager : IDisposable
         // (e.g. the final 1.0 report below, or a delayed UI-thread dispatch of a mid-save
         // tick) would throw ObjectDisposedException.
         var totalBytesByDisk = new ulong[count];
-        var progressByDisk = new double[count];
-        var progressLock = new Lock();
+        var aggregator = new DisposeProgressAggregator(count);
 
         for (var i = 0; i < count; i++)
         {
@@ -139,15 +138,8 @@ public sealed class MountManager : IDisposable
                 return;
             }
 
-            double overall;
-
-            lock (progressLock)
-            {
-                progressByDisk[diskIndex] = diskProgress;
-                overall = progressByDisk.Sum() / count;
-            }
-
-            onProgress(all[diskIndex], diskProgress, overall, totalBytesByDisk[diskIndex]);
+            var (reported, overall) = aggregator.Report(diskIndex, diskProgress);
+            onProgress(all[diskIndex], reported, overall, totalBytesByDisk[diskIndex]);
         }
 
         // Each disk's own save already parallelizes its Zstd compression internally, so disks
@@ -158,7 +150,9 @@ public sealed class MountManager : IDisposable
         {
             ReportOverall(i, 0.0);
 
-            var perDiskProgress = onProgress is null ? null : new Progress<double>(p => ReportOverall(i, p));
+            // Reported synchronously: Progress<T> would post each report to the thread pool, so a
+            // late mid-save report could land after the final 1.0 below and drag progress back.
+            var perDiskProgress = onProgress is null ? null : new SynchronousProgress(p => ReportOverall(i, p));
             all[i].Dispose(perDiskProgress);
 
             ReportOverall(i, 1.0);
@@ -326,6 +320,54 @@ public sealed class MountManager : IDisposable
         catch (Exception ex)
         {
             Logger.LogWarning(ex, "ActivityDetected subscriber threw during activity poll.");
+        }
+    }
+
+    /// <summary>
+    /// An <see cref="IProgress{T}"/> that invokes its callback on the reporting thread.
+    /// </summary>
+    /// <param name="onReport">Invoked with each reported value.</param>
+    private sealed class SynchronousProgress(Action<double> onReport) : IProgress<double>
+    {
+        /// <inheritdoc />
+        public void Report(double value) => onReport(value);
+    }
+}
+
+/// <summary>
+/// Combines the save progress of disks disposed concurrently into an overall fraction. Each
+/// disk's progress only moves forward, so the overall fraction never goes back either, even if
+/// reports arrive out of order.
+/// </summary>
+/// <param name="diskCount">Number of disks being disposed; must be positive.</param>
+internal sealed class DisposeProgressAggregator(int diskCount)
+{
+    /// <summary>
+    /// Furthest progress reported so far for each disk, in [0, 1].
+    /// </summary>
+    private readonly double[] _progressByDisk = new double[diskCount];
+
+    /// <summary>
+    /// Guards <see cref="_progressByDisk"/> against concurrent reports.
+    /// </summary>
+    private readonly Lock _lock = new();
+
+    /// <summary>
+    /// Records a progress report for one disk.
+    /// </summary>
+    /// <param name="diskIndex">Index of the reporting disk.</param>
+    /// <param name="diskProgress">The disk's reported progress.</param>
+    /// <returns>
+    /// The disk's progress to show (never lower than an earlier report) and the average across
+    /// all disks.
+    /// </returns>
+    public (double DiskProgress, double Overall) Report(int diskIndex, double diskProgress)
+    {
+        lock (_lock)
+        {
+            var progress = Math.Max(_progressByDisk[diskIndex], Math.Clamp(diskProgress, 0.0, 1.0));
+            _progressByDisk[diskIndex] = progress;
+            return (progress, _progressByDisk.Sum() / _progressByDisk.Length);
         }
     }
 }
