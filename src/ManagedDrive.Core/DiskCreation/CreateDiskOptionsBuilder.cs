@@ -128,7 +128,11 @@ public sealed record CreateDiskInput
     /// <summary>Whether <see cref="CapacityValue"/> is in GB (<c>true</c>) or MB (<c>false</c>).</summary>
     public bool CapacityIsGb { get; init; }
 
-    /// <summary>The maximum allowed capacity display value for the selected unit.</summary>
+    /// <summary>
+    /// The maximum allowed capacity display value for the selected unit. A larger value is still
+    /// accepted when it is the unchanged <see cref="OriginalCapacityBytes"/>, so editing a disk
+    /// created on a machine with more memory (or grown by loading its image) keeps its capacity.
+    /// </summary>
     public int MaxCapacityValue { get; init; }
 
     /// <summary>The entered volume label (used in non-import modes).</summary>
@@ -149,11 +153,25 @@ public sealed record CreateDiskInput
     /// <summary>The auto-save interval, in minutes.</summary>
     public int IntervalValue { get; init; }
 
+    /// <summary>
+    /// The edited disk's auto-save interval when the dialog opened (edit mode), or <c>null</c>
+    /// otherwise. Accepted even above the 1-60 range offered for new values, so a longer interval
+    /// set through the CLI survives an unrelated edit.
+    /// </summary>
+    public uint? OriginalAutoSaveIntervalMinutes { get; init; }
+
     /// <summary>Whether snapshot count pruning is enabled.</summary>
     public bool SnapshotCountEnabled { get; init; }
 
     /// <summary>The maximum snapshot count.</summary>
     public int SnapshotCountValue { get; init; }
+
+    /// <summary>
+    /// The edited disk's maximum snapshot count when the dialog opened (edit mode), or
+    /// <c>null</c> otherwise. Accepted even above the 1-20 range offered for new values, so a
+    /// larger limit set through the CLI survives an unrelated edit.
+    /// </summary>
+    public uint? OriginalMaxSnapshotCount { get; init; }
 
     /// <summary>Whether snapshot size pruning is enabled.</summary>
     public bool SnapshotSizeEnabled { get; init; }
@@ -169,6 +187,16 @@ public sealed record CreateDiskInput
 
     /// <summary>The high-usage warning percentage.</summary>
     public int HighUsageWarnPercentValue { get; init; }
+
+    /// <summary>
+    /// The edited disk's high-usage warning percentage when the dialog opened (edit mode), or
+    /// <c>null</c> otherwise. Kept exactly while <see cref="HighUsageWarnPercentValue"/> is still
+    /// its <see cref="CreateDiskOptionsBuilder.ToHighUsageWarnPercentValue"/> slider position, so
+    /// a fractional value or 100 set through the CLI survives an unrelated edit; an invalid value
+    /// (see <see cref="CreateDiskOptionsBuilder.CanKeepHighUsageWarnPercent"/>) is replaced by
+    /// the slider position instead.
+    /// </summary>
+    public double? OriginalHighUsageWarnPercent { get; init; }
 
     /// <summary>The selected compression level.</summary>
     public ImageCompressionLevel CompressionLevel { get; init; } = ImageCompressionLevel.Fastest;
@@ -271,15 +299,18 @@ public static class CreateDiskOptionsBuilder
         }
         else
         {
-            if (input.CapacityValue <= 0 || input.CapacityValue > input.MaxCapacityValue)
+            ulong? unchangedCapacityBytes = input.OriginalCapacityBytes is { } original &&
+                ByteUnitConverter.SplitToUnit(original) == (input.CapacityValue, input.CapacityIsGb)
+                    ? original
+                    : null;
+            if (input.CapacityValue <= 0 ||
+                (input.CapacityValue > input.MaxCapacityValue && unchangedCapacityBytes is null))
             {
                 return Fail(CreateDiskValidationError.BadCapacity);
             }
 
-            capacityBytes = input.OriginalCapacityBytes is { } original &&
-                ByteUnitConverter.SplitToUnit(original) == (input.CapacityValue, input.CapacityIsGb)
-                    ? original
-                    : ByteUnitConverter.ToBytes(input.CapacityValue, input.CapacityIsGb);
+            capacityBytes = unchangedCapacityBytes
+                ?? ByteUnitConverter.ToBytes(input.CapacityValue, input.CapacityIsGb);
         }
 
         var imagePath = string.IsNullOrWhiteSpace(input.ImagePathText)
@@ -318,7 +349,8 @@ public static class CreateDiskOptionsBuilder
                 return Fail(CreateDiskValidationError.AutoSaveNoImage);
             }
 
-            if (input.IntervalValue < 1 || input.IntervalValue > 60)
+            if (input.IntervalValue < 1 ||
+                (input.IntervalValue > 60 && input.IntervalValue != input.OriginalAutoSaveIntervalMinutes))
             {
                 return Fail(CreateDiskValidationError.BadAutoSaveInterval);
             }
@@ -332,7 +364,8 @@ public static class CreateDiskOptionsBuilder
         {
             if (input.SnapshotCountEnabled)
             {
-                if (input.SnapshotCountValue < 1 || input.SnapshotCountValue > 20)
+                if (input.SnapshotCountValue < 1 ||
+                    (input.SnapshotCountValue > 20 && input.SnapshotCountValue != input.OriginalMaxSnapshotCount))
                 {
                     return Fail(CreateDiskValidationError.BadSnapshotCount);
                 }
@@ -514,11 +547,39 @@ public static class CreateDiskOptionsBuilder
         return new() { Options = options };
     }
 
+    /// <summary>
+    /// Returns the whole-percent slider position (1-99) the dialog shows for a stored high-usage
+    /// warning percentage.
+    /// </summary>
+    /// <param name="percent">The stored percentage.</param>
+    /// <returns>
+    /// The percentage truncated and clamped to the slider's 1-99 range; 99 for <c>NaN</c>.
+    /// </returns>
+    public static int ToHighUsageWarnPercentValue(double percent) =>
+        double.IsNaN(percent) ? 99 : (int)Math.Clamp(percent, 1, 99);
+
+    /// <summary>
+    /// Returns whether a stored high-usage warning percentage is meaningful enough to keep as-is
+    /// on edit: above 0 (which would warn on an empty disk) and at most 100. <c>NaN</c> fails both
+    /// comparisons.
+    /// </summary>
+    /// <param name="percent">The stored percentage.</param>
+    /// <returns><c>true</c> if an unchanged edit may keep <paramref name="percent"/>.</returns>
+    public static bool CanKeepHighUsageWarnPercent(double percent) => percent is > 0 and <= 100;
+
     private static bool TryResolveHighUsagePercent(CreateDiskInput input, out double? highUsageWarnPercent)
     {
         highUsageWarnPercent = null;
         if (!input.HighUsageWarnEnabled)
         {
+            return true;
+        }
+
+        if (input.OriginalHighUsageWarnPercent is { } original &&
+            CanKeepHighUsageWarnPercent(original) &&
+            input.HighUsageWarnPercentValue == ToHighUsageWarnPercentValue(original))
+        {
+            highUsageWarnPercent = original;
             return true;
         }
 

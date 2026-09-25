@@ -461,6 +461,235 @@ public sealed class CreateDiskOptionsBuilderTests
         Assert.Equal(200UL * 1024 * 1024, result.Options!.CapacityBytes);
     }
 
+    /// <summary>
+    /// Editing a disk larger than this machine's current limit keeps its capacity when the
+    /// capacity field is left alone.
+    /// </summary>
+    [Fact]
+    public void Build_EditCapacityAboveMaximumUnchanged_KeepsOriginalCapacity()
+    {
+        const ulong original = 8UL * 1024 * 1024 * 1024;
+        var input = ValidCreateInput() with
+        {
+            Mode = CreateDiskMode.Edit,
+            OriginalCapacityBytes = original,
+            CapacityValue = 8,
+            CapacityIsGb = true,
+            MaxCapacityValue = 4,
+        };
+
+        var result = CreateDiskOptionsBuilder.Build(input);
+
+        Assert.True(result.Success);
+        Assert.Equal(original, result.Options!.CapacityBytes);
+    }
+
+    /// <summary>
+    /// A new capacity above the limit is still rejected, even while editing a disk that was
+    /// already above it.
+    /// </summary>
+    [Fact]
+    public void Build_EditCapacityChangedAboveMaximum_ReturnsBadCapacity()
+    {
+        var input = ValidCreateInput() with
+        {
+            Mode = CreateDiskMode.Edit,
+            OriginalCapacityBytes = 8UL * 1024 * 1024 * 1024,
+            CapacityValue = 6,
+            CapacityIsGb = true,
+            MaxCapacityValue = 4,
+        };
+
+        var result = CreateDiskOptionsBuilder.Build(input);
+
+        Assert.Equal(CreateDiskValidationError.BadCapacity, result.Error);
+    }
+
+    /// <summary>
+    /// An auto-save interval above 60 minutes set through the CLI survives an edit that leaves
+    /// it unchanged; a different out-of-range value is still rejected.
+    /// </summary>
+    /// <param name="interval">The interval the dialog submits.</param>
+    /// <param name="expectedError">The expected validation error.</param>
+    [Theory]
+    [InlineData(120, CreateDiskValidationError.None)]
+    [InlineData(90, CreateDiskValidationError.BadAutoSaveInterval)]
+    public void Build_EditIntervalAboveRange_AcceptsOnlyTheOriginalInterval(
+        int interval, CreateDiskValidationError expectedError)
+    {
+        var dir = Directory.CreateTempSubdirectory();
+        try
+        {
+            var input = ValidCreateInput() with
+            {
+                Mode = CreateDiskMode.Edit,
+                ImagePathText = Path.Combine(dir.FullName, "disk.mdr"),
+                AutoSaveEnabled = true,
+                IntervalValue = interval,
+                OriginalAutoSaveIntervalMinutes = 120,
+            };
+
+            var result = CreateDiskOptionsBuilder.Build(input);
+
+            Assert.Equal(expectedError, result.Error);
+            if (expectedError == CreateDiskValidationError.None)
+            {
+                Assert.Equal(120u, result.Options!.AutoSaveIntervalMinutes);
+            }
+        }
+        finally
+        {
+            dir.Delete(recursive: true);
+        }
+    }
+
+    /// <summary>
+    /// A snapshot count limit above 20 set through the CLI survives an edit that leaves it
+    /// unchanged; a different out-of-range value is still rejected.
+    /// </summary>
+    /// <param name="count">The snapshot count the dialog submits.</param>
+    /// <param name="expectedError">The expected validation error.</param>
+    [Theory]
+    [InlineData(50, CreateDiskValidationError.None)]
+    [InlineData(30, CreateDiskValidationError.BadSnapshotCount)]
+    public void Build_EditSnapshotCountAboveRange_AcceptsOnlyTheOriginalCount(
+        int count, CreateDiskValidationError expectedError)
+    {
+        var dir = Directory.CreateTempSubdirectory();
+        try
+        {
+            var input = ValidCreateInput() with
+            {
+                Mode = CreateDiskMode.Edit,
+                ImagePathText = Path.Combine(dir.FullName, "disk.mdr"),
+                AutoSaveEnabled = true,
+                IntervalValue = 10,
+                SnapshotCountEnabled = true,
+                SnapshotCountValue = count,
+                OriginalMaxSnapshotCount = 50,
+            };
+
+            var result = CreateDiskOptionsBuilder.Build(input);
+
+            Assert.Equal(expectedError, result.Error);
+            if (expectedError == CreateDiskValidationError.None)
+            {
+                Assert.Equal(50u, result.Options!.MaxSnapshotCount);
+            }
+        }
+        finally
+        {
+            dir.Delete(recursive: true);
+        }
+    }
+
+    /// <summary>
+    /// A high-usage percentage the slider can't represent exactly (fractional, or outside 1-99
+    /// from the CLI) is kept while the slider stays on the position it was shown at.
+    /// </summary>
+    /// <param name="original">The edited disk's stored percentage.</param>
+    [Theory]
+    [InlineData(85.5)]
+    [InlineData(100.0)]
+    public void Build_EditHighUsagePercentUnchanged_KeepsOriginalPercent(double original)
+    {
+        var input = ValidCreateInput() with
+        {
+            Mode = CreateDiskMode.Edit,
+            HighUsageWarnEnabled = true,
+            HighUsageWarnPercentValue = CreateDiskOptionsBuilder.ToHighUsageWarnPercentValue(original),
+            OriginalHighUsageWarnPercent = original,
+        };
+
+        var result = CreateDiskOptionsBuilder.Build(input);
+
+        Assert.True(result.Success);
+        Assert.Equal(original, result.Options!.HighUsageWarnPercent);
+    }
+
+    /// <summary>
+    /// Moving the slider away from the original percentage's position saves the new value.
+    /// </summary>
+    [Fact]
+    public void Build_EditHighUsagePercentChanged_UsesNewPercent()
+    {
+        var input = ValidCreateInput() with
+        {
+            Mode = CreateDiskMode.Edit,
+            HighUsageWarnEnabled = true,
+            HighUsageWarnPercentValue = 80,
+            OriginalHighUsageWarnPercent = 85.5,
+        };
+
+        var result = CreateDiskOptionsBuilder.Build(input);
+
+        Assert.True(result.Success);
+        Assert.Equal(80.0, result.Options!.HighUsageWarnPercent);
+    }
+
+    /// <summary>
+    /// An invalid stored percentage (0, above 100, or <c>NaN</c>) is not written back; the slider
+    /// position it was shown at is saved instead.
+    /// </summary>
+    /// <param name="original">The edited disk's stored percentage.</param>
+    /// <param name="expected">The expected saved percentage.</param>
+    [Theory]
+    [InlineData(0.0, 1.0)]
+    [InlineData(150.0, 99.0)]
+    [InlineData(double.NaN, 99.0)]
+    public void Build_EditHighUsagePercentInvalidOriginal_SavesSliderPosition(double original, double expected)
+    {
+        var input = ValidCreateInput() with
+        {
+            Mode = CreateDiskMode.Edit,
+            HighUsageWarnEnabled = true,
+            HighUsageWarnPercentValue = CreateDiskOptionsBuilder.ToHighUsageWarnPercentValue(original),
+            OriginalHighUsageWarnPercent = original,
+        };
+
+        var result = CreateDiskOptionsBuilder.Build(input);
+
+        Assert.True(result.Success);
+        Assert.Equal(expected, result.Options!.HighUsageWarnPercent);
+    }
+
+    /// <summary>
+    /// Only a percentage above 0 and at most 100 is kept as-is on edit.
+    /// </summary>
+    /// <param name="percent">The stored percentage.</param>
+    /// <param name="expected">Whether it may be kept.</param>
+    [Theory]
+    [InlineData(85.5, true)]
+    [InlineData(100.0, true)]
+    [InlineData(0.0, false)]
+    [InlineData(100.5, false)]
+    [InlineData(double.NaN, false)]
+    public void CanKeepHighUsageWarnPercent_Percent_ReturnsWhetherValid(double percent, bool expected)
+    {
+        var canKeep = CreateDiskOptionsBuilder.CanKeepHighUsageWarnPercent(percent);
+
+        Assert.Equal(expected, canKeep);
+    }
+
+    /// <summary>
+    /// The slider position for a stored percentage truncates and clamps it to 1-99, and maps
+    /// <c>NaN</c> to 99.
+    /// </summary>
+    /// <param name="percent">The stored percentage.</param>
+    /// <param name="expected">The expected slider position.</param>
+    [Theory]
+    [InlineData(85.5, 85)]
+    [InlineData(90.0, 90)]
+    [InlineData(100.0, 99)]
+    [InlineData(0.0, 1)]
+    [InlineData(double.NaN, 99)]
+    public void ToHighUsageWarnPercentValue_Percent_ReturnsSliderPosition(double percent, int expected)
+    {
+        var value = CreateDiskOptionsBuilder.ToHighUsageWarnPercentValue(percent);
+
+        Assert.Equal(expected, value);
+    }
+
     private static CreateDiskInput EncryptedInput(out DirectoryInfo dir, string p1, string p2)
     {
         dir = Directory.CreateTempSubdirectory();

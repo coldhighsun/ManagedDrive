@@ -29,6 +29,15 @@ public partial class CreateDiskDialog
     /// not truncate a non-whole-MB capacity.
     /// </summary>
     private readonly ulong? _originalCapacityBytes;
+
+    /// <summary>
+    /// The edited disk's high-usage warning percentage, or <c>null</c> outside edit mode (or when
+    /// the warning was off, or the stored value can't be kept; see
+    /// <see cref="CreateDiskOptionsBuilder.CanKeepHighUsageWarnPercent"/>). Passed to
+    /// <see cref="CreateDiskInput.OriginalHighUsageWarnPercent"/> and shown as-is while the
+    /// slider stays on its position.
+    /// </summary>
+    private readonly double? _originalHighUsageWarnPercent;
     private readonly string? _originalPassword;
     private readonly IReadOnlyList<DiskOptions> _otherDisks;
     private readonly bool _wasEncrypted;
@@ -37,6 +46,42 @@ public partial class CreateDiskDialog
     private int _customZstdLevelValue = 3;
     private int _highUsageWarnPercentValue = 90;
     private int _intervalValue = 10;
+
+    /// <summary>
+    /// Upper bound of <see cref="AutoSaveIntervalSlider"/>: 60 minutes, or the edited disk's own
+    /// longer interval so opening the dialog doesn't silently shorten it.
+    /// </summary>
+    private int _intervalMaximum = NormalIntervalMaximum;
+
+    /// <summary>
+    /// The longest auto-save interval, in minutes, offered for new values; matches
+    /// <see cref="CreateDiskOptionsBuilder"/>'s range.
+    /// </summary>
+    private const int NormalIntervalMaximum = 60;
+
+    /// <summary>
+    /// The largest snapshot count limit offered for new values; matches
+    /// <see cref="CreateDiskOptionsBuilder"/>'s range.
+    /// </summary>
+    private const int NormalSnapshotCountMaximum = 20;
+
+    /// <summary>
+    /// The edited disk's auto-save interval, or <c>null</c> outside edit mode (or when it had
+    /// auto-save off). Passed to <see cref="CreateDiskInput.OriginalAutoSaveIntervalMinutes"/>.
+    /// </summary>
+    private uint? _originalAutoSaveIntervalMinutes;
+
+    /// <summary>
+    /// The edited disk's maximum snapshot count, or <c>null</c> outside edit mode (or when it had
+    /// no count limit). Passed to <see cref="CreateDiskInput.OriginalMaxSnapshotCount"/>.
+    /// </summary>
+    private uint? _originalMaxSnapshotCount;
+
+    /// <summary>
+    /// Upper bound of <see cref="SnapshotCountSlider"/>: 20, or the edited disk's own larger
+    /// limit so opening the dialog doesn't silently lower it.
+    /// </summary>
+    private int _snapshotCountMaximum = NormalSnapshotCountMaximum;
     private int _snapshotCountValue = 10;
     private int _snapshotSizeValue = 2;
 
@@ -137,7 +182,7 @@ public partial class CreateDiskDialog
         CapacityUnitBox.SelectedItem = capacityIsGb ? "GB" : "MB";
         _capacityValue = capacityValue;
 
-        _capacityMaximum = GetMaxCapacityValue();
+        _capacityMaximum = GetCapacityMaximum();
         CapacitySlider.Maximum = _capacityMaximum;
         UpdateCapacityDisplay();
 
@@ -157,17 +202,25 @@ public partial class CreateDiskDialog
 
         UpdateAutoSaveEnabledState();
 
-        if (existing is { AutoSaveIntervalMinutes: { } minutes, ReadOnly: false })
+        // An interval of 0 means auto-save is off (RamDisk only starts the timer for > 0), so
+        // it must not turn into a checked box with a 1-minute interval.
+        if (existing is { AutoSaveIntervalMinutes: { } minutes and > 0, ReadOnly: false })
         {
             AutoSaveBox.IsChecked = true;
             AutoSaveIntervalPanel.IsEnabled = true;
-            IntervalValue = (int)Math.Max(1, minutes);
+            _originalAutoSaveIntervalMinutes = minutes;
+            _intervalMaximum = CoverExistingValue(_intervalMaximum, minutes);
+            AutoSaveIntervalSlider.Maximum = _intervalMaximum;
+            IntervalValue = (int)Math.Min(minutes, (uint)_intervalMaximum);
 
             if (existing.MaxSnapshotCount is { } maxCount)
             {
                 SnapshotCountEnabledBox.IsChecked = true;
                 SnapshotCountPanel.IsEnabled = true;
-                SnapshotCountValue = (int)Math.Max(1, maxCount);
+                _originalMaxSnapshotCount = maxCount;
+                _snapshotCountMaximum = CoverExistingValue(_snapshotCountMaximum, maxCount);
+                SnapshotCountSlider.Maximum = _snapshotCountMaximum;
+                SnapshotCountValue = (int)Math.Min(maxCount, (uint)_snapshotCountMaximum);
             }
 
             if (existing.MaxSnapshotSizeBytes is { } maxSizeBytes)
@@ -177,7 +230,7 @@ public partial class CreateDiskDialog
 
                 var (sizeValue, sizeIsGb) = ByteUnitConverter.SplitToUnit(maxSizeBytes);
                 SnapshotSizeUnitBox.SelectedItem = sizeIsGb ? "GB" : "MB";
-                SnapshotSizeSlider.Maximum = GetMaxSnapshotSizeValue();
+                SnapshotSizeSlider.Maximum = CoverExistingValue(GetMaxSnapshotSizeValue(), (ulong)sizeValue);
                 SnapshotSizeValue = sizeValue;
             }
         }
@@ -185,7 +238,9 @@ public partial class CreateDiskDialog
         if (existing.HighUsageWarnPercent is { } warnPercent)
         {
             HighUsageWarnBox.IsChecked = true;
-            HighUsageWarnPercentValue = (int)Math.Clamp(warnPercent, 50, 90);
+            _originalHighUsageWarnPercent =
+                CreateDiskOptionsBuilder.CanKeepHighUsageWarnPercent(warnPercent) ? warnPercent : null;
+            HighUsageWarnPercentValue = CreateDiskOptionsBuilder.ToHighUsageWarnPercentValue(warnPercent);
         }
         else
         {
@@ -366,6 +421,12 @@ public partial class CreateDiskDialog
         set
         {
             _capacityValue = Math.Clamp(value, 1, _capacityMaximum);
+            if (CapacityUnitBox is not null)
+            {
+                _capacityValue = SnapAboveNormalRange(
+                    _capacityValue, GetMaxCapacityValue(), GetOriginalCapacityValueForSelectedUnit());
+            }
+
             UpdateCapacityDisplay();
         }
     }
@@ -388,7 +449,11 @@ public partial class CreateDiskDialog
         {
             _highUsageWarnPercentValue = Math.Clamp(value, 1, 99);
             HighUsageWarnPercentSlider.Value = _highUsageWarnPercentValue;
-            HighUsageWarnPercentValueText?.Text = $"{_highUsageWarnPercentValue}%";
+            HighUsageWarnPercentValueText?.Text =
+                _originalHighUsageWarnPercent is { } original &&
+                _highUsageWarnPercentValue == CreateDiskOptionsBuilder.ToHighUsageWarnPercentValue(original)
+                    ? $"{original:0.#}%"
+                    : $"{_highUsageWarnPercentValue}%";
         }
     }
 
@@ -397,7 +462,8 @@ public partial class CreateDiskDialog
         get => _intervalValue;
         set
         {
-            _intervalValue = Math.Clamp(value, 1, 60);
+            _intervalValue = SnapAboveNormalRange(
+                Math.Clamp(value, 1, _intervalMaximum), NormalIntervalMaximum, _originalAutoSaveIntervalMinutes);
             AutoSaveIntervalSlider.Value = _intervalValue;
             AutoSaveIntervalValueText?.Text = Loc.Format("CreateDisk.MinutesValue", _intervalValue);
         }
@@ -408,7 +474,8 @@ public partial class CreateDiskDialog
         get => _snapshotCountValue;
         set
         {
-            _snapshotCountValue = Math.Clamp(value, 1, 20);
+            _snapshotCountValue = SnapAboveNormalRange(
+                Math.Clamp(value, 1, _snapshotCountMaximum), NormalSnapshotCountMaximum, _originalMaxSnapshotCount);
             UpdateSnapshotCountDisplay();
         }
     }
@@ -475,13 +542,16 @@ public partial class CreateDiskDialog
             AutoMount = AutoMountBox.IsChecked == true,
             AutoSaveEnabled = AutoSaveBox.IsChecked == true,
             IntervalValue = _intervalValue,
+            OriginalAutoSaveIntervalMinutes = _originalAutoSaveIntervalMinutes,
             SnapshotCountEnabled = SnapshotCountEnabledBox.IsChecked == true,
             SnapshotCountValue = _snapshotCountValue,
+            OriginalMaxSnapshotCount = _originalMaxSnapshotCount,
             SnapshotSizeEnabled = SnapshotSizeEnabledBox.IsChecked == true,
             SnapshotSizeValue = _snapshotSizeValue,
             SnapshotSizeIsGb = SnapshotSizeUnitBox.SelectedItem as string == "GB",
             HighUsageWarnEnabled = HighUsageWarnBox.IsChecked == true,
             HighUsageWarnPercentValue = _highUsageWarnPercentValue,
+            OriginalHighUsageWarnPercent = _originalHighUsageWarnPercent,
             CompressionLevel = (CompressionLevelBox.SelectedItem as CompressionLevelItem)?.Level
                 ?? ImageCompressionLevel.Fastest,
             CustomZstdLevelEnabled = CustomZstdLevelRow.IsEnabled && CustomZstdLevelBox.IsChecked == true,
@@ -503,7 +573,7 @@ public partial class CreateDiskDialog
 
     private void CapacityUnitBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        _capacityMaximum = GetMaxCapacityValue();
+        _capacityMaximum = GetCapacityMaximum();
         CapacitySlider.Maximum = _capacityMaximum;
         if (_capacityValue > _capacityMaximum)
         {
@@ -558,6 +628,73 @@ public partial class CreateDiskDialog
     }
 
     private int ComputeMaxValueForUnit(bool isGb) => ByteUnitConverter.MaxValueForUnit(_maxCapacityBytes, isGb);
+
+    /// <summary>
+    /// Returns a slider maximum that also covers an edited disk's existing value, so pre-filling
+    /// the slider doesn't clamp a value set elsewhere (the CLI, or another machine) down to the
+    /// range offered for new values.
+    /// </summary>
+    /// <param name="defaultMaximum">The maximum offered for new values.</param>
+    /// <param name="existingValue">The edited disk's current value.</param>
+    /// <returns>The larger of the two, capped at <see cref="int.MaxValue"/>.</returns>
+    internal static int CoverExistingValue(int defaultMaximum, ulong existingValue) =>
+        (int)Math.Min(Math.Max((ulong)defaultMaximum, existingValue), int.MaxValue);
+
+    /// <summary>
+    /// Snaps a slider value in the extension <see cref="CoverExistingValue"/> added above the
+    /// normal range to whichever end is nearer: the normal maximum or the edited disk's existing
+    /// value. <see cref="CreateDiskOptionsBuilder"/> accepts nothing else up there, so the slider
+    /// must not offer values in between.
+    /// </summary>
+    /// <param name="value">The slider value, already clamped to the slider's range.</param>
+    /// <param name="normalMaximum">The maximum offered for new values.</param>
+    /// <param name="existingValue">
+    /// The edited disk's existing value, or <c>null</c> when the range isn't extended for it.
+    /// </param>
+    /// <returns>
+    /// <paramref name="value"/> itself when it is within the normal range (or there is no
+    /// extension); otherwise <paramref name="normalMaximum"/> or <paramref name="existingValue"/>.
+    /// </returns>
+    internal static int SnapAboveNormalRange(int value, int normalMaximum, ulong? existingValue)
+    {
+        if (value <= normalMaximum || existingValue is not { } existing || existing <= (ulong)normalMaximum)
+        {
+            return value;
+        }
+
+        var existingInt = (int)Math.Min(existing, int.MaxValue);
+        return (long)value - normalMaximum < (long)existingInt - value ? normalMaximum : existingInt;
+    }
+
+    /// <summary>
+    /// Returns the capacity slider's maximum for the selected unit: the available-memory limit,
+    /// extended to the edited disk's own capacity while that unit is the one it is shown in, so
+    /// a disk larger than this machine's available memory keeps its capacity when edited.
+    /// </summary>
+    /// <returns>The maximum capacity display value for the selected unit.</returns>
+    private int GetCapacityMaximum()
+    {
+        var maximum = GetMaxCapacityValue();
+        return GetOriginalCapacityValueForSelectedUnit() is { } original
+            ? CoverExistingValue(maximum, original)
+            : maximum;
+    }
+
+    /// <summary>
+    /// Returns the edited disk's capacity as a display value when the selected unit is the one
+    /// it is shown in, or <c>null</c> outside edit mode or for the other unit.
+    /// </summary>
+    /// <returns>The original capacity display value, or <c>null</c>.</returns>
+    private ulong? GetOriginalCapacityValueForSelectedUnit()
+    {
+        if (_originalCapacityBytes is not { } original)
+        {
+            return null;
+        }
+
+        var (value, isGb) = ByteUnitConverter.SplitToUnit(original);
+        return isGb == (CapacityUnitBox.SelectedItem as string == "GB") ? (ulong)value : null;
+    }
 
     private void EncryptImageBox_CheckedChanged(object sender, RoutedEventArgs e)
     {
