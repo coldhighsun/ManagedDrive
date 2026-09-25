@@ -522,6 +522,15 @@ public static class CreateDiskOptionsBuilder
 
     private static CreateDiskBuildResult ResolvePassword(CreateDiskInput input)
     {
+        if (input.IsReadOnly)
+        {
+            // A read-only disk never rewrites its image, so its encryption cannot change here —
+            // the dialog disables the checkbox then, so its state says nothing about intent.
+            // Treating it as unchecked would turn editing an encrypted read-only disk into
+            // "remove password protection".
+            return new() { PasswordChanged = false };
+        }
+
         if (!input.EncryptChecked)
         {
             // Explicitly unchecked while editing an already-encrypted disk means "remove

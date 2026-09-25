@@ -552,7 +552,7 @@ public partial class CreateDiskDialog
 
     private void EncryptImageBox_CheckedChanged(object sender, RoutedEventArgs e)
     {
-        PasswordPanel.IsEnabled = EncryptImageBox.IsChecked == true;
+        PasswordPanel.IsEnabled = EncryptImageBox.IsEnabled && EncryptImageBox.IsChecked == true;
         UpdatePasswordStrengthHint();
     }
 
@@ -774,10 +774,13 @@ public partial class CreateDiskDialog
         EncryptImageBox.IsEnabled = hasImagePath && ReadOnlyBox.IsChecked != true && !_isImportMode;
         if (!EncryptImageBox.IsEnabled)
         {
-            EncryptImageBox.IsChecked = false;
+            // Read-only alone leaves the image's encryption untouched (see
+            // CreateDiskOptionsBuilder.ResolvePassword), so show what the image actually has
+            // rather than an unchecked box that reads as "password removed".
+            EncryptImageBox.IsChecked = hasImagePath && !_isImportMode && _wasEncrypted;
         }
 
-        PasswordPanel.IsEnabled = EncryptImageBox.IsChecked == true;
+        PasswordPanel.IsEnabled = EncryptImageBox.IsEnabled && EncryptImageBox.IsChecked == true;
 
         UpdateAutoSaveIntervalPanelState();
         UpdateSnapshotEnabledState();
