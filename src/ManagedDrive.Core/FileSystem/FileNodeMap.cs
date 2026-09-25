@@ -311,15 +311,33 @@ public sealed class FileNodeMap : IDisposable
     /// <returns>
     /// A sequence of all (path, node) pairs currently stored in the map.
     /// </returns>
-    public IReadOnlyList<KeyValuePair<string, FileNode>> GetAllNodes()
+    public IReadOnlyList<KeyValuePair<string, FileNode>> GetAllNodes() => GetAllNodes(out _);
+
+    /// <summary>
+    /// Returns a snapshot of all nodes in the map, in sorted path order, together with each
+    /// node's <see cref="FileNode.MetadataVersion"/> as of the same instant. A rename changes a
+    /// node's path and bumps its version under one write-lock acquisition, so each captured
+    /// version is exactly the one that goes with the captured path — reading the versions later
+    /// instead could pair a pre-rename path with a post-rename version.
+    /// </summary>
+    /// <param name="metadataVersions">
+    /// Receives each node's metadata version, at the same index as the node in the result.
+    /// </param>
+    /// <returns>
+    /// A sequence of all (path, node) pairs currently stored in the map.
+    /// </returns>
+    internal IReadOnlyList<KeyValuePair<string, FileNode>> GetAllNodes(out ulong[] metadataVersions)
     {
         _syncRoot.EnterReadLock();
         try
         {
             var result = new List<KeyValuePair<string, FileNode>>(_map.Count);
+            metadataVersions = new ulong[_map.Count];
             foreach (var key in _sortedKeys)
             {
-                result.Add(new(key, _map[key]));
+                var node = _map[key];
+                metadataVersions[result.Count] = node.MetadataVersion;
+                result.Add(new(key, node));
             }
 
             return result;
@@ -740,6 +758,11 @@ public sealed class FileNodeMap : IDisposable
 
             RemoveCore(fileName);
             AddCore(newFileName, node);
+
+            // Bumped under the write lock, like the descendants' versions above, so a save that
+            // snapshots the map after this rename can never see the new path alongside the old
+            // version and reuse a segment still holding the node under its old path.
+            node.MetadataVersion++;
             return RenameConflict.None;
         }
         finally

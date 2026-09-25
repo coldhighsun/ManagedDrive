@@ -486,9 +486,10 @@ public static class DiskImageSerializer
         string imagePath,
         ImageCompressionLevel level,
         ImageEncryptionInfo? encryption,
-        long segmentTargetBytes)
+        long segmentTargetBytes,
+        IProgress<double>? progress = null)
     {
-        SaveSegmentedIncremental(nodeMap, capacityBytes, volumeLabel, imagePath, level, encryption, progress: null,
+        SaveSegmentedIncremental(nodeMap, capacityBytes, volumeLabel, imagePath, level, encryption, progress,
             customZstdLevel: null, segmentTargetBytes);
     }
 
@@ -1132,14 +1133,16 @@ public static class DiskImageSerializer
             Directory.CreateDirectory(directory);
         }
 
-        var nodes = nodeMap.GetAllNodes();
+        // Metadata versions are captured together with the paths: a node is written under its
+        // snapshot path, so a later read could credit that stale path with a concurrent rename's
+        // version and leave the rename out of every following incremental save.
+        var nodes = nodeMap.GetAllNodes(out var capturedMetadataVersion);
         var totalBytes = nodeMap.GetTotalAllocated();
 
         // Captured per node before writing, so the post-save version bookkeeping below reflects
         // exactly the state that was actually persisted, not whatever a concurrent WinFsp write
         // might have bumped it to while this save was in flight.
         var capturedContentVersion = new ulong[nodes.Count];
-        var capturedMetadataVersion = new ulong[nodes.Count];
         var nodeSegmentIndex = new int[nodes.Count];
 
         // Pass 1: decide segment boundaries by AllocationSize only (pure in-memory bookkeeping,
@@ -1158,7 +1161,6 @@ public static class DiskImageSerializer
             {
                 var kvp = nodes[cursor];
                 capturedContentVersion[cursor] = kvp.Value.ContentVersion;
-                capturedMetadataVersion[cursor] = kvp.Value.MetadataVersion;
                 nodeSegmentIndex[cursor] = segmentIndex;
                 chunk.Add(kvp);
                 segmentBytes += (long)kvp.Value.FileInfo.AllocationSize;
@@ -1294,7 +1296,7 @@ public static class DiskImageSerializer
     }
 
     private static void SaveSegmentedIncremental(
-                                                                FileNodeMap nodeMap,
+        FileNodeMap nodeMap,
         ulong capacityBytes,
         string volumeLabel,
         string imagePath,
@@ -1314,7 +1316,8 @@ public static class DiskImageSerializer
         }
 
         {
-            var nodes = nodeMap.GetAllNodes();
+            // Metadata versions captured with the paths, for the same reason as in SaveSegmented.
+            var nodes = nodeMap.GetAllNodes(out var capturedMetadataVersion);
 
             // Group each live node's array position by the segment it belonged to as of the last
             // save. Positions whose node was never saved (or whose recorded segment no longer
@@ -1443,7 +1446,6 @@ public static class DiskImageSerializer
             poolPositions.Sort();
 
             var capturedContentVersion = new ulong[nodes.Count];
-            var capturedMetadataVersion = new ulong[nodes.Count];
 
             // Pass 1: decide rewrite-pool segment boundaries only (pure in-memory bookkeeping),
             // same rationale as SaveSegmented above.
@@ -1460,7 +1462,6 @@ public static class DiskImageSerializer
                     var pos = poolPositions[cursor];
                     var node = nodes[pos].Value;
                     capturedContentVersion[pos] = node.ContentVersion;
-                    capturedMetadataVersion[pos] = node.MetadataVersion;
                     chunkPositions.Add(pos);
                     segmentBytes += (long)node.FileInfo.AllocationSize;
                     cursor++;

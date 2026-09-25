@@ -385,6 +385,56 @@ public sealed class DiskImageSerializerIncrementalTests
         }
     }
 
+    /// <summary>
+    /// A node renamed while an incremental save is in flight is written under the path the save
+    /// snapshotted, and must still count as changed afterwards, so the next save writes it under
+    /// its new path instead of reusing the stale segment forever.
+    /// </summary>
+    [Fact]
+    public void Save_NodeRenamedDuringSave_NextSaveWritesNewPath()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid()}.mdr");
+        try
+        {
+            var map = new FileNodeMap();
+            map.Add("\\", MakeDir());
+            map.Add("\\A.txt", MakeFile("a"u8.ToArray()));
+            var b = MakeFile("b"u8.ToArray());
+            map.Add("\\B.txt", b);
+
+            DiskImageSerializer.SaveSegmentedIncrementalForTest(map, 1024 * 1024, "Label", path,
+                ImageCompressionLevel.None, encryption: null, segmentTargetBytes: 1);
+
+            // B is dirty, so the second save rewrites it; the rename lands after the save took its
+            // snapshot (still holding B under its old path) but before it rewrites B.
+            b.ContentVersion++;
+            var renamed = false;
+            var renameDuringSave = new DelegateProgress(_ =>
+            {
+                if (!renamed)
+                {
+                    renamed = true;
+                    map.Rename("\\B.txt", "\\C.txt", b, replaceIfExists: false);
+                }
+            });
+            DiskImageSerializer.SaveSegmentedIncrementalForTest(map, 1024 * 1024, "Label", path,
+                ImageCompressionLevel.None, encryption: null, segmentTargetBytes: 1, renameDuringSave);
+
+            DiskImageSerializer.SaveSegmentedIncrementalForTest(map, 1024 * 1024, "Label", path,
+                ImageCompressionLevel.None, encryption: null, segmentTargetBytes: 1);
+
+            Assert.True(renamed);
+            var loaded = DiskImageSerializer.Load(path, out _, out _, password: null, out _);
+            Assert.False(loaded.TryGet("\\B.txt", out _));
+            Assert.True(loaded.TryGet("\\C.txt", out var loadedC));
+            Assert.Equal("b"u8.ToArray(), loadedC!.FileData!.ToArray((long)loadedC.FileInfo.FileSize));
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
     [Fact]
     public void Save_ExistingImageTruncated_FallsBackToFullRewriteAndStillLoads()
     {
@@ -419,6 +469,17 @@ public sealed class DiskImageSerializerIncrementalTests
         {
             File.Delete(path);
         }
+    }
+
+    /// <summary>
+    /// Progress sink that runs a callback synchronously on the reporting thread, unlike
+    /// <see cref="Progress{T}"/>, so a test can act at an exact point in a save.
+    /// </summary>
+    /// <param name="onReport">Called with each reported value.</param>
+    private sealed class DelegateProgress(Action<double> onReport) : IProgress<double>
+    {
+        /// <inheritdoc/>
+        public void Report(double value) => onReport(value);
     }
 
     private static FileNode MakeDir() => new()
