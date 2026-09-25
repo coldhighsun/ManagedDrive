@@ -81,101 +81,33 @@ public partial class App
         ConfigureServices();
         RegisterGlobalExceptionHandlers();
 
-        _settings = new();
-        var config = _settings.Load();
-        LanguageManager.Instance.ApplyDefault(config.Language);
-        ThemeManager.Instance.ApplyDefault(config.Theme);
-
-        _singleInstanceMutex = new(true, AppInstance.SingleInstanceMutexName, out var createdNew);
-        if (!createdNew)
+        AppConfiguration config;
+        try
         {
-            _singleInstanceMutex.Dispose();
-            _singleInstanceMutex = null;
-
-            if (e.Args.Length > 0)
+            _settings = new();
+            config = _settings.Load();
+            if (!StartUi(e.Args, _settings, config))
             {
-                // Launched with CLI-style args (e.g. from the Explorer context menu) while
-                // another instance is already running: forward the command to it instead of
-                // showing the "already running" dialog.
-                if (CliPipeClient.TrySend(e.Args, out var response) && response.ExitCode != 0)
-                {
-                    MessageBox.Show(response.Message, "ManagedDrive", MessageBoxButton.OK, MessageBoxImage.Warning);
-                }
-
-                Shutdown();
                 return;
             }
-
+        }
+        catch (Exception ex)
+        {
+            // Nothing is on screen yet, so the dispatcher handler's "log and keep running" would
+            // leave a windowless process behind — one still holding the single-instance mutex, so
+            // every later launch would just report "already running".
+            _logger.LogCritical(ex, "Startup failed");
             MessageBox.Show(
-                Loc.Get("Msg.AlreadyRunning"),
-                "ManagedDrive",
+                Loc.Format("Msg.StartupFailedBody", ex.Message),
+                Loc.Get("Msg.UnexpectedErrorTitle"),
                 MessageBoxButton.OK,
-                MessageBoxImage.Information);
-            Shutdown();
+                MessageBoxImage.Error);
+            Shutdown(1);
             return;
-        }
-
-        if (!CheckWinFspPrerequisite())
-        {
-            // Shutdown() only queues the exit; return so nothing below runs — in particular no
-            // MainViewModel gets created, so App_Exit has no (empty) disk list to save over the
-            // user's settings.
-            Shutdown();
-            return;
-        }
-
-        _mountManager = new();
-        _sessionEndingSaveHandler = new(
-            _mountManager,
-            () => _mainWindowHandle,
-            _serviceProvider!.GetRequiredService<ILogger<SessionEndingSaveHandler>>());
-        SystemEvents.SessionEnding += _sessionEndingSaveHandler.OnSessionEnding;
-        _mainViewModel = new(_mountManager, _settings, _serviceProvider!.GetRequiredService<ILogger<MainViewModel>>(), config.Disks);
-        _mainViewModel.ExitRequested += async (_, _) => await ShutdownAsync();
-        _mainWindow = new(_mainViewModel);
-        _mainWindow.Closing += MainWindow_Closing;
-        _mainWindow.IsVisibleChanged += OnMainWindowVisibleChanged;
-
-        // Force the HWND to exist now (on the UI thread) so SessionEndingSaveHandler can reference
-        // it from the SystemEvents thread even when the window stays hidden in the tray.
-        _mainWindowHandle = new WindowInteropHelper(_mainWindow).EnsureHandle();
-
-        var iconStream = GetResourceStream(new("pack://application:,,,/ManagedDrive.ico"))!.Stream;
-        _trayIconController = new(
-            Dispatcher, iconStream, _mainViewModel, ShowMainWindow, ShowMainWindowAndCreate, ResetTempDirsFromTrayAsync,
-            ShowMainWindowAndSettings, ShowAboutDialog, ExitApplication);
-        _trayTooltipController = new(_mainViewModel, _trayIconController);
-        _tempDirCompatChecker = new(_settings, _trayIconController, () => _mainWindow is { IsLoaded: true } ? _mainWindow : null);
-        _mountManager.ActivityDetected += _trayIconController.OnActivityDetected;
-        _diskNotificationService = new(
-            _mainViewModel, _trayIconController, () => _mainWindow!.IsVisible,
-            _serviceProvider!.GetRequiredService<ILogger<DiskNotificationService>>());
-
-        // Constructed before AutoMountDisksAsync so that an auto-mounted disk which is already the
-        // TEMP target gets its global symlink published at startup. Rooted as a field only to keep
-        // its Disks.CollectionChanged subscription alive.
-        _globalMountCoordinator = new(_mainViewModel, _serviceProvider!.GetRequiredService<ILogger<GlobalMountCoordinator>>());
-
-        _tempDirCompatChecker.CheckOnStartup(config);
-
-        _updateCheckService = new(_settings, _trayIconController, () => _mainWindow is { IsLoaded: true } ? _mainWindow : null);
-        _mainViewModel.UpdateCheckService = _updateCheckService;
-        _ = _updateCheckService.CheckOnStartupAsync(config);
-
-        if (config.StartMinimized)
-        {
-            _trayIconController.Visible = true;
-        }
-        else
-        {
-            _mainWindow.Topmost = true;
-            _mainWindow.Show();
-            _mainWindow.Activate();
-            _mainWindow.Topmost = false;
         }
 
         await AutoMountDisksAsync();
-        _tempDirCompatChecker.CheckAfterAutoMount(config, _mainViewModel.Disks);
+        _tempDirCompatChecker!.CheckAfterAutoMount(config, _mainViewModel!.Disks);
 
         _cliPipeServer = new(_mainViewModel);
         _cliPipeServer.Start();
@@ -191,6 +123,110 @@ public partial class App
                 MessageBox.Show(result.Message, "ManagedDrive", MessageBoxButton.OK, MessageBoxImage.Warning);
             }
         }
+    }
+
+    /// <summary>
+    /// Runs the synchronous part of startup: takes the single-instance mutex (or hands the command
+    /// line to the instance already running), builds the view model, window and tray services, and
+    /// shows the window or tray icon.
+    /// </summary>
+    /// <param name="args">The process's command-line arguments.</param>
+    /// <param name="settings">The app's settings store.</param>
+    /// <param name="config">The settings loaded at startup.</param>
+    /// <returns>
+    /// <see langword="true"/> once the UI is up; <see langword="false"/> if startup stopped early,
+    /// in which case the exit has already been requested.
+    /// </returns>
+    private bool StartUi(string[] args, SettingsStore settings, AppConfiguration config)
+    {
+        LanguageManager.Instance.ApplyDefault(config.Language);
+        ThemeManager.Instance.ApplyDefault(config.Theme);
+
+        if (!AppInstance.TryAcquire(out _singleInstanceMutex))
+        {
+            if (args.Length > 0)
+            {
+                // Launched with CLI-style args (e.g. from the Explorer context menu) while
+                // another instance is already running: forward the command to it instead of
+                // showing the "already running" dialog.
+                if (CliPipeClient.TrySend(args, out var response) && response.ExitCode != 0)
+                {
+                    MessageBox.Show(response.Message, "ManagedDrive", MessageBoxButton.OK, MessageBoxImage.Warning);
+                }
+
+                Shutdown();
+                return false;
+            }
+
+            MessageBox.Show(
+                Loc.Get("Msg.AlreadyRunning"),
+                "ManagedDrive",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
+            Shutdown();
+            return false;
+        }
+
+        if (!CheckWinFspPrerequisite())
+        {
+            // Shutdown() only queues the exit; return so nothing below runs — in particular no
+            // MainViewModel gets created, so App_Exit has no (empty) disk list to save over the
+            // user's settings.
+            Shutdown();
+            return false;
+        }
+
+        _mountManager = new();
+        _sessionEndingSaveHandler = new(
+            _mountManager,
+            () => _mainWindowHandle,
+            _serviceProvider!.GetRequiredService<ILogger<SessionEndingSaveHandler>>());
+        SystemEvents.SessionEnding += _sessionEndingSaveHandler.OnSessionEnding;
+        _mainViewModel = new(_mountManager, settings, _serviceProvider!.GetRequiredService<ILogger<MainViewModel>>(), config.Disks);
+        _mainViewModel.ExitRequested += async (_, _) => await ShutdownAsync();
+        _mainWindow = new(_mainViewModel);
+        _mainWindow.Closing += MainWindow_Closing;
+        _mainWindow.IsVisibleChanged += OnMainWindowVisibleChanged;
+
+        // Force the HWND to exist now (on the UI thread) so SessionEndingSaveHandler can reference
+        // it from the SystemEvents thread even when the window stays hidden in the tray.
+        _mainWindowHandle = new WindowInteropHelper(_mainWindow).EnsureHandle();
+
+        var iconStream = GetResourceStream(new("pack://application:,,,/ManagedDrive.ico"))!.Stream;
+        _trayIconController = new(
+            Dispatcher, iconStream, _mainViewModel, ShowMainWindow, ShowMainWindowAndCreate, ResetTempDirsFromTrayAsync,
+            ShowMainWindowAndSettings, ShowAboutDialog, ExitApplication);
+        _trayTooltipController = new(_mainViewModel, _trayIconController);
+        _tempDirCompatChecker = new(settings, _trayIconController, () => _mainWindow is { IsLoaded: true } ? _mainWindow : null);
+        _mountManager.ActivityDetected += _trayIconController.OnActivityDetected;
+        _diskNotificationService = new(
+            _mainViewModel, _trayIconController, () => _mainWindow!.IsVisible,
+            _serviceProvider!.GetRequiredService<ILogger<DiskNotificationService>>());
+
+        // Constructed before AutoMountDisksAsync so that an auto-mounted disk which is already the
+        // TEMP target gets its global symlink published at startup. Rooted as a field only to keep
+        // its Disks.CollectionChanged subscription alive.
+        _globalMountCoordinator = new(_mainViewModel, _serviceProvider!.GetRequiredService<ILogger<GlobalMountCoordinator>>());
+
+        _tempDirCompatChecker.CheckOnStartup(config);
+
+        _updateCheckService = new(settings, _trayIconController, () => _mainWindow is { IsLoaded: true } ? _mainWindow : null);
+        _mainViewModel.UpdateCheckService = _updateCheckService;
+        _ = _updateCheckService.CheckOnStartupAsync(config);
+
+        if (config.StartMinimized)
+        {
+            _trayIconController.Visible = true;
+        }
+        else
+        {
+            _mainWindow.Topmost = true;
+            _mainWindow.Show();
+            _mainWindow.Activate();
+            _mainWindow.Topmost = false;
+        }
+
+        return true;
     }
 
     private async Task AutoMountDisksAsync()

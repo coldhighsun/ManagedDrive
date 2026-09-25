@@ -1,3 +1,5 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace ManagedDrive.Cli.Core;
 
 /// <summary>
@@ -14,14 +16,15 @@ public static class AppInstance
     public const string SingleInstanceMutexName = "Global\\ManagedDrive-4A7C2E1B-9F3D-4B8A-A1C5-3E6D2F0B8C9A";
 
     /// <summary>
-    /// Test-only override for the mutex name <see cref="IsRunning"/> checks; <see langword="null"/>
+    /// Test-only override for the mutex name <see cref="IsRunning"/> and <see cref="TryAcquire"/>
+    /// use; <see langword="null"/>
     /// means use <see cref="SingleInstanceMutexName"/>. Set via
     /// <c>InternalsVisibleTo("ManagedDrive.Tests")</c>.
     /// </summary>
     internal static string? TestMutexNameOverride;
 
     /// <summary>
-    /// Gets the mutex name <see cref="IsRunning"/> checks.
+    /// Gets the mutex name <see cref="IsRunning"/> checks and <see cref="TryAcquire"/> creates.
     /// </summary>
     private static string MutexName => TestMutexNameOverride ?? SingleInstanceMutexName;
 
@@ -50,5 +53,43 @@ public static class AppInstance
         {
             return true;
         }
+    }
+
+    /// <summary>
+    /// Tries to become the single running app instance by creating and taking ownership of its
+    /// mutex.
+    /// </summary>
+    /// <param name="mutex">
+    /// The owned mutex when this call succeeds; the caller must release and dispose it on exit.
+    /// <see langword="null"/> otherwise.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> if this process now owns the mutex; <see langword="false"/> if
+    /// another instance already holds it — including one running elevated or as another user,
+    /// whose mutex this process isn't allowed to open.
+    /// </returns>
+    public static bool TryAcquire([NotNullWhen(true)] out Mutex? mutex)
+    {
+        Mutex candidate;
+        bool createdNew;
+        try
+        {
+            candidate = new(true, MutexName, out createdNew);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            mutex = null;
+            return false;
+        }
+
+        if (!createdNew)
+        {
+            candidate.Dispose();
+            mutex = null;
+            return false;
+        }
+
+        mutex = candidate;
+        return true;
     }
 }
