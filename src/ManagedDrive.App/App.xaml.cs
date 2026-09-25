@@ -335,6 +335,12 @@ public partial class App
     {
         if (_isExiting)
         {
+            // Keep the window (and so the app) alive while ShutdownAsync's exit save is still
+            // running: letting Alt+F4 close it here would end the app via OnLastWindowClose, and
+            // App_Exit's safety-net Dispose is a no-op once ShutdownAsync has taken the disk list,
+            // so the in-flight save would be killed with the process. The final Shutdown() call
+            // is unaffected — WPF ignores Closing cancellation during Application.Shutdown.
+            e.Cancel = true;
             return;
         }
 
