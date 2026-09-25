@@ -5,6 +5,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\ManagedDrive.HelperProtocol\ManagedDrive.HelperProtocol.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
     <InternalsVisibleTo Include="ManagedDrive.Tests" />
   </ItemGroup>
 
