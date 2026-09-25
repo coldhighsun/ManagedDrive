@@ -76,4 +76,60 @@ public sealed class SettingsStoreTests : IDisposable
         var backup = Assert.Single(Directory.GetFiles(_dir, "settings.json.corrupt-*"));
         Assert.Equal(truncated, File.ReadAllText(backup));
     }
+
+    /// <summary>
+    /// Update applies the change to what is on disk and keeps every other field.
+    /// </summary>
+    [Fact]
+    public void Update_AppliesChangeToTheConfigurationOnDisk()
+    {
+        var store = new SettingsStore(SettingsPath);
+        store.Save(new AppConfiguration
+        {
+            Language = "zh-CN",
+            Disks = [new DiskProfile { MountPoint = "R:" }],
+        });
+
+        store.Update(current => current with { StartMinimized = true });
+
+        var loaded = store.Load();
+        Assert.True(loaded.StartMinimized);
+        Assert.Equal("zh-CN", loaded.Language);
+        Assert.Equal("R:", Assert.Single(loaded.Disks).MountPoint);
+    }
+
+    /// <summary>
+    /// Two concurrent updates of different fields never lose either change.
+    /// </summary>
+    [Fact]
+    public async Task Update_ConcurrentUpdatesOfDifferentFields_KeepsEveryChange()
+    {
+        var store = new SettingsStore(SettingsPath);
+        store.Save(new AppConfiguration());
+        var checkedAt = new DateTimeOffset(2026, 9, 25, 0, 0, 0, TimeSpan.Zero);
+
+        // Each round races two read-modify-writes of different fields; with an unlocked
+        // Load-then-Save one of them would regularly overwrite the other with its stale read.
+        for (var i = 0; i < 50; i++)
+        {
+            store.Save(new AppConfiguration());
+            using var start = new Barrier(2);
+
+            var first = Task.Run(() =>
+            {
+                start.SignalAndWait(TestContext.Current.CancellationToken);
+                store.Update(current => current with { LastUpdateCheckUtc = checkedAt });
+            }, TestContext.Current.CancellationToken);
+            var second = Task.Run(() =>
+            {
+                start.SignalAndWait(TestContext.Current.CancellationToken);
+                store.Update(current => current with { SkippedVersion = "1.2.3" });
+            }, TestContext.Current.CancellationToken);
+            await Task.WhenAll(first, second);
+
+            var loaded = store.Load();
+            Assert.Equal(checkedAt, loaded.LastUpdateCheckUtc);
+            Assert.Equal("1.2.3", loaded.SkippedVersion);
+        }
+    }
 }

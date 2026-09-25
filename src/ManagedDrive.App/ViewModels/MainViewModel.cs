@@ -1563,10 +1563,9 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     /// </summary>
     internal void SaveSettings()
     {
-        var current = _settingsStore.Load();
         var profiles = MergeProfiles(GetProfiles().ToList(), _unmountedProfiles);
         _unmountedProfiles.RemoveAll(p => !profiles.Contains(p));
-        _settingsStore.Save(new()
+        _settingsStore.Update(current => new()
         {
             RunAtStartup = StartupManager.IsEnabled,
             StartMinimized = current.StartMinimized,
@@ -2396,9 +2395,9 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 
         if (dialog.ShowDialog() == true)
         {
-            var updated = dialog.Result!;
-            updated.Disks = config.Disks;
-            _settingsStore.Save(updated);
+            // The dialog is modal but the dispatcher keeps running under it, so CLI commands, the
+            // tray menu and update checks may have saved settings since `config` was read.
+            _settingsStore.Update(latest => SettingsDialog.ApplyEdits(latest, dialog.Result!));
             _logger.LogInformation("Settings saved.");
         }
     }
@@ -2441,7 +2440,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
                     return;
                 }
 
-                _settingsStore.Save(_settingsStore.Load() with { TempDirCompatWarningShown = true });
+                _settingsStore.Update(current => current with { TempDirCompatWarningShown = true });
             }
 
             var tempPath = Path.Combine(vm.MountPoint, "Temp");

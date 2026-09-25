@@ -22,7 +22,6 @@ public partial class SettingsDialog
         ImageCompressionLevel.SmallestSize,
     ];
 
-    private readonly AppConfiguration _original;
     private readonly UpdateCheckService? _updateCheckService;
 
     /// <summary>
@@ -36,7 +35,6 @@ public partial class SettingsDialog
     public SettingsDialog(AppConfiguration config, UpdateCheckService? updateCheckService = null)
     {
         InitializeComponent();
-        _original = config;
         _updateCheckService = updateCheckService;
         RunAtStartupBox.IsChecked = StartupManager.IsEnabled;
         StartMinimizedBox.IsChecked = config.StartMinimized;
@@ -119,8 +117,9 @@ public partial class SettingsDialog
     }
 
     /// <summary>
-    /// Gets the updated <see cref="AppConfiguration"/> after the user confirms.
-    /// <c>null</c> when the dialog was cancelled.
+    /// Gets the settings the user confirmed, or <c>null</c> when the dialog was cancelled. Only the
+    /// fields this dialog edits are meaningful; apply them to the latest configuration with
+    /// <see cref="ApplyEdits"/> rather than saving this instance as-is.
     /// </summary>
     public AppConfiguration? Result
     {
@@ -148,12 +147,8 @@ public partial class SettingsDialog
             CloseToTray = CloseToTrayBox.IsChecked == true,
             Language = selectedTag,
             Theme = selectedTheme,
-            Disks = _original.Disks,
-            TempDirCompatWarningShown = _original.TempDirCompatWarningShown,
             ContextMenuEnabled = contextMenuEnabled,
             AutoCheckForUpdates = AutoCheckForUpdatesBox.IsChecked == true,
-            LastUpdateCheckUtc = _original.LastUpdateCheckUtc,
-            SkippedVersion = _original.SkippedVersion,
             DefaultCompressionLevel = (DefaultCompressionLevelBox.SelectedItem as CompressionLevelItem)?.Level
                 ?? ImageCompressionLevel.Fastest,
             DefaultImageDirectory = string.IsNullOrWhiteSpace(DefaultImageDirectoryBox.Text) ? null : DefaultImageDirectoryBox.Text,
@@ -161,6 +156,28 @@ public partial class SettingsDialog
 
         DialogResult = true;
     }
+
+    /// <summary>
+    /// Returns <paramref name="latest"/> with the fields this dialog edits taken from
+    /// <paramref name="edits"/>. Everything else — disk profiles, update-check state, the TEMP
+    /// warning flag — may have been written while the dialog was open (a CLI command, the tray
+    /// menu, the dialog's own "Check for Updates Now"), so it must come from the configuration
+    /// read at save time, not from the snapshot the dialog was opened with.
+    /// </summary>
+    /// <param name="latest">The configuration currently on disk.</param>
+    /// <param name="edits">The dialog's <see cref="Result"/>.</param>
+    internal static AppConfiguration ApplyEdits(AppConfiguration latest, AppConfiguration edits) => latest with
+    {
+        RunAtStartup = edits.RunAtStartup,
+        StartMinimized = edits.StartMinimized,
+        CloseToTray = edits.CloseToTray,
+        Language = edits.Language,
+        Theme = edits.Theme,
+        ContextMenuEnabled = edits.ContextMenuEnabled,
+        AutoCheckForUpdates = edits.AutoCheckForUpdates,
+        DefaultCompressionLevel = edits.DefaultCompressionLevel,
+        DefaultImageDirectory = edits.DefaultImageDirectory,
+    };
 
     /// <summary>
     /// Opens a folder picker to choose <see cref="AppConfiguration.DefaultImageDirectory"/>.
