@@ -114,6 +114,14 @@ public sealed record CreateDiskInput
     /// <summary>Archive path, for archive-import mode.</summary>
     public string ImportArchivePath { get; init; } = string.Empty;
 
+    /// <summary>
+    /// The disk's exact capacity when the dialog opened (edit mode), or <c>null</c> otherwise.
+    /// A loaded image can raise the capacity to a value that is not a whole MB, which the
+    /// MB/GB fields cannot represent; when those fields still show the value they were
+    /// pre-filled with, this exact capacity is kept instead of the truncated display value.
+    /// </summary>
+    public ulong? OriginalCapacityBytes { get; init; }
+
     /// <summary>Capacity display value (in <see cref="CapacityIsGb"/> units).</summary>
     public int CapacityValue { get; init; }
 
@@ -268,7 +276,10 @@ public static class CreateDiskOptionsBuilder
                 return Fail(CreateDiskValidationError.BadCapacity);
             }
 
-            capacityBytes = ByteUnitConverter.ToBytes(input.CapacityValue, input.CapacityIsGb);
+            capacityBytes = input.OriginalCapacityBytes is { } original &&
+                ByteUnitConverter.SplitToUnit(original) == (input.CapacityValue, input.CapacityIsGb)
+                    ? original
+                    : ByteUnitConverter.ToBytes(input.CapacityValue, input.CapacityIsGb);
         }
 
         var imagePath = string.IsNullOrWhiteSpace(input.ImagePathText)
