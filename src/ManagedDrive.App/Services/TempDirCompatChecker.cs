@@ -38,10 +38,25 @@ public sealed class TempDirCompatChecker
     }
 
     /// <summary>
-    /// Runs the one-time startup check: if TEMP points at a drive letter matching a saved disk
-    /// profile that isn't set to auto-mount, resets TEMP and warns; if it matches an auto-mount
-    /// profile, warns once (since elevated processes still can't reach WinFsp drives) and records
-    /// that the warning was shown.
+    /// Returns the saved disk profile whose mount point (drive letter or directory) contains
+    /// <paramref name="path"/>, preferring the most specific one.
+    /// </summary>
+    /// <param name="path">The path to look up, e.g. the expanded TEMP directory.</param>
+    /// <param name="profiles">The saved disk profiles.</param>
+    /// <returns>The matching profile, or <c>null</c> if <paramref name="path"/> is on none of them.</returns>
+    internal static DiskProfile? FindProfileContainingPath(string path, IEnumerable<DiskProfile> profiles) =>
+        profiles
+            .Where(d => MountPointValidator.IsPathOnMountPoint(path, d.MountPoint))
+            // Every match is a prefix of the normalized path, so the longest normalized mount point
+            // is the innermost one; the raw strings may contain ".." or other non-canonical forms.
+            // IsPathOnMountPoint already normalized each match successfully, so this can't throw.
+            .MaxBy(d => MountPointValidator.NormalizeForPrefixCheck(d.MountPoint).Length);
+
+    /// <summary>
+    /// Runs the one-time startup check: if TEMP points into a saved disk profile's mount point
+    /// that isn't set to auto-mount, resets TEMP and warns; if it matches an auto-mount profile,
+    /// warns once (since elevated processes still can't reach WinFsp drives) and records that the
+    /// warning was shown.
     /// </summary>
     public void CheckOnStartup(AppConfiguration config)
     {
@@ -52,14 +67,7 @@ public sealed class TempDirCompatChecker
         }
 
         var expanded = Environment.ExpandEnvironmentVariables(userTemp);
-        if (expanded.Length < 2 || !char.IsLetter(expanded[0]) || expanded[1] != ':')
-        {
-            return;
-        }
-
-        var mountPoint = char.ToUpperInvariant(expanded[0]) + ":";
-        var matchingProfile = config.Disks.FirstOrDefault(d =>
-            string.Equals(d.MountPoint, mountPoint, StringComparison.OrdinalIgnoreCase));
+        var matchingProfile = FindProfileContainingPath(expanded, config.Disks);
 
         if (matchingProfile == null)
         {
@@ -100,8 +108,8 @@ public sealed class TempDirCompatChecker
     }
 
     /// <summary>
-    /// Runs a post-auto-mount safety check: if TEMP still points at a drive letter matching a
-    /// saved disk profile, but no <em>currently live</em> disk actually occupies that mount point,
+    /// Runs a post-auto-mount safety check: if TEMP still points into a saved disk profile's mount
+    /// point, but no <em>currently live</em> disk actually occupies that mount point,
     /// TEMP is dangling — the disk it targeted failed to auto-mount (or an earlier crash skipped
     /// the reset that would normally happen on unmount/edit) and TEMP would otherwise be silently
     /// pointing at an inaccessible directory for the rest of the session. Resets TEMP and warns.
@@ -123,14 +131,7 @@ public sealed class TempDirCompatChecker
         }
 
         var expanded = Environment.ExpandEnvironmentVariables(userTemp);
-        if (expanded.Length < 2 || !char.IsLetter(expanded[0]) || expanded[1] != ':')
-        {
-            return;
-        }
-
-        var mountPoint = char.ToUpperInvariant(expanded[0]) + ":";
-        var isKnownProfile = config.Disks.Any(d =>
-            string.Equals(d.MountPoint, mountPoint, StringComparison.OrdinalIgnoreCase));
+        var isKnownProfile = FindProfileContainingPath(expanded, config.Disks) is not null;
         if (!isKnownProfile || IsTempOnAnyDisk(disks))
         {
             return;

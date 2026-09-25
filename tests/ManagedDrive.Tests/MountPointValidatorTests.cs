@@ -140,4 +140,23 @@ public sealed class MountPointValidatorTests : IDisposable
     {
         Assert.False(MountPointValidator.IsPathOnMountPoint(path, mountPoint));
     }
+
+    /// <summary>
+    /// Drive letters and directory mount points normalize to a canonical absolute path ending
+    /// in a backslash.
+    /// </summary>
+    /// <param name="mountPoint">The mount point.</param>
+    /// <param name="expected">The expected normalized form.</param>
+    [Theory]
+    [InlineData("R:", @"R:\")]
+    [InlineData(@"C:\ram", @"C:\ram\")]
+    [InlineData(@"C:\ram\", @"C:\ram\")]
+    [InlineData(@"C:/ram", @"C:\ram\")]
+    [InlineData(@"C:\other\..\ram", @"C:\ram\")]
+    public void NormalizeForPrefixCheck_MountPoint_ReturnsCanonicalPathWithTrailingBackslash(string mountPoint, string expected)
+    {
+        var normalized = MountPointValidator.NormalizeForPrefixCheck(mountPoint);
+
+        Assert.Equal(expected, normalized);
+    }
 }

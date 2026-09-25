@@ -13,9 +13,17 @@ namespace ManagedDrive.App.Services;
 /// <see cref="INotifyPropertyChanged"/> notification, so this one observer covers them all.
 /// Every call is best-effort — if the helper service is not installed/running, the disk still
 /// works, just without cross-session visibility.
+///
+/// Only drive letters are published (see <see cref="IsPublishable"/>): a directory mount point is
+/// a reparse point on the host volume that targets the WinFsp volume device directly, so it
+/// already resolves the same way from every session, and the helper rejects anything but a drive
+/// letter anyway.
 /// </summary>
 public sealed class GlobalMountCoordinator
 {
+    /// <summary>
+    /// Logs the outcome of each helper-service request.
+    /// </summary>
     private readonly ILogger<GlobalMountCoordinator> _logger;
 
     /// <summary>
@@ -23,6 +31,12 @@ public sealed class GlobalMountCoordinator
     /// </summary>
     private readonly GlobalMountRequestQueue _requests;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="GlobalMountCoordinator"/> class and starts
+    /// observing the TEMP state of every disk in <paramref name="mainViewModel"/>.
+    /// </summary>
+    /// <param name="mainViewModel">The view model whose disks to observe.</param>
+    /// <param name="logger">The logger.</param>
     public GlobalMountCoordinator(MainViewModel mainViewModel, ILogger<GlobalMountCoordinator> logger)
     {
         _logger = logger;
@@ -39,7 +53,7 @@ public sealed class GlobalMountCoordinator
                     // A disk auto-mounted at startup may already be the TEMP target.
                     if (vm.IsCurrentTempDir)
                     {
-                        PublishAsync(vm);
+                        EnqueuePublish(vm);
                     }
                 }
             }
@@ -49,12 +63,18 @@ public sealed class GlobalMountCoordinator
                 foreach (DiskViewModel vm in e.OldItems)
                 {
                     vm.PropertyChanged -= OnDiskPropertyChanged;
-                    UnpublishAsync(vm.MountPoint);
+                    EnqueueUnpublish(vm.MountPoint);
                 }
             }
         };
     }
 
+    /// <summary>
+    /// Publishes or unpublishes a disk when its <see cref="DiskViewModel.IsCurrentTempDir"/>
+    /// state changes.
+    /// </summary>
+    /// <param name="sender">The disk view model.</param>
+    /// <param name="e">The event data.</param>
     private void OnDiskPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (e.PropertyName != nameof(DiskViewModel.IsCurrentTempDir) || sender is not DiskViewModel vm)
@@ -64,17 +84,33 @@ public sealed class GlobalMountCoordinator
 
         if (vm.IsCurrentTempDir)
         {
-            PublishAsync(vm);
+            EnqueuePublish(vm);
         }
         else
         {
-            UnpublishAsync(vm.MountPoint);
+            EnqueueUnpublish(vm.MountPoint);
         }
     }
 
-    private void PublishAsync(DiskViewModel vm)
+    /// <summary>
+    /// Returns whether a disk's mount point gets a global DOS-device symlink: only drive letters
+    /// do, since a directory mount point is already reachable from other sessions.
+    /// </summary>
+    /// <param name="mountPoint">The disk's mount point.</param>
+    /// <returns><c>true</c> if <paramref name="mountPoint"/> is a drive letter.</returns>
+    internal static bool IsPublishable(string mountPoint) => MountPointValidator.IsDriveLetter(mountPoint);
+
+    /// <summary>
+    /// Queues a request asking the helper service to publish <paramref name="vm"/>'s drive
+    /// letter globally; does nothing for a directory mount point or a disk whose volume device
+    /// path is unknown.
+    /// </summary>
+    /// <param name="vm">The disk that became the TEMP target.</param>
+    private void EnqueuePublish(DiskViewModel vm)
     {
-        if (!vm.Disk.TryGetVolumeDevicePath(out var devicePath) || devicePath == null)
+        if (!IsPublishable(vm.MountPoint) ||
+            !vm.Disk.TryGetVolumeDevicePath(out var devicePath) ||
+            devicePath == null)
         {
             return;
         }
@@ -95,8 +131,18 @@ public sealed class GlobalMountCoordinator
         });
     }
 
-    private void UnpublishAsync(string letter)
+    /// <summary>
+    /// Queues a request asking the helper service to remove the global symlink for
+    /// <paramref name="letter"/>; does nothing for a directory mount point.
+    /// </summary>
+    /// <param name="letter">The mount point of the disk that stopped being the TEMP target.</param>
+    private void EnqueueUnpublish(string letter)
     {
+        if (!IsPublishable(letter))
+        {
+            return;
+        }
+
         _requests.Enqueue(() =>
         {
             if (HelperPipeClient.TryUnpublish(letter, out var response))

@@ -107,7 +107,12 @@ public static class MountPointValidator
     /// Normalizes a mount point to an absolute, trailing-backslash-terminated path suitable for
     /// an <see cref="string.StartsWith(string, StringComparison)"/> containment check.
     /// </summary>
-    private static string NormalizeForPrefixCheck(string mountPoint)
+    /// <param name="mountPoint">A drive letter (<c>X:</c>) or directory mount point.</param>
+    /// <returns>The normalized path, e.g. <c>X:\</c> or <c>C:\mnt\ram\</c>.</returns>
+    /// <exception cref="ArgumentException">
+    /// <paramref name="mountPoint"/> is not a valid path (as for <see cref="Path.GetFullPath(string)"/>).
+    /// </exception>
+    public static string NormalizeForPrefixCheck(string mountPoint)
     {
         var full = IsDriveLetter(mountPoint) ? mountPoint + '\\' : Path.GetFullPath(mountPoint);
         return full.EndsWith('\\') ? full : full + '\\';
