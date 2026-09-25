@@ -415,6 +415,41 @@ public sealed class CreateDiskOptionsBuilderTests
         }
     }
 
+    [Fact]
+    public void Build_EditCapacityUntouched_KeepsExactNonWholeMbCapacity()
+    {
+        const ulong original = (100UL * 1024 * 1024) + 4096;
+        var input = ValidCreateInput() with
+        {
+            Mode = CreateDiskMode.Edit,
+            OriginalCapacityBytes = original,
+            CapacityValue = 100,
+            CapacityIsGb = false,
+        };
+
+        var result = CreateDiskOptionsBuilder.Build(input);
+
+        Assert.True(result.Success);
+        Assert.Equal(original, result.Options!.CapacityBytes);
+    }
+
+    [Fact]
+    public void Build_EditCapacityChanged_UsesDisplayedValue()
+    {
+        var input = ValidCreateInput() with
+        {
+            Mode = CreateDiskMode.Edit,
+            OriginalCapacityBytes = (100UL * 1024 * 1024) + 4096,
+            CapacityValue = 200,
+            CapacityIsGb = false,
+        };
+
+        var result = CreateDiskOptionsBuilder.Build(input);
+
+        Assert.True(result.Success);
+        Assert.Equal(200UL * 1024 * 1024, result.Options!.CapacityBytes);
+    }
+
     private static CreateDiskInput EncryptedInput(out DirectoryInfo dir, string p1, string p2)
     {
         dir = Directory.CreateTempSubdirectory();

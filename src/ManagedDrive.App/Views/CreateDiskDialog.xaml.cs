@@ -22,6 +22,13 @@ public partial class CreateDiskDialog
     private readonly bool _isArchiveImportMode;
     private readonly bool _isImportMode;
     private readonly ulong _maxCapacityBytes;
+
+    /// <summary>
+    /// The edited disk's exact capacity, or <c>null</c> outside edit mode. Passed to
+    /// <see cref="CreateDiskInput.OriginalCapacityBytes"/> so an untouched capacity field does
+    /// not truncate a non-whole-MB capacity.
+    /// </summary>
+    private readonly ulong? _originalCapacityBytes;
     private readonly string? _originalPassword;
     private readonly IReadOnlyList<DiskOptions> _otherDisks;
     private readonly bool _wasEncrypted;
@@ -111,6 +118,7 @@ public partial class CreateDiskDialog
     {
         Title = Loc.Get("CreateDisk.TitleEdit");
         _originalPassword = currentPassword;
+        _originalCapacityBytes = existing.CapacityBytes;
         _wasEncrypted = currentPassword is not null;
         EncryptImageBox.IsChecked = _wasEncrypted;
         if (_wasEncrypted)
@@ -457,6 +465,7 @@ public partial class CreateDiskDialog
             ImportCapacityBytes = _importCapacityBytes,
             ImportVolumeLabel = _importVolumeLabel,
             ImportArchivePath = _importArchivePath,
+            OriginalCapacityBytes = _originalCapacityBytes,
             CapacityValue = _capacityValue,
             CapacityIsGb = CapacityUnitBox.SelectedItem as string == "GB",
             MaxCapacityValue = GetMaxCapacityValue(),
