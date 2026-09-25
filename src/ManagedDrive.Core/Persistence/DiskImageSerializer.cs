@@ -544,45 +544,57 @@ public static class DiskImageSerializer
         // plainLength is unused capacity.
         var plainBuffer = plainStream.GetBuffer();
         var plainLength = (int)plainStream.Length;
-        var contentHash = SHA256.HashData(plainBuffer.AsSpan(0, plainLength));
+        try
+        {
+            var contentHash = SHA256.HashData(plainBuffer.AsSpan(0, plainLength));
 
-        // The payload is retained until the whole image is written, so it must be exactly sized.
-        // Compression already produces an exact-size array; uncompressed output needs a trimmed
-        // copy of the plaintext buffer (unless it happens to be exactly full already).
-        var compressed = level != ImageCompressionLevel.None;
-        byte[] payload;
-        if (compressed)
-        {
-            payload = ParallelZstd.CompressFramed(plainBuffer, plainLength, level.ToZstdLevel(customZstdLevel));
-        }
-        else if (encryption is null && plainBuffer.Length != plainLength)
-        {
-            payload = plainBuffer.AsSpan(0, plainLength).ToArray();
-        }
-        else
-        {
-            payload = plainBuffer;
-        }
+            // The payload is retained until the whole image is written, so it must be exactly sized.
+            // Compression already produces an exact-size array; uncompressed output needs a trimmed
+            // copy of the plaintext buffer (unless it happens to be exactly full already).
+            var compressed = level != ImageCompressionLevel.None;
+            byte[] payload;
+            if (compressed)
+            {
+                payload = ParallelZstd.CompressFramed(plainBuffer, plainLength, level.ToZstdLevel(customZstdLevel));
+            }
+            else if (encryption is null && plainBuffer.Length != plainLength)
+            {
+                payload = plainBuffer.AsSpan(0, plainLength).ToArray();
+            }
+            else
+            {
+                payload = plainBuffer;
+            }
 
-        if (encryption is not { } enc)
-        {
-            return (payload, contentHash, null, null);
-        }
+            if (encryption is not { } enc)
+            {
+                return (payload, contentHash, null, null);
+            }
 
-        var nonce = RandomNumberGenerator.GetBytes(NonceSize);
-        var tag = new byte[TagSize];
-        using var aesGcm = new AesGcm(enc.Cek, TagSize);
-        if (compressed)
-        {
-            // The compressed payload is a private, exactly-sized array: encrypt it in place.
-            aesGcm.Encrypt(nonce, payload, payload, tag);
-            return (payload, contentHash, nonce, tag);
-        }
+            var nonce = RandomNumberGenerator.GetBytes(NonceSize);
+            var tag = new byte[TagSize];
+            using var aesGcm = new AesGcm(enc.Cek, TagSize);
+            if (compressed)
+            {
+                // The compressed payload is a private, exactly-sized array: encrypt it in place.
+                aesGcm.Encrypt(nonce, payload, payload, tag);
+                return (payload, contentHash, nonce, tag);
+            }
 
-        // Uncompressed: encrypting into a fresh exact-size array doubles as the trim.
-        var ciphertext = new byte[plainLength];
-        aesGcm.Encrypt(nonce, plainBuffer.AsSpan(0, plainLength), ciphertext, tag);
-        return (ciphertext, contentHash, nonce, tag);
+            // Uncompressed: encrypting into a fresh exact-size array doubles as the trim.
+            var ciphertext = new byte[plainLength];
+            aesGcm.Encrypt(nonce, plainBuffer.AsSpan(0, plainLength), ciphertext, tag);
+            return (ciphertext, contentHash, nonce, tag);
+        }
+        finally
+        {
+            // An encrypted segment's plaintext never ends up in the payload, so scrub it rather than
+            // leave the disk's contents in freed memory. Unencrypted, the buffer may be the payload.
+            if (encryption is not null)
+            {
+                SecureZero.Range(plainBuffer, 0, plainLength);
+            }
+        }
     }
 
     /// <summary>
