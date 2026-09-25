@@ -11,4 +11,8 @@
     <PackageReference Include="YamlDotNet" />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="ManagedDrive.Tests" />
+  </ItemGroup>
+
 </Project>
