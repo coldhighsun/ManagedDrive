@@ -63,7 +63,7 @@ public static class CliOutputRenderer
         foreach (var disk in disks)
         {
             table.AddRow(
-                disk.MountPoint,
+                Markup.Escape(disk.MountPoint),
                 Markup.Escape(disk.VolumeLabel),
                 ByteFormatter.Format(disk.UsedBytes),
                 ByteFormatter.Format(disk.TotalBytes));
