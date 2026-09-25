@@ -16,6 +16,7 @@ public sealed class CliPipeClientTests : IDisposable
     {
         CliPipeClient.TestPipeNameOverride = null;
         CliPipeClient.TestReadTimeoutOverride = null;
+        CliPipeClient.TestCurrentUserSidOverride = null;
     }
 
     [Fact]
@@ -180,6 +181,46 @@ public sealed class CliPipeClientTests : IDisposable
         Assert.False(response.Success);
         Assert.Equal(1, response.ExitCode);
         Assert.Equal(CliPipeClient.AccessDeniedMessage, response.Message);
+    }
+
+    [Fact(Timeout = 10_000)]
+    public async Task TrySend_ServerPipeOwnedByAnotherUser_ReturnsTrueWithUntrustedServerFailureWithoutSendingRequest()
+    {
+        var pipeName = CliPipeClient.TestPipeNameOverride!;
+
+        // The pipe is explicitly owned by this process's user, while the client is told it runs as
+        // someone else — so from the client's point of view another, unprivileged user created it.
+        using var identity = System.Security.Principal.WindowsIdentity.GetCurrent();
+        var security = new PipeSecurity();
+        security.AddAccessRule(new(identity.User!, PipeAccessRights.FullControl, System.Security.AccessControl.AccessControlType.Allow));
+        security.SetOwner(identity.User!);
+        CliPipeClient.TestCurrentUserSidOverride = new("S-1-5-21-1000000000-2000000000-3000000000-1001");
+
+        using var server = NamedPipeServerStreamAcl.Create(
+            pipeName, PipeDirection.InOut, 1, PipeTransmissionMode.Byte, PipeOptions.Asynchronous, 0, 0, security);
+        var serverTask = Task.Run(async () =>
+        {
+            try
+            {
+                await server.WaitForConnectionAsync(TestContext.Current.CancellationToken);
+            }
+            catch (IOException)
+            {
+                // The client connected and hung up before this accept ran — nothing was sent.
+                return null;
+            }
+
+            using var reader = new StreamReader(server, leaveOpen: true);
+            return await reader.ReadLineAsync(TestContext.Current.CancellationToken);
+        }, TestContext.Current.CancellationToken);
+
+        var answered = CliPipeClient.TrySend(["mount", "R:", "--password", "secret"], out var response);
+
+        Assert.True(answered);
+        Assert.False(response.Success);
+        Assert.Equal(1, response.ExitCode);
+        Assert.Equal(CliPipeClient.UntrustedServerMessage, response.Message);
+        Assert.Null(await serverTask);
     }
 
     private static async Task AwaitIgnoringCancellationAsync(Task task)

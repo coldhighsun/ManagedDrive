@@ -1,6 +1,8 @@
 using System.IO.Pipes;
+using System.Security.Principal;
 using System.Text;
 using System.Text.Json;
+using ManagedDrive.HelperProtocol;
 
 namespace ManagedDrive.Cli.Core;
 
@@ -42,6 +44,31 @@ public static class CliPipeClient
     private static string PipeName => TestPipeNameOverride ?? CliPipeProtocol.PipeName;
 
     /// <summary>
+    /// Test-only override for the user a server pipe must be owned by (see
+    /// <see cref="CurrentUserSid"/>); <see langword="null"/> means the current process's user.
+    /// Lets tests stand up a pipe owned by "another user" without a second account. Set via
+    /// <c>InternalsVisibleTo("ManagedDrive.Tests")</c>.
+    /// </summary>
+    internal static SecurityIdentifier? TestCurrentUserSidOverride;
+
+    /// <summary>
+    /// Gets the user whose own server pipe this client trusts, besides a privileged one.
+    /// </summary>
+    private static SecurityIdentifier? CurrentUserSid
+    {
+        get
+        {
+            if (TestCurrentUserSidOverride is not null)
+            {
+                return TestCurrentUserSidOverride;
+            }
+
+            using var identity = WindowsIdentity.GetCurrent();
+            return identity.User;
+        }
+    }
+
+    /// <summary>
     /// Upper bound on the response line read by <see cref="ReadBoundedLineAsync"/>, mirroring
     /// <c>PipeIo.MaxLineLength</c>'s guard against an unbounded buffer — this pipe's server side
     /// already caps its own request read the same way, and the running instance is itself a peer
@@ -54,6 +81,13 @@ public static class CliPipeClient
     /// </summary>
     internal const string AccessDeniedMessage =
         "Access to the running ManagedDrive instance was denied. It may be running as administrator or as another user; run mdrive the same way.";
+
+    /// <summary>
+    /// Failure message reported when the pipe was created by another (unprivileged) user, so the
+    /// request was withheld.
+    /// </summary>
+    internal const string UntrustedServerMessage =
+        "The ManagedDrive CLI pipe belongs to another user, so the command was not sent. Another program may be posing as ManagedDrive.";
 
     /// <summary>
     /// Failure message reported when the request was delivered but no response arrived within
@@ -86,7 +120,8 @@ public static class CliPipeClient
     /// is reported as a failure <paramref name="response"/> — the instance may already be
     /// executing the command, so the caller must not resend it and risk running a side-effecting
     /// command twice. Also <c>true</c> if a running instance refused this process access to its
-    /// pipe (<paramref name="response"/> then carries a failure explaining that). <c>false</c>
+    /// pipe, or the pipe was created by another user and so was never sent the request
+    /// (<paramref name="response"/> then carries a failure explaining that). <c>false</c>
     /// only if the request was never delivered — no instance accepted the connection in time, or
     /// the connection broke before the request was written — so retrying is safe.
     /// </returns>
@@ -111,6 +146,16 @@ public static class CliPipeClient
             // listening": the caller would otherwise launch a second instance and then time out
             // waiting for a pipe it can never reach.
             response = new(false, AccessDeniedMessage, null, 1);
+            return true;
+        }
+
+        if (!PipeSecurityRules.IsTrustedOwner(PipeSecurityRules.TryGetOwner(pipe), CurrentUserSid))
+        {
+            // Any local user can create a pipe under this well-known name while no instance is
+            // running, so never hand the arguments (which may include a --password) to a server
+            // neither this user nor an administrator created. Reported as an answer, not as
+            // "nothing listening": launching the app would not help while the name is taken.
+            response = new(false, UntrustedServerMessage, null, 1);
             return true;
         }
 
