@@ -118,6 +118,14 @@ public static class DiskImageSerializer
 
     private const int NonceSize = 12;
     private const int Pbkdf2Iterations = 210_000;
+
+    /// <summary>
+    /// Most PBKDF2 iterations accepted from an image header. The count is read before the password
+    /// is checked, so without a bound a crafted image could stall the load for hours in key
+    /// derivation. Well above <see cref="Pbkdf2Iterations"/> to leave room for raising it later.
+    /// </summary>
+    private const int MaxPbkdf2Iterations = 10_000_000;
+
     private const int SaltSize = 16;
     private const int SegmentedVersion = 6;
 
@@ -1720,6 +1728,21 @@ public static class DiskImageSerializer
     private static InvalidDataException CorruptEncryptedData(CryptographicException inner) =>
         new("The image is corrupted: its encrypted data failed integrity verification.", inner);
 
+    /// <summary>
+    /// Derives the key-encryption key from <paramref name="password"/> and unwraps the image's
+    /// content-encryption key with it.
+    /// </summary>
+    /// <param name="wrappedCek">The wrapped CEK from the image header.</param>
+    /// <param name="password">The password the user supplied.</param>
+    /// <param name="salt">The PBKDF2 salt from the image header.</param>
+    /// <param name="iterations">The PBKDF2 iteration count from the image header.</param>
+    /// <param name="nonce">The key-wrap nonce from the image header.</param>
+    /// <param name="tag">The key-wrap authentication tag from the image header.</param>
+    /// <returns>The unwrapped CEK.</returns>
+    /// <exception cref="InvalidDataException">
+    /// <paramref name="iterations"/> is outside 1..<see cref="MaxPbkdf2Iterations"/>.
+    /// </exception>
+    /// <exception cref="ImagePasswordIncorrectException">The password doesn't unwrap the CEK.</exception>
     private static byte[] UnwrapCek(
             byte[] wrappedCek,
             string password,
@@ -1728,6 +1751,12 @@ public static class DiskImageSerializer
             byte[] nonce,
             byte[] tag)
     {
+        if (iterations is < 1 or > MaxPbkdf2Iterations)
+        {
+            throw new InvalidDataException(
+                $"The image's key-derivation iteration count ({iterations}) is out of range; the image is corrupted.");
+        }
+
         var kek = Rfc2898DeriveBytes.Pbkdf2(password, salt, iterations, HashAlgorithmName.SHA256, CekSize);
         try
         {
@@ -1750,6 +1779,17 @@ public static class DiskImageSerializer
         }
     }
 
+    /// <summary>
+    /// Derives the key-encryption key from <paramref name="password"/> and wraps
+    /// <paramref name="cek"/> with it.
+    /// </summary>
+    /// <param name="cek">The content-encryption key to wrap.</param>
+    /// <param name="password">The password to derive the wrapping key from.</param>
+    /// <param name="salt">The PBKDF2 salt.</param>
+    /// <param name="iterations">The PBKDF2 iteration count.</param>
+    /// <param name="nonce">Receives the random key-wrap nonce.</param>
+    /// <param name="tag">Receives the key-wrap authentication tag.</param>
+    /// <returns>The wrapped CEK.</returns>
     private static byte[] WrapCek(
             byte[] cek,
             string password,
