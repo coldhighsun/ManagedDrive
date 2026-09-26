@@ -93,6 +93,16 @@ public sealed class TrayTooltipController
             _tooltipCooldown = false;
             _timerTooltipCooldown.Stop();
         };
+
+        // DynamicResource bindings inside the popup's content don't reliably re-resolve while
+        // IsOpen is false, so a tooltip already open when the language changes needs a nudge.
+        LanguageManager.Instance.LanguageChanged += (_, _) =>
+        {
+            if (_trayInfoPopup.IsOpen)
+            {
+                mainViewModel.RefreshForTrayTooltip();
+            }
+        };
     }
 
     private bool IsInIconRegion(System.Drawing.Point cursor)
