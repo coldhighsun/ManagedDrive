@@ -139,6 +139,27 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             _diskActivityStatusTimer.Stop();
             StatusText = Loc.Get("Status.Ready");
         };
+
+        LanguageManager.Instance.LanguageChanged += OnLanguageChanged;
+    }
+
+    /// <summary>
+    /// Re-localizes the status bar and tray tooltip text after a language switch. Most
+    /// <see cref="StatusText"/> assignments are transient (they revert to <c>Status.Ready</c>
+    /// within <see cref="DiskActivityStatusDuration"/>) or get re-issued by the very next disk
+    /// event, so only the two states that could otherwise sit stale indefinitely — a sticky
+    /// problem report and the plain "ready/idle" text — are refreshed here.
+    /// </summary>
+    private void OnLanguageChanged(object? sender, EventArgs e)
+    {
+        if (_stickyStatus is null)
+        {
+            StatusText = Loc.Get("Status.Ready");
+        }
+
+        RefreshAvailableMemory();
+        OnPropertyChanged(nameof(NoDisksMountedText));
+        OnPropertyChanged(nameof(LoadingDisksText));
     }
 
     public event EventHandler? ExitRequested;
@@ -153,6 +174,23 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     {
         get;
     }
+
+    /// <summary>
+    /// Gets the localized "no mounted disks" message shown in the tray tooltip. A plain
+    /// getter (not a <c>DynamicResource</c>) because the tooltip's content lives inside a
+    /// <see cref="System.Windows.Controls.Primitives.Popup"/> that's disconnected from the
+    /// visual tree while closed, where <c>DynamicResource</c> invalidation doesn't reach it;
+    /// <see cref="OnLanguageChanged"/> raises <see cref="PropertyChanged"/> for this property
+    /// explicitly instead.
+    /// </summary>
+    public string NoDisksMountedText => Loc.Get("Tray.NoDisksMounted");
+
+    /// <summary>
+    /// Gets the localized "loading disks" message shown in the tray tooltip while disks are
+    /// still being auto-mounted. See <see cref="NoDisksMountedText"/> for why this isn't a
+    /// <c>DynamicResource</c>.
+    /// </summary>
+    public string LoadingDisksText => Loc.Get("Tray.LoadingDisks");
 
     /// <summary>
     /// Gets a localized, human-readable description of the currently available physical
@@ -439,6 +477,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     /// <inheritdoc />
     public void Dispose()
     {
+        LanguageManager.Instance.LanguageChanged -= OnLanguageChanged;
         _memoryRefreshTimer.Stop();
         _diskActivityStatusTimer.Stop();
 

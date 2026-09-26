@@ -92,7 +92,7 @@
 
                 <TextBlock FontSize="13"
                            Foreground="{DynamicResource AppForegroundLight}"
-                           Text="{DynamicResource Tray.LoadingDisks}">
+                           Text="{Binding LoadingDisksText}">
                     <TextBlock.Style>
                         <Style TargetType="TextBlock">
                             <Setter Property="Visibility" Value="Collapsed" />
@@ -111,7 +111,7 @@
 
                 <TextBlock FontSize="13"
                            Foreground="{DynamicResource AppForegroundLight}"
-                           Text="{DynamicResource Tray.NoDisksMounted}">
+                           Text="{Binding NoDisksMountedText}">
                     <TextBlock.Style>
                         <Style TargetType="TextBlock">
                             <Setter Property="Visibility" Value="Collapsed" />
