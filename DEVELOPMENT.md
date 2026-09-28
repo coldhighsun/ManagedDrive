@@ -65,15 +65,15 @@ Measured with [BenchmarkDotNet](https://benchmarkdotnet.org/) (Intel Core i9-139
 
 | Scenario | RAM Disk | NVMe SSD | Ratio |
 |---|---:|---:|---:|
-| Sequential write, 4 KB | 1.7 MB/s | 1.0 MB/s | **RAM 1.8× faster** |
-| Sequential write, 1 MB | 385.2 MB/s | 91.8 MB/s | **RAM 4.2× faster** |
-| Sequential read (OS cache), 4 KB | 4.0 MB/s | 6.2 MB/s | NVMe 1.5× faster |
-| Sequential read (OS cache), 1 MB | 632.2 MB/s | 1,331.4 MB/s | NVMe 2.1× faster |
-| Random 4 KB read (uncached), 30 seeks | 1.82 ms | 3.34 ms | **RAM 1.8× faster** |
-| Random 4 KB read (OS cache), 30 seeks | 1.93 ms | 0.91 ms | NVMe 2.1× faster |
-| 30× small-file (4 KB) create+write | 68.5 ms (2.28 ms/file) | 111.4 ms (3.71 ms/file) | **RAM 1.6× faster** |
+| Sequential write, 4 KB | 1.9 MB/s | 0.9 MB/s | **RAM 2.3× faster** |
+| Sequential write, 1 MB | 391.5 MB/s | 89.9 MB/s | **RAM 4.4× faster** |
+| Sequential read (OS cache), 4 KB | 3.7 MB/s | 4.3 MB/s | NVMe 1.1× faster |
+| Sequential read (OS cache), 1 MB | 592.7 MB/s | 1,267.7 MB/s | NVMe 2.1× faster |
+| Random 4 KB read (uncached), 30 seeks | 1.78 ms | 3.41 ms | **RAM 1.9× faster** |
+| Random 4 KB read (OS cache), 30 seeks | 1.92 ms | 1.08 ms | NVMe 1.8× faster |
+| 30× small-file (4 KB) create+write | 61.0 ms (2.03 ms/file) | 112.9 ms (3.76 ms/file) | **RAM 1.8× faster** |
 
-Writes win big (up to 4.2×) by skipping block allocation, journaling, and the physical write. Uncached random reads benefit from zero seek latency (1.8× faster). Small-file creates are also faster (1.6×) because metadata operations stay in memory. Cached reads, however, favor the NVMe path — NTFS reads from the OS page cache stay entirely in-kernel, while the RAM disk incurs an extra kernel–userspace round trip through WinFsp. Run `dotnet run --project benchmarks/ManagedDrive.Benchmarks -c Release` for current numbers on your own hardware (see [Running Benchmarks](#running-benchmarks) below).
+Writes win big (up to 4.4×) by skipping block allocation, journaling, and the physical write. Uncached random reads benefit from zero seek latency (1.9× faster). Small-file creates are also faster (1.8×) because metadata operations stay in memory. Cached reads, however, favor the NVMe path — NTFS reads from the OS page cache stay entirely in-kernel, while the RAM disk incurs an extra kernel–userspace round trip through WinFsp. Run `dotnet run --project benchmarks/ManagedDrive.Benchmarks -c Release` for current numbers on your own hardware (see [Running Benchmarks](#running-benchmarks) below).
 
 ### Running Tests
 
@@ -154,15 +154,15 @@ ManagedDrive 使用 **WinFsp**（Windows 文件系统代理）将内存目录树
 
 | 场景 | 内存盘 | NVMe SSD | 倍率 |
 |---|---:|---:|---:|
-| 顺序写入，4 KB | 1.7 MB/s | 1.0 MB/s | **内存盘快 1.8×** |
-| 顺序写入，1 MB | 385.2 MB/s | 91.8 MB/s | **内存盘快 4.2×** |
-| 顺序读取（OS 缓存），4 KB | 4.0 MB/s | 6.2 MB/s | NVMe 快 1.5× |
-| 顺序读取（OS 缓存），1 MB | 632.2 MB/s | 1,331.4 MB/s | NVMe 快 2.1× |
-| 随机 4 KB 读取（未缓存），30 次寻址 | 1.82 ms | 3.34 ms | **内存盘快 1.8×** |
-| 随机 4 KB 读取（OS 缓存），30 次寻址 | 1.93 ms | 0.91 ms | NVMe 快 2.1× |
-| 30 次小文件（4 KB）创建+写入 | 68.5 ms（2.28 ms/文件） | 111.4 ms（3.71 ms/文件） | **内存盘快 1.6×** |
+| 顺序写入，4 KB | 1.9 MB/s | 0.9 MB/s | **内存盘快 2.3×** |
+| 顺序写入，1 MB | 391.5 MB/s | 89.9 MB/s | **内存盘快 4.4×** |
+| 顺序读取（OS 缓存），4 KB | 3.7 MB/s | 4.3 MB/s | NVMe 快 1.1× |
+| 顺序读取（OS 缓存），1 MB | 592.7 MB/s | 1,267.7 MB/s | NVMe 快 2.1× |
+| 随机 4 KB 读取（未缓存），30 次寻址 | 1.78 ms | 3.41 ms | **内存盘快 1.9×** |
+| 随机 4 KB 读取（OS 缓存），30 次寻址 | 1.92 ms | 1.08 ms | NVMe 快 1.8× |
+| 30 次小文件（4 KB）创建+写入 | 61.0 ms（2.03 ms/文件） | 112.9 ms（3.76 ms/文件） | **内存盘快 1.8×** |
 
-写入优势显著（最高 4.2×），因为跳过了物理块分配、日志记录和实际落盘。未缓存的随机读取受益于零寻址延迟（快 1.8×）。小文件创建也更快（1.6×），因为元数据操作全在内存中完成。但缓存读取方面 NVMe 更优——NTFS 从 OS 页缓存读取时全程在内核态完成，而内存盘需要经过 WinFsp 的内核–用户态往返，增加了额外开销。运行 `dotnet run --project benchmarks/ManagedDrive.Benchmarks -c Release` 可在你自己的硬件上获取当前数据（见下方[运行基准测试](#running-benchmarks-zh)）。
+写入优势显著（最高 4.4×），因为跳过了物理块分配、日志记录和实际落盘。未缓存的随机读取受益于零寻址延迟（快 1.9×）。小文件创建也更快（1.8×），因为元数据操作全在内存中完成。但缓存读取方面 NVMe 更优——NTFS 从 OS 页缓存读取时全程在内核态完成，而内存盘需要经过 WinFsp 的内核–用户态往返，增加了额外开销。运行 `dotnet run --project benchmarks/ManagedDrive.Benchmarks -c Release` 可在你自己的硬件上获取当前数据（见下方[运行基准测试](#running-benchmarks-zh)）。
 
 ### 运行测试
 
