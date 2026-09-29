@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using Fsp;
 
 namespace ManagedDrive.Tests;
 
@@ -30,15 +31,80 @@ public sealed class MemoryFileSystemCallbackTests
     }
 
     [Fact]
+    public void Cleanup_DeleteTogetherWithSetAllocationSize_KeepsAllocatedTotalExact()
+    {
+        // A preallocated file deleted on close gets both flags in one Cleanup. The node is already
+        // out of the map, so trimming it must not subtract its allocation from the total again.
+        var fs = new MemoryFileSystem(1024 * 1024, "Label");
+        fs.Create("\\temp.bin", 0, 0, (uint)FileAttributes.Normal, [], 64 * 1024,
+            out var fileNode, out _, out _, out _);
+        fs.SetFileSize(fileNode!, null!, 100, setAllocationSize: false, out _);
+
+        fs.Cleanup(fileNode!, null!, "\\temp.bin",
+            FileSystemBase.CleanupDelete | FileSystemBase.CleanupSetAllocationSize);
+
+        Assert.False(fs.NodeMap.TryGet("\\temp.bin", out _));
+        Assert.Equal(0UL, fs.NodeMap.GetTotalAllocated());
+    }
+
+    [Fact]
+    public void Cleanup_SetAllocationSize_TrimsOverAllocationToFileSize()
+    {
+        // WinFsp asks for this on close so space preallocated but never used is given back.
+        var fs = new MemoryFileSystem(1024 * 1024, "Label");
+        fs.Create("\\file.bin", 0, 0, (uint)FileAttributes.Normal, [], 64 * 1024,
+            out var fileNode, out _, out _, out _);
+        fs.SetFileSize(fileNode!, null!, 100, setAllocationSize: false, out _);
+        var node = (FileNode)fileNode!;
+        fs.ClearDirty();
+
+        fs.Cleanup(fileNode!, null!, "\\file.bin", FileSystemBase.CleanupSetAllocationSize);
+
+        Assert.Equal(512UL, node.FileInfo.AllocationSize);
+        Assert.Equal(100UL, node.FileInfo.FileSize);
+        Assert.Equal(512UL, fs.NodeMap.GetTotalAllocated());
+        Assert.True(fs.IsDirty);
+    }
+
+    [Fact]
+    public void Cleanup_SetAllocationSizeWhenAllocationAlreadyFits_LeavesDiskClean()
+    {
+        var fs = new MemoryFileSystem(1024 * 1024, "Label");
+        fs.Create("\\file.bin", 0, 0, (uint)FileAttributes.Normal, [], 0,
+            out var fileNode, out _, out _, out _);
+        fs.SetFileSize(fileNode!, null!, 100, setAllocationSize: false, out _);
+        fs.ClearDirty();
+
+        fs.Cleanup(fileNode!, null!, "\\file.bin", FileSystemBase.CleanupSetAllocationSize);
+
+        Assert.False(fs.IsDirty);
+    }
+
+    [Fact]
     public void Cleanup_WithDeleteFlag_RemovesNodeFromMap()
     {
         var fs = new MemoryFileSystem(1024 * 1024, "Label");
         fs.Create("\\file.bin", 0, 0, (uint)FileAttributes.Normal, [], 0,
             out var fileNode, out _, out _, out _);
 
-        fs.Cleanup(fileNode!, null!, "\\file.bin", MemoryFileSystem.CleanupDelete);
+        fs.Cleanup(fileNode!, null!, "\\file.bin", FileSystemBase.CleanupDelete);
 
         Assert.False(fs.NodeMap.TryGet("\\file.bin", out _));
+    }
+
+    [Fact]
+    public void Cleanup_WithDeleteFlagOnDirectoryThatGainedAChild_KeepsDirectoryAndChild()
+    {
+        var fs = new MemoryFileSystem(1024 * 1024, "Label");
+        fs.Create("\\dir", 0, 0, (uint)FileAttributes.Directory, [], 0,
+            out var dirNode, out _, out _, out _);
+        Assert.Equal(0, fs.CanDelete(dirNode!, null!, "\\dir"));
+        fs.Create("\\dir\\child.bin", 0, 0, (uint)FileAttributes.Normal, [], 0, out _, out _, out _, out _);
+
+        fs.Cleanup(dirNode!, null!, "\\dir", FileSystemBase.CleanupDelete);
+
+        Assert.True(fs.NodeMap.TryGet("\\dir", out _));
+        Assert.True(fs.NodeMap.TryGet("\\dir\\child.bin", out _));
     }
 
     [Fact]
@@ -51,105 +117,10 @@ public sealed class MemoryFileSystemCallbackTests
         fs.Create("\\file.bin", 0, 0, (uint)FileAttributes.Normal, [], 0,
             out var currentNode, out _, out _, out _);
 
-        fs.Cleanup(staleNode!, null!, "\\file.bin", MemoryFileSystem.CleanupDelete);
+        fs.Cleanup(staleNode!, null!, "\\file.bin", FileSystemBase.CleanupDelete);
 
         Assert.True(fs.NodeMap.TryGet("\\file.bin", out var stored));
         Assert.Same(currentNode, stored);
-    }
-
-    [Fact]
-    public void Cleanup_WithDeleteFlagOnDirectoryThatGainedAChild_KeepsDirectoryAndChild()
-    {
-        var fs = new MemoryFileSystem(1024 * 1024, "Label");
-        fs.Create("\\dir", 0, 0, (uint)FileAttributes.Directory, [], 0,
-            out var dirNode, out _, out _, out _);
-        Assert.Equal(0, fs.CanDelete(dirNode!, null!, "\\dir"));
-        fs.Create("\\dir\\child.bin", 0, 0, (uint)FileAttributes.Normal, [], 0, out _, out _, out _, out _);
-
-        fs.Cleanup(dirNode!, null!, "\\dir", MemoryFileSystem.CleanupDelete);
-
-        Assert.True(fs.NodeMap.TryGet("\\dir", out _));
-        Assert.True(fs.NodeMap.TryGet("\\dir\\child.bin", out _));
-    }
-
-    [Fact]
-    public void Create_ParentDirectoryMissing_ReturnsObjectPathNotFound()
-    {
-        var fs = new MemoryFileSystem(1024 * 1024, "Label");
-
-        var status = fs.Create("\\missing\\child.bin", 0, 0, (uint)FileAttributes.Normal, [], 0,
-            out _, out _, out _, out _);
-
-        Assert.Equal(unchecked((int)0xC000003A), status); // STATUS_OBJECT_PATH_NOT_FOUND
-        Assert.False(fs.NodeMap.TryGet("\\missing\\child.bin", out _));
-    }
-
-    [Fact]
-    public void SetFileSize_ThroughHandleOpenedBeforeFormat_LeavesTotalAllocatedUnchanged()
-    {
-        var fs = new MemoryFileSystem(1024 * 1024, "Label");
-        fs.Create("\\file.bin", 0, 0, (uint)FileAttributes.Normal, [], 0,
-            out var staleNode, out _, out _, out _);
-        WriteBytes(fs, staleNode!, new byte[8192], 0);
-        fs.NodeMap.ClearAll();
-        var totalAfterFormat = fs.NodeMap.GetTotalAllocated();
-
-        fs.SetFileSize(staleNode!, null!, 0, setAllocationSize: true, out _);
-
-        Assert.Equal(totalAfterFormat, fs.NodeMap.GetTotalAllocated());
-    }
-
-    [Fact]
-    public void Write_ExtendingThroughHandleOpenedBeforeFormat_FailsAndLeavesTotalAllocatedUnchanged()
-    {
-        var fs = new MemoryFileSystem(1024 * 1024, "Label");
-        fs.Create("\\file.bin", 0, 0, (uint)FileAttributes.Normal, [], 0,
-            out var staleNode, out _, out _, out _);
-        fs.NodeMap.ClearAll();
-        var totalAfterFormat = fs.NodeMap.GetTotalAllocated();
-
-        var ptr = Marshal.AllocHGlobal(8192);
-        int status;
-        try
-        {
-            status = fs.Write(staleNode!, null!, ptr, 0, 8192, false, false, out _, out _);
-        }
-        finally
-        {
-            Marshal.FreeHGlobal(ptr);
-        }
-
-        Assert.NotEqual(0, status);
-        Assert.Equal(totalAfterFormat, fs.NodeMap.GetTotalAllocated());
-    }
-
-    [Fact]
-    public void Cleanup_WithSetLastWriteTimeFlag_BumpsMetadataVersion()
-    {
-        var fs = new MemoryFileSystem(1024 * 1024, "Label");
-        fs.Create("\\file.bin", 0, 0, (uint)FileAttributes.Normal, [], 0,
-            out var fileNode, out _, out _, out _);
-        var node = (FileNode)fileNode!;
-        var versionBefore = node.MetadataVersion;
-
-        fs.Cleanup(fileNode!, null!, "\\file.bin", MemoryFileSystem.CleanupSetLastWriteTime);
-
-        Assert.True(node.MetadataVersion > versionBefore);
-    }
-
-    [Fact]
-    public void Cleanup_WithSetArchiveBitFlagOnFile_SetsArchiveAttribute()
-    {
-        var fs = new MemoryFileSystem(1024 * 1024, "Label");
-        fs.Create("\\file.bin", 0, 0, (uint)FileAttributes.Normal, [], 0,
-            out var fileNode, out _, out _, out _);
-        var node = (FileNode)fileNode!;
-        var versionBefore = node.MetadataVersion;
-
-        fs.Cleanup(fileNode!, null!, "\\file.bin", MemoryFileSystem.CleanupSetArchiveBit);
-
-        Assert.Equal((uint)FileAttributes.Archive, node.FileInfo.FileAttributes & (uint)FileAttributes.Archive);
-        Assert.True(node.MetadataVersion > versionBefore);
     }
 
     [Fact]
@@ -162,7 +133,7 @@ public sealed class MemoryFileSystemCallbackTests
         fs.ClearDirty();
         var versionBefore = node.MetadataVersion;
 
-        fs.Cleanup(fileNode!, null!, "\\file.bin", MemoryFileSystem.CleanupSetArchiveBit);
+        fs.Cleanup(fileNode!, null!, "\\file.bin", FileSystemBase.CleanupSetArchiveBit);
 
         Assert.Equal(versionBefore, node.MetadataVersion);
         Assert.False(fs.IsDirty);
@@ -176,9 +147,38 @@ public sealed class MemoryFileSystemCallbackTests
             out var dirNode, out _, out _, out _);
         var node = (FileNode)dirNode!;
 
-        fs.Cleanup(dirNode!, null!, "\\dir", MemoryFileSystem.CleanupSetArchiveBit);
+        fs.Cleanup(dirNode!, null!, "\\dir", FileSystemBase.CleanupSetArchiveBit);
 
         Assert.Equal(0u, node.FileInfo.FileAttributes & (uint)FileAttributes.Archive);
+    }
+
+    [Fact]
+    public void Cleanup_WithSetArchiveBitFlagOnFile_SetsArchiveAttribute()
+    {
+        var fs = new MemoryFileSystem(1024 * 1024, "Label");
+        fs.Create("\\file.bin", 0, 0, (uint)FileAttributes.Normal, [], 0,
+            out var fileNode, out _, out _, out _);
+        var node = (FileNode)fileNode!;
+        var versionBefore = node.MetadataVersion;
+
+        fs.Cleanup(fileNode!, null!, "\\file.bin", FileSystemBase.CleanupSetArchiveBit);
+
+        Assert.Equal((uint)FileAttributes.Archive, node.FileInfo.FileAttributes & (uint)FileAttributes.Archive);
+        Assert.True(node.MetadataVersion > versionBefore);
+    }
+
+    [Fact]
+    public void Cleanup_WithSetLastWriteTimeFlag_BumpsMetadataVersion()
+    {
+        var fs = new MemoryFileSystem(1024 * 1024, "Label");
+        fs.Create("\\file.bin", 0, 0, (uint)FileAttributes.Normal, [], 0,
+            out var fileNode, out _, out _, out _);
+        var node = (FileNode)fileNode!;
+        var versionBefore = node.MetadataVersion;
+
+        fs.Cleanup(fileNode!, null!, "\\file.bin", FileSystemBase.CleanupSetLastWriteTime);
+
+        Assert.True(node.MetadataVersion > versionBefore);
     }
 
     [Fact]
@@ -228,7 +228,7 @@ public sealed class MemoryFileSystemCallbackTests
         fs.Create("\\file.bin", 0, 0, (uint)FileAttributes.Normal, [], 0,
             out var fileNode, out _, out _, out _);
         var events = new List<bool>();
-        fs.ContentAccessed += isWrite => events.Add(isWrite);
+        fs.ContentAccessed += events.Add;
 
         WriteBytes(fs, fileNode!, [1, 2, 3], offset: 0);
         ReadBytes(fs, fileNode!, 3, offset: 0);
@@ -288,6 +288,18 @@ public sealed class MemoryFileSystemCallbackTests
     }
 
     [Fact]
+    public void Create_ParentDirectoryMissing_ReturnsObjectPathNotFound()
+    {
+        var fs = new MemoryFileSystem(1024 * 1024, "Label");
+
+        var status = fs.Create("\\missing\\child.bin", 0, 0, (uint)FileAttributes.Normal, [], 0,
+            out _, out _, out _, out _);
+
+        Assert.Equal(unchecked((int)0xC000003A), status); // STATUS_OBJECT_PATH_NOT_FOUND
+        Assert.False(fs.NodeMap.TryGet("\\missing\\child.bin", out _));
+    }
+
+    [Fact]
     public void GetFileInfo_ReturnsCurrentNodeState()
     {
         var fs = new MemoryFileSystem(1024 * 1024, "Label");
@@ -298,50 +310,6 @@ public sealed class MemoryFileSystemCallbackTests
 
         Assert.Equal(0, status);
         Assert.Equal(4096u, fileInfo.AllocationSize);
-    }
-
-    [Fact]
-    public void Open_ExistingPath_ReturnsSameNode()
-    {
-        var fs = new MemoryFileSystem(1024 * 1024, "Label");
-        fs.Create("\\file.bin", 0, 0, (uint)FileAttributes.Normal, [], 0,
-            out var created, out _, out _, out _);
-
-        var status = fs.Open("\\file.bin", 0, 0, out var opened, out _, out _, out _);
-
-        Assert.Equal(0, status);
-        Assert.Same(created, opened);
-    }
-
-    [Fact]
-    public void Open_MissingPath_ReturnsObjectNameNotFound()
-    {
-        var fs = new MemoryFileSystem(1024 * 1024, "Label");
-
-        var status = fs.Open("\\missing.bin", 0, 0, out _, out _, out _, out _);
-
-        Assert.Equal(unchecked((int)0xC0000034), status); // STATUS_OBJECT_NAME_NOT_FOUND
-    }
-
-    [Fact]
-    public void Open_MissingIntermediateDirectory_ReturnsObjectPathNotFound()
-    {
-        var fs = new MemoryFileSystem(1024 * 1024, "Label");
-
-        var status = fs.Open("\\missing\\file.bin", 0, 0, out _, out _, out _, out _);
-
-        Assert.Equal(unchecked((int)0xC000003A), status); // STATUS_OBJECT_PATH_NOT_FOUND
-    }
-
-    [Fact]
-    public void Open_IntermediateComponentIsFile_ReturnsNotADirectory()
-    {
-        var fs = new MemoryFileSystem(1024 * 1024, "Label");
-        fs.Create("\\file.bin", 0, 0, (uint)FileAttributes.Normal, [], 0, out _, out _, out _, out _);
-
-        var status = fs.Open("\\file.bin\\child.bin", 0, 0, out _, out _, out _, out _);
-
-        Assert.Equal(unchecked((int)0xC0000103), status); // STATUS_NOT_A_DIRECTORY
     }
 
     [Fact]
@@ -358,14 +326,15 @@ public sealed class MemoryFileSystemCallbackTests
     }
 
     [Fact]
-    public void GetSecurityByName_MissingPath_ReturnsObjectNameNotFound()
+    public void GetSecurityByName_IntermediateComponentIsFile_ReturnsNotADirectory()
     {
         var fs = new MemoryFileSystem(1024 * 1024, "Label");
+        fs.Create("\\file.bin", 0, 0, (uint)FileAttributes.Normal, [], 0, out _, out _, out _, out _);
         byte[] securityDescriptor = null!;
 
-        var status = fs.GetSecurityByName("\\missing.bin", out _, ref securityDescriptor);
+        var status = fs.GetSecurityByName("\\file.bin\\child.bin", out _, ref securityDescriptor);
 
-        Assert.Equal(unchecked((int)0xC0000034), status); // STATUS_OBJECT_NAME_NOT_FOUND
+        Assert.Equal(unchecked((int)0xC0000103), status); // STATUS_NOT_A_DIRECTORY
     }
 
     [Fact]
@@ -380,15 +349,58 @@ public sealed class MemoryFileSystemCallbackTests
     }
 
     [Fact]
-    public void GetSecurityByName_IntermediateComponentIsFile_ReturnsNotADirectory()
+    public void GetSecurityByName_MissingPath_ReturnsObjectNameNotFound()
+    {
+        var fs = new MemoryFileSystem(1024 * 1024, "Label");
+        byte[] securityDescriptor = null!;
+
+        var status = fs.GetSecurityByName("\\missing.bin", out _, ref securityDescriptor);
+
+        Assert.Equal(unchecked((int)0xC0000034), status); // STATUS_OBJECT_NAME_NOT_FOUND
+    }
+
+    [Fact]
+    public void Open_ExistingPath_ReturnsSameNode()
+    {
+        var fs = new MemoryFileSystem(1024 * 1024, "Label");
+        fs.Create("\\file.bin", 0, 0, (uint)FileAttributes.Normal, [], 0,
+            out var created, out _, out _, out _);
+
+        var status = fs.Open("\\file.bin", 0, 0, out var opened, out _, out _, out _);
+
+        Assert.Equal(0, status);
+        Assert.Same(created, opened);
+    }
+
+    [Fact]
+    public void Open_IntermediateComponentIsFile_ReturnsNotADirectory()
     {
         var fs = new MemoryFileSystem(1024 * 1024, "Label");
         fs.Create("\\file.bin", 0, 0, (uint)FileAttributes.Normal, [], 0, out _, out _, out _, out _);
-        byte[] securityDescriptor = null!;
 
-        var status = fs.GetSecurityByName("\\file.bin\\child.bin", out _, ref securityDescriptor);
+        var status = fs.Open("\\file.bin\\child.bin", 0, 0, out _, out _, out _, out _);
 
         Assert.Equal(unchecked((int)0xC0000103), status); // STATUS_NOT_A_DIRECTORY
+    }
+
+    [Fact]
+    public void Open_MissingIntermediateDirectory_ReturnsObjectPathNotFound()
+    {
+        var fs = new MemoryFileSystem(1024 * 1024, "Label");
+
+        var status = fs.Open("\\missing\\file.bin", 0, 0, out _, out _, out _, out _);
+
+        Assert.Equal(unchecked((int)0xC000003A), status); // STATUS_OBJECT_PATH_NOT_FOUND
+    }
+
+    [Fact]
+    public void Open_MissingPath_ReturnsObjectNameNotFound()
+    {
+        var fs = new MemoryFileSystem(1024 * 1024, "Label");
+
+        var status = fs.Open("\\missing.bin", 0, 0, out _, out _, out _, out _);
+
+        Assert.Equal(unchecked((int)0xC0000034), status); // STATUS_OBJECT_NAME_NOT_FOUND
     }
 
     [Fact]
@@ -430,6 +442,82 @@ public sealed class MemoryFileSystemCallbackTests
     }
 
     [Fact]
+    public void Rename_DirectoryIntoOwnSubtree_ReturnsAccessDenied()
+    {
+        var fs = new MemoryFileSystem(1024 * 1024, "Label");
+        fs.Create("\\dir", 0, 0, (uint)FileAttributes.Directory, [], 0,
+            out var dirNode, out _, out _, out _);
+        fs.Create("\\dir\\child", 0, 0, (uint)FileAttributes.Directory, [], 0, out _, out _, out _, out _);
+
+        var status = fs.Rename(dirNode!, null!, "\\dir", "\\dir\\child\\dir", replaceIfExists: false);
+
+        Assert.Equal(unchecked((int)0xC0000022), status); // STATUS_ACCESS_DENIED
+        Assert.True(fs.NodeMap.TryGet("\\dir", out _));
+    }
+
+    [Fact]
+    public void Rename_DirectoryOverExistingFile_ReturnsNotADirectory()
+    {
+        var fs = new MemoryFileSystem(1024 * 1024, "Label");
+        fs.Create("\\source", 0, 0, (uint)FileAttributes.Directory, [], 0,
+            out var sourceNode, out _, out _, out _);
+        fs.Create("\\target.bin", 0, 0, (uint)FileAttributes.Normal, [], 0, out _, out _, out _, out _);
+
+        var status = fs.Rename(sourceNode!, null!, "\\source", "\\target.bin", replaceIfExists: true);
+
+        Assert.Equal(unchecked((int)0xC0000103), status); // STATUS_NOT_A_DIRECTORY
+        Assert.True(fs.NodeMap.TryGet("\\target.bin", out _));
+    }
+
+    [Fact]
+    public void Rename_FileOverExistingDirectory_ReturnsFileIsADirectory()
+    {
+        var fs = new MemoryFileSystem(1024 * 1024, "Label");
+        fs.Create("\\source.bin", 0, 0, (uint)FileAttributes.Normal, [], 0,
+            out var sourceNode, out _, out _, out _);
+        fs.Create("\\target", 0, 0, (uint)FileAttributes.Directory, [], 0, out _, out _, out _, out _);
+
+        var status = fs.Rename(sourceNode!, null!, "\\source.bin", "\\target", replaceIfExists: true);
+
+        Assert.Equal(unchecked((int)0xC00000BA), status); // STATUS_FILE_IS_A_DIRECTORY
+        Assert.True(fs.NodeMap.TryGet("\\target", out _));
+    }
+
+    [Fact]
+    public void Rename_ReplacingEmptyDirectory_ReturnsNameCollisionAndLeavesBothInPlace()
+    {
+        // ReplaceIfExists never applies to a directory target on Windows, even an empty one —
+        // only a file target can be replaced by a rename.
+        var fs = new MemoryFileSystem(1024 * 1024, "Label");
+        fs.Create("\\source", 0, 0, (uint)FileAttributes.Directory, [], 0,
+            out var sourceNode, out _, out _, out _);
+        fs.Create("\\source\\child.bin", 0, 0, (uint)FileAttributes.Normal, [], 0, out _, out _, out _, out _);
+        fs.Create("\\target", 0, 0, (uint)FileAttributes.Directory, [], 0, out _, out _, out _, out _);
+
+        var status = fs.Rename(sourceNode!, null!, "\\source", "\\target", replaceIfExists: true);
+
+        Assert.Equal(unchecked((int)0xC0000035), status); // STATUS_OBJECT_NAME_COLLISION
+        Assert.True(fs.NodeMap.TryGet("\\source", out _));
+        Assert.True(fs.NodeMap.TryGet("\\source\\child.bin", out _));
+        Assert.True(fs.NodeMap.TryGet("\\target", out _));
+    }
+
+    [Fact]
+    public void Rename_ReplacingNonEmptyDirectory_ReturnsDirectoryNotEmpty()
+    {
+        var fs = new MemoryFileSystem(1024 * 1024, "Label");
+        fs.Create("\\source", 0, 0, (uint)FileAttributes.Directory, [], 0,
+            out var sourceNode, out _, out _, out _);
+        fs.Create("\\target", 0, 0, (uint)FileAttributes.Directory, [], 0, out _, out _, out _, out _);
+        fs.Create("\\target\\child.bin", 0, 0, (uint)FileAttributes.Normal, [], 0, out _, out _, out _, out _);
+
+        var status = fs.Rename(sourceNode!, null!, "\\source", "\\target", replaceIfExists: true);
+
+        Assert.Equal(unchecked((int)0xC0000101), status); // STATUS_DIRECTORY_NOT_EMPTY
+        Assert.True(fs.NodeMap.TryGet("\\target\\child.bin", out _));
+    }
+
+    [Fact]
     public void Rename_TargetExistsWithoutReplace_ReturnsNameCollision()
     {
         var fs = new MemoryFileSystem(1024 * 1024, "Label");
@@ -460,79 +548,40 @@ public sealed class MemoryFileSystemCallbackTests
     }
 
     [Fact]
-    public void Rename_DirectoryIntoOwnSubtree_ReturnsAccessDenied()
+    public void SetBasicInfo_NothingRequested_LeavesDiskClean()
     {
         var fs = new MemoryFileSystem(1024 * 1024, "Label");
-        fs.Create("\\dir", 0, 0, (uint)FileAttributes.Directory, [], 0,
-            out var dirNode, out _, out _, out _);
-        fs.Create("\\dir\\child", 0, 0, (uint)FileAttributes.Directory, [], 0, out _, out _, out _, out _);
+        fs.Create("\\file.bin", 0, 0, (uint)FileAttributes.Normal, [], 0,
+            out var fileNode, out _, out _, out _);
+        var node = (FileNode)fileNode!;
+        var versionBefore = node.MetadataVersion;
+        fs.ClearDirty();
 
-        var status = fs.Rename(dirNode!, null!, "\\dir", "\\dir\\child\\dir", replaceIfExists: false);
+        var status = fs.SetBasicInfo(fileNode!, null!, FileNode.InvalidFileAttributes, 0, 0, 0, 0, out _);
 
-        Assert.Equal(unchecked((int)0xC0000022), status); // STATUS_ACCESS_DENIED
-        Assert.True(fs.NodeMap.TryGet("\\dir", out _));
+        Assert.Equal(0, status);
+        Assert.Equal(versionBefore, node.MetadataVersion);
+        Assert.False(fs.IsDirty);
     }
 
+    // Callbacks that end up changing nothing must not mark the disk dirty, or they trigger an
+    // auto-save (and snapshot check) for a disk whose content is unchanged.
     [Fact]
-    public void Rename_ReplacingNonEmptyDirectory_ReturnsDirectoryNotEmpty()
+    public void SetBasicInfo_SameValues_LeavesDiskClean()
     {
         var fs = new MemoryFileSystem(1024 * 1024, "Label");
-        fs.Create("\\source", 0, 0, (uint)FileAttributes.Directory, [], 0,
-            out var sourceNode, out _, out _, out _);
-        fs.Create("\\target", 0, 0, (uint)FileAttributes.Directory, [], 0, out _, out _, out _, out _);
-        fs.Create("\\target\\child.bin", 0, 0, (uint)FileAttributes.Normal, [], 0, out _, out _, out _, out _);
+        fs.Create("\\file.bin", 0, 0, (uint)FileAttributes.Normal, [], 0,
+            out var fileNode, out _, out _, out _);
+        var node = (FileNode)fileNode!;
+        var info = node.FileInfo;
+        var versionBefore = node.MetadataVersion;
+        fs.ClearDirty();
 
-        var status = fs.Rename(sourceNode!, null!, "\\source", "\\target", replaceIfExists: true);
+        fs.SetBasicInfo(fileNode!, null!, info.FileAttributes, info.CreationTime, info.LastAccessTime,
+            info.LastWriteTime, info.ChangeTime, out _);
 
-        Assert.Equal(unchecked((int)0xC0000101), status); // STATUS_DIRECTORY_NOT_EMPTY
-        Assert.True(fs.NodeMap.TryGet("\\target\\child.bin", out _));
-    }
-
-    [Fact]
-    public void Rename_ReplacingEmptyDirectory_ReturnsNameCollisionAndLeavesBothInPlace()
-    {
-        // ReplaceIfExists never applies to a directory target on Windows, even an empty one —
-        // only a file target can be replaced by a rename.
-        var fs = new MemoryFileSystem(1024 * 1024, "Label");
-        fs.Create("\\source", 0, 0, (uint)FileAttributes.Directory, [], 0,
-            out var sourceNode, out _, out _, out _);
-        fs.Create("\\source\\child.bin", 0, 0, (uint)FileAttributes.Normal, [], 0, out _, out _, out _, out _);
-        fs.Create("\\target", 0, 0, (uint)FileAttributes.Directory, [], 0, out _, out _, out _, out _);
-
-        var status = fs.Rename(sourceNode!, null!, "\\source", "\\target", replaceIfExists: true);
-
-        Assert.Equal(unchecked((int)0xC0000035), status); // STATUS_OBJECT_NAME_COLLISION
-        Assert.True(fs.NodeMap.TryGet("\\source", out _));
-        Assert.True(fs.NodeMap.TryGet("\\source\\child.bin", out _));
-        Assert.True(fs.NodeMap.TryGet("\\target", out _));
-    }
-
-    [Fact]
-    public void Rename_FileOverExistingDirectory_ReturnsFileIsADirectory()
-    {
-        var fs = new MemoryFileSystem(1024 * 1024, "Label");
-        fs.Create("\\source.bin", 0, 0, (uint)FileAttributes.Normal, [], 0,
-            out var sourceNode, out _, out _, out _);
-        fs.Create("\\target", 0, 0, (uint)FileAttributes.Directory, [], 0, out _, out _, out _, out _);
-
-        var status = fs.Rename(sourceNode!, null!, "\\source.bin", "\\target", replaceIfExists: true);
-
-        Assert.Equal(unchecked((int)0xC00000BA), status); // STATUS_FILE_IS_A_DIRECTORY
-        Assert.True(fs.NodeMap.TryGet("\\target", out _));
-    }
-
-    [Fact]
-    public void Rename_DirectoryOverExistingFile_ReturnsNotADirectory()
-    {
-        var fs = new MemoryFileSystem(1024 * 1024, "Label");
-        fs.Create("\\source", 0, 0, (uint)FileAttributes.Directory, [], 0,
-            out var sourceNode, out _, out _, out _);
-        fs.Create("\\target.bin", 0, 0, (uint)FileAttributes.Normal, [], 0, out _, out _, out _, out _);
-
-        var status = fs.Rename(sourceNode!, null!, "\\source", "\\target.bin", replaceIfExists: true);
-
-        Assert.Equal(unchecked((int)0xC0000103), status); // STATUS_NOT_A_DIRECTORY
-        Assert.True(fs.NodeMap.TryGet("\\target.bin", out _));
+        Assert.Equal(versionBefore, node.MetadataVersion);
+        Assert.False(fs.IsDirty);
     }
 
     [Fact]
@@ -553,42 +602,53 @@ public sealed class MemoryFileSystemCallbackTests
         Assert.True(fs.IsDirty);
     }
 
-    // Callbacks that end up changing nothing must not mark the disk dirty, or they trigger an
-    // auto-save (and snapshot check) for a disk whose content is unchanged.
-
     [Fact]
-    public void SetBasicInfo_NothingRequested_LeavesDiskClean()
+    public void SetFileSize_ExtendAfterTruncateAndAllocationTrim_ReadsZerosInsteadOfOldData()
     {
+        // Closing trims the allocation to 512 but keeps the chunk, so bytes 100..511 survive the
+        // close unless the truncation itself cleared them.
         var fs = new MemoryFileSystem(1024 * 1024, "Label");
         fs.Create("\\file.bin", 0, 0, (uint)FileAttributes.Normal, [], 0,
             out var fileNode, out _, out _, out _);
-        var node = (FileNode)fileNode!;
-        var versionBefore = node.MetadataVersion;
-        fs.ClearDirty();
+        WriteBytes(fs, fileNode!, Enumerable.Repeat((byte)0xAA, 1000).ToArray(), offset: 0);
+        fs.SetFileSize(fileNode!, null!, 100, setAllocationSize: false, out _);
+        fs.Cleanup(fileNode!, null!, "\\file.bin", FileSystemBase.CleanupSetAllocationSize);
 
-        var status = fs.SetBasicInfo(fileNode!, null!, FileNode.InvalidFileAttributes, 0, 0, 0, 0, out _);
+        fs.SetFileSize(fileNode!, null!, 400, setAllocationSize: false, out _);
 
-        Assert.Equal(0, status);
-        Assert.Equal(versionBefore, node.MetadataVersion);
-        Assert.False(fs.IsDirty);
+        var bytes = ReadBytes(fs, fileNode!, 400, offset: 0);
+        Assert.All(bytes[100..], b => Assert.Equal(0, b));
     }
 
     [Fact]
-    public void SetBasicInfo_SameValues_LeavesDiskClean()
+    public void SetFileSize_ThroughHandleOpenedBeforeFormat_LeavesTotalAllocatedUnchanged()
+    {
+        var fs = new MemoryFileSystem(1024 * 1024, "Label");
+        fs.Create("\\file.bin", 0, 0, (uint)FileAttributes.Normal, [], 0,
+            out var staleNode, out _, out _, out _);
+        WriteBytes(fs, staleNode!, new byte[8192], 0);
+        fs.NodeMap.ClearAll();
+        var totalAfterFormat = fs.NodeMap.GetTotalAllocated();
+
+        fs.SetFileSize(staleNode!, null!, 0, setAllocationSize: true, out _);
+
+        Assert.Equal(totalAfterFormat, fs.NodeMap.GetTotalAllocated());
+    }
+
+    [Fact]
+    public void SetFileSize_TruncateThenExtendWithinAllocation_ReadsZerosInsteadOfOldData()
     {
         var fs = new MemoryFileSystem(1024 * 1024, "Label");
         fs.Create("\\file.bin", 0, 0, (uint)FileAttributes.Normal, [], 0,
             out var fileNode, out _, out _, out _);
-        var node = (FileNode)fileNode!;
-        var info = node.FileInfo;
-        var versionBefore = node.MetadataVersion;
-        fs.ClearDirty();
+        WriteBytes(fs, fileNode!, Enumerable.Repeat((byte)0xAA, 1000).ToArray(), offset: 0);
 
-        fs.SetBasicInfo(fileNode!, null!, info.FileAttributes, info.CreationTime, info.LastAccessTime,
-            info.LastWriteTime, info.ChangeTime, out _);
+        fs.SetFileSize(fileNode!, null!, 10, setAllocationSize: false, out _);
+        fs.SetFileSize(fileNode!, null!, 1000, setAllocationSize: false, out _);
 
-        Assert.Equal(versionBefore, node.MetadataVersion);
-        Assert.False(fs.IsDirty);
+        var bytes = ReadBytes(fs, fileNode!, 1000, offset: 0);
+        Assert.All(bytes[..10], b => Assert.Equal(0xAA, b));
+        Assert.All(bytes[10..], b => Assert.Equal(0, b));
     }
 
     [Theory]
@@ -609,53 +669,27 @@ public sealed class MemoryFileSystemCallbackTests
     }
 
     [Fact]
-    public void Cleanup_SetAllocationSizeWhenAllocationAlreadyFits_LeavesDiskClean()
+    public void Write_ExtendingThroughHandleOpenedBeforeFormat_FailsAndLeavesTotalAllocatedUnchanged()
     {
         var fs = new MemoryFileSystem(1024 * 1024, "Label");
         fs.Create("\\file.bin", 0, 0, (uint)FileAttributes.Normal, [], 0,
-            out var fileNode, out _, out _, out _);
-        fs.SetFileSize(fileNode!, null!, 100, setAllocationSize: false, out _);
-        fs.ClearDirty();
+            out var staleNode, out _, out _, out _);
+        fs.NodeMap.ClearAll();
+        var totalAfterFormat = fs.NodeMap.GetTotalAllocated();
 
-        fs.Cleanup(fileNode!, null!, "\\file.bin", MemoryFileSystem.CleanupSetAllocationSize);
+        var ptr = Marshal.AllocHGlobal(8192);
+        int status;
+        try
+        {
+            status = fs.Write(staleNode!, null!, ptr, 0, 8192, false, false, out _, out _);
+        }
+        finally
+        {
+            Marshal.FreeHGlobal(ptr);
+        }
 
-        Assert.False(fs.IsDirty);
-    }
-
-    [Fact]
-    public void Cleanup_SetAllocationSize_TrimsOverAllocationToFileSize()
-    {
-        // WinFsp asks for this on close so space preallocated but never used is given back.
-        var fs = new MemoryFileSystem(1024 * 1024, "Label");
-        fs.Create("\\file.bin", 0, 0, (uint)FileAttributes.Normal, [], 64 * 1024,
-            out var fileNode, out _, out _, out _);
-        fs.SetFileSize(fileNode!, null!, 100, setAllocationSize: false, out _);
-        var node = (FileNode)fileNode!;
-        fs.ClearDirty();
-
-        fs.Cleanup(fileNode!, null!, "\\file.bin", MemoryFileSystem.CleanupSetAllocationSize);
-
-        Assert.Equal(512UL, node.FileInfo.AllocationSize);
-        Assert.Equal(100UL, node.FileInfo.FileSize);
-        Assert.Equal(512UL, fs.NodeMap.GetTotalAllocated());
-        Assert.True(fs.IsDirty);
-    }
-
-    [Fact]
-    public void Cleanup_DeleteTogetherWithSetAllocationSize_KeepsAllocatedTotalExact()
-    {
-        // A preallocated file deleted on close gets both flags in one Cleanup. The node is already
-        // out of the map, so trimming it must not subtract its allocation from the total again.
-        var fs = new MemoryFileSystem(1024 * 1024, "Label");
-        fs.Create("\\temp.bin", 0, 0, (uint)FileAttributes.Normal, [], 64 * 1024,
-            out var fileNode, out _, out _, out _);
-        fs.SetFileSize(fileNode!, null!, 100, setAllocationSize: false, out _);
-
-        fs.Cleanup(fileNode!, null!, "\\temp.bin",
-            MemoryFileSystem.CleanupDelete | MemoryFileSystem.CleanupSetAllocationSize);
-
-        Assert.False(fs.NodeMap.TryGet("\\temp.bin", out _));
-        Assert.Equal(0UL, fs.NodeMap.GetTotalAllocated());
+        Assert.NotEqual(0, status);
+        Assert.Equal(totalAfterFormat, fs.NodeMap.GetTotalAllocated());
     }
 
     [Fact]
@@ -673,6 +707,22 @@ public sealed class MemoryFileSystemCallbackTests
 
         Assert.Equal(unchecked((int)0xC00000A2), status); // STATUS_MEDIA_WRITE_PROTECTED
         Assert.Equal(0u, bytesTransferred);
+    }
+
+    [Fact]
+    public void Write_PastTruncatedEnd_ReadsZerosInTheGap()
+    {
+        var fs = new MemoryFileSystem(1024 * 1024, "Label");
+        fs.Create("\\file.bin", 0, 0, (uint)FileAttributes.Normal, [], 0,
+            out var fileNode, out _, out _, out _);
+        WriteBytes(fs, fileNode!, Enumerable.Repeat((byte)0xAA, 1000).ToArray(), offset: 0);
+        fs.SetFileSize(fileNode!, null!, 10, setAllocationSize: false, out _);
+
+        WriteBytes(fs, fileNode!, [0xBB], offset: 900);
+
+        var bytes = ReadBytes(fs, fileNode!, 901, offset: 0);
+        Assert.All(bytes[10..900], b => Assert.Equal(0, b));
+        Assert.Equal(0xBB, bytes[900]);
     }
 
     [Fact]
@@ -695,56 +745,6 @@ public sealed class MemoryFileSystemCallbackTests
         Assert.Equal("\\file.bin", fs.LastContentReadPath);
         Assert.Equal(data.Length, fs.TotalBytesRead);
         Assert.Equal(data.Length, fs.TotalBytesWritten);
-    }
-
-    [Fact]
-    public void SetFileSize_TruncateThenExtendWithinAllocation_ReadsZerosInsteadOfOldData()
-    {
-        var fs = new MemoryFileSystem(1024 * 1024, "Label");
-        fs.Create("\\file.bin", 0, 0, (uint)FileAttributes.Normal, [], 0,
-            out var fileNode, out _, out _, out _);
-        WriteBytes(fs, fileNode!, Enumerable.Repeat((byte)0xAA, 1000).ToArray(), offset: 0);
-
-        fs.SetFileSize(fileNode!, null!, 10, setAllocationSize: false, out _);
-        fs.SetFileSize(fileNode!, null!, 1000, setAllocationSize: false, out _);
-
-        var bytes = ReadBytes(fs, fileNode!, 1000, offset: 0);
-        Assert.All(bytes[..10], b => Assert.Equal(0xAA, b));
-        Assert.All(bytes[10..], b => Assert.Equal(0, b));
-    }
-
-    [Fact]
-    public void Write_PastTruncatedEnd_ReadsZerosInTheGap()
-    {
-        var fs = new MemoryFileSystem(1024 * 1024, "Label");
-        fs.Create("\\file.bin", 0, 0, (uint)FileAttributes.Normal, [], 0,
-            out var fileNode, out _, out _, out _);
-        WriteBytes(fs, fileNode!, Enumerable.Repeat((byte)0xAA, 1000).ToArray(), offset: 0);
-        fs.SetFileSize(fileNode!, null!, 10, setAllocationSize: false, out _);
-
-        WriteBytes(fs, fileNode!, [0xBB], offset: 900);
-
-        var bytes = ReadBytes(fs, fileNode!, 901, offset: 0);
-        Assert.All(bytes[10..900], b => Assert.Equal(0, b));
-        Assert.Equal(0xBB, bytes[900]);
-    }
-
-    [Fact]
-    public void SetFileSize_ExtendAfterTruncateAndAllocationTrim_ReadsZerosInsteadOfOldData()
-    {
-        // Closing trims the allocation to 512 but keeps the chunk, so bytes 100..511 survive the
-        // close unless the truncation itself cleared them.
-        var fs = new MemoryFileSystem(1024 * 1024, "Label");
-        fs.Create("\\file.bin", 0, 0, (uint)FileAttributes.Normal, [], 0,
-            out var fileNode, out _, out _, out _);
-        WriteBytes(fs, fileNode!, Enumerable.Repeat((byte)0xAA, 1000).ToArray(), offset: 0);
-        fs.SetFileSize(fileNode!, null!, 100, setAllocationSize: false, out _);
-        fs.Cleanup(fileNode!, null!, "\\file.bin", MemoryFileSystem.CleanupSetAllocationSize);
-
-        fs.SetFileSize(fileNode!, null!, 400, setAllocationSize: false, out _);
-
-        var bytes = ReadBytes(fs, fileNode!, 400, offset: 0);
-        Assert.All(bytes[100..], b => Assert.Equal(0, b));
     }
 
     private static byte[] ReadBytes(MemoryFileSystem fs, object fileNode, int length, ulong offset)

@@ -282,7 +282,8 @@ public sealed class PipeListenerTests : IDisposable
     /// <param name="line">The line to write.</param>
     private static async Task SendAsync(NamedPipeClientStream client, string line)
     {
-        await using var writer = new StreamWriter(client, leaveOpen: true) { AutoFlush = true };
+        await using var writer = new StreamWriter(client, leaveOpen: true);
+        writer.AutoFlush = true;
         await writer.WriteLineAsync(line);
     }
 

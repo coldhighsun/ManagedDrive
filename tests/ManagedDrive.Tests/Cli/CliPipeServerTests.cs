@@ -211,7 +211,8 @@ public sealed class CliPipeServerTests
     private static async Task<CliResponse> SendAsync(NamedPipeClientStream client, string arg)
     {
         using var reader = new StreamReader(client, leaveOpen: true);
-        await using var writer = new StreamWriter(client, leaveOpen: true) { AutoFlush = true };
+        await using var writer = new StreamWriter(client, leaveOpen: true);
+        writer.AutoFlush = true;
         await writer.WriteLineAsync(CliPipeProtocol.SerializeRequest([arg], null));
         var line = await reader.ReadLineAsync(TestContext.Current.CancellationToken);
         return CliPipeProtocol.DeserializeResponse(line!);
