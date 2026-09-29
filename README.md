@@ -22,6 +22,18 @@
 A Windows RAM disk manager built on .NET 10 and [WinFsp](https://winfsp.dev).  
 Create, mount and manage in-memory volumes that appear as normal drive letters in Explorer.
 
+### Screenshots
+
+<p align="center">
+  <img src="docs/screenshots/main_window.png" alt="Main window" width="400">
+  <img src="docs/screenshots/right_menu.png" alt="Disk context menu" width="400">
+</p>
+<p align="center">
+  <img src="docs/screenshots/settings_window.png" alt="Settings window" width="260">
+  <img src="docs/screenshots/ram_settings_1.png" alt="RAM disk settings (1)" width="260">
+  <img src="docs/screenshots/ram_settings_2.png" alt="RAM disk settings (2)" width="260">
+</p>
+
 ### Features
 
 **Core**
@@ -186,7 +198,7 @@ ManagedDrive warns once when TEMP is set to a RAM disk, and again on every start
 
 ## For Developers
 
-Building from source, solution structure, internals, and performance benchmarks live in [DEVELOPMENT.md](DEVELOPMENT.md).
+Building from source, solution structure, internals, and performance benchmarks live in [DEVELOPMENT.md](docs/DEVELOPMENT.md).
 
 ### License
 
@@ -200,6 +212,18 @@ This project bundles [WinFsp](https://winfsp.dev/) and [SharpCompress](https://g
 
 基于 .NET 10 和 [WinFsp](https://winfsp.dev) 构建的 Windows RAM 虚拟磁盘管理器。  
 创建、挂载并管理内存盘，它们在文件资源管理器中以普通驱动器号的形式呈现。
+
+### 软件截图
+
+<p align="center">
+  <img src="docs/screenshots/main_window_ch.png" alt="主窗口" width="400">
+  <img src="docs/screenshots/right_menu_ch.png" alt="磁盘右键菜单" width="400">
+</p>
+<p align="center">
+  <img src="docs/screenshots/settings_window_ch.png" alt="设置窗口" width="260">
+  <img src="docs/screenshots/ram_settings_1_ch.png" alt="内存盘设置（一）" width="260">
+  <img src="docs/screenshots/ram_settings_2_ch.png" alt="内存盘设置（二）" width="260">
+</p>
 
 ### 功能特性
 
@@ -364,7 +388,7 @@ ManagedDrive 会在 TEMP 被设为内存盘时提示一次，此后只要 TEMP �
 
 ## 开发者内容
 
-构建说明、解决方案结构、内部实现和性能基准见 [DEVELOPMENT.md](DEVELOPMENT.md)。
+构建说明、解决方案结构、内部实现和性能基准见 [DEVELOPMENT.md](docs/DEVELOPMENT.md)。
 
 ### 许可证
 
