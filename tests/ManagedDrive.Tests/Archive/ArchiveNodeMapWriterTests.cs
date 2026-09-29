@@ -37,7 +37,7 @@ public sealed class ArchiveNodeMapWriterTests
         // or above 2 GiB. Use ImageCompressionLevel.None (stored, no deflate work) to keep a
         // 2 GiB-plus export fast enough for a unit test.
         const long size = (long)int.MaxValue + 4096;
-        var alignedSize = FileNode.AlignToAllocationUnit((ulong)size);
+        var alignedSize = FileNode.AlignToAllocationUnit(size);
 
         // Restoring the archive materializes the whole file, which the low-memory guard only
         // allows while its reserve stays free. The margin covers other tests running alongside.
@@ -70,7 +70,7 @@ public sealed class ArchiveNodeMapWriterTests
             FileInfo =
             {
                 FileAttributes = (uint)FileAttributes.Normal,
-                FileSize = (ulong)size,
+                FileSize = size,
                 AllocationSize = alignedSize,
                 CreationTime = now,
                 LastAccessTime = now,

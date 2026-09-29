@@ -51,7 +51,7 @@ public sealed class DiskImageSerializerTests
             var ex = Assert.Throws<InvalidDataException>(() =>
                 DiskImageSerializer.Load(path, out _, out _, "s3cret", out _));
 
-            Assert.IsAssignableFrom<System.Security.Cryptography.CryptographicException>(ex.InnerException);
+            Assert.IsAssignableFrom<CryptographicException>(ex.InnerException);
         }
         finally
         {

@@ -151,7 +151,8 @@ public sealed class CliPipeClientTests : IDisposable
             await server.WaitForConnectionAsync(TestContext.Current.CancellationToken);
 
             using var reader = new StreamReader(server, leaveOpen: true);
-            await using var writer = new StreamWriter(server, leaveOpen: true) { AutoFlush = true };
+            await using var writer = new StreamWriter(server, leaveOpen: true);
+            writer.AutoFlush = true;
             await reader.ReadLineAsync(TestContext.Current.CancellationToken);
             await writer.WriteLineAsync("{not json");
         }, TestContext.Current.CancellationToken);
@@ -342,7 +343,8 @@ public sealed class CliPipeClientTests : IDisposable
             await _server.WaitForConnectionAsync(TestContext.Current.CancellationToken);
 
             using var reader = new StreamReader(_server, leaveOpen: true);
-            await using var writer = new StreamWriter(_server, leaveOpen: true) { AutoFlush = true };
+            await using var writer = new StreamWriter(_server, leaveOpen: true);
+            writer.AutoFlush = true;
 
             await reader.ReadLineAsync(TestContext.Current.CancellationToken);
             await writer.WriteLineAsync(CliPipeProtocol.SerializeResponse(response));
