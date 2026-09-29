@@ -1,6 +1,6 @@
 # Development
 
-Developer-facing documentation for ManagedDrive — building from source, solution structure, internals, and benchmarks. See [README.md](README.md) for user-facing installation and usage docs.
+Developer-facing documentation for ManagedDrive — building from source, solution structure, internals, and benchmarks. See [README.md](../README.md) for user-facing installation and usage docs.
 
 [English](#english) | [中文](#中文)
 
