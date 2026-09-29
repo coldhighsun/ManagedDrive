@@ -108,6 +108,12 @@ public static class DiskImageSerializer
     private const int CekSize = 32;
 
     /// <summary>
+    /// Rough per-node size of the fixed metadata fields <see cref="WriteNode"/> emits, excluding
+    /// the path. Only used to pre-size a segment's plaintext buffer.
+    /// </summary>
+    private const int EstimatedNodeMetadataBytes = 128;
+
+    /// <summary>
     /// Buffer size for the image file's <see cref="FileStream"/>. Save/Load are purely sequential,
     /// large-volume I/O, so a larger-than-default (4 KB) buffer cuts the number of read/write
     /// syscalls substantially — this matters most for uncompressed images, where node metadata is
@@ -116,9 +122,6 @@ public static class DiskImageSerializer
     /// </summary>
     private const int FileStreamBufferSize = 1024 * 1024;
 
-    private const int NonceSize = 12;
-    private const int Pbkdf2Iterations = 210_000;
-
     /// <summary>
     /// Most PBKDF2 iterations accepted from an image header. The count is read before the password
     /// is checked, so without a bound a crafted image could stall the load for hours in key
@@ -126,6 +129,20 @@ public static class DiskImageSerializer
     /// </summary>
     private const int MaxPbkdf2Iterations = 10_000_000;
 
+    /// <summary>
+    /// A segment always holds at least one whole node's content (see <see cref="SegmentTargetBytes"/>),
+    /// so a single node whose own content approaches this size can't safely be built by
+    /// <see cref="BuildSegmentPayload"/>, which buffers a segment's plaintext in one
+    /// <see cref="MemoryStream"/> and (when encrypted) encrypts it with <see cref="AesGcm"/>'s
+    /// single-shot API — both capped near 2 GB. <see cref="SaveIncremental"/> checks node content
+    /// against this (deliberately conservative, well under that ceiling) threshold and diverts the
+    /// whole save to the non-segmented <see cref="Save"/>, which streams without any such limit,
+    /// rather than let the segmented writer overflow.
+    /// </summary>
+    private const ulong MaxSafeSegmentNodeBytes = 1UL * 1024 * 1024 * 1024;
+
+    private const int NonceSize = 12;
+    private const int Pbkdf2Iterations = 210_000;
     private const int SaltSize = 16;
     private const int SegmentedVersion = 6;
 
@@ -140,33 +157,16 @@ public static class DiskImageSerializer
     /// </summary>
     private const long SegmentTargetBytes = 4L * 1024 * 1024;
 
-    /// <summary>
-    /// A segment always holds at least one whole node's content (see <see cref="SegmentTargetBytes"/>),
-    /// so a single node whose own content approaches this size can't safely be built by
-    /// <see cref="BuildSegmentPayload"/>, which buffers a segment's plaintext in one
-    /// <see cref="MemoryStream"/> and (when encrypted) encrypts it with <see cref="AesGcm"/>'s
-    /// single-shot API — both capped near 2 GB. <see cref="SaveIncremental"/> checks node content
-    /// against this (deliberately conservative, well under that ceiling) threshold and diverts the
-    /// whole save to the non-segmented <see cref="Save"/>, which streams without any such limit,
-    /// rather than let the segmented writer overflow.
-    /// </summary>
-    private const ulong MaxSafeSegmentNodeBytes = 1UL * 1024 * 1024 * 1024;
-
-    /// <summary>
-    /// Rough per-node size of the fixed metadata fields <see cref="WriteNode"/> emits, excluding
-    /// the path. Only used to pre-size a segment's plaintext buffer.
-    /// </summary>
-    private const int EstimatedNodeMetadataBytes = 128;
-
     private const int Sha256Size = 32;
     private const int TagSize = 16;
     private const int Version = 5;
-    private static readonly byte[] Magic = "MDRD"u8.ToArray();
 
     /// <summary>
     /// Logger for recoverable anomalies found in an existing image while saving over it.
     /// </summary>
     private static readonly ILogger Logger = AppLog.CreateLogger(typeof(DiskImageSerializer));
+
+    private static readonly byte[] Magic = "MDRD"u8.ToArray();
 
     /// <summary>
     /// Generates a fresh random 256-bit content-encryption key for use when encryption is first
@@ -503,6 +503,32 @@ public static class DiskImageSerializer
     }
 
     /// <summary>
+    /// Unwraps an <see cref="AggregateException"/> thrown out of a <see cref="Parallel.For(int,int,Action{int})"/>
+    /// segment-compression loop back down to the single original exception a caller of the old,
+    /// sequential per-segment loop would have seen, preserving its original stack trace.
+    /// Cancellation is raised through progress reports, so several workers typically observe it at
+    /// once; their <see cref="OperationCanceledException"/>s are collapsed into one (or dropped in
+    /// favor of a single genuine failure alongside them), so callers that treat cancellation
+    /// differently from failure still see a plain cancellation rather than an aggregate.
+    /// </summary>
+    internal static Exception Unwrap(AggregateException ex)
+    {
+        var inner = ex.Flatten().InnerExceptions;
+        var failures = inner.Where(e => e is not OperationCanceledException).ToList();
+        if (failures.Count == 0)
+        {
+            ExceptionDispatchInfo.Capture(inner[0]).Throw();
+        }
+
+        if (failures.Count == 1)
+        {
+            ExceptionDispatchInfo.Capture(failures[0]).Throw();
+        }
+
+        return new AggregateException(failures);
+    }
+
+    /// <summary>
     /// Serializes <paramref name="chunkNodes"/> into a single version 6 segment payload: writes
     /// each node, hashes the resulting plaintext, Zstd-compresses it (unless
     /// <paramref name="level"/> is <see cref="ImageCompressionLevel.None"/>), and — when
@@ -598,52 +624,62 @@ public static class DiskImageSerializer
     }
 
     /// <summary>
-    /// Reports <paramref name="fraction"/> through <paramref name="progress"/> only if it's
-    /// strictly greater than the last value reported, so concurrent callers racing on a shared
-    /// <see cref="Parallel.For(int,int,Action{int})"/> loop can't make the reported progress jump
-    /// backward relative to what was reported before it.
+    /// Creates the exception for encrypted image data failing authentication under a CEK the
+    /// password already unwrapped. That can only mean the data was damaged or tampered with;
+    /// reporting it as a wrong password would send the user retrying passwords that can't help.
     /// </summary>
-    private static void ReportMonotonic(IProgress<double>? progress, double fraction, Lock progressLock, ref double lastReportedFraction)
-    {
-        if (progress is null)
-        {
-            return;
-        }
-
-        lock (progressLock)
-        {
-            if (fraction > lastReportedFraction)
-            {
-                lastReportedFraction = fraction;
-                progress.Report(fraction);
-            }
-        }
-    }
+    /// <param name="inner">The authentication failure.</param>
+    /// <returns>The exception to throw.</returns>
+    private static InvalidDataException CorruptEncryptedData(CryptographicException inner) =>
+        new("The image is corrupted: its encrypted data failed integrity verification.", inner);
 
     /// <summary>
-    /// Unwraps an <see cref="AggregateException"/> thrown out of a <see cref="Parallel.For(int,int,Action{int})"/>
-    /// segment-compression loop back down to the single original exception a caller of the old,
-    /// sequential per-segment loop would have seen, preserving its original stack trace.
-    /// Cancellation is raised through progress reports, so several workers typically observe it at
-    /// once; their <see cref="OperationCanceledException"/>s are collapsed into one (or dropped in
-    /// favor of a single genuine failure alongside them), so callers that treat cancellation
-    /// differently from failure still see a plain cancellation rather than an aggregate.
+    /// Decrypts (in place, when <paramref name="cek"/> is given), decompresses (when
+    /// <paramref name="compressed"/>) and parses one version 6 segment's payload into its nodes,
+    /// in file order. Safe to run concurrently for different segments.
     /// </summary>
-    internal static Exception Unwrap(AggregateException ex)
+    /// <param name="zstdParallelism">
+    /// Degree of parallelism for decompressing the segment's Zstd chunks; <c>null</c> for the
+    /// default (processor count).
+    /// </param>
+    /// <param name="cek">Content-encryption key to decrypt the segment, or <c>null</c> if unencrypted.</param>
+    /// <param name="compressed">Whether the segment is compressed.</param>
+    /// <param name="payload">The raw payload bytes read from the file, either plaintext or ciphertext.</param>
+    /// <param name="segment">The segment's index entry, which contains the nonce and tag for decryption.</param>
+    private static List<(string Path, FileNode Node)> DecodeSegment(
+        byte[] payload,
+        SegmentIndexEntry segment,
+        byte[]? cek,
+        bool compressed,
+        int? zstdParallelism)
     {
-        var inner = ex.Flatten().InnerExceptions;
-        var failures = inner.Where(e => e is not OperationCanceledException).ToList();
-        if (failures.Count == 0)
+        if (cek is null)
         {
-            ExceptionDispatchInfo.Capture(inner[0]).Throw();
+            return ParseNodes(payload, segment, compressed, zstdParallelism);
         }
 
-        if (failures.Count == 1)
+        try
         {
-            ExceptionDispatchInfo.Capture(failures[0]).Throw();
+            using var aesGcm = new AesGcm(cek, TagSize);
+            aesGcm.Decrypt(segment.Nonce!, payload, segment.Tag!, payload);
+        }
+        catch (CryptographicException ex)
+        {
+            // See LoadChunkedEncrypted: past the CEK unwrap, a failure means damage, not a wrong password.
+            throw CorruptEncryptedData(ex);
         }
 
-        return new AggregateException(failures);
+        try
+        {
+            return ParseNodes(payload, segment, compressed, zstdParallelism);
+        }
+        finally
+        {
+            // payload now holds this segment's decrypted plaintext (compressed node bytes, or the
+            // node bytes themselves) — zeroed once it's been fully read, the same reasoning as the
+            // chunk-buffer zeroing in ChunkedGcm/ParallelZstd.
+            SecureZero.All(payload);
+        }
     }
 
     /// <summary>
@@ -934,48 +970,17 @@ public static class DiskImageSerializer
     }
 
     /// <summary>
-    /// Decrypts (in place, when <paramref name="cek"/> is given), decompresses (when
-    /// <paramref name="compressed"/>) and parses one version 6 segment's payload into its nodes,
-    /// in file order. Safe to run concurrently for different segments.
+    /// Opens the reader over a version 1/2 image's single payload region — gzip-decompressing it
+    /// first when the image is a compressed version 2 (version 1 is never compressed). Shared by
+    /// <see cref="PeekHeader"/> (reads capacity/label only) and <see cref="LoadLegacy"/> (reads
+    /// capacity/label, then the full node region) so both stay in sync on this legacy layout rule.
     /// </summary>
-    /// <param name="zstdParallelism">
-    /// Degree of parallelism for decompressing the segment's Zstd chunks; <c>null</c> for the
-    /// default (processor count).
-    /// </param>
-    private static List<(string Path, FileNode Node)> DecodeSegment(
-        byte[] payload,
-        SegmentIndexEntry segment,
-        byte[]? cek,
-        bool compressed,
-        int? zstdParallelism)
+    private static BinaryReader OpenLegacyPayloadReader(FileStream stream, BinaryReader reader, int version, ImageCompressionLevel level)
     {
-        if (cek is null)
-        {
-            return ParseNodes(payload, segment, compressed, zstdParallelism);
-        }
-
-        try
-        {
-            using var aesGcm = new AesGcm(cek, TagSize);
-            aesGcm.Decrypt(segment.Nonce!, payload, segment.Tag!, payload);
-        }
-        catch (CryptographicException ex)
-        {
-            // See LoadChunkedEncrypted: past the CEK unwrap, a failure means damage, not a wrong password.
-            throw CorruptEncryptedData(ex);
-        }
-
-        try
-        {
-            return ParseNodes(payload, segment, compressed, zstdParallelism);
-        }
-        finally
-        {
-            // payload now holds this segment's decrypted plaintext (compressed node bytes, or the
-            // node bytes themselves) — zeroed once it's been fully read, the same reasoning as the
-            // chunk-buffer zeroing in ChunkedGcm/ParallelZstd.
-            SecureZero.All(payload);
-        }
+        var compressed = version == 2 && level != ImageCompressionLevel.None;
+        return compressed
+            ? new(new GZipStream(stream, CompressionMode.Decompress, leaveOpen: true), System.Text.Encoding.UTF8)
+            : reader;
     }
 
     private static List<(string Path, FileNode Node)> ParseNodes(byte[] payload, SegmentIndexEntry segment, bool compressed, int? zstdParallelism)
@@ -994,25 +999,11 @@ public static class DiskImageSerializer
         return nodes;
     }
 
-    /// <summary>
-    /// Opens the reader over a version 1/2 image's single payload region — gzip-decompressing it
-    /// first when the image is a compressed version 2 (version 1 is never compressed). Shared by
-    /// <see cref="PeekHeader"/> (reads capacity/label only) and <see cref="LoadLegacy"/> (reads
-    /// capacity/label, then the full node region) so both stay in sync on this legacy layout rule.
-    /// </summary>
-    private static BinaryReader OpenLegacyPayloadReader(FileStream stream, BinaryReader reader, int version, ImageCompressionLevel level)
-    {
-        var compressed = version == 2 && level != ImageCompressionLevel.None;
-        return compressed
-            ? new(new GZipStream(stream, CompressionMode.Decompress, leaveOpen: true), System.Text.Encoding.UTF8)
-            : reader;
-    }
-
     private static void ReadHeader(
-        BinaryReader reader,
-        out int version,
-        out ImageCompressionLevel level,
-        out bool isEncrypted)
+            BinaryReader reader,
+            out int version,
+            out ImageCompressionLevel level,
+            out bool isEncrypted)
     {
         var magic = reader.ReadBytes(4);
         if (!magic.SequenceEqual(Magic))
@@ -1115,6 +1106,47 @@ public static class DiskImageSerializer
         }
 
         return nodeMap;
+    }
+
+    /// <summary>
+    /// Reads exactly <paramref name="payloadLength"/> bytes of a segment's payload from
+    /// <paramref name="reader"/>. Unlike <see cref="BinaryReader.ReadBytes"/> alone, which returns
+    /// a shorter array instead of throwing when the underlying stream ends early, this verifies
+    /// the full length was read so a truncated/corrupted image fails loudly here rather than
+    /// silently propagating a too-short payload alongside a stale, too-large recorded length.
+    /// </summary>
+    private static byte[] ReadSegmentPayload(BinaryReader reader, long payloadLength)
+    {
+        var payload = reader.ReadBytes(checked((int)payloadLength));
+        if (payload.Length != payloadLength)
+        {
+            throw new EndOfStreamException("The image ends before its last segment.");
+        }
+
+        return payload;
+    }
+
+    /// <summary>
+    /// Reports <paramref name="fraction"/> through <paramref name="progress"/> only if it's
+    /// strictly greater than the last value reported, so concurrent callers racing on a shared
+    /// <see cref="Parallel.For(int,int,Action{int})"/> loop can't make the reported progress jump
+    /// backward relative to what was reported before it.
+    /// </summary>
+    private static void ReportMonotonic(IProgress<double>? progress, double fraction, Lock progressLock, ref double lastReportedFraction)
+    {
+        if (progress is null)
+        {
+            return;
+        }
+
+        lock (progressLock)
+        {
+            if (fraction > lastReportedFraction)
+            {
+                lastReportedFraction = fraction;
+                progress.Report(fraction);
+            }
+        }
     }
 
     /// <summary>
@@ -1638,6 +1670,34 @@ public static class DiskImageSerializer
     }
 
     /// <summary>
+    /// Returns whether <paramref name="entries"/> describe exactly the
+    /// <paramref name="payloadRegionBytes"/> bytes that follow the segment index: every node count
+    /// and payload length non-negative, every payload small enough for
+    /// <see cref="ReadSegmentPayload"/>, and the payload lengths summing to the region's size. The
+    /// writer never appends anything after the last payload, so any mismatch means the image was
+    /// truncated or damaged.
+    /// </summary>
+    private static bool SegmentIndexMatchesPayloadRegion(SegmentIndexEntry[] entries, long payloadRegionBytes)
+    {
+        var total = 0L;
+        foreach (var entry in entries)
+        {
+            if (entry.NodeCount < 0 || entry.PayloadLength < 0 || entry.PayloadLength > int.MaxValue)
+            {
+                return false;
+            }
+
+            total += entry.PayloadLength;
+            if (total > payloadRegionBytes)
+            {
+                return false;
+            }
+        }
+
+        return total == payloadRegionBytes;
+    }
+
+    /// <summary>
     /// Opens <paramref name="imagePath"/> and reads through its header and segment index, iff it is
     /// a version 6 image whose compression level and encryption state match the current save
     /// request. Positioned at the start of the segment payload region on success. Never reads or
@@ -1731,14 +1791,48 @@ public static class DiskImageSerializer
     }
 
     /// <summary>
-    /// Creates the exception for encrypted image data failing authentication under a CEK the
-    /// password already unwrapped. That can only mean the data was damaged or tampered with;
-    /// reporting it as a wrong password would send the user retrying passwords that can't help.
+    /// Reads a version 6 image's segment index, starting at its segment count, and checks it
+    /// against the rest of the file before anything trusts it. The count is bounded by the bytes
+    /// left before any array is sized from it, so a damaged or crafted count can't trigger a huge
+    /// allocation; the entries must then describe exactly the payload region that follows (see
+    /// <see cref="SegmentIndexMatchesPayloadRegion"/>).
     /// </summary>
-    /// <param name="inner">The authentication failure.</param>
-    /// <returns>The exception to throw.</returns>
-    private static InvalidDataException CorruptEncryptedData(CryptographicException inner) =>
-        new("The image is corrupted: its encrypted data failed integrity verification.", inner);
+    /// <param name="reader">
+    /// Reader over a seekable image stream, positioned at the segment count. Left at the start of
+    /// the payload region when the index is valid.
+    /// </param>
+    /// <param name="isEncrypted">Whether the entries carry a nonce and tag.</param>
+    /// <returns>The entries, or <see langword="null"/> if the index doesn't fit the file.</returns>
+    /// <exception cref="EndOfStreamException">The file ends before the segment count.</exception>
+    private static SegmentIndexEntry[]? TryReadSegmentIndex(BinaryReader reader, bool isEncrypted)
+    {
+        var stream = reader.BaseStream;
+        var segmentCount = reader.ReadInt32();
+        var entrySize = sizeof(int) + sizeof(long) + Sha256Size + (isEncrypted ? NonceSize + TagSize : 0);
+        if (segmentCount < 0 || segmentCount > (stream.Length - stream.Position) / entrySize)
+        {
+            return null;
+        }
+
+        var entries = new SegmentIndexEntry[segmentCount];
+        for (var i = 0; i < segmentCount; i++)
+        {
+            var nodeCount = reader.ReadInt32();
+            var payloadLength = reader.ReadInt64();
+            var contentHash = reader.ReadBytes(Sha256Size);
+            byte[]? nonce = null;
+            byte[]? tag = null;
+            if (isEncrypted)
+            {
+                nonce = reader.ReadBytes(NonceSize);
+                tag = reader.ReadBytes(TagSize);
+            }
+
+            entries[i] = new(nodeCount, payloadLength, contentHash, nonce, tag);
+        }
+
+        return SegmentIndexMatchesPayloadRegion(entries, stream.Length - stream.Position) ? entries : null;
+    }
 
     /// <summary>
     /// Derives the key-encryption key from <paramref name="password"/> and unwraps the image's
@@ -1925,96 +2019,6 @@ public static class DiskImageSerializer
                 payloadStream.Dispose();
             }
         }
-    }
-
-    /// <summary>
-    /// Reads a version 6 image's segment index, starting at its segment count, and checks it
-    /// against the rest of the file before anything trusts it. The count is bounded by the bytes
-    /// left before any array is sized from it, so a damaged or crafted count can't trigger a huge
-    /// allocation; the entries must then describe exactly the payload region that follows (see
-    /// <see cref="SegmentIndexMatchesPayloadRegion"/>).
-    /// </summary>
-    /// <param name="reader">
-    /// Reader over a seekable image stream, positioned at the segment count. Left at the start of
-    /// the payload region when the index is valid.
-    /// </param>
-    /// <param name="isEncrypted">Whether the entries carry a nonce and tag.</param>
-    /// <returns>The entries, or <see langword="null"/> if the index doesn't fit the file.</returns>
-    /// <exception cref="EndOfStreamException">The file ends before the segment count.</exception>
-    private static SegmentIndexEntry[]? TryReadSegmentIndex(BinaryReader reader, bool isEncrypted)
-    {
-        var stream = reader.BaseStream;
-        var segmentCount = reader.ReadInt32();
-        var entrySize = sizeof(int) + sizeof(long) + Sha256Size + (isEncrypted ? NonceSize + TagSize : 0);
-        if (segmentCount < 0 || segmentCount > (stream.Length - stream.Position) / entrySize)
-        {
-            return null;
-        }
-
-        var entries = new SegmentIndexEntry[segmentCount];
-        for (var i = 0; i < segmentCount; i++)
-        {
-            var nodeCount = reader.ReadInt32();
-            var payloadLength = reader.ReadInt64();
-            var contentHash = reader.ReadBytes(Sha256Size);
-            byte[]? nonce = null;
-            byte[]? tag = null;
-            if (isEncrypted)
-            {
-                nonce = reader.ReadBytes(NonceSize);
-                tag = reader.ReadBytes(TagSize);
-            }
-
-            entries[i] = new(nodeCount, payloadLength, contentHash, nonce, tag);
-        }
-
-        return SegmentIndexMatchesPayloadRegion(entries, stream.Length - stream.Position) ? entries : null;
-    }
-
-    /// <summary>
-    /// Returns whether <paramref name="entries"/> describe exactly the
-    /// <paramref name="payloadRegionBytes"/> bytes that follow the segment index: every node count
-    /// and payload length non-negative, every payload small enough for
-    /// <see cref="ReadSegmentPayload"/>, and the payload lengths summing to the region's size. The
-    /// writer never appends anything after the last payload, so any mismatch means the image was
-    /// truncated or damaged.
-    /// </summary>
-    private static bool SegmentIndexMatchesPayloadRegion(SegmentIndexEntry[] entries, long payloadRegionBytes)
-    {
-        var total = 0L;
-        foreach (var entry in entries)
-        {
-            if (entry.NodeCount < 0 || entry.PayloadLength < 0 || entry.PayloadLength > int.MaxValue)
-            {
-                return false;
-            }
-
-            total += entry.PayloadLength;
-            if (total > payloadRegionBytes)
-            {
-                return false;
-            }
-        }
-
-        return total == payloadRegionBytes;
-    }
-
-    /// <summary>
-    /// Reads exactly <paramref name="payloadLength"/> bytes of a segment's payload from
-    /// <paramref name="reader"/>. Unlike <see cref="BinaryReader.ReadBytes"/> alone, which returns
-    /// a shorter array instead of throwing when the underlying stream ends early, this verifies
-    /// the full length was read so a truncated/corrupted image fails loudly here rather than
-    /// silently propagating a too-short payload alongside a stale, too-large recorded length.
-    /// </summary>
-    private static byte[] ReadSegmentPayload(BinaryReader reader, long payloadLength)
-    {
-        var payload = reader.ReadBytes(checked((int)payloadLength));
-        if (payload.Length != payloadLength)
-        {
-            throw new EndOfStreamException("The image ends before its last segment.");
-        }
-
-        return payload;
     }
 
     private readonly record struct SegmentIndexEntry(

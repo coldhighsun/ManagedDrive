@@ -1,7 +1,6 @@
 using System.Reflection;
 using GitHubReleaseUpdater;
 using GitHubReleaseUpdater.Exceptions;
-using GitHubReleaseUpdater.Versioning;
 
 namespace ManagedDrive.App.Services;
 
