@@ -489,3 +489,6 @@ $RECYCLE.BIN/
 # Inno Setup build inputs/outputs
 installer/publish-fx/
 installer/Output/
+
+# ReSharper / Rider per-project settings
+*.DotSettings
