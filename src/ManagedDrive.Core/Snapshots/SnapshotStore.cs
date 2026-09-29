@@ -299,6 +299,12 @@ internal static class SnapshotStore
     /// which dedup would then hand to every later snapshot of that content.
     /// </para>
     /// </summary>
+    /// <param name="blobDirectory">The shared blob directory for snapshots of the main image.</param>
+    /// <param name="data">The file content to store as a blob.</param>
+    /// <param name="length">The number of bytes of <paramref name="data"/> to store.</param>
+    /// <param name="level">The compression level to use, or <see cref="ImageCompressionLevel.None"/> to skip compression.</param>
+    /// <param name="cek">The content encryption key to encrypt the blob under, or <see langword="null"/> to leave it unencrypted.</param>
+    /// <param name="customZstdLevel">The Zstd level to use when <paramref name="level"/> is <see cref="ImageCompressionLevel"/>, or <see langword="null"/> to use the default.</param>
     /// <param name="beforeBlobWrite">Test seam invoked between the two passes.</param>
     internal static byte[] WriteBlob(string blobDirectory, FileContent data, long length, ImageCompressionLevel level, byte[]? cek, int? customZstdLevel, Action? beforeBlobWrite = null)
     {

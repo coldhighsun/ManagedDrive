@@ -1,4 +1,3 @@
-using ManagedDrive.App.Infrastructure;
 using ManagedDrive.Cli.Core;
 using System.Windows.Input;
 
