@@ -32,6 +32,11 @@ public partial class App
     private DiskNotificationService? _diskNotificationService;
     private GlobalMountCoordinator? _globalMountCoordinator;
     private bool _isExiting;
+
+    /// <summary>
+    /// Set to 1 by the first <see cref="ShutdownAsync"/> call so a repeated exit request is ignored.
+    /// </summary>
+    private int _shutdownStarted;
     private ILogger<App> _logger = NullLoggerFactory.Instance.CreateLogger<App>();
     private MainViewModel? _mainViewModel;
     private MainWindow? _mainWindow;
@@ -73,10 +78,20 @@ public partial class App
 
         // Safety net: if ShutdownAsync already disposed the mount manager, this is a no-op.
         // Bounded so a stuck final save can't hang process exit indefinitely.
-        if (!Task.Run(() => _mountManager?.Dispose()).Wait(ExitDisposeTimeout))
+        try
         {
-            _logger.LogWarning("MountManager.Dispose did not complete within the exit timeout of {Timeout}", ExitDisposeTimeout);
+            if (!Task.Run(() => _mountManager?.Dispose()).Wait(ExitDisposeTimeout))
+            {
+                _logger.LogWarning("MountManager.Dispose did not complete within the exit timeout of {Timeout}", ExitDisposeTimeout);
+            }
         }
+        catch (Exception ex)
+        {
+            // MountManager.Dispose rethrows after every disk was attempted; the mutex release and
+            // log flush below must still run.
+            _logger.LogError(ex, "Disposing the mounted disks failed during exit.");
+        }
+
         if (_singleInstanceMutex != null)
         {
             _singleInstanceMutex.ReleaseMutex();
@@ -533,6 +548,14 @@ public partial class App
 
     private async Task ShutdownAsync()
     {
+        // A second exit request (CLI `exit` twice, or CLI exit plus tray Exit) must not start a
+        // concurrent teardown and MountManager.Dispose while the first is still saving.
+        if (Interlocked.Exchange(ref _shutdownStarted, 1) != 0)
+        {
+            _logger.LogInformation("ShutdownAsync ignored: a shutdown is already in progress.");
+            return;
+        }
+
         _logger.LogInformation("ShutdownAsync starting.");
 
         _isExiting = true;
@@ -545,9 +568,18 @@ public partial class App
 
         TeardownBeforeMountManagerDispose();
 
-        await Task.Run(() => _mountManager?.Dispose((disk, diskFraction, overallFraction, totalBytes) =>
-            Current.Dispatcher.BeginInvoke(() =>
-                _mainViewModel?.ReportExitSaveProgress(disk.Options.MountPoint, overallFraction, diskFraction, totalBytes))));
+        try
+        {
+            await Task.Run(() => _mountManager?.Dispose((disk, diskFraction, overallFraction, totalBytes) =>
+                Current.Dispatcher.BeginInvoke(() =>
+                    _mainViewModel?.ReportExitSaveProgress(disk.Options.MountPoint, overallFraction, diskFraction, totalBytes))));
+        }
+        catch (Exception ex)
+        {
+            // MountManager.Dispose has already tried every disk; whatever failed is logged there.
+            // The window is locked in the exiting state, so the process must still terminate.
+            _logger.LogError(ex, "Disposing the mounted disks failed during shutdown.");
+        }
 
         _logger.LogInformation("ShutdownAsync completed; shutting down application.");
         Shutdown();
@@ -560,17 +592,43 @@ public partial class App
     /// </summary>
     private void TeardownBeforeMountManagerDispose()
     {
-        if (_sessionEndingSaveHandler != null)
+        // Each step is isolated: a failure here (e.g. SaveSettings hitting a locked settings file)
+        // must not skip the remaining steps, and above all must not prevent the caller from
+        // reaching MountManager.Dispose, which performs the final save of every disk.
+        RunTeardownStep(() =>
         {
-            SystemEvents.SessionEnding -= _sessionEndingSaveHandler.OnSessionEnding;
-        }
-        if (_mountManager != null && _trayIconController != null)
+            if (_sessionEndingSaveHandler != null)
+            {
+                SystemEvents.SessionEnding -= _sessionEndingSaveHandler.OnSessionEnding;
+            }
+        });
+        RunTeardownStep(() =>
         {
-            _mountManager.ActivityDetected -= _trayIconController.OnActivityDetected;
+            if (_mountManager != null && _trayIconController != null)
+            {
+                _mountManager.ActivityDetected -= _trayIconController.OnActivityDetected;
+            }
+        });
+        RunTeardownStep(() => _cliPipeServer?.Dispose());
+        RunTeardownStep(() => _mainViewModel?.SaveSettings());
+        RunTeardownStep(() => _trayIconController?.Dispose());
+        RunTeardownStep(() => _mainViewModel?.Dispose());
+    }
+
+    /// <summary>
+    /// Runs one shutdown teardown step, logging instead of propagating any exception so the
+    /// remaining steps and the final disk save still run.
+    /// </summary>
+    /// <param name="step">The teardown step to run.</param>
+    private void RunTeardownStep(Action step)
+    {
+        try
+        {
+            step();
         }
-        _cliPipeServer?.Dispose();
-        _mainViewModel?.SaveSettings();
-        _trayIconController?.Dispose();
-        _mainViewModel?.Dispose();
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "A shutdown teardown step failed; continuing.");
+        }
     }
 }

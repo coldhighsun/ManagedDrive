@@ -33,6 +33,7 @@ public static class TempDirResetService
 
             key.SetValue("TEMP", DefaultUserTemp, RegistryValueKind.ExpandString);
             key.SetValue("TMP", DefaultUserTemp, RegistryValueKind.ExpandString);
+            UserTempCache.Shared.Invalidate();
 
             SendMessageTimeout(HwndBroadcast, WmSettingChange, UIntPtr.Zero, "Environment",
                 SendMessageTimeoutAbortIfHung, 5000, out _);
@@ -65,6 +66,7 @@ public static class TempDirResetService
 
             key.SetValue("TEMP", tempPath, RegistryValueKind.String);
             key.SetValue("TMP", tempPath, RegistryValueKind.String);
+            UserTempCache.Shared.Invalidate();
 
             SendMessageTimeout(HwndBroadcast, WmSettingChange, UIntPtr.Zero, "Environment",
                 SendMessageTimeoutAbortIfHung, 5000, out _);

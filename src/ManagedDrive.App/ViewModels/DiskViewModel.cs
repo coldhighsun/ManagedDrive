@@ -426,9 +426,12 @@ public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
             OnPropertyChanged(nameof(WriteSpeedHistory));
             OnPropertyChanged(nameof(TotalReadFormatted));
             OnPropertyChanged(nameof(TotalWrittenFormatted));
-
-            IsCurrentTempDir = CheckIsCurrentTempDir();
         }
+
+        // Refreshed even while the main window is hidden: the unmount/edit paths, the tray menu
+        // and the global drive-letter coordinator all trust this flag, and would otherwise act on
+        // a stale value (e.g. skip resetting TEMP when unmounting from the tray).
+        IsCurrentTempDir = CheckIsCurrentTempDir();
 
         // Bound by the tray tooltip, which can be visible even while the main window is hidden.
         OnPropertyChanged(nameof(UsedPercent));
@@ -507,7 +510,10 @@ public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
 
     private bool CheckIsCurrentTempDir()
     {
-        var userTemp = Environment.GetEnvironmentVariable("TEMP", EnvironmentVariableTarget.User);
+        // Read through a short-lived shared cache: this runs for every disk on every refresh tick,
+        // including while the window is hidden. TempDirResetService invalidates it when the app
+        // itself changes TEMP.
+        var userTemp = UserTempCache.Shared.Get();
         var diskTemp = Path.Combine(MountPoint, "Temp");
         return string.Equals(userTemp, diskTemp, StringComparison.OrdinalIgnoreCase);
     }

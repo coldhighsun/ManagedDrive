@@ -381,41 +381,54 @@ public sealed partial class MainViewModel
     /// otherwise — including either mount point not being mounted, the target being read-only, or
     /// the target's capacity being smaller than the source's used bytes.
     /// </returns>
-    public Task<(bool Success, string Message)> CloneByMountPointAsync(string sourceMountPoint, string targetMountPoint)
+    public async Task<(bool Success, string Message)> CloneByMountPointAsync(string sourceMountPoint, string targetMountPoint)
     {
         _logger.LogInformation("CLI clone requested: {Source} -> {Target}.", sourceMountPoint, targetMountPoint);
 
         var source = FindDisk(sourceMountPoint);
         if (source == null)
         {
-            return Task.FromResult((false, Loc.Format("Msg.CliMountPointNotMounted", sourceMountPoint)));
+            return (false, Loc.Format("Msg.CliMountPointNotMounted", sourceMountPoint));
         }
 
         var target = FindDisk(targetMountPoint);
         if (target == null)
         {
-            return Task.FromResult((false, Loc.Format("Msg.CliMountPointNotMounted", targetMountPoint)));
+            return (false, Loc.Format("Msg.CliMountPointNotMounted", targetMountPoint));
         }
 
         if (target == source)
         {
-            return Task.FromResult((false, Loc.Get("Val.CliCloneTargetIsSource")));
+            return (false, Loc.Get("Val.CliCloneTargetIsSource"));
         }
 
         if (target.IsReadOnly)
         {
-            return Task.FromResult((false, Loc.Format("Val.CliCloneTargetReadOnly", targetMountPoint)));
+            return (false, Loc.Format("Val.CliCloneTargetReadOnly", targetMountPoint));
         }
 
-        if (!target.Disk.TryCloneFrom(source.Disk, out var error))
+        // Off the UI thread: copying a large disk's content would otherwise freeze the window.
+        var (cloned, error) = await Task.Run(() =>
+        {
+            var ok = target.Disk.TryCloneFrom(source.Disk, out var cloneError);
+            return (ok, cloneError);
+        });
+
+        if (!cloned)
         {
             _logger.LogWarning("CLI clone failed: {Source} -> {Target}: {Error}", sourceMountPoint, targetMountPoint, error);
-            return Task.FromResult((false, error ?? string.Empty));
+            return (false, error ?? string.Empty);
+        }
+
+        // The target may have been unmounted while the clone ran off the UI thread.
+        if (!IsStillMounted(target))
+        {
+            return (false, Loc.Format("Msg.CliMountPointNotMounted", targetMountPoint));
         }
 
         target.Refresh();
         _logger.LogInformation("CLI clone completed: {Source} -> {Target}.", sourceMountPoint, targetMountPoint);
-        return Task.FromResult((true, Loc.Format("Status.DiskCloned", sourceMountPoint, targetMountPoint)));
+        return (true, Loc.Format("Status.DiskCloned", sourceMountPoint, targetMountPoint));
     }
 
     /// <summary>
