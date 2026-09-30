@@ -164,7 +164,8 @@ public partial class App
             // Launched with CLI-style args (e.g. from the Explorer context menu) as the first
             // instance: execute the command directly against this instance's MainViewModel.
             var controller = new MainViewModelCliDiskController(_mainViewModel);
-            var result = await CliCommandProcessor.ExecuteAsync(e.Args, controller, Environment.CurrentDirectory);
+            var result = await _cliPipeServer.RunExclusiveAsync(() =>
+                CliCommandProcessor.ExecuteAsync(e.Args, controller, Environment.CurrentDirectory));
             if (result.ExitCode != 0)
             {
                 MessageBox.Show(result.Message, "ManagedDrive", MessageBoxButton.OK, MessageBoxImage.Warning);
@@ -246,7 +247,7 @@ public partial class App
             Dispatcher, iconStream, _mainViewModel, ShowMainWindow, ShowMainWindowAndCreate, ResetTempDirsFromTrayAsync,
             ShowMainWindowAndSettings, ShowAboutDialog, ExitApplication);
         _trayTooltipController = new(_mainViewModel, _trayIconController);
-        _tempDirCompatChecker = new(settings, _trayIconController, () => _mainWindow is { IsLoaded: true } ? _mainWindow : null);
+        _tempDirCompatChecker = new(settings, _trayIconController, () => _mainWindow is { IsVisible: true, WindowState: not WindowState.Minimized } ? _mainWindow : null);
         _mountManager.ActivityDetected += _trayIconController.OnActivityDetected;
         _diskNotificationService = new(
             _mainViewModel, _trayIconController, () => WindowVisibility.IsShownToUser(_mainWindow),
@@ -384,7 +385,7 @@ public partial class App
     {
         var tempOnRamDisk = _mainViewModel != null && TempDirCompatChecker.IsTempOnAnyDisk(_mainViewModel.Disks);
 
-        if (_mainViewModel is { Disks.Count: > 0 })
+        if (_mainViewModel is { Disks.Count: > 0 } or { HasPendingUnmounts: true })
         {
             ShowMainWindow();
 
@@ -566,7 +567,26 @@ public partial class App
             ShowMainWindow();
         }
 
+        // The view models unsubscribe from each disk's SaveFailed while being disposed in the
+        // teardown, before the final save runs, so failures are collected from the disks directly.
+        var saveFailures = new System.Collections.Concurrent.ConcurrentQueue<string>();
+        var observedDisks = (_mountManager?.GetAll() ?? [])
+            .Concat(_mainViewModel?.PendingUnmountDisks ?? [])
+            .ToList();
+        foreach (var disk in observedDisks)
+        {
+            var mountPoint = disk.Options.MountPoint;
+            disk.SaveFailed += (_, ex) => saveFailures.Enqueue(Loc.Format("Status.SaveFailed", mountPoint, ex.Message));
+        }
+
         TeardownBeforeMountManagerDispose();
+
+        // A disk unmounted just before exit is already gone from the mount list, so the dispose
+        // below would not wait for its final save and the process would kill it mid-write.
+        if (_mainViewModel != null)
+        {
+            await _mainViewModel.WaitForPendingUnmountsAsync();
+        }
 
         try
         {
@@ -579,6 +599,15 @@ public partial class App
             // MountManager.Dispose has already tried every disk; whatever failed is logged there.
             // The window is locked in the exiting state, so the process must still terminate.
             _logger.LogError(ex, "Disposing the mounted disks failed during shutdown.");
+        }
+
+        if (!saveFailures.IsEmpty)
+        {
+            MessageBox.Show(
+                string.Join(Environment.NewLine, saveFailures),
+                Loc.Get("Tray.SaveFailedTitle"),
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
         }
 
         _logger.LogInformation("ShutdownAsync completed; shutting down application.");

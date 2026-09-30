@@ -766,14 +766,12 @@ public sealed partial class MainViewModel
         }
 
         var mountPoint = vm.Disk.Options.MountPoint;
-        vm.Dispose();
-        Disks.Remove(vm);
-        await Task.Run(() => _mountManager.Unmount(mountPoint));
+        var saveError = await UnmountDiskAsync(vm);
 
         await DeleteDiskImageIfRequestedAsync(deleteImage, persistImagePath, sourceArchivePath);
 
         SaveSettings();
-        StatusText = Loc.Format("Status.Unmounted", mountPoint);
+        ShowUnmountResult(mountPoint, saveError);
         _logger.LogInformation("Unmount completed for {MountPoint}.", mountPoint);
     }
 

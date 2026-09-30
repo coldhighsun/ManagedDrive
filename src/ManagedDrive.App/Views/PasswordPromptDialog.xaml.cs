@@ -28,6 +28,7 @@ public partial class PasswordPromptDialog
         InitializeComponent();
         Title = title;
         TitleText.Text = title;
+        Loaded += (_, _) => DialogPlacement.BringToFrontWhenUnowned(this);
 
         if (errorMessage is not null)
         {
