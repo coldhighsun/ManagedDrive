@@ -899,6 +899,7 @@ public sealed class MemoryFileSystem : FileSystemBase
 
         _volumeLabel = volumeLabel;
         MarkDirty();
+        VolumeLabelChanged?.Invoke(volumeLabel);
         return GetVolumeInfo(out volumeInfo);
     }
 
@@ -1122,6 +1123,18 @@ public sealed class MemoryFileSystem : FileSystemBase
         // capacity-checked growth: a plain check-then-set would let one that passed against the
         // old ceiling land afterwards and leave the total permanently above the new capacity.
         NodeMap.TryRunIfTotalAllocatedWithin(newCapacity, () => _maxCapacity = newCapacity);
+
+    /// <summary>
+    /// Raised after the volume label was changed from Explorer through <see cref="SetVolumeLabel"/>,
+    /// on a WinFsp driver thread.
+    /// </summary>
+    internal event Action<string>? VolumeLabelChanged;
+
+    /// <summary>
+    /// Gets the current volume label, including changes made from Explorer through
+    /// <see cref="SetVolumeLabel"/>.
+    /// </summary>
+    internal string VolumeLabel => _volumeLabel;
 
     /// <summary>
     /// Updates the volume label reported by <see cref="GetVolumeInfo"/>.
