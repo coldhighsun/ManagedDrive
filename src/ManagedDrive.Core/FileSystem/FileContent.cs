@@ -498,14 +498,23 @@ public sealed class FileContent
     /// <param name="count">Number of leading bytes to write.</param>
     public void CopyTo(Stream destination, long count)
     {
-        lock (_lock)
+        for (var pos = 0L; pos < count;)
         {
-            for (var pos = 0L; pos < count;)
+            // The lock covers only locating one run, not writing it out: the destination may be
+            // slow (a compress/encrypt/file pipeline), and holding the lock across a whole file
+            // would stall every read, write and resize of it for that long. Chunk arrays are never
+            // pooled or reused, so the span stays valid memory after the lock is released; a
+            // write landing meanwhile only means this copy is not a point-in-time snapshot, which
+            // every caller already tolerates (they re-check content versions or re-hash what was
+            // actually written).
+            ReadOnlySpan<byte> run;
+            lock (_lock)
             {
-                var run = ReadableRun(pos, count - pos);
-                destination.Write(run);
-                pos += run.Length;
+                run = ReadableRun(pos, count - pos);
             }
+
+            destination.Write(run);
+            pos += run.Length;
         }
     }
 
@@ -582,14 +591,17 @@ public sealed class FileContent
     /// <param name="count">Number of leading bytes to hash.</param>
     public void HashInto(IncrementalHash hash, long count)
     {
-        lock (_lock)
+        for (var pos = 0L; pos < count;)
         {
-            for (var pos = 0L; pos < count;)
+            // Locked per run rather than per file; see CopyTo for why that is safe.
+            ReadOnlySpan<byte> run;
+            lock (_lock)
             {
-                var run = ReadableRun(pos, count - pos);
-                hash.AppendData(run);
-                pos += run.Length;
+                run = ReadableRun(pos, count - pos);
             }
+
+            hash.AppendData(run);
+            pos += run.Length;
         }
     }
 

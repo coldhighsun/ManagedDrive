@@ -282,6 +282,33 @@ public sealed class ArchiveNodeMapBuilderTests
         }
     }
 
+    /// <summary>
+    /// An entry whose data ends before its declared size fails the import instead of being zero-padded.
+    /// </summary>
+    [Fact]
+    public void BuildNodeMap_EntryShorterThanDeclaredSize_ThrowsInvalidDataException()
+    {
+        var path = CreateZip(entries => entries.Add("A.txt", new byte[100]));
+
+        try
+        {
+            // Inflate the uncompressed size declared in the central directory (offset 24 of the
+            // central directory file header) so the entry stream ends before the declared size.
+            var bytes = File.ReadAllBytes(path);
+            var header = bytes.AsSpan().LastIndexOf<byte>([0x50, 0x4B, 0x01, 0x02]);
+            Assert.True(header >= 0);
+            var declared = BitConverter.ToUInt32(bytes, header + 24);
+            BitConverter.TryWriteBytes(bytes.AsSpan(header + 24, 4), declared + 500);
+            File.WriteAllBytes(path, bytes);
+
+            Assert.Throws<InvalidDataException>(() => ArchiveNodeMapBuilder.BuildNodeMap(path));
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
     private static string CreateZip(Action<Dictionary<string, byte[]>> configure)
     {
         var entries = new Dictionary<string, byte[]>();

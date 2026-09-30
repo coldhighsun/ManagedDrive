@@ -146,17 +146,49 @@ public sealed class MountManager : IDisposable
         // are only saved a few at a time (not fully unbounded) to avoid oversubscribing the CPU.
         var parallelism = Math.Max(1, Environment.ProcessorCount / 2);
 
+        // A failure on one disk (a throwing progress callback, a failed unmount) must not stop the
+        // remaining disks from being saved and unmounted: _disks is already cleared, so nothing
+        // could retry them. Failures are collected and rethrown once every disk was processed.
+        var errors = new System.Collections.Concurrent.ConcurrentQueue<Exception>();
+
         Parallel.For(0, count, new() { MaxDegreeOfParallelism = parallelism }, i =>
         {
-            ReportOverall(i, 0.0);
+            try
+            {
+                ReportOverall(i, 0.0);
+            }
+            catch (Exception ex)
+            {
+                Logger.LogWarning(ex, "Progress callback threw before disposing a disk.");
+            }
 
-            // Reported synchronously: Progress<T> would post each report to the thread pool, so a
-            // late mid-save report could land after the final 1.0 below and drag progress back.
-            var perDiskProgress = onProgress is null ? null : new SynchronousProgress(p => ReportOverall(i, p));
-            all[i].Dispose(perDiskProgress);
+            try
+            {
+                // Reported synchronously: Progress<T> would post each report to the thread pool, so a
+                // late mid-save report could land after the final 1.0 below and drag progress back.
+                var perDiskProgress = onProgress is null ? null : new SynchronousProgress(p => ReportOverall(i, p));
+                all[i].Dispose(perDiskProgress);
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError(ex, "Failed to dispose a disk during shutdown.");
+                errors.Enqueue(ex);
+            }
 
-            ReportOverall(i, 1.0);
+            try
+            {
+                ReportOverall(i, 1.0);
+            }
+            catch (Exception ex)
+            {
+                Logger.LogWarning(ex, "Progress callback threw after disposing a disk.");
+            }
         });
+
+        if (!errors.IsEmpty)
+        {
+            throw new AggregateException(errors);
+        }
     }
 
     /// <summary>

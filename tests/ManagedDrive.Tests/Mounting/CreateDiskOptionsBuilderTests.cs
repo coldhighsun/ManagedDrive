@@ -584,6 +584,48 @@ public sealed class CreateDiskOptionsBuilderTests
     }
 
     /// <summary>
+    /// Snapshot limits are kept for a writable disk with an image even when periodic auto-save is
+    /// off; a disk without an image path or a read-only one cannot have snapshots, so the limits
+    /// are dropped.
+    /// </summary>
+    /// <param name="withImage">Whether an image path is supplied.</param>
+    /// <param name="readOnly">Whether the disk is read-only.</param>
+    /// <param name="expectLimits">Whether the limits are expected to survive.</param>
+    [Theory]
+    [InlineData(true, false, true)]
+    [InlineData(false, false, false)]
+    public void Build_SnapshotLimitsWithoutAutoSave_KeptOnlyForWritableDiskWithImage(
+        bool withImage, bool readOnly, bool expectLimits)
+    {
+        var dir = Directory.CreateTempSubdirectory();
+        try
+        {
+            var input = ValidCreateInput() with
+            {
+                ImagePathText = withImage ? Path.Combine(dir.FullName, "disk.mdr") : null,
+                IsReadOnly = readOnly,
+                AutoSaveEnabled = false,
+                SnapshotCountEnabled = true,
+                SnapshotCountValue = 5,
+                SnapshotSizeEnabled = true,
+                SnapshotSizeValue = 2,
+                SnapshotSizeIsGb = true,
+            };
+
+            var result = CreateDiskOptionsBuilder.Build(input);
+
+            Assert.True(result.Success);
+            Assert.Null(result.Options!.AutoSaveIntervalMinutes);
+            Assert.Equal(expectLimits ? 5u : null, result.Options.MaxSnapshotCount);
+            Assert.Equal(expectLimits ? 2UL * 1024 * 1024 * 1024 : null, result.Options.MaxSnapshotSizeBytes);
+        }
+        finally
+        {
+            dir.Delete(recursive: true);
+        }
+    }
+
+    /// <summary>
     /// A high-usage percentage the slider can't represent exactly (fractional, or outside 1-99
     /// from the CLI) is kept while the slider stays on the position it was shown at.
     /// </summary>
@@ -748,6 +790,71 @@ public sealed class CreateDiskOptionsBuilderTests
 
         Assert.True(result.Success);
         Assert.Null(result.Options!.CustomZstdLevel);
+    }
+
+    /// <summary>
+    /// The same image written with different separators, dot segments and case is still recognized as in use.
+    /// </summary>
+    [Fact]
+    public void Build_ImagePathSpelledDifferentlyThanAnotherDisk_ReturnsImagePathInUse()
+    {
+        var dir = Directory.CreateTempSubdirectory();
+        try
+        {
+            var imagePath = Path.Combine(dir.FullName, "disk.mdr");
+            var respelled = Path.Combine(dir.FullName, ".", "sub", "..", "DISK.mdr").Replace('\\', '/');
+            var other = MinimalOptions() with { MountPoint = "Y:", PersistImagePath = imagePath };
+            var input = ValidCreateInput() with { ImagePathText = respelled, OtherDisks = [other] };
+
+            var result = CreateDiskOptionsBuilder.Build(input);
+
+            Assert.Equal(CreateDiskValidationError.ImagePathInUse, result.Error);
+        }
+        finally
+        {
+            dir.Delete(recursive: true);
+        }
+    }
+
+    /// <summary>
+    /// Paths that resolve to the same location compare equal.
+    /// </summary>
+    [Fact]
+    public void ArePathsEquivalent_SameLocationDifferentSpelling_ReturnsTrue()
+    {
+        Assert.True(CreateDiskOptionsBuilder.ArePathsEquivalent(@"C:\d\a.mdr", "C:/d/../d/A.MDR"));
+    }
+
+    /// <summary>
+    /// Paths that resolve to different locations compare different.
+    /// </summary>
+    [Fact]
+    public void ArePathsEquivalent_DifferentLocations_ReturnsFalse()
+    {
+        Assert.False(CreateDiskOptionsBuilder.ArePathsEquivalent(@"C:\d\a.mdr", @"C:\d\b.mdr"));
+    }
+
+    /// <summary>
+    /// Drive-relative, root-relative and relative paths are rejected as image paths.
+    /// </summary>
+    [Theory]
+    [InlineData("C:foo.mdr")]
+    [InlineData(@"\foo.mdr")]
+    [InlineData("foo.mdr")]
+    public void IsValidImagePath_NotFullyQualified_ReturnsFalse(string path)
+    {
+        Assert.False(CreateDiskOptionsBuilder.IsValidImagePath(path));
+    }
+
+    /// <summary>
+    /// A fully qualified path in an existing directory is accepted.
+    /// </summary>
+    [Fact]
+    public void IsValidImagePath_FullyQualifiedInExistingDirectory_ReturnsTrue()
+    {
+        var path = Path.Combine(Path.GetTempPath(), "disk.mdr");
+
+        Assert.True(CreateDiskOptionsBuilder.IsValidImagePath(path));
     }
 
     private static CreateDiskInput ValidCreateInput() => new()

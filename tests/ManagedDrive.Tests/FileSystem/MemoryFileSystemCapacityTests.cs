@@ -29,6 +29,46 @@ public sealed class MemoryFileSystemCapacityTests
         Assert.True(fs.NodeMap.TryGet("\\big.bin", out _));
     }
 
+    /// <summary>
+    /// Growth racing with a capacity reduction must end in one of two consistent states: the
+    /// reduction fails (usage above it), or it succeeds and no later growth exceeds it. Usage
+    /// must never end up permanently above a capacity the reduction reported as applied.
+    /// </summary>
+    [Fact]
+    public async Task TryUpdateCapacity_RacingWithGrowth_NeverLeavesUsageAboveAppliedCapacity()
+    {
+        for (var round = 0; round < 200; round++)
+        {
+            var fs = new MemoryFileSystem(1024 * 1024, "Label");
+            fs.Create("\\file.bin", 0, 0, (uint)FileAttributes.Normal, [], 0,
+                out var fileNode, out _, out _, out _);
+            using var start = new Barrier(2);
+
+            var grow = Task.Run(() =>
+            {
+                start.SignalAndWait(TestContext.Current.CancellationToken);
+                for (var size = 4096UL; size <= 512 * 1024; size += 4096)
+                {
+                    fs.SetFileSize(fileNode!, null!, size, setAllocationSize: false, out _);
+                }
+            }, TestContext.Current.CancellationToken);
+
+            var reduced = false;
+            var reduce = Task.Run(() =>
+            {
+                start.SignalAndWait(TestContext.Current.CancellationToken);
+                reduced = fs.TryUpdateCapacity(64 * 1024);
+            }, TestContext.Current.CancellationToken);
+
+            await Task.WhenAll(grow, reduce);
+
+            if (reduced)
+            {
+                Assert.True(fs.NodeMap.GetTotalAllocated() <= 64 * 1024);
+            }
+        }
+    }
+
     [Fact]
     public void TryUpdateCapacity_ReducingToExactlyCurrentUsage_Succeeds()
     {

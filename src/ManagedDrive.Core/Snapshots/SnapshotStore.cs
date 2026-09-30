@@ -109,9 +109,25 @@ internal static class SnapshotStore
         var nodeMap = new FileNodeMap();
         var count = reader.ReadInt32();
 
+        // A negative count would restore a corrupt index as an empty disk, wiping the live one.
+        if (count < 0)
+        {
+            throw new InvalidDataException($"Invalid snapshot node count: {count}.");
+        }
+
+        var maxNodeBytes = DiskImageSerializer.MaxNodeBytesFor(capacityBytes);
+
         for (var i = 0; i < count; i++)
         {
             var (path, header) = ReadNodeHeader(reader);
+
+            // Sizes come from the file and size the content's chunk table before any data is read.
+            if (header.AllocationSize > maxNodeBytes || header.FileSize > maxNodeBytes)
+            {
+                throw new InvalidDataException(
+                    $"Snapshot entry '{path}' claims a size larger than the disk's capacity; the snapshot is corrupted.");
+            }
+
             var node = new FileNode
             {
                 FileInfo = header.ToFileInfo(),
@@ -597,6 +613,20 @@ internal static class SnapshotStore
             throw new InvalidDataException(
                 $"Snapshot blob for '{nodePath}' (hash {Convert.ToHexStringLower(hash)}) has unexpected length " +
                 $"{filled} bytes; expected {fileSize}. The snapshot may be corrupted.");
+        }
+
+        // The blob is named by the SHA-256 of its plaintext content, so damage that keeps the
+        // length intact (bit rot in an unencrypted blob) is detectable here rather than being
+        // restored silently and then reused by every later snapshot.
+        using (var contentHash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256))
+        {
+            content.HashInto(contentHash, (long)fileSize);
+            if (!CryptographicOperations.FixedTimeEquals(contentHash.GetHashAndReset(), hash))
+            {
+                throw new InvalidDataException(
+                    $"Snapshot blob for '{nodePath}' (hash {Convert.ToHexStringLower(hash)}) does not match its content. " +
+                    "The snapshot may be corrupted.");
+            }
         }
 
         return content;

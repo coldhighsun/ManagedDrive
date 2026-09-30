@@ -360,8 +360,11 @@ public static class CreateDiskOptionsBuilder
 
         uint? maxSnapshotCount = null;
         ulong? maxSnapshotSizeBytes = null;
-        if (autoSaveIntervalMinutes is not null)
+        if (imagePath != null && !isReadOnly)
         {
+            // Snapshot limits only need a writable disk with a backing image: they are kept
+            // whether or not periodic auto-save is on (the CLI mounts disks with limits and no
+            // auto-save, and editing such a disk must not drop them).
             if (input.SnapshotCountEnabled)
             {
                 if (input.SnapshotCountValue < 1 ||
@@ -485,13 +488,34 @@ public static class CreateDiskOptionsBuilder
             return CreateDiskValidationError.ImagePathIsSnapshot;
         }
 
-        if (otherDisks.Any(d => d.PersistImagePath != null &&
-            string.Equals(d.PersistImagePath, imagePath, StringComparison.OrdinalIgnoreCase)))
+        if (otherDisks.Any(d => d.PersistImagePath != null && ArePathsEquivalent(d.PersistImagePath, imagePath)))
         {
             return CreateDiskValidationError.ImagePathInUse;
         }
 
         return CreateDiskValidationError.None;
+    }
+
+    /// <summary>
+    /// Returns <c>true</c> when both paths refer to the same file location, ignoring case and
+    /// spelling differences such as <c>/</c> versus <c>\</c> or <c>.</c>/<c>..</c> segments.
+    /// Falls back to a plain case-insensitive comparison for a path that cannot be resolved.
+    /// </summary>
+    /// <param name="first">The first path.</param>
+    /// <param name="second">The second path.</param>
+    /// <returns>
+    /// <c>true</c> when the paths resolve to the same location.
+    /// </returns>
+    public static bool ArePathsEquivalent(string first, string second)
+    {
+        try
+        {
+            return string.Equals(Path.GetFullPath(first), Path.GetFullPath(second), StringComparison.OrdinalIgnoreCase);
+        }
+        catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException)
+        {
+            return string.Equals(first, second, StringComparison.OrdinalIgnoreCase);
+        }
     }
 
     /// <summary>
@@ -506,7 +530,9 @@ public static class CreateDiskOptionsBuilder
     {
         try
         {
-            if (!Path.IsPathRooted(path))
+            // Rejects drive-relative ("C:foo.mdr") and root-relative ("\foo.mdr") paths, which
+            // would resolve against the process's current directory rather than a fixed location.
+            if (!Path.IsPathFullyQualified(path))
             {
                 return false;
             }

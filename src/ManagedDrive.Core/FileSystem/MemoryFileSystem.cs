@@ -44,6 +44,12 @@ public sealed class MemoryFileSystem : FileSystemBase
     private string? _lastContentWritePath;
     private long _lastContentWriteTicks;
     private ulong _maxCapacity;
+
+    /// <summary>
+    /// Cached delegate returning the current capacity ceiling, handed to the capacity-checked
+    /// <see cref="FileNodeMap"/> operations so they read it under their own lock.
+    /// </summary>
+    private Func<ulong>? _maxCapacityProvider;
     private long _totalBytesRead;
     private long _totalBytesWritten;
     private string _volumeLabel;
@@ -325,7 +331,7 @@ public sealed class MemoryFileSystem : FileSystemBase
         // happen under one NodeMap write-lock acquisition (see TryCreate): a concurrent create of
         // the same name can't be replaced, a node can't land under a directory being deleted, and
         // two concurrent creates can't both pass a stale capacity check.
-        switch (NodeMap.TryCreate(fileName, node, _maxCapacity))
+        switch (NodeMap.TryCreate(fileName, node, MaxCapacityProvider))
         {
             case FileNodeMap.CreateResult.NameCollision:
                 return STATUS_OBJECT_NAME_COLLISION;
@@ -582,7 +588,7 @@ public sealed class MemoryFileSystem : FileSystemBase
         // TryUpdateAllocationSizeWithinCapacity), so two concurrent extending writes on different
         // nodes can't both pass a stale capacity check and together push the real total past
         // _maxCapacity.
-        if (!NodeMap.TryUpdateAllocationSizeWithinCapacity(node, aligned, _maxCapacity))
+        if (!NodeMap.TryUpdateAllocationSizeWithinCapacity(node, aligned, MaxCapacityProvider))
         {
             fileInfo = node.FileInfo;
             return STATUS_DISK_FULL;
@@ -1102,19 +1108,20 @@ public sealed class MemoryFileSystem : FileSystemBase
     }
 
     /// <summary>
+    /// Gets a delegate that reads the current capacity ceiling, for the capacity-checked
+    /// <see cref="FileNodeMap"/> operations.
+    /// </summary>
+    private Func<ulong> MaxCapacityProvider => _maxCapacityProvider ??= () => Volatile.Read(ref _maxCapacity);
+
+    /// <summary>
     /// Attempts to update the capacity ceiling.
     /// Returns <c>false</c> if the new capacity is smaller than the bytes currently allocated.
     /// </summary>
-    internal bool TryUpdateCapacity(ulong newCapacity)
-    {
-        if (NodeMap.GetTotalAllocated() > newCapacity)
-        {
-            return false;
-        }
-
-        _maxCapacity = newCapacity;
-        return true;
-    }
+    internal bool TryUpdateCapacity(ulong newCapacity) =>
+        // Check and assignment under the map's write lock, which excludes every in-flight
+        // capacity-checked growth: a plain check-then-set would let one that passed against the
+        // old ceiling land afterwards and leave the total permanently above the new capacity.
+        NodeMap.TryRunIfTotalAllocatedWithin(newCapacity, () => _maxCapacity = newCapacity);
 
     /// <summary>
     /// Updates the volume label reported by <see cref="GetVolumeInfo"/>.
@@ -1227,7 +1234,7 @@ public sealed class MemoryFileSystem : FileSystemBase
             // TryUpdateAllocationSizeWithinCapacity), so two concurrent extending writes on
             // different nodes can't both pass a stale capacity check and together push the real
             // total past _maxCapacity.
-            if (!NodeMap.TryUpdateAllocationSizeWithinCapacity(node, aligned, _maxCapacity))
+            if (!NodeMap.TryUpdateAllocationSizeWithinCapacity(node, aligned, MaxCapacityProvider))
             {
                 return STATUS_DISK_FULL;
             }

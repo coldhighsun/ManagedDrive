@@ -50,6 +50,15 @@ internal static class ParallelZstd
     internal static int ChunkSize => TestChunkSizeOverride ?? DefaultChunkSize;
 
     /// <summary>
+    /// Largest compressed or decompressed chunk size the reader accepts. Every writer produces
+    /// chunks of at most <see cref="ChunkSize"/> plaintext bytes (and a compressed frame only
+    /// slightly larger for incompressible data), so twice that is generous; the bound stops a
+    /// corrupt or hostile chunk header from making the reader allocate gigabytes before the read
+    /// fails.
+    /// </summary>
+    private static int MaxChunkBytes => Math.Max(ChunkSize, DefaultChunkSize) * 2;
+
+    /// <summary>
     /// One-shot equivalent of writing <paramref name="length"/> bytes of <paramref name="data"/>
     /// through a <see cref="WriteStream"/>: produces the identical <c>[length][compressed bytes]
     /// ... [0]</c> chunk sequence, but compresses each chunk straight out of
@@ -365,7 +374,7 @@ internal static class ParallelZstd
                 return false;
             }
 
-            if (length < 0)
+            if (length < 0 || length > MaxChunkBytes)
             {
                 throw new InvalidDataException($"Invalid compressed chunk length: {length}.");
             }
@@ -377,7 +386,7 @@ internal static class ParallelZstd
             // the reader-thread-only pool, and so the worker decompresses straight into it instead
             // of into a fresh array that would then be copied.
             var decompressedSize = ZstdSharp.Decompressor.GetDecompressedSize(compressed.AsSpan(0, length));
-            if (decompressedSize > (ulong)Array.MaxLength)
+            if (decompressedSize > (ulong)MaxChunkBytes)
             {
                 throw new InvalidDataException($"Compressed chunk claims an oversized payload ({decompressedSize:N0} bytes).");
             }
@@ -549,6 +558,49 @@ internal static class ParallelZstd
             _freeInputs.Clear();
             _freeOutputs.Clear();
             _buffer = [];
+        }
+
+        /// <summary>
+        /// Abandons the stream after a failure: waits for the chunks already handed to workers
+        /// (discarding their output and any error), releases the compressors and scrubs the
+        /// buffered plaintext, without compressing or writing anything further. Disposing the
+        /// stream afterwards is then a no-op instead of finishing a stream that is already
+        /// known to be incomplete — which would only delay the failure and could replace the
+        /// original exception with one from the extra writes.
+        /// </summary>
+        public void Abort()
+        {
+            if (_completed)
+            {
+                return;
+            }
+
+            while (_pending.Count > 0)
+            {
+                var (task, compressor, input, _) = _pending.Dequeue();
+                try
+                {
+                    task.GetAwaiter().GetResult();
+                }
+                catch
+                {
+                    // The failure being reported is the caller's, not this worker's.
+                }
+
+                SecureZero.All(input);
+                compressor.Dispose();
+            }
+
+            while (_freeCompressors.TryPop(out var freeCompressor))
+            {
+                freeCompressor.Dispose();
+            }
+
+            SecureZero.All(_buffer);
+            _freeInputs.Clear();
+            _freeOutputs.Clear();
+            _buffer = [];
+            _completed = true;
         }
 
         public override void Flush()

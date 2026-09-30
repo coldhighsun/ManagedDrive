@@ -86,6 +86,27 @@ public sealed class FileNodeTests
         Assert.Equal(original.FileSecurity, clone.FileSecurity);
     }
 
+    /// <summary>
+    /// The clone's sizes follow the content that was actually copied, so a source whose metadata
+    /// was ahead of (or behind) its content at the moment of the copy can't yield a clone whose
+    /// FileSize exceeds its allocation, or whose allocation differs from its content length.
+    /// </summary>
+    [Fact]
+    public void Clone_MetadataOutOfStepWithContent_ClampsSizesToCopiedContent()
+    {
+        var original = new FileNode
+        {
+            FileInfo = { FileAttributes = (uint)FileAttributes.Normal, FileSize = 9000, AllocationSize = 65536 },
+            FileData = FileContent.FromSpan([1, 2, 3], 4096),
+        };
+
+        var clone = original.Clone();
+
+        Assert.Equal(4096UL, clone.FileInfo.AllocationSize);
+        Assert.Equal(4096UL, clone.FileInfo.FileSize);
+        Assert.Equal(4096, clone.FileData!.Length);
+    }
+
     [Fact]
     public void Clone_ReturnsIndependentBuffers()
     {

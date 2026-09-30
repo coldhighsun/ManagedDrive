@@ -32,6 +32,8 @@ public sealed class MountPointValidatorTests : IDisposable
     [InlineData("R")]
     [InlineData("R:\\")]
     [InlineData(@"C:\Temp\MyDrive")]
+    [InlineData("é:")]
+    [InlineData("中:")]
     public void IsDriveLetter_NotExactlyLetterColon_ReturnsFalse(string mountPoint)
     {
         Assert.False(MountPointValidator.IsDriveLetter(mountPoint));

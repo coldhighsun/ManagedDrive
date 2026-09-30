@@ -88,9 +88,13 @@ public sealed class FileNodeMap : IDisposable
     /// </summary>
     /// <param name="filePath">Absolute file-system path of the new node.</param>
     /// <param name="node">The file node to store.</param>
-    /// <param name="maxCapacity">The volume's capacity ceiling, in bytes.</param>
+    /// <param name="maxCapacity">
+    /// Returns the volume's current capacity ceiling, in bytes. Called under the write lock rather
+    /// than passed as a value, so a ceiling lowered in the meantime (see
+    /// <see cref="TryRunIfTotalAllocatedWithin"/>) is honored instead of a stale one.
+    /// </param>
     /// <returns><see cref="CreateResult.Created"/> if added; otherwise why not (nothing changed).</returns>
-    public CreateResult TryCreate(string filePath, FileNode node, ulong maxCapacity)
+    public CreateResult TryCreate(string filePath, FileNode node, Func<ulong> maxCapacity)
     {
         _syncRoot.EnterWriteLock();
         try
@@ -108,7 +112,7 @@ public sealed class FileNodeMap : IDisposable
                     return CreateResult.ParentNotDirectory;
             }
 
-            if ((ulong)Interlocked.Read(ref _totalAllocated) + node.FileInfo.AllocationSize > maxCapacity)
+            if ((ulong)Interlocked.Read(ref _totalAllocated) + node.FileInfo.AllocationSize > maxCapacity())
             {
                 return CreateResult.CapacityExceeded;
             }
@@ -475,6 +479,36 @@ public sealed class FileNodeMap : IDisposable
     /// The sum of <see cref="Fsp.Interop.FileInfo.AllocationSize"/> for every stored node.
     /// </returns>
     public ulong GetTotalAllocated() => (ulong)Interlocked.Read(ref _totalAllocated);
+
+    /// <summary>
+    /// Runs <paramref name="apply"/> only if the total allocation does not exceed
+    /// <paramref name="limit"/>, with the check and <paramref name="apply"/> atomic with respect
+    /// to every capacity-checked growth (<see cref="TryAddWithinCapacity"/>,
+    /// <see cref="TryUpdateAllocationSizeWithinCapacity"/>), which hold the read lock across their
+    /// own check-and-apply. Used to lower the capacity ceiling without an in-flight growth that
+    /// passed against the old ceiling landing after the check.
+    /// </summary>
+    /// <param name="limit">The largest total allocation, in bytes, for which <paramref name="apply"/> may run.</param>
+    /// <param name="apply">The action to run when the total is within <paramref name="limit"/>.</param>
+    /// <returns><c>true</c> if <paramref name="apply"/> ran; <c>false</c> if the total exceeds <paramref name="limit"/>.</returns>
+    public bool TryRunIfTotalAllocatedWithin(ulong limit, Action apply)
+    {
+        _syncRoot.EnterWriteLock();
+        try
+        {
+            if (GetTotalAllocated() > limit)
+            {
+                return false;
+            }
+
+            apply();
+            return true;
+        }
+        finally
+        {
+            _syncRoot.ExitWriteLock();
+        }
+    }
 
     /// <summary>
     /// Removes the node at <paramref name="filePath"/>, if present.
@@ -918,11 +952,15 @@ public sealed class FileNodeMap : IDisposable
     /// </summary>
     /// <param name="node">The node whose allocation size is changing.</param>
     /// <param name="newAllocationSize">The new allocation size, in bytes.</param>
-    /// <param name="maxCapacity">The volume's capacity ceiling, in bytes.</param>
+    /// <param name="maxCapacityProvider">
+    /// Returns the volume's current capacity ceiling, in bytes. Called while the read lock is held
+    /// rather than passed as a value, so a ceiling lowered in the meantime (see
+    /// <see cref="TryRunIfTotalAllocatedWithin"/>) is honored instead of a stale one.
+    /// </param>
     /// <returns><c>true</c> if applied; <c>false</c> if it would have exceeded capacity (nothing changed).</returns>
-    public bool TryUpdateAllocationSizeWithinCapacity(FileNode node, ulong newAllocationSize, ulong maxCapacity)
+    public bool TryUpdateAllocationSizeWithinCapacity(FileNode node, ulong newAllocationSize, Func<ulong> maxCapacityProvider)
     {
-        if (newAllocationSize > maxCapacity)
+        if (newAllocationSize > maxCapacityProvider())
         {
             // Can never fit. Also keeps a size of 2^63 or more away from the signed delta below,
             // where it would turn negative and be applied as a "shrink" that bypasses the check.
@@ -932,6 +970,9 @@ public sealed class FileNodeMap : IDisposable
         _syncRoot.EnterReadLock();
         try
         {
+            // Read now that the read lock is held: a lowering of the ceiling takes the write lock,
+            // so it either completed before this point (and is seen here) or waits for this call.
+            var maxCapacity = maxCapacityProvider();
             var delta = (long)newAllocationSize - (long)node.FileInfo.AllocationSize;
             if (node.IsDetached)
             {

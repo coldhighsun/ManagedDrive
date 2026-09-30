@@ -500,7 +500,7 @@ public sealed class DiskImageSerializerV6Tests
             // The iteration count follows the 16-byte salt, which follows the label.
             const int iterationsOffset = SegmentCountOffset + 16;
             var bytes = File.ReadAllBytes(path);
-            Assert.Equal(210_000, BitConverter.ToInt32(bytes, iterationsOffset));
+            Assert.Equal(DiskImageSerializer.Pbkdf2Iterations, BitConverter.ToInt32(bytes, iterationsOffset));
             BitConverter.TryWriteBytes(bytes.AsSpan(iterationsOffset), iterations);
             File.WriteAllBytes(path, bytes);
 

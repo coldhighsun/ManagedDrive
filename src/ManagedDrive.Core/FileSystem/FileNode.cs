@@ -43,15 +43,20 @@ public sealed class FileNode
     internal static readonly byte[] DefaultSecurityDescriptorBytes = BuildDefaultSecurityDescriptorBytes();
 
     /// <summary>
-    /// The content hash last computed for this node, cached against <see cref="ContentVersion"/>
-    /// at the time it was computed. <c>null</c> when no hash has been computed yet.
+    /// A content hash together with the <see cref="ContentVersion"/> it was computed for. One
+    /// immutable object, so a reader can never observe a hash paired with another version's
+    /// number.
     /// </summary>
-    internal byte[]? CachedContentHash;
+    /// <param name="Hash">The SHA-256 of the node's content.</param>
+    /// <param name="Version">The <see cref="ContentVersion"/> value the hash was computed for.</param>
+    internal sealed record ContentHashEntry(byte[] Hash, ulong Version);
 
     /// <summary>
-    /// The <see cref="ContentVersion"/> value <see cref="CachedContentHash"/> was computed for.
+    /// The content hash last computed for this node, cached against <see cref="ContentVersion"/>
+    /// at the time it was computed. <c>null</c> when no hash has been computed yet. Replaced as a
+    /// whole, never mutated, since concurrent snapshot diffs may compute it at the same time.
     /// </summary>
-    internal ulong CachedContentHashVersion;
+    internal ContentHashEntry? CachedContentHash;
 
     /// <summary>
     /// Bumped by <see cref="ManagedDrive.Core.FileSystem.MemoryFileSystem"/> every time
@@ -179,11 +184,24 @@ public sealed class FileNode
     /// </returns>
     public FileNode Clone()
     {
+        // The content is copied first and the metadata read after it, then reconciled with what
+        // was actually copied: the source may still be written to (its own WinFsp callbacks are
+        // not paused during a clone), and a size that changed between the two reads would
+        // otherwise leave FileSize/AllocationSize out of step with the copied content, breaking
+        // the FileSize <= AllocationSize == content length invariant reads rely on.
+        var data = FileData?.Clone();
+        var fileInfo = FileInfo;
+        if (data is not null)
+        {
+            fileInfo.AllocationSize = (ulong)data.Length;
+            fileInfo.FileSize = Math.Min(fileInfo.FileSize, fileInfo.AllocationSize);
+        }
+
         return new()
         {
-            FileInfo = FileInfo,
+            FileInfo = fileInfo,
             FileSecurity = FileSecurity?.ToArray(),
-            FileData = FileData?.Clone(),
+            FileData = data,
             FilePath = FilePath,
             LeafName = LeafName,
         };
