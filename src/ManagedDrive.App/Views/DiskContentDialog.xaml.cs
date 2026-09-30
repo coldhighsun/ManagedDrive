@@ -27,6 +27,7 @@ public partial class DiskContentDialog
     private readonly ObservableCollection<DiskContentRow> _rows = [];
     private readonly DiskViewModel _target;
     private CancellationTokenSource? _busyCts;
+    private readonly DispatcherTimer _filterDebounceTimer;
     private string _filterText = string.Empty;
     private bool _sortAscending = true;
     private SortKey _sortKey = SortKey.Name;
@@ -38,6 +39,9 @@ public partial class DiskContentDialog
     public DiskContentDialog(DiskViewModel target)
     {
         InitializeComponent();
+
+        _filterDebounceTimer = new() { Interval = TimeSpan.FromMilliseconds(300) };
+        _filterDebounceTimer.Tick += FilterDebounceTimer_Tick;
 
         _target = target;
         _isReadOnly = target.IsReadOnly;
@@ -61,7 +65,11 @@ public partial class DiskContentDialog
         // dialog (and its close-button/context-menu-driven cancellation surface) is gone — fires
         // for every close path (title bar X, bottom Close button, Esc), since Window.Closing is
         // the common point they all funnel through.
-        Closing += (_, _) => _busyCts?.Cancel();
+        Closing += (_, _) =>
+        {
+            _busyCts?.Cancel();
+            _filterDebounceTimer.Stop();
+        };
 
         CloseOnDisposing(target);
 
@@ -454,6 +462,17 @@ public partial class DiskContentDialog
     /// </summary>
     private void FilterBox_TextChanged(object sender, TextChangedEventArgs e)
     {
+        // Debounce: restart the timer on every keystroke so the rebuild only runs once typing pauses.
+        _filterDebounceTimer.Stop();
+        _filterDebounceTimer.Start();
+    }
+
+    /// <summary>
+    /// Applies the current filter text once the debounce interval has elapsed without further input.
+    /// </summary>
+    private void FilterDebounceTimer_Tick(object? sender, EventArgs e)
+    {
+        _filterDebounceTimer.Stop();
         _filterText = FilterBox.Text.Trim();
         RebuildRows();
     }
