@@ -99,7 +99,17 @@ public sealed partial class GlobalMountManager(ILogger<GlobalMountManager> logge
                 return (false, $"{letter} is already in use system-wide.");
             }
 
-            WriteRegistryEntry(letter, new(devicePath, callerSid));
+            try
+            {
+                WriteRegistryEntry(letter, new(devicePath, callerSid));
+            }
+            catch
+            {
+                // Without a record nothing would ever reconcile or unpublish this symlink.
+                NativeMethods.RemoveGlobalSymlink(letter, devicePath);
+                throw;
+            }
+
             logger.LogInformation("Published global symlink {Letter} -> {Device} for {Sid}", letter, devicePath, callerSid);
             return (true, $"Published {letter} -> {devicePath}");
         }
@@ -122,7 +132,13 @@ public sealed partial class GlobalMountManager(ILogger<GlobalMountManager> logge
                     continue;
                 }
 
-                NativeMethods.RemoveGlobalSymlink(letter, devicePath);
+                if (!NativeMethods.RemoveGlobalSymlink(letter, devicePath) &&
+                    SymlinkMayStillExist(letter, devicePath))
+                {
+                    // Keep the record so the next pass retries instead of leaking the symlink.
+                    continue;
+                }
+
                 DeleteRegistryEntry(letter);
                 logger.LogInformationThrottled(
                     $"reconciled-stale:{letter}", TimeSpan.FromMinutes(10),
@@ -164,8 +180,16 @@ public sealed partial class GlobalMountManager(ILogger<GlobalMountManager> logge
             var removed = NativeMethods.RemoveGlobalSymlink(letter, devicePath);
             if (!removed)
             {
+                var error = Marshal.GetLastWin32Error();
                 logger.LogWarning("DefineDosDevice remove failed for {Letter} -> {Device}. Win32Error={Error}",
-                    letter, devicePath, Marshal.GetLastWin32Error());
+                    letter, devicePath, error);
+
+                // Keep the record while the symlink still exists: dropping it would leak the
+                // symlink with nothing left to reconcile or unpublish it later.
+                if (SymlinkMayStillExist(letter, devicePath))
+                {
+                    return (false, $"Could not remove the symlink for {letter}. Win32Error={error}");
+                }
             }
 
             DeleteRegistryEntry(letter);
@@ -173,6 +197,19 @@ public sealed partial class GlobalMountManager(ILogger<GlobalMountManager> logge
             return (true, $"Unpublished {letter}");
         }
     }
+
+    /// <summary>
+    /// Whether the global symlink <paramref name="letter"/> -&gt; <paramref name="devicePath"/> may
+    /// still be defined. Errs on the side of <c>true</c> when the definition cannot be queried.
+    /// </summary>
+    /// <param name="letter">The drive letter, in <c>"X:"</c> form.</param>
+    /// <param name="devicePath">The device path the letter was published for.</param>
+    /// <returns>
+    /// <c>false</c> only when the letter is known not to point at <paramref name="devicePath"/>.
+    /// </returns>
+    private static bool SymlinkMayStillExist(string letter, string devicePath) =>
+        NativeMethods.QueryDosDeviceTargets(letter) is not { } targets ||
+        targets.Contains(devicePath, StringComparer.OrdinalIgnoreCase);
 
     private static void DeleteRegistryEntry(string letter)
     {
@@ -182,11 +219,11 @@ public sealed partial class GlobalMountManager(ILogger<GlobalMountManager> logge
 
     // WinFsp volumes surface as \Device\Volume{GUID}. Constrain hard: this service hands SYSTEM's
     // ability to create arbitrary global symlinks, so only well-formed volume device paths pass.
-    [GeneratedRegex(@"^\\Device\\Volume\{[0-9A-Fa-f-]+\}$")]
-    private static partial Regex DevicePathRegex();
+    [GeneratedRegex(@"^\\Device\\Volume\{[0-9A-Fa-f-]+\}\z")]
+    internal static partial Regex DevicePathRegex();
 
-    [GeneratedRegex(@"^[A-Za-z]:$")]
-    private static partial Regex DriveLetterRegex();
+    [GeneratedRegex(@"^[A-Za-z]:\z")]
+    internal static partial Regex DriveLetterRegex();
 
     /// <summary>
     /// Decodes a registry value written by <see cref="WriteRegistryEntry"/>: a

@@ -66,7 +66,16 @@ public sealed class HelperPipeService(GlobalMountManager mountManager, ILogger<H
     /// <param name="stoppingToken">Signals that the service is stopping.</param>
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        mountManager.Reconcile();
+        try
+        {
+            mountManager.Reconcile();
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // A failed startup pass must not stop the service from serving the pipe; the
+            // periodic loop below retries it.
+            logger.LogWarning(ex, "Initial reconcile failed; continuing.");
+        }
 
         _ = Task.Run(() => ReconcileLoopAsync(stoppingToken), stoppingToken);
 
@@ -285,7 +294,18 @@ public sealed class HelperPipeService(GlobalMountManager mountManager, ILogger<H
         {
             while (await timer.WaitForNextTickAsync(stoppingToken))
             {
-                mountManager.Reconcile();
+                // One failed pass (e.g. a transient registry IOException) must not end the loop,
+                // or stale symlinks would never be reclaimed again for the life of the service.
+                try
+                {
+                    mountManager.Reconcile();
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    logger.LogWarningThrottled(
+                        "reconcile-failed", TimeSpan.FromMinutes(5),
+                        "Periodic reconcile failed; will retry: {Error}", ex.Message);
+                }
             }
         }
         catch (OperationCanceledException)
