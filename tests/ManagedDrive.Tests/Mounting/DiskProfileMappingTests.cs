@@ -1,3 +1,4 @@
+using ManagedDrive.App.Models;
 using ManagedDrive.App.ViewModels;
 
 namespace ManagedDrive.Tests;
@@ -15,7 +16,7 @@ public sealed class DiskProfileMappingTests
             ReadOnly = true,
             AutoMount = true,
             PersistImagePath = @"C:\images\disk.mdr",
-            SourceArchivePath = @"C:\archives\disk.zip",
+            SourceArchivePath = null,
             AutoSaveIntervalMinutes = 15,
             CompressionLevel = ImageCompressionLevel.SmallestSize,
             CustomZstdLevel = 19,
@@ -45,5 +46,21 @@ public sealed class DiskProfileMappingTests
         var roundTripped = MainViewModel.ProfileToOptions(profile);
 
         Assert.Equal(options, roundTripped);
+    }
+
+    [Fact]
+    public void ProfileToOptions_ProfileWithBothArchiveAndImagePath_DropsImagePath()
+    {
+        var profile = new DiskProfile
+        {
+            MountPoint = "R:",
+            SourceArchivePath = @"C:\archives\disk.zip",
+            PersistImagePath = @"C:\images\disk.mdr",
+        };
+
+        var options = MainViewModel.ProfileToOptions(profile);
+
+        Assert.Equal(@"C:\archives\disk.zip", options.SourceArchivePath);
+        Assert.Null(options.PersistImagePath);
     }
 }
