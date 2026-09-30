@@ -66,8 +66,39 @@ public sealed class SettingsStore
     /// <returns>
     /// The deserialized <see cref="AppConfiguration"/>, or a fresh default instance on failure.
     /// </returns>
-    public AppConfiguration Load()
+    public AppConfiguration Load() => Read(out _, out _);
+
+    /// <summary>
+    /// How many times <see cref="Update"/> re-reads the settings file after an I/O failure.
+    /// </summary>
+    private const int UpdateReadRetries = 3;
+
+    /// <summary>
+    /// Pause between the re-reads of <see cref="Update"/> after an I/O failure.
+    /// </summary>
+    private static readonly TimeSpan UpdateReadRetryDelay = TimeSpan.FromMilliseconds(50);
+
+    /// <summary>
+    /// Implements <see cref="Load"/>, additionally reporting whether the defaults it returned
+    /// stand in for a file that exists but could not be read due to an I/O or access error.
+    /// </summary>
+    /// <param name="ioFailed">
+    /// <c>true</c> when the file exists but reading it failed with an I/O or access error (for
+    /// example a transient lock held by antivirus or a backup tool), as opposed to it being
+    /// missing or containing invalid data.
+    /// </param>
+    /// <param name="retryable">
+    /// <c>true</c> when <paramref name="ioFailed"/> is an I/O error that may be a brief lock, as
+    /// opposed to an access-denied, which is normally permanent.
+    /// </param>
+    /// <returns>
+    /// The deserialized <see cref="AppConfiguration"/>, or a fresh default instance on failure.
+    /// </returns>
+    private AppConfiguration Read(out bool ioFailed, out bool retryable)
     {
+        ioFailed = false;
+        retryable = false;
+
         lock (_ioLock)
         {
             if (!File.Exists(_settingsPath))
@@ -83,8 +114,16 @@ public sealed class SettingsStore
             }
             catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException or NotSupportedException)
             {
+                ioFailed = ex is IOException or UnauthorizedAccessException;
+                retryable = ex is IOException;
                 Logger.LogError(ex, "Failed to read settings from '{SettingsPath}'; falling back to defaults", _settingsPath);
-                PreserveUnreadableFile();
+
+                // A transient lock leaves the file intact, so there is nothing to preserve.
+                if (!ioFailed)
+                {
+                    PreserveUnreadableFile();
+                }
+
                 return new();
             }
         }
@@ -128,10 +167,32 @@ public sealed class SettingsStore
     /// </param>
     public void Update(Func<AppConfiguration, AppConfiguration> change)
     {
-        // Lock is reentrant, so Load/Save taking it again on this thread is fine.
-        lock (_ioLock)
+        for (var attempt = 0; ; attempt++)
         {
-            Save(change(Load()));
+            // Lock is reentrant, so Load/Save taking it again on this thread is fine.
+            lock (_ioLock)
+            {
+                var current = Read(out var ioFailed, out var retryable);
+                if (!ioFailed)
+                {
+                    Save(change(current));
+                    return;
+                }
+
+                // An access-denied is normally permanent, so only a lock-style I/O error is retried.
+                if (!retryable || attempt >= UpdateReadRetries)
+                {
+                    // The existing file is intact but unreadable; saving the defaults read in its
+                    // place would wipe the user's settings. The caller's in-memory state is
+                    // written by the next update instead.
+                    Logger.LogWarning("Skipped a settings update because '{SettingsPath}' could not be read", _settingsPath);
+                    return;
+                }
+            }
+
+            // A lock from antivirus or a backup tool is usually brief. The wait is outside the
+            // store's lock so other threads aren't held up behind it.
+            Thread.Sleep(UpdateReadRetryDelay);
         }
     }
 

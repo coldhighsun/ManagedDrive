@@ -101,6 +101,7 @@
     <sys:String x:Key="Busy.LoadingDisks">Loading disk {0} of {1}...</sys:String>
     <sys:String x:Key="Busy.ImportingArchive">Importing archive...</sys:String>
     <sys:String x:Key="Busy.ExportingImage">Exporting disk image...</sys:String>
+    <sys:String x:Key="Busy.CloningDisk">Cloning disk...</sys:String>
     <sys:String x:Key="Busy.ImportingImage">Importing disk image...</sys:String>
     <sys:String x:Key="Busy.ByteProgress">{0} / {1}</sys:String>
     <sys:String x:Key="Card.ReadOnly">Read-only</sys:String>

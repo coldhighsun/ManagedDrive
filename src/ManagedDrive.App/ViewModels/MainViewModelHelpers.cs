@@ -16,7 +16,7 @@ internal static class MainViewModelHelpers
     /// collision check (create, edit, import, CLI mount).
     /// </summary>
     public static bool IsPathInUse(IReadOnlyList<DiskOptions> otherDisks, string path, Func<DiskOptions, string?> selector) =>
-        otherDisks.Any(d => selector(d) is { } p && string.Equals(p, path, StringComparison.OrdinalIgnoreCase));
+        otherDisks.Any(d => selector(d) is { } p && CreateDiskOptionsBuilder.ArePathsEquivalent(p, path));
 
     /// <summary>
     /// Finds the first free drive letter searching from <c>Z:</c> down to <c>D:</c>, skipping

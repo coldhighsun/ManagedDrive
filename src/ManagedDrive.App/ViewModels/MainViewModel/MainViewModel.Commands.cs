@@ -57,10 +57,39 @@ public sealed partial class MainViewModel
                 return;
             }
 
-            if (!target.Disk.TryCloneFrom(vm.Disk, out var error))
+            // Copying every file's content is memory-bound work that scales with the disk's used
+            // size, so it runs off the UI thread behind the busy overlay (which also stops another
+            // long operation from starting meanwhile).
+            if (!TryStartBusyOverlay(Loc.Get("Busy.CloningDisk"), indeterminate: true))
+            {
+                return;
+            }
+
+            bool cloned;
+            string? error;
+            try
+            {
+                (cloned, error) = await Task.Run(() =>
+                {
+                    var ok = target.Disk.TryCloneFrom(vm.Disk, out var cloneError);
+                    return (ok, cloneError);
+                });
+            }
+            finally
+            {
+                BusyOverlay.Stop();
+            }
+
+            if (!cloned)
             {
                 _logger.LogWarning("Clone disk failed: {Source} -> {Target}: {Error}", vm.MountPoint, target.MountPoint, error);
                 ShowWarning(error);
+                return;
+            }
+
+            // The target may have been unmounted while the clone ran off the UI thread.
+            if (!IsStillMounted(target))
+            {
                 return;
             }
 

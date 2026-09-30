@@ -132,4 +132,67 @@ public sealed class SettingsStoreTests : IDisposable
             Assert.Equal("1.2.3", loaded.SkippedVersion);
         }
     }
+
+    /// <summary>
+    /// A lock that is released while Update is still retrying doesn't cost the update: it is
+    /// applied on a later attempt.
+    /// </summary>
+    [Fact]
+    public async Task Update_FileLockReleasedDuringRetries_AppliesTheUpdate()
+    {
+        var store = new SettingsStore(SettingsPath);
+        store.Save(new AppConfiguration { Language = "zh-CN" });
+
+        var lockHolder = new FileStream(SettingsPath, FileMode.Open, FileAccess.Read, FileShare.None);
+        var release = Task.Run(async () =>
+        {
+            await Task.Delay(TimeSpan.FromMilliseconds(30), TestContext.Current.CancellationToken);
+            lockHolder.Dispose();
+        }, TestContext.Current.CancellationToken);
+
+        store.Update(current => current with { SkippedVersion = "1.2.3" });
+        await release;
+
+        var loaded = store.Load();
+        Assert.Equal("1.2.3", loaded.SkippedVersion);
+        Assert.Equal("zh-CN", loaded.Language);
+    }
+
+    /// <summary>
+    /// A settings file that stays locked leaves the existing settings untouched and creates no
+    /// <c>.corrupt</c> copy of the healthy file.
+    /// </summary>
+    [Fact]
+    public void Update_FileStaysLocked_LeavesNoCorruptCopy()
+    {
+        var store = new SettingsStore(SettingsPath);
+        store.Save(new AppConfiguration { Language = "zh-CN" });
+
+        using (new FileStream(SettingsPath, FileMode.Open, FileAccess.Read, FileShare.None))
+        {
+            store.Update(current => current with { SkippedVersion = "1.2.3" });
+        }
+
+        Assert.Empty(Directory.GetFiles(_dir, "*.corrupt*"));
+        Assert.Equal("zh-CN", store.Load().Language);
+    }
+
+    /// <summary>
+    /// A settings file locked for the whole call is not overwritten with defaults.
+    /// </summary>
+    [Fact]
+    public void Update_FileLockedByAnotherProcess_DoesNotOverwriteSettingsWithDefaults()
+    {
+        var store = new SettingsStore(SettingsPath);
+        store.Save(new AppConfiguration { Language = "zh-CN" });
+
+        // Simulates an antivirus or backup tool briefly holding the file exclusively.
+        using (new FileStream(SettingsPath, FileMode.Open, FileAccess.Read, FileShare.None))
+        {
+            store.Update(current => current with { SkippedVersion = "1.2.3" });
+        }
+
+        var loaded = store.Load();
+        Assert.Equal("zh-CN", loaded.Language);
+    }
 }

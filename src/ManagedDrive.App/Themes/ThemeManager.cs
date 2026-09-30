@@ -124,7 +124,21 @@ public sealed class ThemeManager
                 return;
             }
 
-            ApplyConcrete(ReadSystemTheme());
+            // SystemEvents raises this on its own thread; ApplyConcrete edits the application's
+            // resource dictionaries, which must happen on the UI thread.
+            var dispatcher = Application.Current?.Dispatcher;
+            if (dispatcher is null || dispatcher.HasShutdownStarted)
+            {
+                return;
+            }
+
+            dispatcher.BeginInvoke(() =>
+            {
+                if (SavedTheme == null)
+                {
+                    ApplyConcrete(ReadSystemTheme());
+                }
+            });
         };
     }
 }

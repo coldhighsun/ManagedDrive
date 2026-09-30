@@ -173,7 +173,19 @@ public partial class CreateDiskDialog
         }
 
         DriveLetterBox.Items.Clear();
-        LoadDriveLetters(reservedLetter: existing.MountPoint[0]);
+        if (existing.MountPoint.Length == 2 && existing.MountPoint[1] == ':')
+        {
+            LoadDriveLetters(reservedLetter: existing.MountPoint[0]);
+        }
+        else
+        {
+            // Mounted on a directory (possible via the CLI): keep it as the selected mount point
+            // instead of treating its first character as a drive letter; picking a letter instead
+            // remounts the disk there.
+            LoadDriveLetters(reservedLetter: null);
+            DriveLetterBox.Items.Add(existing.MountPoint);
+        }
+
         DriveLetterBox.SelectedItem = existing.MountPoint;
 
         VolumeLabelBox.Text = existing.VolumeLabel;
@@ -212,7 +224,13 @@ public partial class CreateDiskDialog
             _intervalMaximum = CoverExistingValue(_intervalMaximum, minutes);
             AutoSaveIntervalSlider.Maximum = _intervalMaximum;
             IntervalValue = (int)Math.Min(minutes, (uint)_intervalMaximum);
+        }
 
+        // Snapshot limits are independent of periodic auto-save (the CLI can mount a disk with
+        // limits and no auto-save), so they're loaded whenever the disk can have snapshots at all;
+        // otherwise editing such a disk would silently drop its retention settings.
+        if (SnapshotCountEnabledBox.IsEnabled)
+        {
             if (existing.MaxSnapshotCount is { } maxCount)
             {
                 SnapshotCountEnabledBox.IsChecked = true;
@@ -1013,7 +1031,9 @@ public partial class CreateDiskDialog
 
     private void UpdateSnapshotEnabledState()
     {
-        var snapshotsAllowed = AutoSaveBox.IsEnabled && AutoSaveBox.IsChecked == true;
+        // AutoSaveBox is enabled exactly for a writable disk with a backing image, which is all
+        // snapshot limits need — they don't depend on periodic auto-save being on.
+        var snapshotsAllowed = AutoSaveBox.IsEnabled;
         SnapshotCountEnabledBox.IsEnabled = snapshotsAllowed;
         SnapshotSizeEnabledBox.IsEnabled = snapshotsAllowed;
         if (!snapshotsAllowed)
