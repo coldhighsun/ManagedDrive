@@ -16,6 +16,7 @@ public partial class ConfirmDialog
         Title = title;
         TitleText.Text = title;
         BodyText.Text = body;
+        Loaded += (_, _) => DialogPlacement.BringToFrontWhenUnowned(this);
     }
 
     public bool IsOptionChecked => OptionCheckBox.IsChecked == true;

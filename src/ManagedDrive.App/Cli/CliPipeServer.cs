@@ -185,6 +185,26 @@ public sealed class CliPipeServer : IDisposable
     }
 
     /// <summary>
+    /// Runs <paramref name="command"/> under the same gate as commands received over the pipe, so
+    /// the first instance's own command line cannot interleave with a hand-off from a second one.
+    /// </summary>
+    /// <typeparam name="T">The command's result type.</typeparam>
+    /// <param name="command">The command to run.</param>
+    /// <returns>The result of <paramref name="command"/>.</returns>
+    public async Task<T> RunExclusiveAsync<T>(Func<Task<T>> command)
+    {
+        await _executionGate.WaitAsync();
+        try
+        {
+            return await command();
+        }
+        finally
+        {
+            _executionGate.Release();
+        }
+    }
+
+    /// <summary>
     /// Starts accepting connections on a background task. Safe to call once; the loop keeps
     /// running until <see cref="Dispose"/> is called.
     /// </summary>

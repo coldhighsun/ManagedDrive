@@ -21,6 +21,99 @@ public sealed partial class MainViewModel
     }
 
     /// <summary>
+    /// Disposes <paramref name="vm"/>, removes it from <see cref="Disks"/> and unmounts its disk,
+    /// which performs the final save. The disk's own <c>SaveFailed</c> event is observed directly
+    /// because disposing the view model detaches the UI subscribers before that save runs.
+    /// </summary>
+    /// <param name="vm">The view model of the disk to unmount.</param>
+    /// <returns>The exception that made the final save fail, or <c>null</c> when it succeeded.</returns>
+    private async Task<Exception?> UnmountDiskAsync(DiskViewModel vm)
+    {
+        var mountPoint = vm.Disk.Options.MountPoint;
+        var disk = vm.Disk;
+        Exception? saveError = null;
+
+        void OnSaveFailed(object? sender, Exception ex) => saveError = ex;
+
+        disk.SaveFailed += OnSaveFailed;
+        (RamDisk Disk, Task Task)? pending = null;
+        try
+        {
+            vm.Dispose();
+
+            // The disk leaves Disks before its final save finishes; the pending entry keeps it
+            // counted for path-in-use checks and lets shutdown wait for the save.
+            var unmountTask = Task.Run(() => _mountManager.Unmount(mountPoint));
+            pending = (disk, unmountTask);
+            _pendingUnmounts.Add(pending.Value);
+            Disks.Remove(vm);
+            await unmountTask;
+        }
+        finally
+        {
+            disk.SaveFailed -= OnSaveFailed;
+            if (pending is { } entry)
+            {
+                _pendingUnmounts.Remove(entry);
+            }
+        }
+
+        return saveError;
+    }
+
+    /// <summary>
+    /// Gets a value indicating whether a disk that already left <see cref="Disks"/> is still
+    /// running its final save.
+    /// </summary>
+    internal bool HasPendingUnmounts => _pendingUnmounts.Count > 0;
+
+    /// <summary>
+    /// Gets the disks that already left <see cref="Disks"/> but are still running their final
+    /// save, so shutdown can watch them for save failures too.
+    /// </summary>
+    internal IReadOnlyList<RamDisk> PendingUnmountDisks => _pendingUnmounts.Select(p => p.Disk).ToList();
+
+    /// <summary>
+    /// Completes when every unmount started by <see cref="UnmountDiskAsync"/> has finished its
+    /// final save. Never throws: a failed unmount is already reported to the caller that started it.
+    /// </summary>
+    /// <returns>A task that completes when the pending unmounts are done.</returns>
+    internal async Task WaitForPendingUnmountsAsync()
+    {
+        foreach (var (_, task) in _pendingUnmounts.ToList())
+        {
+            try
+            {
+                await task;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "A pending unmount failed while waiting for it during shutdown.");
+            }
+        }
+    }
+
+    /// <summary>
+    /// Reports the outcome of an unmount: a sticky error when the final save failed (so the loss
+    /// is not hidden behind an "Unmounted" message), the regular status otherwise.
+    /// </summary>
+    /// <param name="mountPoint">The mount point that was unmounted.</param>
+    /// <param name="saveError">The final-save failure returned by <see cref="UnmountDiskAsync"/>.</param>
+    private void ShowUnmountResult(string mountPoint, Exception? saveError)
+    {
+        if (saveError is null)
+        {
+            StatusText = Loc.Format("Status.Unmounted", mountPoint);
+            return;
+        }
+
+        ShowStickyStatus(
+            Loc.Format("Status.SaveFailed", mountPoint, saveError.Message),
+            mountPoint,
+            nameof(DiskViewModel.SaveFailed));
+    }
+
+    /// <summary>
     /// Inserts <paramref name="vm"/> into <see cref="Disks"/> in mount-point order, and stops
     /// keeping any not-mounted saved profile the disk supersedes.
     /// </summary>
@@ -163,7 +256,9 @@ public sealed partial class MainViewModel
     /// path does not collide with another disk's mount point or image file.
     /// </summary>
     private IReadOnlyList<DiskOptions> GetOtherDiskOptions(DiskViewModel? excluding) =>
-        Disks.Where(d => d != excluding).Select(d => d.Disk.Options).ToList();
+        Disks.Where(d => d != excluding).Select(d => d.Disk.Options)
+            .Concat(_pendingUnmounts.Select(p => p.Disk.Options))
+            .ToList();
 
     private async Task MountAndAddAsync(DiskOptions options, string? password = null, IProgress<double>? progress = null, CancellationToken cancellationToken = default)
     {
@@ -219,7 +314,7 @@ public sealed partial class MainViewModel
             }
 
             var prompt = new PasswordPromptDialog(Loc.Get("PasswordPrompt.Title"), errorMessage, options);
-            if (Application.Current.MainWindow is { IsVisible: true } mainWindow)
+            if (Application.Current.MainWindow is { IsVisible: true, WindowState: not WindowState.Minimized } mainWindow)
             {
                 // Owner must already have been shown (e.g. not yet true when starting minimized,
                 // as during startup auto-mount), or WPF throws.

@@ -18,6 +18,12 @@ public sealed partial class MainViewModel : INotifyPropertyChanged, IDisposable
     private readonly SettingsStore _settingsStore;
 
     /// <summary>
+    /// Disks that were removed from <see cref="Disks"/> but are still running their final save
+    /// inside <see cref="MountManager.Unmount"/>. Only touched on the UI thread.
+    /// </summary>
+    private readonly List<(RamDisk Disk, Task Task)> _pendingUnmounts = [];
+
+    /// <summary>
     /// Saved profiles that are not mounted right now: every profile loaded at startup until it
     /// mounts (see <see cref="RetainSavedProfiles"/>) — including auto-mount profiles still
     /// waiting their turn and profiles with auto-mount turned off, which are never mounted at
