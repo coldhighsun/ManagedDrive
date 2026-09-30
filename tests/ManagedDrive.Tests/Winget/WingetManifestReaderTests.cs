@@ -48,17 +48,77 @@ public sealed class WingetManifestReaderTests
     }
 
     /// <summary>
+    /// An installer type and switches stated once at the manifest root are inherited by the
+    /// installer entries.
+    /// </summary>
+    [Fact]
+    public void ReadInstallerInfo_TypeAndSwitchesAtRoot_AreInheritedByTheInstaller()
+    {
+        var info = ReadManifest(
+            "PackageIdentifier: Some.Package\nInstallerType: msi\nInstallerSwitches:\n  Silent: /qn\nInstallers:\n  - Architecture: x64\n");
+
+        Assert.Equal("msi", info.InstallerType);
+        Assert.Equal("/qn", info.SilentSwitches);
+        Assert.Equal("Some.Package", info.PackageIdentifier);
+    }
+
+    /// <summary>
+    /// With several installers listed, the one whose type matches the downloaded file's
+    /// extension is used, not just the first entry.
+    /// </summary>
+    [Fact]
+    public void ReadInstallerInfo_SeveralInstallers_PicksTheOneMatchingTheDownloadedFile()
+    {
+        const string yaml = "Installers:\n  - Architecture: x64\n    InstallerType: msi\n  - Architecture: x64\n    InstallerType: inno\n";
+
+        var forExe = ReadManifest(yaml, installerFileName: "Setup.exe");
+        var forMsi = ReadManifest(yaml, installerFileName: "Setup.msi");
+
+        Assert.Equal("inno", forExe.InstallerType);
+        Assert.Equal("msi", forMsi.InstallerType);
+    }
+
+    /// <summary>
+    /// A requested architecture narrows the entries before the file type is matched.
+    /// </summary>
+    [Fact]
+    public void ReadInstallerInfo_ArchitectureRequested_PicksThatArchitecturesEntry()
+    {
+        const string yaml =
+            "Installers:\n  - Architecture: x86\n    InstallerType: inno\n    InstallerSwitches:\n      Silent: /x86\n" +
+            "  - Architecture: x64\n    InstallerType: inno\n    InstallerSwitches:\n      Silent: /x64\n";
+
+        var info = ReadManifest(yaml, installerFileName: "Setup.exe", architecture: "x64");
+
+        Assert.Equal("/x64", info.SilentSwitches);
+    }
+
+    /// <summary>
+    /// Several installers and none matching the downloaded file is a guess, so it is left to
+    /// plain winget by throwing <see cref="NotSupportedException"/>.
+    /// </summary>
+    [Fact]
+    public void ReadInstallerInfo_SeveralInstallersNoneMatchingTheFile_ThrowsNotSupportedException()
+    {
+        const string yaml = "Installers:\n  - InstallerType: msi\n  - InstallerType: wix\n";
+
+        Assert.Throws<NotSupportedException>(() => ReadManifest(yaml, installerFileName: "Setup.exe"));
+    }
+
+    /// <summary>
     /// Writes <paramref name="yaml"/> to a temporary manifest file and reads it.
     /// </summary>
     /// <param name="yaml">The manifest content.</param>
+    /// <param name="installerFileName">The downloaded installer's file name, if known.</param>
+    /// <param name="architecture">The requested architecture, if any.</param>
     /// <returns>The installer info read from the manifest.</returns>
-    private static InstallerInfo ReadManifest(string yaml)
+    private static InstallerInfo ReadManifest(string yaml, string? installerFileName = null, string? architecture = null)
     {
         var path = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid()}.yaml");
         File.WriteAllText(path, yaml);
         try
         {
-            return WingetManifestReader.ReadInstallerInfo(path);
+            return WingetManifestReader.ReadInstallerInfo(path, installerFileName, architecture);
         }
         finally
         {
