@@ -107,9 +107,17 @@ internal static class WingetManifestReader
         if (extension is not null)
         {
             var byType = pool.Where(c => TypeMatchesExtension(InstallerTypeOf(c, root), extension)).ToList();
-            if (byType.Count > 0)
+            if (byType.Count == 1 || (byType.Count > 1 && byType.All(c => RunsTheSame(c, byType[0], root))))
             {
                 return byType[0];
+            }
+
+            if (byType.Count > 1)
+            {
+                // e.g. user- and machine-scope entries with different switches: the downloaded
+                // file can't tell them apart, and guessing would run the wrong switches.
+                throw new NotSupportedException(
+                    $"The manifest lists {byType.Count} '{extension}' installers with different switches.");
             }
 
             if (pool.Count > 1)
@@ -120,6 +128,25 @@ internal static class WingetManifestReader
         }
 
         return pool[0];
+    }
+
+    /// <summary>
+    /// Whether two installer entries would be run identically: same type and same silent switches.
+    /// </summary>
+    /// <param name="a">The first installer entry.</param>
+    /// <param name="b">The second installer entry.</param>
+    /// <param name="root">The manifest root, which entries inherit from.</param>
+    /// <returns><c>true</c> if choosing either gives the same command line.</returns>
+    private static bool RunsTheSame(Dictionary<object, object> a, Dictionary<object, object> b, Dictionary<object, object> root)
+    {
+        static string? Switch(Dictionary<object, object> entry, Dictionary<object, object> root, string key) =>
+            ((GetValue(entry, "InstallerSwitches") ?? GetValue(root, "InstallerSwitches")) as Dictionary<object, object>) is { } s
+                ? GetValue(s, key) as string
+                : null;
+
+        return string.Equals(InstallerTypeOf(a, root), InstallerTypeOf(b, root), StringComparison.OrdinalIgnoreCase)
+            && Switch(a, root, "Silent") == Switch(b, root, "Silent")
+            && Switch(a, root, "SilentWithProgress") == Switch(b, root, "SilentWithProgress");
     }
 
     /// <summary>

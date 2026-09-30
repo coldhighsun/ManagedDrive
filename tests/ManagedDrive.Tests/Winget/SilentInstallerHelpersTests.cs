@@ -63,9 +63,21 @@ public sealed class SilentInstallerHelpersTests
     [InlineData(true, "Name  Id  Version  Available\nGit  Git.Git  2.54  2.55", false)]
     [InlineData(true, "找不到与输入条件匹配的已安装程序包。", true)]
     [InlineData(true, "", true)]
+    [InlineData(false, "Name  Id\nGit  Git.Git.Extras  1.0", false)]
+    [InlineData(false, "Name  Id\nGit  Other.Git.Git  1.0", false)]
     public void ProbeOutputMeansDefer_ListedOrNot_DecidesPerRequestKind(bool isUpgrade, string output, bool expected)
     {
         Assert.Equal(expected, SilentInstaller.ProbeOutputMeansDefer(isUpgrade, "git.git", output));
+    }
+
+    /// <summary>
+    /// A partial id (non-exact request) matches as a substring of the listed full id.
+    /// </summary>
+    [Fact]
+    public void ProbeOutputMeansDefer_PartialIdNonExact_MatchesSubstringOfListedId()
+    {
+        Assert.True(SilentInstaller.ProbeOutputMeansDefer(false, "git", "Name  Id\nGit  Git.Git  2.55", exact: false));
+        Assert.False(SilentInstaller.ProbeOutputMeansDefer(true, "git", "Name  Id\nGit  Git.Git  2.54  2.55", exact: false));
     }
 
     /// <summary>

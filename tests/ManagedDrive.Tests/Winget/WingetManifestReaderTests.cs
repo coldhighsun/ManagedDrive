@@ -106,6 +106,36 @@ public sealed class WingetManifestReaderTests
     }
 
     /// <summary>
+    /// Several entries of the same file type with different switches (e.g. user and machine
+    /// scope) can't be told apart by the downloaded file, so the choice is left to plain winget.
+    /// </summary>
+    [Fact]
+    public void ReadInstallerInfo_SameTypeEntriesWithDifferentSwitches_ThrowsNotSupportedException()
+    {
+        const string yaml =
+            "Installers:\n  - Scope: user\n    InstallerType: inno\n    InstallerSwitches:\n      Silent: /CURRENTUSER\n" +
+            "  - Scope: machine\n    InstallerType: inno\n    InstallerSwitches:\n      Silent: /ALLUSERS\n";
+
+        Assert.Throws<NotSupportedException>(() => ReadManifest(yaml, installerFileName: "Setup.exe"));
+    }
+
+    /// <summary>
+    /// Entries that would run identically (only differing in, say, architecture or URL) still
+    /// resolve to the first one.
+    /// </summary>
+    [Fact]
+    public void ReadInstallerInfo_SameTypeEntriesWithSameSwitches_PicksTheFirst()
+    {
+        const string yaml =
+            "Installers:\n  - Architecture: x86\n    InstallerType: inno\n    InstallerSwitches:\n      Silent: /S\n" +
+            "  - Architecture: x64\n    InstallerType: inno\n    InstallerSwitches:\n      Silent: /S\n";
+
+        var info = ReadManifest(yaml, installerFileName: "Setup.exe");
+
+        Assert.Equal("/S", info.SilentSwitches);
+    }
+
+    /// <summary>
     /// Writes <paramref name="yaml"/> to a temporary manifest file and reads it.
     /// </summary>
     /// <param name="yaml">The manifest content.</param>
