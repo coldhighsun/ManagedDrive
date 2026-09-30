@@ -21,7 +21,7 @@ if (isInstallOrUpgrade &&
     WingetInstallArguments.TryParse(remainingArgs, out var parsed) &&
     WinFspVolumeDetector.IsCurrentTempOnWinFspVolume())
 {
-    if (SilentInstaller.TryInstall(parsed.DownloadArgs, parsed.UseFullSilent, out var handledExitCode))
+    if (SilentInstaller.TryInstall(parsed.DownloadArgs, parsed.UseFullSilent, isUpgrade: subcommand == "upgrade", out var handledExitCode))
     {
         if (parsed.WaitForKeyPress)
         {
