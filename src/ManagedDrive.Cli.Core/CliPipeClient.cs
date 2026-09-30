@@ -72,12 +72,13 @@ public static class CliPipeClient
     }
 
     /// <summary>
-    /// Upper bound on the response line read by <see cref="ReadBoundedLineAsync"/>, mirroring
-    /// <c>PipeIo.MaxLineLength</c>'s guard against an unbounded buffer — this pipe's server side
-    /// already caps its own request read the same way, and the running instance is itself a peer
-    /// this client shouldn't trust to always send '\n'.
+    /// Upper bound on the response line read by <see cref="ReadBoundedLineAsync"/>, guarding
+    /// against an unbounded buffer from a peer that never sends '\n'. Much larger than the
+    /// server's request cap (<c>PipeIo.MaxLineLength</c>) because a response legitimately carries
+    /// a command's whole output as one JSON string (<c>ls</c> or <c>snapshot diff</c> of a big
+    /// disk), where JSON escaping expands every newline and non-ASCII character.
     /// </summary>
-    private const int MaxResponseLineLength = 64 * 1024;
+    internal const int MaxResponseLineLength = 16 * 1024 * 1024;
 
     /// <summary>
     /// Failure message reported when a running instance's pipe denies this process access.
@@ -335,7 +336,10 @@ public static class CliPipeClient
     /// <param name="cancellationToken">Token that cancels the read.</param>
     private static async Task<string?> ReadBoundedLineAsync(TextReader reader, CancellationToken cancellationToken)
     {
-        var charBuffer = new char[1];
+        // Read in blocks: a response can be megabytes long, where one async call per character
+        // would dominate. Anything read past the terminating newline is discarded, which is fine
+        // since the server sends exactly one response line per connection.
+        var charBuffer = new char[8192];
         var line = new StringBuilder();
 
         while (true)
@@ -346,18 +350,20 @@ public static class CliPipeClient
                 return line.Length > 0 ? line.ToString() : null;
             }
 
-            var ch = charBuffer[0];
-            if (ch is '\n' or '\r')
-            {
-                return line.ToString();
-            }
+            var block = charBuffer.AsSpan(0, read);
+            var end = block.IndexOfAny('\n', '\r');
+            var take = end < 0 ? read : end;
 
-            if (line.Length >= MaxResponseLineLength)
+            if (line.Length + take > MaxResponseLineLength)
             {
                 return null;
             }
 
-            line.Append(ch);
+            line.Append(block[..take]);
+            if (end >= 0)
+            {
+                return line.ToString();
+            }
         }
     }
 }

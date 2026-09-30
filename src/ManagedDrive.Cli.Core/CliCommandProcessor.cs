@@ -137,7 +137,7 @@ public static class CliCommandProcessor
 
             var exitCode = await MountAsync(
                 ResolvePath(parseResult.GetValue(mountImageArgument)!, workingDirectory),
-                parseResult.GetValue(mountDriveArgument)!,
+                ResolveMountPoint(parseResult.GetValue(mountDriveArgument)!, workingDirectory),
                 overrides,
                 diskController,
                 o => outcome = o);
@@ -171,7 +171,9 @@ public static class CliCommandProcessor
 
             var exitCode = await MountArchiveAsync(
                 ResolvePath(parseResult.GetValue(mountArchiveArgument)!, workingDirectory),
-                parseResult.GetValue(mountArchiveDriveArgument),
+                parseResult.GetValue(mountArchiveDriveArgument) is { } archiveMountPoint
+                    ? ResolveMountPoint(archiveMountPoint, workingDirectory)
+                    : null,
                 overrides,
                 diskController,
                 o => outcome = o);
@@ -331,7 +333,7 @@ public static class CliCommandProcessor
             }
 
             var exitCode = await CreateAsync(
-                parseResult.GetValue(createDriveArgument)!,
+                ResolveMountPoint(parseResult.GetValue(createDriveArgument)!, workingDirectory),
                 parseResult.GetValue(createCapacityMbOption) * 1024UL * 1024UL,
                 parseResult.GetValue(createLabelOption),
                 imagePath,
@@ -858,6 +860,24 @@ public static class CliCommandProcessor
         {
             return path;
         }
+    }
+
+    /// <summary>
+    /// Resolves a mount-point argument that is either a drive letter (<c>R</c>, <c>R:</c>), which
+    /// is returned unchanged, or a directory path, which is resolved against the invoking
+    /// process's working directory like any other path argument (the app validates it from its
+    /// own working directory otherwise).
+    /// </summary>
+    /// <param name="mountPoint">The mount point as typed.</param>
+    /// <param name="workingDirectory">The invoking process's working directory, if known.</param>
+    /// <returns>The drive letter unchanged, or the absolute directory path.</returns>
+    internal static string ResolveMountPoint(string mountPoint, string? workingDirectory)
+    {
+        var trimmed = mountPoint.Trim();
+        var isDriveLetter = trimmed.Length == 1 && char.IsLetter(trimmed[0]) ||
+            trimmed.Length == 2 && char.IsLetter(trimmed[0]) && trimmed[1] == ':';
+
+        return isDriveLetter ? mountPoint : ResolvePath(mountPoint, workingDirectory);
     }
 
     /// <summary>

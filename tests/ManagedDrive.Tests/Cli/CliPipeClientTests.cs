@@ -37,6 +37,35 @@ public sealed class CliPipeClientTests : IDisposable
         Assert.Equal(expected.ExitCode, response.ExitCode);
     }
 
+    /// <summary>
+    /// A response longer than the old 64K-character limit is read in full.
+    /// </summary>
+    [Fact(Timeout = 10_000)]
+    public async Task TrySend_ResponseLargerThanOldLimit_ReturnsFullResponse()
+    {
+        var pipeName = CliPipeClient.TestPipeNameOverride!;
+
+        // Escaped line breaks and non-ASCII characters make the serialized line several times the
+        // message length, well past the 64K characters the client used to accept.
+        var message = string.Concat(Enumerable.Repeat("目录/文件.txt\r\n", 20_000));
+        var expected = new CliResponse(true, message, null, 0);
+        Assert.True(CliPipeProtocol.SerializeResponse(expected).Length > 64 * 1024);
+
+        await using var server = new EchoingCliServer(pipeName, expected);
+        var serverTask = server.RunOnceAsync();
+
+        var connected = await Task.Factory.StartNew(
+            () => (CliPipeClient.TrySend(["ls", "R:\\"], out var r), r),
+            CancellationToken.None,
+            TaskCreationOptions.LongRunning,
+            TaskScheduler.Default).WaitAsync(TestContext.Current.CancellationToken);
+
+        await serverTask;
+        Assert.True(connected.Item1);
+        Assert.True(connected.r.Success);
+        Assert.Equal(message, connected.r.Message);
+    }
+
     [Fact(Timeout = 10_000)]
     public async Task TrySend_ServerAcceptsButNeverResponds_ReturnsTrueWithNoResponseFailureWithoutHanging()
     {
