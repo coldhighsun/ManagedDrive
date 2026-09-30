@@ -159,6 +159,71 @@ public sealed class SettingsStoreTests : IDisposable
     }
 
     /// <summary>
+    /// A lock that is released while Load is still retrying doesn't make Load return defaults.
+    /// </summary>
+    [Fact]
+    public async Task Load_FileLockReleasedDuringRetries_ReturnsSavedSettings()
+    {
+        var store = new SettingsStore(SettingsPath);
+        store.Save(new AppConfiguration { Language = "zh-CN" });
+
+        var lockHolder = new FileStream(SettingsPath, FileMode.Open, FileAccess.Read, FileShare.None);
+        var release = Task.Run(async () =>
+        {
+            await Task.Delay(TimeSpan.FromMilliseconds(30), TestContext.Current.CancellationToken);
+            lockHolder.Dispose();
+        }, TestContext.Current.CancellationToken);
+
+        var loaded = store.Load();
+        await release;
+
+        Assert.Equal("zh-CN", loaded.Language);
+    }
+
+    /// <summary>
+    /// A Load that fails later in the session (after a successful startup Load) must not disable
+    /// Update: its defaults are not what the app's in-memory state was built from.
+    /// </summary>
+    [Fact]
+    public void Update_AfterLaterLoadFailedOnLockedFile_StillSaves()
+    {
+        var store = new SettingsStore(SettingsPath);
+        store.Save(new AppConfiguration { Language = "zh-CN" });
+        store.Load();
+
+        using (new FileStream(SettingsPath, FileMode.Open, FileAccess.Read, FileShare.None))
+        {
+            store.Load();
+        }
+
+        store.Update(current => current with { SkippedVersion = "1.2.3" });
+
+        Assert.Equal("1.2.3", store.Load().SkippedVersion);
+    }
+
+    /// <summary>
+    /// After Load gave up on a locked file, Update must not write state derived from the returned
+    /// defaults over the real settings, even once the lock is gone.
+    /// </summary>
+    [Fact]
+    public void Update_AfterLoadFailedOnLockedFile_DoesNotOverwriteSettings()
+    {
+        var store = new SettingsStore(SettingsPath);
+        store.Save(new AppConfiguration { Language = "zh-CN" });
+
+        using (new FileStream(SettingsPath, FileMode.Open, FileAccess.Read, FileShare.None))
+        {
+            store.Load();
+        }
+
+        store.Update(current => current with { SkippedVersion = "1.2.3" });
+
+        var loaded = store.Load();
+        Assert.Equal("zh-CN", loaded.Language);
+        Assert.Null(loaded.SkippedVersion);
+    }
+
+    /// <summary>
     /// A settings file that stays locked leaves the existing settings untouched and creates no
     /// <c>.corrupt</c> copy of the healthy file.
     /// </summary>
