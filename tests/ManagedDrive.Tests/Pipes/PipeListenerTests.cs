@@ -189,6 +189,15 @@ public sealed class PipeListenerTests : IDisposable
         await SendAsync(await ConnectAsync(), "good");
 
         Assert.Equal("good", await servedTcs.Task.WaitAsync(TestContext.Current.CancellationToken));
+
+        // The failure of the first connection is reported from its own task, so it can land after
+        // the second connection was already served; wait for it instead of asserting right away.
+        var deadline = DateTime.UtcNow.AddSeconds(10);
+        while (!connectionFailures.Any(ex => ex.Message == "bad request") && DateTime.UtcNow < deadline)
+        {
+            await Task.Delay(TimeSpan.FromMilliseconds(10), TestContext.Current.CancellationToken);
+        }
+
         Assert.Contains(connectionFailures, ex => ex.Message == "bad request");
         _cts.Cancel();
         await run;
