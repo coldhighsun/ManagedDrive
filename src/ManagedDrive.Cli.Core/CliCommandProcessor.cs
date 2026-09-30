@@ -11,6 +11,14 @@ namespace ManagedDrive.Cli.Core;
 public static class CliCommandProcessor
 {
     /// <summary>
+    /// Determines whether <paramref name="args"/> is exactly the <c>exit</c> command.
+    /// </summary>
+    /// <param name="args">The command-line arguments.</param>
+    /// <returns><c>true</c> when the only argument is <c>exit</c>.</returns>
+    public static bool IsExitCommand(string[] args) =>
+        args is [var only] && string.Equals(only, "exit", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
     /// Parses <paramref name="args"/> and executes the matching subcommand against
     /// <paramref name="diskController"/>.
     /// </summary>

@@ -39,6 +39,14 @@ public static class Program
         // command from another mdrive keeps it busy. Launching the exe in the latter case would
         // only pop the second instance's "already running" dialog, so just wait for it instead.
         var alreadyRunning = AppInstance.IsRunning();
+        if (!alreadyRunning && CliCommandProcessor.IsExitCommand(args))
+        {
+            // Starting the whole GUI only to tell it to exit again would flash a tray icon and,
+            // if the exit races the startup, leave the app running.
+            await Console.Out.WriteLineAsync("ManagedDrive is not running.");
+            return 0;
+        }
+
         if (!alreadyRunning && !TryLaunchApp())
         {
             await Console.Error.WriteLineAsync("Could not find or start ManagedDrive.exe.");
