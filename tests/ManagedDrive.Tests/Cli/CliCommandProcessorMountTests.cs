@@ -91,6 +91,24 @@ public class CliCommandProcessorMountTests
         Assert.Equal(expected, resolved);
     }
 
+    /// <summary>
+    /// Drive letters are left alone while directory mount points are resolved against the working directory.
+    /// </summary>
+    [Theory]
+    [InlineData("R", "D:\\work", "R")]
+    [InlineData("r:", "D:\\work", "r:")]
+    [InlineData(".\\mnt", "D:\\work", "D:\\work\\mnt")]
+    [InlineData("mnt", "D:\\work", "D:\\work\\mnt")]
+    [InlineData("E:\\mnt", "D:\\work", "E:\\mnt")]
+    [InlineData(".\\mnt", null, ".\\mnt")]
+    public void ResolveMountPoint_VariousInputs_LeavesDriveLettersAndResolvesDirectories(
+        string mountPoint, string? workingDirectory, string expected)
+    {
+        var resolved = CliCommandProcessor.ResolveMountPoint(mountPoint, workingDirectory);
+
+        Assert.Equal(expected, resolved);
+    }
+
     [Fact]
     public async Task Export_RelativeOutputPathWithWorkingDirectory_ResolvesAgainstWorkingDirectory()
     {

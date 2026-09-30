@@ -67,7 +67,15 @@ public static class Program
 
         try
         {
-            Process.Start(new ProcessStartInfo(exePath) { UseShellExecute = false });
+            // ShellExecute launches the long-lived GUI app without inheriting this process's
+            // standard handles: otherwise `mdrive list | more` or `$x = mdrive list` would never
+            // see EOF because the app keeps the pipe's write end open. The explicit working
+            // directory stops the app from pinning the caller's current directory.
+            Process.Start(new ProcessStartInfo(exePath)
+            {
+                UseShellExecute = true,
+                WorkingDirectory = AppContext.BaseDirectory,
+            });
             return true;
         }
         catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception)
