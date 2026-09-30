@@ -67,6 +67,29 @@ public sealed class RamDisk : IDisposable
         _host = host;
         Options = options;
         _fs.ContentAccessed += OnContentAccessed;
+
+        // Keeps Options (read by the UI and saved into the profile) in step with a rename made
+        // in Explorer, which only touches the file system's own label.
+        _fs.VolumeLabelChanged += OnFileSystemVolumeLabelChanged;
+    }
+
+    /// <summary>
+    /// Copies a volume label changed from Explorer into <see cref="Options"/>. Runs on a WinFsp
+    /// driver thread and must not wait for <see cref="_autoSaveLock"/> (a save can hold it for a
+    /// long time), so it retries a compare-and-swap: a concurrent <see cref="TryApplyOptions"/>
+    /// that replaced <see cref="Options"/> in between is never overwritten with stale values.
+    /// </summary>
+    /// <param name="label">The new volume label.</param>
+    private void OnFileSystemVolumeLabelChanged(string label)
+    {
+        while (true)
+        {
+            var current = Options;
+            if (ReferenceEquals(Interlocked.CompareExchange(ref _options, current with { VolumeLabel = label }, current), current))
+            {
+                return;
+            }
+        }
     }
 
     /// <summary>
@@ -144,9 +167,15 @@ public sealed class RamDisk : IDisposable
     /// </summary>
     public DiskOptions Options
     {
-        get;
-        private set;
+        get => Volatile.Read(ref _options);
+        private set => Volatile.Write(ref _options, value);
     }
+
+    /// <summary>
+    /// Backing field of <see cref="Options"/>, kept as a field so a rename made in Explorer can
+    /// update the label with a compare-and-swap instead of taking <see cref="_autoSaveLock"/>.
+    /// </summary>
+    private DiskOptions _options = null!;
 
     /// <summary>
     /// Gets the configured capacity (in bytes) that was in effect before <see cref="Create"/>
@@ -242,6 +271,16 @@ public sealed class RamDisk : IDisposable
         {
             ArchiveNodeMapBuilder.PeekArchive(options.SourceArchivePath, out var totalBytes, out _);
             var nodeMap = ArchiveNodeMapBuilder.BuildNodeMap(options.SourceArchivePath, (long)totalBytes, cancellableProgress);
+
+            // The two paths are documented as mutually exclusive. Left set, the auto-save and
+            // exit save would treat this read-only archive copy as unsaved and overwrite the
+            // existing image at PersistImagePath with it, so refuse instead of guessing.
+            if (options.PersistImagePath != null)
+            {
+                throw new ArgumentException(
+                    $"{nameof(DiskOptions.SourceArchivePath)} and {nameof(DiskOptions.PersistImagePath)} are mutually exclusive.",
+                    nameof(options));
+            }
 
             var capacity = ResolveAndApplyCapacity(nodeMap, options.CapacityBytes, ref options, out originalCapacity);
 
@@ -593,7 +632,7 @@ public sealed class RamDisk : IDisposable
         DiskImageSerializer.Save(
             _fs.NodeMap,
             Options.CapacityBytes,
-            Options.VolumeLabel,
+            _fs.VolumeLabel,
             imagePath,
             level,
             password is not null ? new ImageEncryptionInfo(password, DiskImageSerializer.GenerateCek()) : null,
@@ -724,7 +763,7 @@ public sealed class RamDisk : IDisposable
             DiskImageSerializer.SaveIncremental(
                 _fs.NodeMap,
                 Options.CapacityBytes,
-                Options.VolumeLabel,
+                _fs.VolumeLabel,
                 Options.PersistImagePath,
                 Options.CompressionLevel,
                 _password is not null && _cek is not null ? new ImageEncryptionInfo(_password, _cek) : null,
@@ -945,16 +984,44 @@ public sealed class RamDisk : IDisposable
                 return false;
             }
 
-            if (newOptions.CapacityBytes != Options.CapacityBytes &&
-                !_fs.TryUpdateCapacity(newOptions.CapacityBytes))
+            // An archive-sourced disk is read-only and never saved; giving it an image path too
+            // would make the saved profile unmountable (Create rejects the combination).
+            if (newOptions.SourceArchivePath != null && newOptions.PersistImagePath != null)
             {
-                error = $"Cannot reduce capacity: current usage ({UsedBytes:N0} bytes) exceeds the requested capacity ({newOptions.CapacityBytes:N0} bytes).";
+                error = "A disk mounted from an archive cannot also have an image path.";
                 return false;
+            }
+
+            var persistedHeaderChanged = false;
+
+            if (newOptions.CapacityBytes != Options.CapacityBytes)
+            {
+                if (!_fs.TryUpdateCapacity(newOptions.CapacityBytes))
+                {
+                    error = $"Cannot reduce capacity: current usage ({UsedBytes:N0} bytes) exceeds the requested capacity ({newOptions.CapacityBytes:N0} bytes).";
+                    return false;
+                }
+
+                persistedHeaderChanged = true;
             }
 
             if (newOptions.VolumeLabel != Options.VolumeLabel)
             {
                 _fs.UpdateVolumeLabel(newOptions.VolumeLabel);
+                persistedHeaderChanged = true;
+            }
+
+            if (newOptions.CompressionLevel != Options.CompressionLevel ||
+                newOptions.CustomZstdLevel != Options.CustomZstdLevel)
+            {
+                persistedHeaderChanged = true;
+            }
+
+            if (persistedHeaderChanged)
+            {
+                // Capacity and label live in the image header; without a dirty mark the next save
+                // is skipped and a remount reads the stale header value.
+                _fs.MarkDirty();
             }
 
             Options = newOptions;
@@ -1323,7 +1390,7 @@ public sealed class RamDisk : IDisposable
             SnapshotManager.WriteSnapshot(
                 _fs.NodeMap,
                 Options.CapacityBytes,
-                Options.VolumeLabel,
+                _fs.VolumeLabel,
                 path,
                 DateTimeOffset.UtcNow,
                 Options.CompressionLevel,
