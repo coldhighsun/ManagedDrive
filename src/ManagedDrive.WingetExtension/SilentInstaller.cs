@@ -255,9 +255,17 @@ internal static class SilentInstaller
     /// <c>true</c> when plain winget should handle the request: an <c>install</c> of a package that
     /// is already installed, or an <c>upgrade</c> with nothing to upgrade.
     /// </returns>
-    internal static bool ProbeOutputMeansDefer(bool isUpgrade, string packageId, string probeOutput)
+    internal static bool ProbeOutputMeansDefer(bool isUpgrade, string packageId, string probeOutput, bool exact = true)
     {
-        var listed = probeOutput.Contains(packageId, StringComparison.OrdinalIgnoreCase);
+        // For an exact request the id must appear as a whole token, so "Foo" doesn't count as
+        // installed just because "Foo.Bar" is. A partial id (non-exact) can only ever match as a
+        // substring of the listed full id.
+        var listed = exact
+            ? System.Text.RegularExpressions.Regex.IsMatch(
+                probeOutput,
+                $@"(?<![\w.\-]){System.Text.RegularExpressions.Regex.Escape(packageId)}(?![\w.\-])",
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.CultureInvariant)
+            : probeOutput.Contains(packageId, StringComparison.OrdinalIgnoreCase);
         return isUpgrade ? !listed : listed;
     }
 
@@ -300,7 +308,7 @@ internal static class SilentInstaller
             return false;
         }
 
-        var defer = ProbeOutputMeansDefer(isUpgrade, packageId, output);
+        var defer = ProbeOutputMeansDefer(isUpgrade, packageId, output, exact);
         if (defer)
         {
             Console.WriteLine(isUpgrade
