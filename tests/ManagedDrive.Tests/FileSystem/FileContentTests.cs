@@ -495,4 +495,81 @@ public class FileContentTests
             Marshal.FreeHGlobal(ptr);
         }
     }
+    /// <summary>
+    /// A slow destination must not keep the content locked: while <see cref="FileContent.CopyTo"/>
+    /// is blocked inside the destination's write, another thread can still write to the content.
+    /// </summary>
+    [Fact(Timeout = 15_000)]
+    public async Task CopyTo_BlockedDestination_DoesNotBlockConcurrentWrites()
+    {
+        var content = FileContent.FromSpan([1, 2, 3, 4], 4096);
+        using var writeDone = new ManualResetEventSlim();
+        var destination = new CallbackStream(() =>
+        {
+            var writer = Task.Run(() =>
+            {
+                var ptr = Marshal.AllocHGlobal(4);
+                try
+                {
+                    Marshal.Copy(new byte[] { 9, 9, 9, 9 }, 0, ptr, 4);
+                    content.WriteFrom(ptr, 0, 4);
+                }
+                finally
+                {
+                    Marshal.FreeHGlobal(ptr);
+                }
+
+                writeDone.Set();
+            }, TestContext.Current.CancellationToken);
+
+            // Would deadlock (and time out here) if CopyTo still held the content's lock.
+            Assert.True(writeDone.Wait(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken));
+            writer.GetAwaiter().GetResult();
+        });
+
+        await Task.Run(() => content.CopyTo(destination, 8), TestContext.Current.CancellationToken);
+
+        Assert.True(destination.WasCalled);
+    }
+
+    /// <summary>
+    /// Write-only stream that runs a callback on its first write.
+    /// </summary>
+    /// <param name="onFirstWrite">The action to run when the first write arrives.</param>
+    private sealed class CallbackStream(Action onFirstWrite) : Stream
+    {
+        /// <summary>
+        /// Gets whether the callback has run.
+        /// </summary>
+        public bool WasCalled { get; private set; }
+
+        /// <inheritdoc />
+        public override bool CanRead => false;
+        /// <inheritdoc />
+        public override bool CanSeek => false;
+        /// <inheritdoc />
+        public override bool CanWrite => true;
+        /// <inheritdoc />
+        public override long Length => throw new NotSupportedException();
+        /// <inheritdoc />
+        public override long Position { get => throw new NotSupportedException(); set => throw new NotSupportedException(); }
+        /// <inheritdoc />
+        public override void Flush() { }
+        /// <inheritdoc />
+        public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+        /// <inheritdoc />
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+        /// <inheritdoc />
+        public override void SetLength(long value) => throw new NotSupportedException();
+
+        /// <inheritdoc />
+        public override void Write(byte[] buffer, int offset, int count)
+        {
+            if (!WasCalled)
+            {
+                WasCalled = true;
+                onFirstWrite();
+            }
+        }
+    }
 }

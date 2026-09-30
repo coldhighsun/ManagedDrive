@@ -48,6 +48,13 @@ internal static class ChunkedGcm
     internal static int ChunkSize => TestChunkSizeOverride ?? DefaultChunkSize;
 
     /// <summary>
+    /// Largest encrypted chunk the reader accepts: writers never exceed <see cref="ChunkSize"/>
+    /// plaintext bytes per chunk, so twice that is generous. Bounds the buffer allocated from a
+    /// length field that is read before the chunk is authenticated.
+    /// </summary>
+    private static int MaxChunkBytes => Math.Max(ChunkSize, DefaultChunkSize) * 2;
+
+    /// <summary>
     /// Derives a unique nonce for chunk <paramref name="chunkIndex"/> from a random per-save
     /// <paramref name="baseNonce"/> by XOR-ing its last 4 bytes with the big-endian chunk index.
     /// This is a standard segmented-AEAD nonce derivation: as long as <paramref name="baseNonce"/>
@@ -300,7 +307,7 @@ internal static class ChunkedGcm
             Span<byte> lengthBytes = stackalloc byte[4];
             source.ReadExactly(lengthBytes);
             var ciphertextLength = BinaryPrimitives.ReadInt32LittleEndian(lengthBytes);
-            if (ciphertextLength < 0)
+            if (ciphertextLength < 0 || ciphertextLength > MaxChunkBytes)
             {
                 throw new InvalidDataException($"Invalid encrypted chunk length: {ciphertextLength}.");
             }

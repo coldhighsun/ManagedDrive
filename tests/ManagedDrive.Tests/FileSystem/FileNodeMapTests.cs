@@ -660,7 +660,7 @@ public sealed class FileNodeMapTests
         map.Add("\\stale.bin", stale);
         map.Remove("\\stale.bin");
 
-        var applied = map.TryUpdateAllocationSizeWithinCapacity(stale, 4096, ulong.MaxValue);
+        var applied = map.TryUpdateAllocationSizeWithinCapacity(stale, 4096, () => ulong.MaxValue);
 
         Assert.False(applied);
         Assert.Equal(0UL, map.GetTotalAllocated());
@@ -675,7 +675,7 @@ public sealed class FileNodeMapTests
         file.FileInfo.AllocationSize = 4096;
         map.Add("\\f", file);
 
-        var applied = map.TryUpdateAllocationSizeWithinCapacity(file, 1UL << 63, 1024 * 1024);
+        var applied = map.TryUpdateAllocationSizeWithinCapacity(file, 1UL << 63, () => 1024 * 1024);
 
         Assert.False(applied);
         Assert.Equal(4096UL, file.FileInfo.AllocationSize);
@@ -809,7 +809,7 @@ public sealed class FileNodeMapTests
         var map = new FileNodeMap();
         map.Add("\\", MakeDir());
 
-        var result = map.TryCreate("\\gone\\child.txt", MakeFile(), ulong.MaxValue);
+        var result = map.TryCreate("\\gone\\child.txt", MakeFile(), () => ulong.MaxValue);
 
         Assert.Equal(FileNodeMap.CreateResult.ParentNotFound, result);
         Assert.Equal(1, map.Count);
@@ -821,7 +821,7 @@ public sealed class FileNodeMapTests
         var map = new FileNodeMap();
         map.Add("\\file.txt", MakeFile());
 
-        var result = map.TryCreate("\\file.txt\\child.txt", MakeFile(), ulong.MaxValue);
+        var result = map.TryCreate("\\file.txt\\child.txt", MakeFile(), () => ulong.MaxValue);
 
         Assert.Equal(FileNodeMap.CreateResult.ParentNotDirectory, result);
     }
@@ -833,7 +833,7 @@ public sealed class FileNodeMapTests
         var existing = MakeFile();
         map.Add("\\f", existing);
 
-        var result = map.TryCreate("\\f", MakeFile(), ulong.MaxValue);
+        var result = map.TryCreate("\\f", MakeFile(), () => ulong.MaxValue);
 
         Assert.Equal(FileNodeMap.CreateResult.NameCollision, result);
         Assert.True(map.TryGet("\\f", out var stored));
@@ -847,7 +847,7 @@ public sealed class FileNodeMapTests
         var node = MakeFile();
         node.FileInfo.AllocationSize = 8192;
 
-        var result = map.TryCreate("\\f", node, 4096);
+        var result = map.TryCreate("\\f", node, () => 4096);
 
         Assert.Equal(FileNodeMap.CreateResult.CapacityExceeded, result);
         Assert.Equal(0, map.Count);
@@ -860,7 +860,7 @@ public sealed class FileNodeMapTests
         map.Add("\\d", MakeDir());
         var node = MakeFile();
 
-        var result = map.TryCreate("\\d\\f", node, ulong.MaxValue);
+        var result = map.TryCreate("\\d\\f", node, () => ulong.MaxValue);
 
         Assert.Equal(FileNodeMap.CreateResult.Created, result);
         Assert.True(map.TryGet("\\d\\f", out var stored));

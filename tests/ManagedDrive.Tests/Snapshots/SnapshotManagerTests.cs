@@ -355,6 +355,33 @@ public sealed class SnapshotManagerTests : IDisposable
             SnapshotManager.LoadSnapshot(snapshot.Path, out _, out _, wrongCek));
     }
 
+    /// <summary>
+    /// A blob whose content no longer matches its name (bit rot that keeps the length intact) must
+    /// fail the restore instead of silently loading damaged data.
+    /// </summary>
+    [Fact]
+    public void LoadSnapshot_UnencryptedBlobWithFlippedByte_ThrowsInvalidData()
+    {
+        var content = "distinctive-snapshot-content"u8.ToArray();
+        var nodeMap = new FileNodeMap();
+        nodeMap.Add("\\", MakeDir());
+        nodeMap.Add("\\a.txt", MakeFile(content));
+        SnapshotManager.WriteSnapshot(nodeMap, 1024, "Label", _mainImagePath,
+            new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), ImageCompressionLevel.None, cek: null);
+
+        var blobPath = Directory.EnumerateFiles(BlobDirectory, "*.blob", SearchOption.AllDirectories).Single();
+        var bytes = File.ReadAllBytes(blobPath);
+        var position = bytes.AsSpan().IndexOf(content);
+        Assert.True(position >= 0);
+        bytes[position + 2] ^= 0x01;
+        File.WriteAllBytes(blobPath, bytes);
+
+        var snapshot = Assert.Single(SnapshotManager.ListSnapshots(_mainImagePath));
+
+        Assert.Throws<InvalidDataException>(() =>
+            SnapshotManager.LoadSnapshot(snapshot.Path, out _, out _, cek: null));
+    }
+
     [Fact]
     public void WriteSnapshot_EncryptedAcrossMultipleChunks_RoundTrips()
     {

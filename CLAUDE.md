@@ -59,6 +59,8 @@ Encryption: AES-256-GCM envelope encryption (random CEK wrapped by user password
 
 Snapshots use a separate format (magic `MDRS`) with content-addressed blob store — don't conflate with `DiskImageSerializer`.
 
+Integrity/hardening notes: a v6 segment's plaintext is verified against its index `ContentHash` on load, and a snapshot blob against the SHA-256 in its file name; the size fields most able to force a large allocation (Zstd/GCM chunk lengths, security-descriptor length, image node sizes bounded by the header capacity, snapshot entry sizes bounded by the snapshot's capacity) are range-checked before anything is allocated, but not all are: archive entry sizes are only compared with available physical memory, snapshot blob sizes and the v6 segment index's `PayloadLength`/`NodeCount` are not bounded by capacity, and the legacy v3 whole-blob ciphertext is still read into one array sized from the stream length. PBKDF2 iterations live in the header (currently 600,000; images written with 210,000 still load). Known limitations kept for format compatibility: the MDRS snapshot index (paths, sizes, hashes) and blob file names (plaintext SHA-256) are not encrypted even for an encrypted disk, and v6 segments carry no AAD binding them to their position, so an attacker with write access could roll back, reorder or drop whole segments. Fixing either needs a format version bump.
+
 ### Threading model
 
 - `MountManager` and `RamDisk._autoSaveLock` use the C# 13 `Lock` type. `FileNodeMap` uses a `ReaderWriterLockSlim` (`_syncRoot`): lookups/enumerations take the read lock, structural mutations the write lock.

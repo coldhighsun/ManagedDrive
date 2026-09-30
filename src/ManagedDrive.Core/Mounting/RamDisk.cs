@@ -18,6 +18,19 @@ public sealed class RamDisk : IDisposable
     private static readonly ILogger<RamDisk> Logger = AppLog.CreateLogger<RamDisk>();
 
     /// <summary>
+    /// UTC ticks of <see cref="LastSaveTime"/>, or 0 before the first save. Stored as a single
+    /// long so the UI thread can read it while a save thread writes it without a torn
+    /// <see cref="DateTimeOffset"/> (a nullable struct wider than one machine word).
+    /// </summary>
+    private long _lastSaveTicks;
+
+    /// <summary>
+    /// Largest auto-save interval the timer can represent. <see cref="Timer"/> rejects periods
+    /// above about 4.29 billion milliseconds (roughly 71,582 minutes).
+    /// </summary>
+    internal static readonly TimeSpan MaxAutoSaveInterval = TimeSpan.FromMinutes(71_000);
+
+    /// <summary>
     /// Source of unique, monotonically increasing <see cref="_instanceId"/> values, used to give
     /// every <see cref="RamDisk"/> a stable lock-acquisition order.
     /// </summary>
@@ -117,8 +130,8 @@ public sealed class RamDisk : IDisposable
     /// </summary>
     public DateTimeOffset? LastSaveTime
     {
-        get;
-        private set;
+        get => Interlocked.Read(ref _lastSaveTicks) is var ticks and not 0 ? new DateTimeOffset(ticks, TimeSpan.Zero) : null;
+        private set => Interlocked.Exchange(ref _lastSaveTicks, value?.UtcTicks ?? 0);
     }
 
     /// <summary>
@@ -330,7 +343,18 @@ public sealed class RamDisk : IDisposable
             }
         }
 
-        disk.ConfigureAutoSaveTimer();
+        try
+        {
+            disk.ConfigureAutoSaveTimer();
+        }
+        catch
+        {
+            // Same teardown as the SetPassword failure above: the volume is already mounted, so
+            // an unowned RamDisk would leave the drive letter mounted forever.
+            disk.Dispose();
+            throw;
+        }
+
         return disk;
     }
 
@@ -420,8 +444,27 @@ public sealed class RamDisk : IDisposable
                 // for the same duration. Nothing here touches _fs.NodeMap or _cek/_password, so a
                 // SaveToImage() call that's still running (or starts) while this is in flight is
                 // safe — the save and cleanup below, which do touch them, wait for the same lock.
-                _host.Unmount();
-                _host.Dispose();
+                var unmounted = false;
+                try
+                {
+                    _host.Unmount();
+                    unmounted = true;
+                }
+                finally
+                {
+                    // Disposed even if unmounting threw: disposing the host stops its dispatcher,
+                    // so no callback can still be running when the node map is torn down below.
+                    // A failure here is only logged when unmounting already failed, so the
+                    // unmount error stays the one that propagates.
+                    try
+                    {
+                        _host.Dispose();
+                    }
+                    catch (Exception ex) when (!unmounted)
+                    {
+                        Logger.LogWarning(ex, "Disposing the WinFsp host failed after the unmount failed.");
+                    }
+                }
             }
             finally
             {
@@ -799,8 +842,9 @@ public sealed class RamDisk : IDisposable
     /// </summary>
     /// <param name="newPassword">The new password, or <see langword="null"/> to remove protection.</param>
     /// <exception cref="IOException">
-    /// Thrown when encrypting a previously unencrypted disk and any of its plaintext snapshots
-    /// cannot be deleted; the disk is left unencrypted.
+    /// Thrown when the snapshots that must be deleted with the change cannot all be deleted: the
+    /// plaintext ones when encrypting a previously unencrypted disk (it is left unencrypted), or
+    /// the encrypted ones when removing an encrypted disk's password (it stays encrypted).
     /// </exception>
     public void SetPassword(string? newPassword)
     {
@@ -845,6 +889,19 @@ public sealed class RamDisk : IDisposable
             }
             else
             {
+                // Only an encrypted disk has snapshots that become unrecoverable with the CEK;
+                // a disk that was never encrypted keeps its still-valid plaintext snapshots.
+                // Deleted before the CEK is discarded, and a leftover (e.g. a locked file) is an
+                // error just like on the encrypting path: blobs left behind under the old key
+                // would otherwise be reused by later snapshots after a new key is generated, and
+                // then fail to decrypt on restore.
+                if (_cek is not null && Options.PersistImagePath is { } path &&
+                    !SnapshotManager.DeleteAllSnapshots(path))
+                {
+                    throw new IOException(
+                        $"Could not delete the existing encrypted snapshots of '{path}'; the password was not removed.");
+                }
+
                 if (_cek is not null)
                 {
                     System.Security.Cryptography.CryptographicOperations.ZeroMemory(_cek);
@@ -852,11 +909,6 @@ public sealed class RamDisk : IDisposable
 
                 _password = null;
                 _cek = null;
-
-                if (Options.PersistImagePath is { } path)
-                {
-                    SnapshotManager.DeleteAllSnapshots(path);
-                }
             }
 
             _fs.MarkDirty();
@@ -1168,6 +1220,11 @@ public sealed class RamDisk : IDisposable
             Options.PersistImagePath != null)
         {
             var interval = TimeSpan.FromMinutes(minutes);
+            if (interval > MaxAutoSaveInterval)
+            {
+                interval = MaxAutoSaveInterval;
+            }
+
             _autoSaveTimer = new(_ => TryAutoSave(), null, TimeSpan.Zero, interval);
         }
     }

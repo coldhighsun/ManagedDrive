@@ -152,12 +152,31 @@ public static class ArchiveNodeMapBuilder
         RequireNoTypeConflict(nodeMap, path, expectDirectory: false);
 
         var size = (ulong)RequireNonNegativeSize(entry);
+
+        // The entry size comes from the archive header and sizes a chunk table below before any
+        // data is read, while the content it declares is all going to be materialized in memory:
+        // refuse one larger than all the memory there is rather than allocating from a corrupt or
+        // hostile size. A plain sanity bound: it doesn't charge the low-memory budget, which
+        // FillFromStream does when it actually materializes the content.
+        if (SystemMemoryInfo.GetAvailablePhysicalBytes() is var available and > 0 && size > available)
+        {
+            throw new InsufficientMemoryException(
+                $"Archive entry '{path}' ({size:N0} bytes) does not fit in the available memory.");
+        }
+
         var allocationSize = FileNode.AlignToAllocationUnit(size);
         var data = FileContent.CreateZeroed(allocationSize);
 
         using (var entryStream = openEntryStream())
         {
-            data.FillFromStream(entryStream, (long)size);
+            // FillFromStream zero-pads a short read instead of throwing; a truncated or
+            // mis-declared entry must fail the import rather than mount as zero-filled content.
+            var filled = data.FillFromStream(entryStream, (long)size);
+            if (filled < (long)size)
+            {
+                throw new InvalidDataException(
+                    $"Archive entry '{path}' is truncated: {filled:N0} of {size:N0} bytes.");
+            }
         }
 
         var node = new FileNode

@@ -514,9 +514,10 @@ public static partial class SnapshotManager
     /// </summary>
     private static byte[] ComputeHash(FileNode node, FileContent data)
     {
-        if (node.CachedContentHash is { } cached && node.CachedContentHashVersion == node.ContentVersion)
+        // Read once: the hash and the version it belongs to travel together in one object.
+        if (node.CachedContentHash is { } cached && cached.Version == node.ContentVersion)
         {
-            return cached;
+            return cached.Hash;
         }
 
         // Capture the version before hashing: a write landing mid-hash then leaves the cache keyed
@@ -528,8 +529,7 @@ public static partial class SnapshotManager
         data.HashInto(incrementalHash, fileSize);
         var hash = incrementalHash.GetHashAndReset();
 
-        node.CachedContentHash = hash;
-        node.CachedContentHashVersion = version;
+        node.CachedContentHash = new(hash, version);
         return hash;
     }
 

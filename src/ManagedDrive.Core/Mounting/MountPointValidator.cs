@@ -15,7 +15,7 @@ public static class MountPointValidator
     /// the form <c>X:</c> (single letter followed by a colon).
     /// </summary>
     public static bool IsDriveLetter(string mountPoint) =>
-        mountPoint.Length == 2 && char.IsLetter(mountPoint[0]) && mountPoint[1] == ':';
+        mountPoint.Length == 2 && char.IsAsciiLetter(mountPoint[0]) && mountPoint[1] == ':';
 
     /// <summary>
     /// Validates a directory-path mount point before attempting to mount onto it. Drive-letter

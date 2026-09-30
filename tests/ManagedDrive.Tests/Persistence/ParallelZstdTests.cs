@@ -105,6 +105,41 @@ public sealed class ParallelZstdTests
     }
 
     /// <summary>
+    /// After an abort, disposing the stream must not finish it: nothing more (no queued chunk, no
+    /// terminator) is compressed or written to the target.
+    /// </summary>
+    [Fact]
+    public void Abort_ThenDispose_WritesNothingFurther()
+    {
+        using var output = new MemoryStream();
+        var writer = new ParallelZstd.WriteStream(output, level: 3, maxDegreeOfParallelism: 2, chunkSize: 1024);
+        writer.Write(new byte[100]);
+
+        writer.Abort();
+        writer.Dispose();
+
+        Assert.Equal(0, output.Length);
+    }
+
+    /// <summary>
+    /// Chunks already handed to workers when the stream is aborted are waited for and discarded,
+    /// not written.
+    /// </summary>
+    [Fact]
+    public void Abort_WithChunksInFlight_DoesNotThrowAndWritesNoTerminator()
+    {
+        using var output = new MemoryStream();
+        var writer = new ParallelZstd.WriteStream(output, level: 3, maxDegreeOfParallelism: 4, chunkSize: 64);
+        writer.Write(new byte[64 * 3]);
+        var lengthBeforeAbort = output.Length;
+
+        writer.Abort();
+        writer.Dispose();
+
+        Assert.Equal(lengthBeforeAbort, output.Length);
+    }
+
+    /// <summary>
     /// A long run of frames that decompress to nothing, as a crafted image could hold, is skipped
     /// without exhausting the stack, and the data after it still comes through.
     /// </summary>

@@ -10,6 +10,11 @@ namespace ManagedDrive.Core.Persistence;
 /// </summary>
 internal static class NodeMetadataIO
 {
+    /// <summary>
+    /// Largest security-descriptor length accepted when reading a node record.
+    /// </summary>
+    private const int MaxSecurityDescriptorBytes = 1024 * 1024;
+
     public readonly record struct NodeMetadata(string Path, Fsp.Interop.FileInfo FileInfo, byte[]? Security);
 
     public static void WriteMetadata(BinaryWriter writer, string path, FileNode node) =>
@@ -56,7 +61,19 @@ internal static class NodeMetadataIO
         };
 
         var secLen = reader.ReadInt32();
+
+        // Real descriptors are a few hundred bytes (each ACL is capped at 64 KiB); the generous
+        // bound only stops a corrupt length from allocating an arbitrarily large array up front.
+        if (secLen is < 0 or > MaxSecurityDescriptorBytes)
+        {
+            throw new InvalidDataException($"Invalid security descriptor length: {secLen}.");
+        }
+
         var security = secLen > 0 ? reader.ReadBytes(secLen) : null;
+        if (security is not null && security.Length != secLen)
+        {
+            throw new EndOfStreamException("The stream ends inside a security descriptor.");
+        }
 
         return new(path, fileInfo, security);
     }
