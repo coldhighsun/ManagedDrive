@@ -66,7 +66,51 @@ public sealed class SettingsStore
     /// <returns>
     /// The deserialized <see cref="AppConfiguration"/>, or a fresh default instance on failure.
     /// </returns>
-    public AppConfiguration Load() => Read(out _, out _);
+    public AppConfiguration Load()
+    {
+        // Only the first Load (the one that seeds the app's in-memory state at startup) can leave
+        // that state built from fallback defaults; a later failed Load just returns defaults to
+        // its caller, which doesn't save them.
+        var isStartupLoad = Interlocked.Exchange(ref _startupLoadDone, 1) == 0;
+
+        for (var attempt = 0; ; attempt++)
+        {
+            var config = Read(out var ioFailed, out var retryable);
+
+            // A brief lock (antivirus, backup tool) must not surface as empty defaults: the
+            // caller's next save would then replace the user's real settings with them.
+            if (!ioFailed)
+            {
+                return config;
+            }
+
+            if (!retryable || attempt >= UpdateReadRetries)
+            {
+                // The defaults returned here stand in for a file that exists but is unreadable.
+                // Update must not save state derived from them over that file.
+                if (isStartupLoad)
+                {
+                    _loadFellBackAfterIoFailure = true;
+                }
+
+                return config;
+            }
+
+            Thread.Sleep(UpdateReadRetryDelay);
+        }
+    }
+
+    /// <summary>
+    /// Set when the first <see cref="Load"/> gave up on an I/O or access error and returned
+    /// defaults instead of the file's contents; stays set for the rest of the session.
+    /// </summary>
+    private volatile bool _loadFellBackAfterIoFailure;
+
+    /// <summary>
+    /// Non-zero once <see cref="Load"/> has been called, so only the first call counts as the
+    /// startup load.
+    /// </summary>
+    private int _startupLoadDone;
 
     /// <summary>
     /// How many times <see cref="Update"/> re-reads the settings file after an I/O failure.
@@ -167,6 +211,14 @@ public sealed class SettingsStore
     /// </param>
     public void Update(Func<AppConfiguration, AppConfiguration> change)
     {
+        if (_loadFellBackAfterIoFailure)
+        {
+            // Callers build the new configuration from in-memory state that started as the
+            // defaults <see cref="Load"/> fell back to, so writing it would wipe the real file.
+            Logger.LogWarning("Skipped a settings update because the settings could not be read at startup");
+            return;
+        }
+
         for (var attempt = 0; ; attempt++)
         {
             // Lock is reentrant, so Load/Save taking it again on this thread is fine.
