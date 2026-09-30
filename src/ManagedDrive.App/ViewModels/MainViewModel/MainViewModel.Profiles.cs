@@ -213,7 +213,9 @@ public sealed partial class MainViewModel
         CapacityBytes = p.CapacityBytes,
         ReadOnly = p.ReadOnly,
         AutoMount = p.AutoMount,
-        PersistImagePath = p.PersistImagePath,
+        // An archive-sourced disk is never backed by an image; profiles saved with both (by an older
+        // "Save image" on an archive disk) would otherwise fail to mount.
+        PersistImagePath = p.SourceArchivePath is null ? p.PersistImagePath : null,
         SourceArchivePath = p.SourceArchivePath,
         AutoSaveIntervalMinutes = p.AutoSaveIntervalMinutes,
         CompressionLevel = p.CompressionLevel,
