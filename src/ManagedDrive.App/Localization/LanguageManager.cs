@@ -7,6 +7,9 @@ namespace ManagedDrive.App.Localization;
 /// </summary>
 public sealed class LanguageManager
 {
+    /// <summary>
+    /// The single shared instance.
+    /// </summary>
     public static readonly LanguageManager Instance = new();
 
     private ResourceDictionary? _currentDict;

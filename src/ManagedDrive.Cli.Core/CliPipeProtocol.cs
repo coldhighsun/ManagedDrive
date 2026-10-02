@@ -34,6 +34,9 @@ public static class CliPipeProtocol
         return new(request?.Args ?? [], request?.WorkingDirectory);
     }
 
+    /// <summary>
+    /// Deserializes a response line; a <c>null</c> JSON literal yields a failure response with exit code 1.
+    /// </summary>
     public static CliResponse DeserializeResponse(string json) =>
         JsonSerializer.Deserialize<CliResponse>(json) ?? new CliResponse(false, string.Empty, null, 1);
 
@@ -46,6 +49,9 @@ public static class CliPipeProtocol
     public static string SerializeRequest(string[] args, string? workingDirectory) =>
         JsonSerializer.Serialize(new CliRequest(args, workingDirectory));
 
+    /// <summary>
+    /// Serializes a response line.
+    /// </summary>
     public static string SerializeResponse(CliResponse response) => JsonSerializer.Serialize(response);
 }
 

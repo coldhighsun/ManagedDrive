@@ -18,9 +18,18 @@ namespace ManagedDrive.Benchmarks;
 [MinColumn, MaxColumn]
 public class AppendWriteBenchmarks
 {
+    /// <summary>
+    /// Selects how the low-memory guard obtains the available physical memory.
+    /// </summary>
     public enum MemoryCheck
     {
+        /// <summary>
+        /// Queries the OS on every check, as production does.
+        /// </summary>
         Syscall,
+        /// <summary>
+        /// Returns a fixed large value, skipping the syscall.
+        /// </summary>
         Constant,
     }
 
@@ -30,12 +39,21 @@ public class AppendWriteBenchmarks
     private MemoryFileSystem _fs = null!;
     private IntPtr _buffer;
 
+    /// <summary>
+    /// Size of each append write, in bytes.
+    /// </summary>
     [Params(512, 4 * 1024, 64 * 1024)]
     public int ChunkBytes { get; set; }
 
+    /// <summary>
+    /// The memory-check strategy under test.
+    /// </summary>
     [Params(MemoryCheck.Syscall, MemoryCheck.Constant)]
     public MemoryCheck Check { get; set; }
 
+    /// <summary>
+    /// Creates the in-process file system and the unmanaged source buffer for the selected parameters.
+    /// </summary>
     [GlobalSetup]
     public void Setup()
     {
@@ -49,6 +67,9 @@ public class AppendWriteBenchmarks
         Marshal.Copy(pattern, 0, _buffer, ChunkBytes);
     }
 
+    /// <summary>
+    /// Frees the unmanaged source buffer.
+    /// </summary>
     [GlobalCleanup]
     public void Cleanup() => Marshal.FreeHGlobal(_buffer);
 

@@ -951,7 +951,7 @@ public sealed class DiskContentRow(DiskContentNode node, int depth, bool showFul
     /// <summary>
     /// Gets whether this row can be expanded/collapsed. Always <see langword="false"/> for a
     /// filtered row: the flat filtered list has no nested children to reveal, and toggling one
-    /// would incorrectly fall back to the unfiltered tree view (see <see cref="ToggleExpanded"/>).
+    /// would incorrectly fall back to the unfiltered tree view (see <see cref="DiskContentDialog.ToggleExpanded"/>).
     /// </summary>
     public bool CanExpand => HasChildren && !showFullPath;
 
@@ -990,9 +990,15 @@ public sealed class DepthToIndentConverter : IValueConverter
 {
     private const double IndentPerLevel = 16;
 
+    /// <summary>
+    /// Converts a nesting depth into a left-only indent thickness.
+    /// </summary>
     public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture) =>
         new Thickness((value is int depth ? depth : 0) * IndentPerLevel, 0, 0, 0);
 
+    /// <summary>
+    /// Not supported; the conversion is one-way.
+    /// </summary>
     public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) =>
         throw new NotSupportedException();
 }

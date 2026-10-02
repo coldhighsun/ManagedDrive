@@ -8,6 +8,12 @@ namespace ManagedDrive.Cli.Core;
 /// </summary>
 public enum ArchiveExportFormat
 {
+    /// <summary>
+    /// Standard ZIP archive.
+    /// </summary>
     Zip = 0,
+    /// <summary>
+    /// 7-Zip archive.
+    /// </summary>
     SevenZip = 1,
 }

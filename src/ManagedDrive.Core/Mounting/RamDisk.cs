@@ -104,7 +104,7 @@ public sealed class RamDisk : IDisposable
     /// by the periodic auto-save timer, or by the final save on unmount/dispose. The
     /// exception is also rethrown to the caller for saves that are awaited synchronously
     /// (e.g. a manual save); this event exists so background failures that would otherwise
-    /// be swallowed (auto-save ticks, the final save in <see cref="Dispose"/>) can still be
+    /// be swallowed (auto-save ticks, the final save in <see cref="Dispose()"/>) can still be
     /// surfaced to the UI.
     /// </summary>
     public event EventHandler<Exception>? SaveFailed;
@@ -1305,7 +1305,7 @@ public sealed class RamDisk : IDisposable
         RamDiskSaveDecisions.IsUnchangedSinceLatestSnapshot(mainImagePath, _fs.NodeMap);
 
     /// <summary>
-    /// Whether an exit/shutdown save should run. Used by <see cref="Dispose"/> and
+    /// Whether an exit/shutdown save should run. Used by <see cref="Dispose()"/> and
     /// <see cref="SaveToImageSafe"/> so a disk with save-on-exit disabled is left untouched when
     /// the app exits or Windows shuts down, while periodic auto-save is unaffected. See
     /// <see cref="RamDiskSaveDecisions.NeedsExitSave"/> for the decision logic.

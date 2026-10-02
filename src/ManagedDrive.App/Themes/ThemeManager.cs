@@ -5,6 +5,9 @@ namespace ManagedDrive.App.Themes;
 /// </summary>
 public sealed class ThemeManager
 {
+    /// <summary>
+    /// The single shared instance.
+    /// </summary>
     public static readonly ThemeManager Instance = new();
 
     private ResourceDictionary? _currentDict;

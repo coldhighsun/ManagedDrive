@@ -31,8 +31,8 @@ internal sealed class CancellableProgress(IProgress<double>? inner, Cancellation
         cancellationToken.CanBeCanceled ? new CancellableProgress(progress, cancellationToken) : progress;
 
     /// <summary>
-    /// Checks <paramref name="cancellationToken"/>, then forwards <paramref name="value"/> to
-    /// <paramref name="inner"/> if it's non-null.
+    /// Checks <c>cancellationToken</c>, then forwards <paramref name="value"/> to
+    /// <c>inner</c> if it's non-null.
     /// </summary>
     /// <param name="value">The progress value to report, in [0, 1].</param>
     public void Report(double value)

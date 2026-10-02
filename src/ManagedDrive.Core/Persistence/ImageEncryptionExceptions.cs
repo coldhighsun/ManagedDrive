@@ -6,6 +6,9 @@ namespace ManagedDrive.Core.Persistence;
 /// </summary>
 public sealed class ImagePasswordRequiredException : Exception
 {
+    /// <summary>
+    /// Initializes a new instance of the <see cref="ImagePasswordRequiredException"/> class with the default message.
+    /// </summary>
     public ImagePasswordRequiredException()
         : base("This image is password-protected; a password is required to load it.")
     {
@@ -18,6 +21,9 @@ public sealed class ImagePasswordRequiredException : Exception
 /// </summary>
 public sealed class ImagePasswordIncorrectException : Exception
 {
+    /// <summary>
+    /// Initializes a new instance of the <see cref="ImagePasswordIncorrectException"/> class with the default message.
+    /// </summary>
     public ImagePasswordIncorrectException()
         : base("The supplied password is incorrect.")
     {

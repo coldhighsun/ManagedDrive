@@ -21,8 +21,11 @@ public static class Program
     /// </summary>
     private static readonly TimeSpan RetryInterval = TimeSpan.FromMilliseconds(200);
 
-    // Relative path arguments need no rewriting here: CliPipeClient sends this process's working
-    // directory along with the args, and the app resolves paths against it.
+    /// <summary>
+    /// Relative path arguments need no rewriting here: CliPipeClient sends this process's working
+    /// directory along with the args, and the app resolves paths against it.
+    /// Runs the CLI: forwards the arguments to the running app and returns the process exit code.
+    /// </summary>
     public static async Task<int> Main(string[] args)
     {
         // File names and volume labels can hold any Unicode character, which the console's

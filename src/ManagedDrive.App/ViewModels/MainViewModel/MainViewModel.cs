@@ -166,6 +166,9 @@ public sealed partial class MainViewModel : INotifyPropertyChanged, IDisposable
         OnPropertyChanged(nameof(LoadingDisksText));
     }
 
+    /// <summary>
+    /// Occurs when the user asks the application to exit.
+    /// </summary>
     public event EventHandler? ExitRequested;
 
     /// <inheritdoc />

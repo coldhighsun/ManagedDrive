@@ -3,7 +3,7 @@ using BenchmarkDotNet.Attributes;
 namespace ManagedDrive.Benchmarks;
 
 /// <summary>
-/// Measures contention on <see cref="FileNodeMap"/>'s single global lock under concurrent access
+/// Measures contention on <see cref="ManagedDrive.Core.FileSystem.FileNodeMap"/>'s single global lock under concurrent access
 /// from multiple threads to disjoint files/directories on the same RAM disk. Data-gathering step
 /// for evaluating whether swapping to a <see cref="System.Threading.ReaderWriterLockSlim"/> is
 /// worth the added complexity — see the performance optimization plan.
@@ -21,9 +21,15 @@ public class ConcurrentAccessBenchmarks
     private RamDisk _ramDisk = null!;
     private byte[] _writeBuffer = null!;
 
+    /// <summary>
+    /// Disposes the RAM disk.
+    /// </summary>
     [GlobalCleanup]
     public void Cleanup() => _ramDisk.Dispose();
 
+    /// <summary>
+    /// Populates the per-thread directories before each concurrent read iteration.
+    /// </summary>
     [IterationSetup(Targets = [nameof(ConcurrentReads_DisjointDirectories)])]
     public void IterationSetup_ConcurrentReads()
     {
@@ -38,6 +44,9 @@ public class ConcurrentAccessBenchmarks
         }
     }
 
+    /// <summary>
+    /// Clears the per-thread directories before each concurrent write iteration.
+    /// </summary>
     [IterationSetup(Targets = [nameof(ConcurrentWrites_DisjointDirectories)])]
     public void IterationSetup_ConcurrentWrites()
     {
@@ -50,6 +59,9 @@ public class ConcurrentAccessBenchmarks
         }
     }
 
+    /// <summary>
+    /// Populates a single directory before each single-threaded read iteration.
+    /// </summary>
     [IterationSetup(Targets = [nameof(SingleThreaded_Read)])]
     public void IterationSetup_SingleThreadedRead()
     {
@@ -61,6 +73,9 @@ public class ConcurrentAccessBenchmarks
             File.WriteAllBytes(Path.Combine(dir, $"file-{i}.dat"), _writeBuffer);
     }
 
+    /// <summary>
+    /// Clears the target directory before each single-threaded write iteration.
+    /// </summary>
     [IterationSetup(Targets = [nameof(SingleThreaded_Write)])]
     public void IterationSetup_SingleThreadedWrite()
     {
@@ -72,7 +87,7 @@ public class ConcurrentAccessBenchmarks
 
     /// <summary>
     /// Each thread reads its own directory's files — no data dependency across threads, so any
-    /// slowdown relative to single-threaded throughput reflects lock contention in <see cref="FileNodeMap"/>,
+    /// slowdown relative to single-threaded throughput reflects lock contention in <see cref="ManagedDrive.Core.FileSystem.FileNodeMap"/>,
     /// not genuine data sharing.
     /// </summary>
     [Benchmark(Description = "ConcurrentReads DisjointDirectories", Baseline = true)]
@@ -128,7 +143,7 @@ public class ConcurrentAccessBenchmarks
     /// <summary>
     /// Sequential write baseline: creates and writes the same total file count as
     /// <see cref="ConcurrentWrites_DisjointDirectories"/> on a single thread. Comparing this against the
-    /// parallel version isolates whether the parallel slowdown comes from <see cref="FileNodeMap"/> lock
+    /// parallel version isolates whether the parallel slowdown comes from <see cref="ManagedDrive.Core.FileSystem.FileNodeMap"/> lock
     /// contention or is simply the inherent per-file <c>Create</c> cost multiplied by the file count.
     /// </summary>
     [Benchmark(Description = "SingleThreaded Write")]
@@ -142,6 +157,9 @@ public class ConcurrentAccessBenchmarks
         }
     }
 
+    /// <summary>
+    /// Mounts the RAM disk and allocates the write buffer.
+    /// </summary>
     [GlobalSetup]
     public void Setup()
     {

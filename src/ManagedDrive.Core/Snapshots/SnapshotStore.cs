@@ -490,7 +490,7 @@ internal static class SnapshotStore
 
     /// <summary>
     /// Reads the blob for <paramref name="hash"/> straight into a <see cref="FileContent"/> via
-    /// <see cref="FileContent.FillFromStream"/>, decrypting (chunked or legacy whole-blob, see
+    /// <see cref="FileContent.FillFromStream(Stream, long)"/>, decrypting (chunked or legacy whole-blob, see
     /// <see cref="WriteBlob"/>) and decompressing on the fly rather than materializing the
     /// ciphertext, plaintext, and decompressed bytes as three separate whole-file buffers.
     /// </summary>

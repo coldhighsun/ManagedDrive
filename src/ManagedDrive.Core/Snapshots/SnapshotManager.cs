@@ -464,7 +464,7 @@ public static partial class SnapshotManager
     /// Enumerates every blob file in <paramref name="blobDirectory"/>, or an empty sequence if
     /// the directory doesn't exist. Shared by <see cref="LoadBlobSizes"/> and
     /// <see cref="GarbageCollectBlobs"/> so the blob store is only walked once per caller instead
-    /// of each duplicating the same <see cref="Directory.EnumerateFiles"/> call.
+    /// of each duplicating the same <see cref="Directory.EnumerateFiles(string, string, SearchOption)"/> call.
     /// </summary>
     private static IEnumerable<string> EnumerateBlobFiles(string blobDirectory) =>
         Directory.Exists(blobDirectory)

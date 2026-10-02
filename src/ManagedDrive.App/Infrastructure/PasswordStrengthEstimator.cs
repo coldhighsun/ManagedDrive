@@ -5,8 +5,17 @@ namespace ManagedDrive.App.Infrastructure;
 /// </summary>
 public enum PasswordStrength
 {
+    /// <summary>
+    /// The password is easy to guess.
+    /// </summary>
     Weak,
+    /// <summary>
+    /// The password offers moderate resistance to guessing.
+    /// </summary>
     Medium,
+    /// <summary>
+    /// The password is hard to guess.
+    /// </summary>
     Strong,
 }
 
@@ -22,7 +31,6 @@ public static class PasswordStrengthEstimator
     /// </summary>
     public static PasswordStrength Estimate(string password)
     {
-        var classCount = 0;
         var hasLower = false;
         var hasUpper = false;
         var hasDigit = false;
@@ -48,7 +56,7 @@ public static class PasswordStrengthEstimator
             }
         }
 
-        classCount = (hasLower ? 1 : 0) + (hasUpper ? 1 : 0) + (hasDigit ? 1 : 0) + (hasOther ? 1 : 0);
+        var classCount = (hasLower ? 1 : 0) + (hasUpper ? 1 : 0) + (hasDigit ? 1 : 0) + (hasOther ? 1 : 0);
 
         if (password.Length >= 12 && classCount >= 3)
         {
