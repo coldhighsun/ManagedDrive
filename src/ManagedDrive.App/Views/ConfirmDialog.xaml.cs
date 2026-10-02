@@ -19,8 +19,14 @@ public partial class ConfirmDialog
         Loaded += (_, _) => DialogPlacement.BringToFrontWhenUnowned(this);
     }
 
+    /// <summary>
+    /// Gets whether the optional checkbox is checked.
+    /// </summary>
     public bool IsOptionChecked => OptionCheckBox.IsChecked == true;
 
+    /// <summary>
+    /// Shows the optional checkbox with the given label.
+    /// </summary>
     public void ShowOption(string label)
     {
         OptionCheckBox.Content = label;

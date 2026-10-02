@@ -88,7 +88,7 @@ internal static class ChunkedGcm
     /// <summary>
     /// Write-only <see cref="Stream"/> that buffers up to <see cref="ChunkSize"/> bytes at a
     /// time and, on each full buffer plus once more on <see cref="Complete"/>, AES-256-GCM-encrypts
-    /// that chunk with a nonce derived via <see cref="DeriveChunkNonce"/> and writes it to the
+    /// that chunk with a nonce derived via <see cref="DeriveChunkNonce(byte[], int)"/> and writes it to the
     /// underlying stream as <c>[Int32 ciphertext length][16-byte tag][ciphertext]</c>.
     /// </summary>
     internal sealed class WriteStream(Stream output, byte[] key, byte[] baseNonce, int chunkSize) : Stream

@@ -12,6 +12,9 @@ public partial class AboutDialog
     private readonly UpdateCheckService? _updateCheckService;
     private UpdateInfo? _updateInfo;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="AboutDialog"/> class and starts an update check when a service is supplied.
+    /// </summary>
     public AboutDialog(UpdateCheckService? updateCheckService = null)
     {
         InitializeComponent();

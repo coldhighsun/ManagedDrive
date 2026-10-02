@@ -65,7 +65,7 @@ public sealed class UpdateInstaller(ReleaseUpdater updater, string downloadDirec
     public void Dispose() => updater.Dispose();
 
     /// <summary>
-    /// Removes installers left in <see cref="downloadDirectory"/> by earlier updates, so superseded
+    /// Removes installers left in <c>downloadDirectory</c> by earlier updates, so superseded
     /// versions do not pile up. Partial downloads are kept so an interrupted download can resume.
     /// </summary>
     /// <param name="currentAssetName">Name of the installer about to be downloaded, which is kept.</param>

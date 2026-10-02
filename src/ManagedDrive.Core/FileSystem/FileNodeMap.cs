@@ -204,7 +204,7 @@ public sealed class FileNodeMap : IDisposable
     }
 
     /// <summary>
-    /// Lock-free core of <see cref="Add"/> and <see cref="TryAddWithinCapacity"/>: inserts or
+    /// Lock-free core of <see cref="Add"/> and <see cref="TryCreate"/>: inserts or
     /// replaces the node at <paramref name="filePath"/>, updates <see cref="_sortedKeys"/>, and
     /// adjusts <see cref="_totalAllocated"/>. Also reserves the node's index number (see
     /// <see cref="FileNode.ReserveIndexNumber"/>) — every loaded image, snapshot, and archive
@@ -483,7 +483,7 @@ public sealed class FileNodeMap : IDisposable
     /// <summary>
     /// Runs <paramref name="apply"/> only if the total allocation does not exceed
     /// <paramref name="limit"/>, with the check and <paramref name="apply"/> atomic with respect
-    /// to every capacity-checked growth (<see cref="TryAddWithinCapacity"/>,
+    /// to every capacity-checked growth (<see cref="TryCreate"/>,
     /// <see cref="TryUpdateAllocationSizeWithinCapacity"/>), which hold the read lock across their
     /// own check-and-apply. Used to lower the capacity ceiling without an in-flight growth that
     /// passed against the old ceiling landing after the check.
@@ -942,13 +942,13 @@ public sealed class FileNodeMap : IDisposable
     /// <summary>
     /// Capacity-checked counterpart to <see cref="UpdateAllocationSize"/>: when
     /// <paramref name="newAllocationSize"/> grows the node, atomically verifies that applying it
-    /// would not push the running total past <paramref name="maxCapacity"/> and only then applies
+    /// would not push the running total past <paramref name="maxCapacityProvider"/> and only then applies
     /// it — via a compare-exchange loop on the same field <see cref="UpdateAllocationSize"/> uses,
     /// so this stays as lock-free as that hot path instead of escalating to the write lock. Without
     /// this, checking headroom (e.g. via <see cref="GetTotalAllocated"/>) and applying growth as two
     /// separate steps lets two concurrent extending writes on different nodes each see the same
     /// stale total, both pass the check, and together push the real total past
-    /// <paramref name="maxCapacity"/>.
+    /// <paramref name="maxCapacityProvider"/>.
     /// </summary>
     /// <param name="node">The node whose allocation size is changing.</param>
     /// <param name="newAllocationSize">The new allocation size, in bytes.</param>

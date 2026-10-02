@@ -251,6 +251,7 @@ internal static class SilentInstaller
     /// <param name="isUpgrade">Whether the request is <c>upgrade</c> rather than <c>install</c>.</param>
     /// <param name="packageId">The package's id.</param>
     /// <param name="probeOutput">What the probe printed.</param>
+    /// <param name="exact">Whether the request names the package id exactly (<c>--exact</c>) rather than as a partial id.</param>
     /// <returns>
     /// <c>true</c> when plain winget should handle the request: an <c>install</c> of a package that
     /// is already installed, or an <c>upgrade</c> with nothing to upgrade.

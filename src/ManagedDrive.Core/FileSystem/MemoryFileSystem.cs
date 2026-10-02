@@ -845,7 +845,7 @@ public sealed class MemoryFileSystem : FileSystemBase
     /// <summary>
     /// Merges the requested modifications into the node's security descriptor. WinFsp passes a
     /// <em>modification</em> descriptor, not a complete replacement — it must be combined with the
-    /// node's existing descriptor via <see cref="ModifySecurityDescriptorEx"/>. Storing the
+    /// node's existing descriptor via <see cref="FileSystemBase.ModifySecurityDescriptorEx"/>. Storing the
     /// modification descriptor verbatim leaves the node with a descriptor the kernel rejects, so
     /// every later open (including a delete) fails with STATUS_INVALID_SECURITY_DESCR.
     /// </summary>

@@ -9,6 +9,10 @@ namespace ManagedDrive.App.Themes;
 /// </summary>
 public sealed class TrayColorTable : ProfessionalColorTable
 {
+    /// <summary>
+    /// Initializes a new instance of the <see cref="TrayColorTable"/> class using the dark palette when
+    /// <c>isDark</c> is <c>true</c> and the light palette otherwise.
+    /// </summary>
     public TrayColorTable(bool isDark)
     {
         if (isDark)
@@ -27,26 +31,59 @@ public sealed class TrayColorTable : ProfessionalColorTable
         }
     }
 
+    /// <summary>
+    /// Gets the background color of the drop-down menu.
+    /// </summary>
     public override Color ToolStripDropDownBackground { get; }
 
+    /// <summary>
+    /// Gets the start color of the image margin gradient; matches the menu background.
+    /// </summary>
     public override Color ImageMarginGradientBegin => ToolStripDropDownBackground;
 
+    /// <summary>
+    /// Gets the middle color of the image margin gradient; matches the menu background.
+    /// </summary>
     public override Color ImageMarginGradientMiddle => ToolStripDropDownBackground;
 
+    /// <summary>
+    /// Gets the end color of the image margin gradient; matches the menu background.
+    /// </summary>
     public override Color ImageMarginGradientEnd => ToolStripDropDownBackground;
 
+    /// <summary>
+    /// Gets the color of the menu border.
+    /// </summary>
     public override Color MenuBorder { get; }
 
+    /// <summary>
+    /// Gets the border color of a selected menu item; matches the menu border.
+    /// </summary>
     public override Color MenuItemBorder => MenuBorder;
 
+    /// <summary>
+    /// Gets the background color of a selected menu item.
+    /// </summary>
     public override Color MenuItemSelected { get; }
 
+    /// <summary>
+    /// Gets the start color of the selected item gradient; matches the selected color.
+    /// </summary>
     public override Color MenuItemSelectedGradientBegin => MenuItemSelected;
 
+    /// <summary>
+    /// Gets the end color of the selected item gradient; matches the selected color.
+    /// </summary>
     public override Color MenuItemSelectedGradientEnd => MenuItemSelected;
 
+    /// <summary>
+    /// Gets the dark color of menu separators.
+    /// </summary>
     public override Color SeparatorDark { get; }
 
+    /// <summary>
+    /// Gets the light color of menu separators; matches the dark color so separators render flat.
+    /// </summary>
     public override Color SeparatorLight => SeparatorDark;
 }
 
@@ -65,6 +102,12 @@ public sealed class TrayMenuRenderer(bool isDark) : ToolStripProfessionalRendere
         ? Color.FromArgb(0xFF, 0x3A, 0x3A, 0x50)
         : Color.FromArgb(0xFF, 0xE8, 0xEA, 0xF6);
 
+    /// <summary>
+    /// Renders item text in the theme's foreground color, or the system gray when the item is disabled.
+    /// </summary>
+    /// <summary>
+    /// Renders item text in the theme's foreground color, or the system gray when the item is disabled.
+    /// </summary>
     protected override void OnRenderItemText(ToolStripItemTextRenderEventArgs e)
     {
         e.TextColor = e.Item.Enabled ? _foreground : System.Drawing.SystemColors.GrayText;

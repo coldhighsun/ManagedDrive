@@ -9,8 +9,20 @@ namespace ManagedDrive.Cli.Core;
 /// </summary>
 public enum ImageCompressionLevel
 {
+    /// <summary>
+    /// No compression.
+    /// </summary>
     None = 0,
+    /// <summary>
+    /// Fastest compression with the lowest ratio.
+    /// </summary>
     Fastest = 1,
+    /// <summary>
+    /// Balanced compression speed and ratio.
+    /// </summary>
     Optimal = 2,
+    /// <summary>
+    /// Slowest compression with the smallest image size.
+    /// </summary>
     SmallestSize = 3,
 }

@@ -45,7 +45,7 @@ public readonly record struct ImageEncryptionInfo(string Password, byte[] Cek);
 ///     whole node region. Each chunk is [Int32 ciphertext length][16-byte tag][ciphertext
 ///     bytes], terminated by a zero-length chunk. Per-chunk nonces are derived from the base
 ///     nonce by XOR-ing its last 4 bytes with the big-endian chunk index, guaranteeing a unique
-///     nonce per chunk under the same key/base nonce (see <see cref="ChunkedGcm.DeriveChunkNonce"/>).
+///     nonce per chunk under the same key/base nonce (see <see cref="ChunkedGcm.DeriveChunkNonce(byte[], int)"/>).
 ///     Identical layout for both version 4 and 5 — only the compression algorithm wrapped inside
 ///     differs.
 ///   </item>
@@ -648,6 +648,7 @@ public static class DiskImageSerializer
     /// Degree of parallelism for decompressing the segment's Zstd chunks; <c>null</c> for the
     /// default (processor count).
     /// </param>
+    /// <param name="maxNodeBytes">Upper bound, in bytes, on any single node's content size accepted while parsing.</param>
     /// <param name="cek">Content-encryption key to decrypt the segment, or <c>null</c> if unencrypted.</param>
     /// <param name="compressed">Whether the segment is compressed.</param>
     /// <param name="payload">The raw payload bytes read from the file, either plaintext or ciphertext.</param>
@@ -1164,7 +1165,7 @@ public static class DiskImageSerializer
     /// <param name="capacityBytes">The capacity stored in the image header.</param>
     /// <returns>The capacity plus <see cref="NodeSizeSlackBytes"/>, saturating below <see cref="long.MaxValue"/>.</returns>
     internal static ulong MaxNodeBytesFor(ulong capacityBytes) =>
-        capacityBytes >= (ulong)long.MaxValue - NodeSizeSlackBytes ? (ulong)long.MaxValue : capacityBytes + NodeSizeSlackBytes;
+        capacityBytes >= long.MaxValue - NodeSizeSlackBytes ? long.MaxValue : capacityBytes + NodeSizeSlackBytes;
 
     /// <summary>
     /// Discards <paramref name="count"/> bytes from <paramref name="stream"/>, throwing if the
@@ -1246,7 +1247,7 @@ public static class DiskImageSerializer
 
     /// <summary>
     /// Writes a version 6 (segmented) image, grouping consecutive nodes (in the sorted order
-    /// <see cref="FileNodeMap.GetAllNodes"/> returns them) into segments whose summed allocation
+    /// <see cref="FileNodeMap.GetAllNodes()"/> returns them) into segments whose summed allocation
     /// size is close to <paramref name="segmentTargetBytes"/>. This full rewrite still
     /// recompresses/re-encrypts every node on every call — used both as the very first save that
     /// establishes each node's <see cref="FileNode.SavedSegmentIndex"/> baseline, and as

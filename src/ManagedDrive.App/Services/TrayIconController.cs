@@ -344,7 +344,7 @@ public sealed class TrayIconController : IDisposable
     /// <summary>
     /// Applies (or clears) <see cref="DwmwaUseImmersiveDarkMode"/> on the popup's native window so
     /// its DWM-drawn chrome matches <see cref="ApplyTrayMenuTheme"/>'s owner-drawn colors. Requires
-    /// <paramref name="menu"/>'s handle to already exist; called from its
+    /// <paramref name="popup"/>'s handle to already exist; called from its
     /// <see cref="System.Windows.Forms.Control.HandleCreated"/> event and again whenever the theme
     /// changes while the handle is already live.
     /// </summary>

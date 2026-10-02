@@ -14,6 +14,9 @@ public static class CliOutputRenderer
 {
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
 
+    /// <summary>
+    /// Writes the response to the terminal and returns the process exit code.
+    /// </summary>
     public static int Render(CliResponse response)
     {
         if (response.Disks != null)

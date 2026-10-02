@@ -278,6 +278,8 @@ public sealed record CliDiskInfo(string MountPoint, string VolumeLabel, ulong Us
 /// table and to address a specific snapshot in <c>snapshot restore</c>/<c>snapshot delete</c>.
 /// </summary>
 /// <param name="Index">1-based index, newest first (1 = newest).</param>
+/// <param name="TimestampUtc">When the snapshot was taken.</param>
+/// <param name="SizeBytes">Size of the snapshot, in bytes.</param>
 public sealed record CliSnapshotInfo(int Index, DateTimeOffset TimestampUtc, ulong SizeBytes);
 
 /// <summary>

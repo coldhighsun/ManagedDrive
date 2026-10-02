@@ -31,14 +31,26 @@ public static class HelperPipeProtocol
     /// </summary>
     public const string PipeName = "ManagedDrive-Helper-7B1E9C4A-2D5F-4A63-B8E1-6C0A9F2D3E7B";
 
+    /// <summary>
+    /// Deserializes a request line.
+    /// </summary>
     public static HelperRequest DeserializeRequest(string json) =>
         JsonSerializer.Deserialize<HelperRequest>(json) ?? new HelperRequest(string.Empty, null, null);
 
+    /// <summary>
+    /// Deserializes a response line.
+    /// </summary>
     public static HelperResponse DeserializeResponse(string json) =>
         JsonSerializer.Deserialize<HelperResponse>(json) ?? new HelperResponse(false, string.Empty);
 
+    /// <summary>
+    /// Serializes a request as a single JSON line.
+    /// </summary>
     public static string SerializeRequest(HelperRequest request) => JsonSerializer.Serialize(request);
 
+    /// <summary>
+    /// Serializes a response as a single JSON line.
+    /// </summary>
     public static string SerializeResponse(HelperResponse response) => JsonSerializer.Serialize(response);
 }
 

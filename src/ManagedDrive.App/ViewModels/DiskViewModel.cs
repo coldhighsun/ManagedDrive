@@ -468,7 +468,7 @@ public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
     }
 
     /// <summary>
-    /// Enables or disables the <see cref="Disk.ContentAccessed"/> subscription that drives
+    /// Enables or disables the <see cref="RamDisk.ContentAccessed"/> subscription that drives
     /// <see cref="ActivityObserved"/>. The main window's visibility controls this (see
     /// <see cref="App"/>) — no one can see the status bar while it's hidden, so there is no
     /// point paying for dispatcher marshaling and throttle-timer upkeep in that state. Disabling
