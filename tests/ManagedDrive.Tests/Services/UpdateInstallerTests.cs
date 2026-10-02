@@ -4,7 +4,6 @@ using GitHubReleaseUpdater.Exceptions;
 using GitHubReleaseUpdater.GitHub;
 using GitHubReleaseUpdater.GitHub.Models;
 using GitHubReleaseUpdater.Installation;
-using GitHubReleaseUpdater.Verification;
 using ManagedDrive.App.Models;
 using ManagedDrive.App.Services;
 
@@ -156,7 +155,7 @@ public sealed class UpdateInstallerTests : IDisposable
 
         using (installer)
         {
-            await Assert.ThrowsAsync<GitHubReleaseUpdater.Exceptions.ChecksumMismatchException>(() => installer.DownloadAndLaunchAsync(info, null, CancellationToken.None));
+            await Assert.ThrowsAsync<ChecksumMismatchException>(() => installer.DownloadAndLaunchAsync(info, null, CancellationToken.None));
         }
 
         Assert.Empty(launcher.Launched);
