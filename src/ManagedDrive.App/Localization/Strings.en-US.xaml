@@ -358,10 +358,27 @@
     <sys:String x:Key="About.Copyright">© 2026 coldhighsun</sys:String>
     <sys:String x:Key="About.ViewOnGitHub">View on GitHub</sys:String>
     <sys:String x:Key="About.ViewThirdPartyNotices">Third-Party Notices</sys:String>
-    <sys:String x:Key="About.UpdateAvailable">A new version ({0}) is available. Click to download.</sys:String>
+    <sys:String x:Key="About.UpdateAvailable">A new version ({0}) is available. Click to update.</sys:String>
 
     <!-- Update available -->
-    <sys:String x:Key="Update.BalloonBody">ManagedDrive {0} is available. Click About to view details.</sys:String>
+    <sys:String x:Key="Update.BalloonBody">ManagedDrive {0} is available. Open About to update.</sys:String>
+    <sys:String x:Key="Update.Title">Update available</sys:String>
+    <sys:String x:Key="Update.Header">ManagedDrive {0} is available</sys:String>
+    <sys:String x:Key="Update.CurrentVersion">You are running version {0}.</sys:String>
+    <sys:String x:Key="Update.WhatsNew">What's new</sys:String>
+    <sys:String x:Key="Update.InstallNote">Updating downloads the installer, then closes ManagedDrive (mounted disks are saved first, as on a normal exit), installs the new version and starts it again. You will be asked to allow the installer to make changes.</sys:String>
+    <sys:String x:Key="Update.NoInstaller">This release has no installer that can be installed automatically. Open the release page to download it manually.</sys:String>
+    <sys:String x:Key="Update.UpdateNow">Update now</sys:String>
+    <sys:String x:Key="Update.RemindLater">Remind me later</sys:String>
+    <sys:String x:Key="Update.SkipVersion">Skip this version</sys:String>
+    <sys:String x:Key="Update.Retry">Try again</sys:String>
+    <sys:String x:Key="Update.ViewRelease">View release page</sys:String>
+    <sys:String x:Key="Update.Starting">Starting download…</sys:String>
+    <sys:String x:Key="Update.Progress">{0} of {1} ({2}/s)</sys:String>
+    <sys:String x:Key="Update.ProgressUnknownTotal">{0} downloaded ({1}/s)</sys:String>
+    <sys:String x:Key="Update.UacDeclined">The installer was not started because administrator permission was not granted. Nothing has been changed.</sys:String>
+    <sys:String x:Key="Update.Failed">The update failed: {0}</sys:String>
+    <sys:String x:Key="Update.TempResetFailed">Your Windows Temp directory points at a RAM disk and could not be reset to the system default, which the installer requires. Reset it manually and try again.</sys:String>
 
     <!-- SaveFileDialog -->
     <sys:String x:Key="SaveDlg.Title">Select Image File</sys:String>
