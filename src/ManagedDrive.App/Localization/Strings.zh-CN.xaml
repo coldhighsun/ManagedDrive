@@ -358,10 +358,27 @@
     <sys:String x:Key="About.Copyright">© 2026 coldhighsun</sys:String>
     <sys:String x:Key="About.ViewOnGitHub">在 GitHub 上查看</sys:String>
     <sys:String x:Key="About.ViewThirdPartyNotices">第三方声明</sys:String>
-    <sys:String x:Key="About.UpdateAvailable">发现新版本 {0}，点击下载。</sys:String>
+    <sys:String x:Key="About.UpdateAvailable">发现新版本 {0}，点击更新。</sys:String>
 
     <!-- Update available -->
-    <sys:String x:Key="Update.BalloonBody">ManagedDrive {0} 已发布，点击"关于"查看详情。</sys:String>
+    <sys:String x:Key="Update.BalloonBody">ManagedDrive {0} 已发布，打开"关于"即可更新。</sys:String>
+    <sys:String x:Key="Update.Title">发现新版本</sys:String>
+    <sys:String x:Key="Update.Header">ManagedDrive {0} 已发布</sys:String>
+    <sys:String x:Key="Update.CurrentVersion">当前版本：{0}。</sys:String>
+    <sys:String x:Key="Update.WhatsNew">更新内容</sys:String>
+    <sys:String x:Key="Update.InstallNote">更新会先下载安装程序，然后关闭 ManagedDrive（与正常退出一样，会先保存已挂载的磁盘），安装新版本并自动重新启动。安装程序会请求你授权进行更改。</sys:String>
+    <sys:String x:Key="Update.NoInstaller">此版本没有可自动安装的安装程序，请打开发布页面手动下载。</sys:String>
+    <sys:String x:Key="Update.UpdateNow">立即更新</sys:String>
+    <sys:String x:Key="Update.RemindLater">稍后提醒</sys:String>
+    <sys:String x:Key="Update.SkipVersion">跳过此版本</sys:String>
+    <sys:String x:Key="Update.Retry">重试</sys:String>
+    <sys:String x:Key="Update.ViewRelease">查看发布页面</sys:String>
+    <sys:String x:Key="Update.Starting">正在开始下载…</sys:String>
+    <sys:String x:Key="Update.Progress">{0} / {1}（{2}/秒）</sys:String>
+    <sys:String x:Key="Update.ProgressUnknownTotal">已下载 {0}（{1}/秒）</sys:String>
+    <sys:String x:Key="Update.UacDeclined">未获得管理员授权，安装程序没有启动，未做任何更改。</sys:String>
+    <sys:String x:Key="Update.Failed">更新失败：{0}</sys:String>
+    <sys:String x:Key="Update.TempResetFailed">Windows 临时目录（TEMP）指向了内存盘，且无法重置为系统默认位置，而安装程序要求这样做。请手动重置后重试。</sys:String>
 
     <!-- SaveFileDialog -->
     <sys:String x:Key="SaveDlg.Title">选择镜像文件</sys:String>

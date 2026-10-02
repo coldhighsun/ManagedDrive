@@ -10,6 +10,7 @@ public partial class AboutDialog
     private const string GitHubUrl = "https://github.com/coldhighsun/ManagedDrive";
     private const string ThirdPartyNoticesUrl = "https://github.com/coldhighsun/ManagedDrive/blob/main/THIRD-PARTY-NOTICES.md";
     private readonly UpdateCheckService? _updateCheckService;
+    private UpdateInfo? _updateInfo;
 
     public AboutDialog(UpdateCheckService? updateCheckService = null)
     {
@@ -36,9 +37,23 @@ public partial class AboutDialog
             return;
         }
 
-        UpdateLink.NavigateUri = info.ReleaseUrl;
+        _updateInfo = info;
         UpdateLinkRun.Text = Loc.Format("About.UpdateAvailable", info.Version);
         UpdateStatusText.Visibility = Visibility.Visible;
+    }
+
+    private void UpdateLink_Click(object sender, RoutedEventArgs e)
+    {
+        if (_updateCheckService == null || _updateInfo == null)
+        {
+            return;
+        }
+
+        if (UpdateDialog.ShowFor(_updateCheckService, _updateInfo, this))
+        {
+            // The installer has been started and will ask the app to exit; nothing else should stay open.
+            Close();
+        }
     }
 
     private void Hyperlink_RequestNavigate(object sender, RequestNavigateEventArgs e)

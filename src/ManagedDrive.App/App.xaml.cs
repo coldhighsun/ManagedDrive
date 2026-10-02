@@ -260,9 +260,9 @@ public partial class App
 
         _tempDirCompatChecker.CheckOnStartup(config);
 
-        _updateCheckService = new(settings, _trayIconController);
+        _updateCheckService = new(settings, _trayIconController, () => _mainViewModel.Disks);
         _mainViewModel.UpdateCheckService = _updateCheckService;
-        _ = _updateCheckService.CheckOnStartupAsync(config);
+        _ = PromptForUpdateOnStartupAsync(config);
 
         if (config.StartMinimized)
         {
@@ -516,6 +516,30 @@ public partial class App
     }
 
     private Task ResetTempDirsFromTrayAsync() => _tempDirCompatChecker!.ResetFromTrayAsync();
+
+    /// <summary>
+    /// Runs the startup update check and, when a newer release exists, asks the user whether to install it.
+    /// A modal prompt is only shown while the main window is visible; when the app sits in the tray
+    /// (e.g. started minimized) a balloon pointing at About is shown instead of interrupting the user.
+    /// </summary>
+    private async Task PromptForUpdateOnStartupAsync(AppConfiguration config)
+    {
+        var service = _updateCheckService!;
+        var info = await service.CheckOnStartupAsync(config);
+        if (info is null || _isExiting)
+        {
+            return;
+        }
+
+        if (WindowVisibility.IsShownToUser(_mainWindow))
+        {
+            UpdateDialog.ShowFor(service, info, _mainWindow);
+        }
+        else
+        {
+            service.NotifyUpdateAvailable(info);
+        }
+    }
 
     private void ShowAboutDialog()
     {

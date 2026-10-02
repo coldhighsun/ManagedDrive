@@ -33,7 +33,7 @@
                                FontSize="12"
                                Margin="0,4,0,0"
                                Visibility="Collapsed">
-                        <Hyperlink x:Name="UpdateLink" RequestNavigate="Hyperlink_RequestNavigate">
+                        <Hyperlink x:Name="UpdateLink" Click="UpdateLink_Click">
                             <Run x:Name="UpdateLinkRun"/>
                         </Hyperlink>
                     </TextBlock>
