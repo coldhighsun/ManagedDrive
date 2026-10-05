@@ -388,7 +388,7 @@ public sealed class MemoryFileSystem : FileSystemBase
             return STATUS_OBJECT_NAME_NOT_FOUND;
         }
 
-        normalizedName = fileName;
+        normalizedName = child.LeafName;
         fileInfo = child.FileInfo;
         return STATUS_SUCCESS;
     }
