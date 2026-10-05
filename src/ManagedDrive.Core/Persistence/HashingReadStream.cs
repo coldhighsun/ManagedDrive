@@ -49,6 +49,12 @@ internal sealed class HashingReadStream(Stream inner) : Stream
     }
 
     /// <summary>
+    /// Gets the number of bytes consumed by <see cref="DrainAndGetHash"/>, i.e. bytes that were
+    /// left unread by the caller before draining.
+    /// </summary>
+    public long DrainedByteCount { get; private set; }
+
+    /// <summary>
     /// Reads and hashes whatever is left in the inner stream, then returns the digest of
     /// everything that passed through this wrapper.
     /// </summary>
@@ -58,8 +64,10 @@ internal sealed class HashingReadStream(Stream inner) : Stream
     public byte[] DrainAndGetHash()
     {
         Span<byte> scratch = stackalloc byte[4096];
-        while (Read(scratch) > 0)
+        int read;
+        while ((read = Read(scratch)) > 0)
         {
+            DrainedByteCount += read;
         }
 
         return _hash.GetHashAndReset();

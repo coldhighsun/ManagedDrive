@@ -1017,7 +1017,13 @@ public static class DiskImageSerializer
             nodes.Add(ReadNode(payloadReader, maxNodeBytes));
         }
 
-        if (!CryptographicOperations.FixedTimeEquals(hashingStream.DrainAndGetHash(), segment.ContentHash))
+        var actualHash = hashingStream.DrainAndGetHash();
+        if (hashingStream.DrainedByteCount > 0)
+        {
+            throw new InvalidDataException("A segment holds more data than its recorded node count; the image is corrupted.");
+        }
+
+        if (!CryptographicOperations.FixedTimeEquals(actualHash, segment.ContentHash))
         {
             throw new InvalidDataException("A segment's content does not match its recorded digest; the image is corrupted.");
         }
