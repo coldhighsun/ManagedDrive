@@ -116,7 +116,7 @@ public sealed partial class MainViewModel
             SaveSettings();
             StatusText = Loc.Format("Status.MountedWithCapacity", disk.MountPoint, options.VolumeLabel, options.CapacityBytes / (1024 * 1024));
             _logger.LogInformation("CLI mount-archive succeeded: {ArchivePath} -> {MountPoint}.", archivePath, disk.MountPoint);
-            Process.Start("explorer.exe", disk.MountPoint);
+            TryOpenInExplorer(disk.MountPoint);
             return (true, StatusText);
         }
         catch (Exception ex)
@@ -502,6 +502,23 @@ public sealed partial class MainViewModel
         return Task.FromResult((true, newPassword is null
             ? Loc.Format("Status.PasswordRemoved", mountPoint)
             : Loc.Format("Status.PasswordSet", mountPoint)));
+    }
+
+    /// <summary>
+    /// Opens <paramref name="path"/> in Explorer, logging instead of throwing when that fails so a
+    /// cosmetic launch problem is never reported as a failed operation.
+    /// </summary>
+    /// <param name="path">The folder to open.</param>
+    private void TryOpenInExplorer(string path)
+    {
+        try
+        {
+            Process.Start("explorer.exe", path);
+        }
+        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException)
+        {
+            _logger.LogWarning(ex, "Could not open {Path} in Explorer.", path);
+        }
     }
 
     /// <summary>
