@@ -50,6 +50,17 @@ public class CliCommandProcessorSetPasswordTests
     }
 
     [Fact]
+    public async Task SetPassword_PasswordFileWithInvalidPathChars_FailsWithoutCallingController()
+    {
+        var controller = new FakeCliDiskController { SetPasswordSuccess = true };
+
+        var outcome = await CliCommandProcessor.ExecuteAsync(["set-password", "R:", "--password-file", "a|b\0c"], controller);
+
+        Assert.False(outcome.Success);
+        Assert.False(controller.SetPasswordCalled);
+    }
+
+    [Fact]
     public async Task SetPassword_NoOptionSpecified_FailsWithoutCallingController()
     {
         var controller = new FakeCliDiskController { SetPasswordSuccess = true };

@@ -904,7 +904,7 @@ public static class CliCommandProcessor
             error = null;
             return true;
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
         {
             password = null;
             error = $"Could not read --password-file: {ex.Message}";
