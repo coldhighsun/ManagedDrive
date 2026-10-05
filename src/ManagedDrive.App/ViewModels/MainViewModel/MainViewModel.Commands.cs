@@ -488,6 +488,11 @@ public sealed partial class MainViewModel
             ShowWarning(Loc.Get("Val.ImportInvalidArchive"));
             return;
         }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            ShowWarning(Loc.Format("Msg.MountFailed", ex.Message));
+            return;
+        }
 
         var dialog = CreateDiskDialog.ForArchiveImport(archivePath, totalBytes, suggestedLabel, otherDisks);
         dialog.Owner = Application.Current.MainWindow;
@@ -538,6 +543,11 @@ public sealed partial class MainViewModel
         catch (InvalidDataException)
         {
             ShowWarning(Loc.Get("Val.ImportInvalidImage"));
+            return;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            ShowWarning(Loc.Format("Msg.MountFailed", ex.Message));
             return;
         }
 

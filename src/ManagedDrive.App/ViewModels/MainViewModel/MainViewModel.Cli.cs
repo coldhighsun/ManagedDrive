@@ -106,6 +106,10 @@ public sealed partial class MainViewModel
         {
             return (false, Loc.Get("Val.ImportInvalidArchive"));
         }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return (false, Loc.Format("Msg.MountFailed", ex.Message));
+        }
 
         var savedProfile = _settingsStore.Load().Disks
             .FirstOrDefault(p => p.SourceArchivePath != null &&
@@ -185,6 +189,10 @@ public sealed partial class MainViewModel
         catch (InvalidDataException)
         {
             return (false, Loc.Get("Val.ImportInvalidImage"));
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return (false, Loc.Format("Msg.MountFailed", ex.Message));
         }
 
         if (isEncrypted && overrides.Password is null)
