@@ -300,12 +300,46 @@ public sealed class SettingsStore
         var backupPath = $"{_settingsPath}.corrupt-{DateTimeOffset.Now:yyyyMMdd-HHmmss}";
         try
         {
-            File.Copy(_settingsPath, backupPath, overwrite: true);
+            // The same bad file is read again by every Load/Update until a save replaces it, so
+            // copying it each time would pile up identical backups.
+            if (HasIdenticalBackup())
+            {
+                return;
+            }
+
+            // Two different bad files within the same second must not overwrite each other.
+            for (var suffix = 1; File.Exists(backupPath); suffix++)
+            {
+                backupPath = $"{_settingsPath}.corrupt-{DateTimeOffset.Now:yyyyMMdd-HHmmss}-{suffix}";
+            }
+
+            File.Copy(_settingsPath, backupPath, overwrite: false);
             Logger.LogWarning("Copied unreadable settings file to '{BackupPath}'", backupPath);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             Logger.LogWarning(ex, "Failed to copy unreadable settings file to '{BackupPath}'", backupPath);
         }
+    }
+
+    /// <summary>
+    /// Returns <c>true</c> when an existing <c>.corrupt</c> backup has exactly the same bytes as
+    /// the current settings file.
+    /// </summary>
+    /// <returns><c>true</c> if the current file is already backed up.</returns>
+    private bool HasIdenticalBackup()
+    {
+        var directory = Path.GetDirectoryName(_settingsPath)!;
+        var current = File.ReadAllBytes(_settingsPath);
+
+        foreach (var backup in Directory.EnumerateFiles(directory, $"{Path.GetFileName(_settingsPath)}.corrupt-*"))
+        {
+            if (new FileInfo(backup).Length == current.Length && File.ReadAllBytes(backup).AsSpan().SequenceEqual(current))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

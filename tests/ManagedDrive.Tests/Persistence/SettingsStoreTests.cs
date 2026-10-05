@@ -312,6 +312,28 @@ public sealed class SettingsStoreTests : IDisposable
     }
 
     /// <summary>
+    /// Reading the same invalid file repeatedly keeps a single backup, while a different invalid
+    /// file gets its own.
+    /// </summary>
+    [Fact]
+    public void Load_SameInvalidFileRepeatedly_KeepsOneBackup()
+    {
+        var store = new SettingsStore(SettingsPath);
+        File.WriteAllText(SettingsPath, "{ \"Disks\": [ { \"MountPoint\": \"\" } ] }");
+
+        store.Load();
+        store.Load();
+        store.Update(current => current);
+
+        Assert.Single(Directory.GetFiles(_dir, "settings.json.corrupt-*"));
+
+        File.WriteAllText(SettingsPath, "{ \"Disks\": [ { \"MountPoint\": \"\", \"VolumeLabel\": \"x\" } ] }");
+        store.Load();
+
+        Assert.Equal(2, Directory.GetFiles(_dir, "settings.json.corrupt-*").Length);
+    }
+
+    /// <summary>
     /// A settings file locked for the whole call is not overwritten with defaults.
     /// </summary>
     [Fact]
