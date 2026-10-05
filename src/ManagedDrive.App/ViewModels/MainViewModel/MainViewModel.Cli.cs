@@ -17,26 +17,32 @@ public sealed partial class MainViewModel
     /// <c>(true, message)</c> on success; <c>(false, message)</c> if the disk is read-only; or
     /// <c>(false, string.Empty)</c> if no disk is currently mounted at <paramref name="mountPoint"/>.
     /// </returns>
-    public Task<(bool Success, string Message)> FormatByMountPointAsync(string mountPoint)
+    public async Task<(bool Success, string Message)> FormatByMountPointAsync(string mountPoint)
     {
         _logger.LogInformation("CLI format requested for {MountPoint}.", mountPoint);
 
         var vm = FindDisk(mountPoint);
         if (vm == null)
         {
-            return Task.FromResult((false, string.Empty));
+            return (false, string.Empty);
         }
 
-        if (!vm.Disk.Format())
+        var formatted = await Task.Run(vm.Disk.Format);
+        if (!IsStillMounted(vm))
+        {
+            return (false, Loc.Format("Status.DiskNoLongerMounted", mountPoint));
+        }
+
+        if (!formatted)
         {
             _logger.LogWarning("CLI format failed for {MountPoint}: disk is read-only.", mountPoint);
-            return Task.FromResult((false, Loc.Get("Msg.FormatDiskReadOnly")));
+            return (false, Loc.Get("Msg.FormatDiskReadOnly"));
         }
 
         vm.Refresh();
         StatusText = Loc.Format("Status.FormatDisk", mountPoint);
         _logger.LogInformation("CLI format completed for {MountPoint}.", mountPoint);
-        return Task.FromResult((true, StatusText));
+        return (true, StatusText);
     }
 
     /// <summary>
@@ -483,25 +489,25 @@ public sealed partial class MainViewModel
     /// <c>(true, message)</c> on success; <c>(false, error)</c> if the password could not be set;
     /// or <c>(false, string.Empty)</c> if no disk is currently mounted at <paramref name="mountPoint"/>.
     /// </returns>
-    public Task<(bool Success, string Message)> SetPasswordByMountPointAsync(string mountPoint, string? newPassword)
+    public async Task<(bool Success, string Message)> SetPasswordByMountPointAsync(string mountPoint, string? newPassword)
     {
         _logger.LogInformation("CLI set-password requested for {MountPoint}.", mountPoint);
 
         var vm = FindDisk(mountPoint);
         if (vm == null)
         {
-            return Task.FromResult((false, string.Empty));
+            return (false, string.Empty);
         }
 
-        if (TrySetPassword(vm.Disk, newPassword) is { } error)
+        if (await Task.Run(() => TrySetPassword(vm.Disk, newPassword)) is { } error)
         {
-            return Task.FromResult((false, error));
+            return (false, error);
         }
 
         _logger.LogInformation("CLI set-password completed for {MountPoint}.", mountPoint);
-        return Task.FromResult((true, newPassword is null
+        return (true, newPassword is null
             ? Loc.Format("Status.PasswordRemoved", mountPoint)
-            : Loc.Format("Status.PasswordSet", mountPoint)));
+            : Loc.Format("Status.PasswordSet", mountPoint));
     }
 
     /// <summary>
