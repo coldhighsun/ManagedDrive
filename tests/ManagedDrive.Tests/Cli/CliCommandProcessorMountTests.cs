@@ -219,6 +219,18 @@ public class CliCommandProcessorMountTests
     }
 
     [Fact]
+    public async Task Unmount_FinalSaveFailed_ReportsFailureWithNonZeroExitCode()
+    {
+        var controller = new FakeCliDiskController { UnmountSuccess = true, UnmountSaveError = "disk full" };
+
+        var outcome = await CliCommandProcessor.ExecuteAsync(["unmount", "R:"], controller);
+
+        Assert.False(outcome.Success);
+        Assert.Equal(1, outcome.ExitCode);
+        Assert.Contains("disk full", outcome.Message);
+    }
+
+    [Fact]
     public async Task List_ReturnsDisksFromController()
     {
         var controller = new FakeCliDiskController
@@ -432,6 +444,8 @@ public class CliCommandProcessorMountTests
 
         public bool UnmountSuccess { get; set; } = true;
 
+        public string? UnmountSaveError { get; set; }
+
         public IReadOnlyList<CliDiskInfo> Disks { get; set; } = [];
 
         public Task<(bool Success, string Message)> DeleteSnapshotAsync(string mountPoint, int index) =>
@@ -523,11 +537,11 @@ public class CliCommandProcessorMountTests
         public Task<(bool Success, string Message)> CreateSnapshotAsync(string mountPoint) =>
             Task.FromResult((false, string.Empty));
 
-        public Task<bool> UnmountAsync(string mountPoint, bool deleteImage)
+        public Task<(bool Unmounted, string? SaveError)> UnmountAsync(string mountPoint, bool deleteImage)
         {
             LastMountPoint = mountPoint;
             LastDeleteImage = deleteImage;
-            return Task.FromResult(UnmountSuccess);
+            return Task.FromResult((UnmountSuccess, UnmountSaveError));
         }
     }
 }

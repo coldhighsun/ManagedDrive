@@ -166,6 +166,6 @@ public class CliCommandProcessorCloneAndSnapshotCreateTests
         public Task<(bool Success, string Message)> SetPasswordAsync(string mountPoint, string? newPassword) =>
             Task.FromResult((false, string.Empty));
 
-        public Task<bool> UnmountAsync(string mountPoint, bool deleteImage) => Task.FromResult(false);
+        public Task<(bool Unmounted, string? SaveError)> UnmountAsync(string mountPoint, bool deleteImage) => Task.FromResult<(bool, string?)>((false, null));
     }
 }

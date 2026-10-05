@@ -691,8 +691,15 @@ public sealed partial class MainViewModel
         {
             // The dialog is modal but the dispatcher keeps running under it, so CLI commands, the
             // tray menu and update checks may have saved settings since `config` was read.
-            _settingsStore.Update(latest => SettingsDialog.ApplyEdits(latest, dialog.Result!));
-            _logger.LogInformation("Settings saved.");
+            if (_settingsStore.Update(latest => SettingsDialog.ApplyEdits(latest, dialog.Result!)))
+            {
+                _logger.LogInformation("Settings saved.");
+            }
+            else
+            {
+                _logger.LogWarning("Settings could not be saved.");
+                ShowError(Loc.Get("Msg.SaveSettingsFailed"));
+            }
         }
     }
 
