@@ -98,7 +98,7 @@ public sealed class TrayIconController : IDisposable
         var menu = new System.Windows.Forms.ContextMenuStrip();
         _menuShow = new(Loc.Get("Tray.Show"), null, (_, _) => dispatcher.Invoke(onShow));
         _menuNewDisk = new(Loc.Get("Tray.NewDisk"), null, (_, _) => dispatcher.Invoke(onNewDisk));
-        _menuResetTempDirs = new(Loc.Get("Tray.ResetTempDirs"), null, async (_, _) => await dispatcher.InvokeAsync(onResetTempDirsAsync));
+        _menuResetTempDirs = new(Loc.Get("Tray.ResetTempDirs"), null, async (_, _) => await dispatcher.InvokeAsync(onResetTempDirsAsync).Task.Unwrap());
         _menuSettings = new(Loc.Get("Tray.Settings"), null, (_, _) => dispatcher.Invoke(onSettings));
         _menuAbout = new(Loc.Get("Tray.About"), null, (_, _) => dispatcher.Invoke(onAbout));
         _menuExit = new(Loc.Get("Tray.Exit"), null, (_, _) => dispatcher.Invoke(onExit));
