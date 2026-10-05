@@ -375,7 +375,7 @@ public sealed partial class MainViewModel
         }
     }
 
-    private void ExecuteFormatDisk(DiskViewModel? vm)
+    private async void ExecuteFormatDisk(DiskViewModel? vm)
     {
         if (vm == null)
         {
@@ -396,7 +396,16 @@ public sealed partial class MainViewModel
 
         _logger.LogInformation("Format disk confirmed for {MountPoint}.", vm.MountPoint);
 
-        if (!vm.Disk.Format())
+        // Format takes the disk's save lock, which a running auto-save can hold for a long time.
+        var formatted = await Task.Run(vm.Disk.Format);
+
+        // The disk can be unmounted by a CLI command or the tray while the format runs.
+        if (!IsStillMounted(vm))
+        {
+            return;
+        }
+
+        if (!formatted)
         {
             _logger.LogWarning("Format disk failed for {MountPoint}: disk is read-only.", vm.MountPoint);
             ShowWarning(Loc.Get("Msg.FormatDiskReadOnly"));
@@ -639,7 +648,17 @@ public sealed partial class MainViewModel
                 return;
             }
 
-            if (!vm.Disk.TryApplyOptions(vm.Disk.Options with { PersistImagePath = dlg.FileName }, out var applyError))
+            var newOptions = vm.Disk.Options with { PersistImagePath = dlg.FileName };
+            string? applyError = null;
+
+            // Takes the disk's save lock, which a running auto-save can hold for a long time.
+            var applied = await Task.Run(() => vm.Disk.TryApplyOptions(newOptions, out applyError));
+            if (!IsStillMounted(vm))
+            {
+                return;
+            }
+
+            if (!applied)
             {
                 _logger.LogWarning("Save image path could not be applied for {MountPoint}: {Error}", vm.MountPoint, applyError);
                 ShowWarning(applyError);
