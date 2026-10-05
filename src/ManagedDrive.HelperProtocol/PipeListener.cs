@@ -147,7 +147,7 @@ public sealed class PipeListener
                 // taken over; clients checking the pipe's owner still cover it.
                 pipe = _createPipe(Volatile.Read(ref _connectedInstances) == 0);
             }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ObjectDisposedException or InvalidOperationException)
             {
                 _instanceSlots.Release();
                 _onCreateFailed(ex);
@@ -163,13 +163,26 @@ public sealed class PipeListener
             {
                 await pipe.WaitForConnectionAsync(ct);
             }
-            catch (Exception ex) when (ex is OperationCanceledException or IOException)
+            catch (Exception ex) when (ex is OperationCanceledException or IOException or ObjectDisposedException or InvalidOperationException)
             {
                 await pipe.DisposeAsync();
                 _instanceSlots.Release();
                 if (ex is OperationCanceledException)
                 {
                     return;
+                }
+
+                if (ex is not IOException)
+                {
+                    // Not specific to one client, so pause like a create failure instead of
+                    // spinning, and keep listening rather than letting the accept loop die.
+                    _onConnectionFailed(ex);
+                    if (!await DelayUnlessCancelledAsync(_retryDelay, ct))
+                    {
+                        return;
+                    }
+
+                    continue;
                 }
 
                 // A client that connected and hung up before the connection was accepted. Not

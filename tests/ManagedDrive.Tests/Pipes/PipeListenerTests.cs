@@ -160,6 +160,34 @@ public sealed class PipeListenerTests : IDisposable
     }
 
     /// <summary>
+    /// A non-IO failure creating the pipe is reported and retried instead of ending the accept loop.
+    /// </summary>
+    [Fact(Timeout = 20_000)]
+    public async Task RunAsync_CreateThrowsInvalidOperation_ReportsItAndRetries()
+    {
+        var attempts = 0;
+        var createFailures = new ConcurrentQueue<Exception>();
+        var servedTcs = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var listener = new PipeListener(
+            maxInstances: 4,
+            firstInstance => Interlocked.Increment(ref attempts) == 1
+                ? throw new InvalidOperationException("transient")
+                : CreatePipe(4, firstInstance),
+            async (pipe, ct) => servedTcs.TrySetResult(await ReadLineAsync(pipe, ct)),
+            createFailures.Enqueue,
+            ex => { },
+            TimeSpan.FromMilliseconds(50));
+        var run = listener.RunAsync(_cts.Token);
+
+        await SendAsync(await ConnectAsync(), "hello");
+
+        Assert.Equal("hello", await servedTcs.Task.WaitAsync(TestContext.Current.CancellationToken));
+        Assert.Equal("transient", Assert.Single(createFailures).Message);
+        _cts.Cancel();
+        await run;
+    }
+
+    /// <summary>
     /// A client whose serving throws is reported, and later clients are still served.
     /// </summary>
     [Fact(Timeout = 20_000)]
