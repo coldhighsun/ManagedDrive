@@ -236,6 +236,78 @@ public sealed class DiskImageSerializerIncrementalTests
         }
     }
 
+    /// <summary>
+    /// Directories and empty files have no allocation size, but must still count toward a
+    /// segment's size, or a disk full of them becomes one unbounded segment.
+    /// </summary>
+    [Fact]
+    public void Save_ManyEmptyNodes_AreSplitAcrossSegments()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid()}.mdr");
+        try
+        {
+            var map = new FileNodeMap();
+            map.Add("\\", MakeDir());
+            for (var i = 0; i < 100; i++)
+            {
+                map.Add($"\\Empty{i}.txt", MakeFile([]));
+            }
+
+            DiskImageSerializer.SaveSegmentedIncrementalForTest(map, 1024 * 1024, "Label", path,
+                ImageCompressionLevel.None, encryption: null, segmentTargetBytes: 4096);
+
+            var segmentCount = map.GetAllNodes().Max(kvp => kvp.Value.SavedSegmentIndex) + 1;
+            Assert.True(segmentCount > 1, $"Expected several segments but got {segmentCount}.");
+
+            var loaded = DiskImageSerializer.Load(path, out _, out _, password: null, out _);
+            Assert.Equal(101, loaded.Count);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    /// <summary>
+    /// An incremental save that reuses a segment streams its bytes from the old image: the reused
+    /// segment's content must survive when another segment is rewritten, including when encrypted.
+    /// </summary>
+    [Fact]
+    public void Save_ReusedSegmentStreamedFromOldImage_LoadsAfterRewriteOfSibling()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid()}.mdr");
+        try
+        {
+            var map = new FileNodeMap();
+            map.Add("\\", MakeDir());
+            var big = MakeFile(new byte[300_000]);
+            map.Add("\\Big.bin", big);
+            var small = MakeFile("x"u8.ToArray());
+            map.Add("\\Small.txt", small);
+
+            DiskImageSerializer.SaveSegmentedIncrementalForTest(map, 1024 * 1024, "Label", path,
+                ImageCompressionLevel.None, encryption: null, segmentTargetBytes: 1);
+
+            small.FileData = FileContent.FromSpan("yy"u8.ToArray(), 512);
+            small.FileInfo.FileSize = 2;
+            small.ContentVersion++;
+
+            DiskImageSerializer.SaveSegmentedIncrementalForTest(map, 1024 * 1024, "Label", path,
+                ImageCompressionLevel.None, encryption: null, segmentTargetBytes: 1);
+
+            Assert.False(File.Exists(path + ".tmp"));
+            var loaded = DiskImageSerializer.Load(path, out _, out _, password: null, out _);
+            Assert.True(loaded.TryGet("\\Big.bin", out var loadedBig));
+            Assert.Equal(300_000UL, loadedBig!.FileInfo.FileSize);
+            Assert.True(loaded.TryGet("\\Small.txt", out var loadedSmall));
+            Assert.Equal("yy"u8.ToArray(), loadedSmall!.FileData!.ToArray((long)loadedSmall.FileInfo.FileSize));
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
     [Fact]
     public void Save_ThirdSaveReusesSegmentsWrittenByIncrementalSecondSave()
     {

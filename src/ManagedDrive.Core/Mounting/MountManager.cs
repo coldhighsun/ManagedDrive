@@ -23,6 +23,14 @@ public sealed class MountManager : IDisposable
     private readonly Lock _syncRoot = new();
 
     /// <summary>
+    /// One task per <see cref="Unmount"/> call whose disk has already left <see cref="_disks"/> but
+    /// is still being disposed (and so possibly still saving). Guarded by <see cref="_syncRoot"/>.
+    /// <see cref="Dispose(Action{RamDisk, double, double, ulong}?)"/> waits for these, since it can
+    /// no longer see those disks and would otherwise let the process exit mid-save.
+    /// </summary>
+    private readonly List<Task> _unmountsInFlight = [];
+
+    /// <summary>
     /// Set under <see cref="_syncRoot"/> by <see cref="Dispose(Action{RamDisk, double, double, ulong}?)"/>.
     /// A <see cref="Mount"/> still in flight when it's set disposes its own disk instead of
     /// registering it, since the disposal has already taken the list of disks to unmount.
@@ -103,18 +111,21 @@ public sealed class MountManager : IDisposable
         _activityPollTimer.Dispose();
 
         List<RamDisk> all;
+        Task[] pendingUnmounts;
 
         lock (_syncRoot)
         {
             _disposed = true;
             all = [.. _disks.Values];
             _disks.Clear();
+            pendingUnmounts = [.. _unmountsInFlight];
         }
 
         var count = all.Count;
 
         if (count == 0)
         {
+            WaitForPendingUnmounts(pendingUnmounts);
             return;
         }
 
@@ -185,9 +196,35 @@ public sealed class MountManager : IDisposable
             }
         });
 
+        WaitForPendingUnmounts(pendingUnmounts);
+
         if (!errors.IsEmpty)
         {
             throw new AggregateException(errors);
+        }
+    }
+
+    /// <summary>
+    /// Blocks until every <see cref="Unmount"/> that was still disposing its disk when
+    /// <see cref="Dispose(Action{RamDisk, double, double, ulong}?)"/> started has finished, so the
+    /// final saves of those disks are not cut short by process exit. The unmounts report their own
+    /// failures to their callers, so only completion is awaited here.
+    /// </summary>
+    /// <param name="pendingUnmounts">The in-flight unmount tasks captured by Dispose.</param>
+    private static void WaitForPendingUnmounts(Task[] pendingUnmounts)
+    {
+        if (pendingUnmounts.Length == 0)
+        {
+            return;
+        }
+
+        try
+        {
+            Task.WaitAll(pendingUnmounts);
+        }
+        catch (AggregateException)
+        {
+            // Completion is all that matters here; see the summary.
         }
     }
 
@@ -299,6 +336,7 @@ public sealed class MountManager : IDisposable
     public bool Unmount(string mountPoint)
     {
         RamDisk? disk;
+        var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
 
         lock (_syncRoot)
         {
@@ -306,11 +344,45 @@ public sealed class MountManager : IDisposable
             {
                 return false;
             }
+
+            // Registered in the same critical section as the removal, so a concurrent Dispose
+            // either still sees the disk in _disks or sees this task.
+            _unmountsInFlight.Add(completion.Task);
         }
 
-        disk.ContentAccessed -= OnDiskContentAccessed;
-        disk.Dispose();
-        DiskUnmounted?.Invoke(this, disk);
+        var disposeFailed = false;
+        try
+        {
+            disk.ContentAccessed -= OnDiskContentAccessed;
+            disk.Dispose();
+        }
+        catch
+        {
+            disposeFailed = true;
+            throw;
+        }
+        finally
+        {
+            lock (_syncRoot)
+            {
+                _unmountsInFlight.Remove(completion.Task);
+            }
+
+            completion.SetResult();
+
+            // Raised even if Dispose threw: the disk is no longer registered here, so subscribers
+            // (the UI) must stop showing it as mounted. A throwing subscriber must not replace
+            // the Dispose failure that is already propagating.
+            try
+            {
+                DiskUnmounted?.Invoke(this, disk);
+            }
+            catch (Exception ex) when (disposeFailed)
+            {
+                Logger.LogWarning(ex, "A DiskUnmounted subscriber threw while an unmount failure was propagating.");
+            }
+        }
+
         return true;
     }
 
