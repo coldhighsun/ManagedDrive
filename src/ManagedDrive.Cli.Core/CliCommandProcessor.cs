@@ -1009,9 +1009,16 @@ public static class CliCommandProcessor
     {
         driveLetter = NormalizeDriveLetter(driveLetter);
 
-        var unmounted = await diskController.UnmountAsync(driveLetter, deleteImage);
+        var (unmounted, saveError) = await diskController.UnmountAsync(driveLetter, deleteImage);
         if (unmounted)
         {
+            // The disk is gone, but its contents were not persisted: scripts must not see success.
+            if (saveError is not null)
+            {
+                setOutcome(new(false, $"Unmounted {driveLetter}, but saving its image failed: {saveError}", null, 1));
+                return 1;
+            }
+
             setOutcome(new(
                 true,
                 deleteImage ? $"Unmounted {driveLetter} and deleted its image file." : $"Unmounted {driveLetter}.",

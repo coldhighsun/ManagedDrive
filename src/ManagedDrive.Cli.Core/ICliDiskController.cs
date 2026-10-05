@@ -262,10 +262,12 @@ public interface ICliDiskController
     /// archive file after unmounting.
     /// </param>
     /// <returns>
-    /// <c>true</c> if a mounted disk was found and unmounted; <c>false</c> if no disk is
-    /// currently mounted at <paramref name="mountPoint"/>.
+    /// <c>Unmounted</c> is <c>true</c> if a mounted disk was found and unmounted; <c>false</c> if
+    /// no disk is currently mounted at <paramref name="mountPoint"/>. <c>SaveError</c> is the
+    /// message of the failure of the final image save, or <c>null</c> if it succeeded or none was
+    /// needed; the disk is unmounted either way.
     /// </returns>
-    Task<bool> UnmountAsync(string mountPoint, bool deleteImage);
+    Task<(bool Unmounted, string? SaveError)> UnmountAsync(string mountPoint, bool deleteImage);
 }
 
 /// <summary>

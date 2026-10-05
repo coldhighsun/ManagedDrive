@@ -153,7 +153,7 @@ public class CliCommandProcessorSetPasswordTests
         public Task<(bool Success, string Message)> SaveAsync(string mountPoint) =>
             Task.FromResult((false, string.Empty));
 
-        public Task<bool> UnmountAsync(string mountPoint, bool deleteImage) => Task.FromResult(false);
+        public Task<(bool Unmounted, string? SaveError)> UnmountAsync(string mountPoint, bool deleteImage) => Task.FromResult<(bool, string?)>((false, null));
 
         public Task<(bool Success, string Message)> CreateAsync(string mountPoint, ulong capacityBytes, string? volumeLabel, string? imagePath, string? password) =>
             Task.FromResult((false, string.Empty));

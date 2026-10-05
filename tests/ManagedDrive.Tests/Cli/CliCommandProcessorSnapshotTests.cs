@@ -160,6 +160,6 @@ public class CliCommandProcessorSnapshotTests
         public Task<(bool Success, string Message)> CreateSnapshotAsync(string mountPoint) =>
             Task.FromResult((false, string.Empty));
 
-        public Task<bool> UnmountAsync(string mountPoint, bool deleteImage) => Task.FromResult(false);
+        public Task<(bool Unmounted, string? SaveError)> UnmountAsync(string mountPoint, bool deleteImage) => Task.FromResult<(bool, string?)>((false, null));
     }
 }

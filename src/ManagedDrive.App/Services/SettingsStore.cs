@@ -153,8 +153,8 @@ public sealed class SettingsStore
             try
             {
                 var json = File.ReadAllText(_settingsPath);
-                return JsonSerializer.Deserialize<AppConfiguration>(json, JsonOptions)
-                    ?? new AppConfiguration();
+                var config = JsonSerializer.Deserialize<AppConfiguration>(json, JsonOptions);
+                return config is null ? new() : Normalize(config);
             }
             catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException or NotSupportedException)
             {
@@ -171,6 +171,33 @@ public sealed class SettingsStore
                 return new();
             }
         }
+    }
+
+    /// <summary>
+    /// Repairs values that deserialize without error but would crash later consumers: a
+    /// <c>null</c> disk list, <c>null</c> list entries, and profiles without a mount point.
+    /// </summary>
+    /// <param name="config">The freshly deserialized configuration.</param>
+    /// <returns>The same configuration with a usable <see cref="AppConfiguration.Disks"/> list.</returns>
+    private AppConfiguration Normalize(AppConfiguration config)
+    {
+        // JSON null bypasses the non-nullable annotations, so the list or its entries can be null.
+        var disks = (IEnumerable<DiskProfile?>?)config.Disks ?? [];
+        var usable = disks
+            .OfType<DiskProfile>()
+            .Where(profile => !string.IsNullOrEmpty(profile.MountPoint))
+            .ToList();
+
+        if (config.Disks is null || usable.Count != config.Disks.Count)
+        {
+            Logger.LogWarning("Ignored invalid disk entries in the settings file");
+
+            // The next save replaces the file without them, so keep the original for repair.
+            PreserveUnreadableFile();
+            config.Disks = usable;
+        }
+
+        return config;
     }
 
     /// <summary>
@@ -209,14 +236,19 @@ public sealed class SettingsStore
     /// Produces the configuration to save from the one currently on disk. Runs under the store's
     /// lock, so it must not call back into this store from another thread.
     /// </param>
-    public void Update(Func<AppConfiguration, AppConfiguration> change)
+    /// <returns>
+    /// <c>true</c> if the updated configuration was written; <c>false</c> if the update was
+    /// skipped or the write failed (logged). Callers that merely persist state a completed
+    /// operation already changed can ignore it; a user-initiated "save settings" should report it.
+    /// </returns>
+    public bool Update(Func<AppConfiguration, AppConfiguration> change)
     {
         if (_loadFellBackAfterIoFailure)
         {
             // Callers build the new configuration from in-memory state that started as the
             // defaults <see cref="Load"/> fell back to, so writing it would wipe the real file.
             Logger.LogWarning("Skipped a settings update because the settings could not be read at startup");
-            return;
+            return false;
         }
 
         for (var attempt = 0; ; attempt++)
@@ -227,8 +259,19 @@ public sealed class SettingsStore
                 var current = Read(out var ioFailed, out var retryable);
                 if (!ioFailed)
                 {
-                    Save(change(current));
-                    return;
+                    var updated = change(current);
+                    try
+                    {
+                        Save(updated);
+                        return true;
+                    }
+                    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                    {
+                        // Persisting is best-effort: the caller's operation (e.g. a mount) has
+                        // already happened and must not be reported as failed because of it.
+                        Logger.LogWarning(ex, "Failed to save settings to '{SettingsPath}'", _settingsPath);
+                        return false;
+                    }
                 }
 
                 // An access-denied is normally permanent, so only a lock-style I/O error is retried.
@@ -238,7 +281,7 @@ public sealed class SettingsStore
                     // place would wipe the user's settings. The caller's in-memory state is
                     // written by the next update instead.
                     Logger.LogWarning("Skipped a settings update because '{SettingsPath}' could not be read", _settingsPath);
-                    return;
+                    return false;
                 }
             }
 

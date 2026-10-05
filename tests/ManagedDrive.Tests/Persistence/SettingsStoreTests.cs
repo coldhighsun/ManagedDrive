@@ -243,6 +243,75 @@ public sealed class SettingsStoreTests : IDisposable
     }
 
     /// <summary>
+    /// A settings file whose list or entries are JSON null loads with a usable disk list.
+    /// </summary>
+    [Fact]
+    public void Load_NullDisksOrEntries_DropsInvalidEntries()
+    {
+        var store = new SettingsStore(SettingsPath);
+        File.WriteAllText(SettingsPath, "{ \"Disks\": [ null, { \"MountPoint\": null }, { \"MountPoint\": \"R:\" } ] }");
+
+        var loaded = store.Load();
+
+        Assert.Equal("R:", Assert.Single(loaded.Disks).MountPoint);
+
+        File.WriteAllText(SettingsPath, "{ \"Disks\": null }");
+        Assert.Empty(store.Load().Disks);
+    }
+
+    /// <summary>
+    /// A failed write (here: the temp file is held open) is logged, not thrown, so a caller's
+    /// already-successful operation isn't reported as failed.
+    /// </summary>
+    [Fact]
+    public void Update_SaveFailsWithIoError_DoesNotThrow()
+    {
+        var store = new SettingsStore(SettingsPath);
+        store.Save(new AppConfiguration { Language = "zh-CN" });
+
+        using (new FileStream(SettingsPath + ".tmp", FileMode.Create, FileAccess.Write, FileShare.None))
+        {
+            var saved = true;
+            var exception = Record.Exception(() => saved = store.Update(current => current with { SkippedVersion = "1.2.3" }));
+
+            Assert.Null(exception);
+            Assert.False(saved);
+        }
+
+        Assert.Equal("zh-CN", store.Load().Language);
+    }
+
+    /// <summary>
+    /// A successful update reports that it was written.
+    /// </summary>
+    [Fact]
+    public void Update_Succeeds_ReturnsTrue()
+    {
+        var store = new SettingsStore(SettingsPath);
+
+        var saved = store.Update(current => current with { SkippedVersion = "1.2.3" });
+
+        Assert.True(saved);
+    }
+
+    /// <summary>
+    /// Entries dropped as invalid are kept in a <c>.corrupt</c> copy of the original file, since the
+    /// next save replaces it.
+    /// </summary>
+    [Fact]
+    public void Load_InvalidDiskEntries_PreservesTheOriginalFile()
+    {
+        var store = new SettingsStore(SettingsPath);
+        const string original = "{ \"Disks\": [ { \"MountPoint\": \"\" }, { \"MountPoint\": \"R:\" } ] }";
+        File.WriteAllText(SettingsPath, original);
+
+        store.Load();
+
+        var backup = Assert.Single(Directory.GetFiles(_dir, "settings.json.corrupt-*"));
+        Assert.Equal(original, File.ReadAllText(backup));
+    }
+
+    /// <summary>
     /// A settings file locked for the whole call is not overwritten with defaults.
     /// </summary>
     [Fact]

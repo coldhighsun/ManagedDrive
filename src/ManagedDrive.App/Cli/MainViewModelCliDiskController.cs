@@ -107,6 +107,6 @@ internal sealed class MainViewModelCliDiskController(MainViewModel mainViewModel
     public Task<(bool Success, string Message)> SetPasswordAsync(string mountPoint, string? newPassword) =>
         mainViewModel.SetPasswordByMountPointAsync(mountPoint, newPassword);
 
-    public Task<bool> UnmountAsync(string mountPoint, bool deleteImage) =>
-                mainViewModel.UnmountByMountPointAsync(mountPoint, deleteImage);
+    public Task<(bool Unmounted, string? SaveError)> UnmountAsync(string mountPoint, bool deleteImage) =>
+        mainViewModel.UnmountByMountPointAsync(mountPoint, deleteImage);
 }

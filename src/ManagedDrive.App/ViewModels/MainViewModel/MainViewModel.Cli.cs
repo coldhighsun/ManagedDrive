@@ -683,6 +683,13 @@ public sealed partial class MainViewModel
             _logger.LogInformation("CLI export completed: {MountPoint} -> {OutputPath}.", mountPoint, outputPath);
             return (true, StatusText);
         }
+        catch (OperationCanceledException)
+        {
+            // No token is passed in, so the only canceller is the disk's own Dispose: it was
+            // unmounted while the export was running.
+            _logger.LogWarning("CLI export cancelled because the disk was unmounted: {MountPoint} -> {OutputPath}.", mountPoint, outputPath);
+            return (false, Loc.Format("Msg.ExportCancelledByUnmount", mountPoint));
+        }
         catch (Exception ex)
         {
             _logger.LogError(ex, "CLI export failed: {MountPoint} -> {OutputPath}.", mountPoint, outputPath);
@@ -701,17 +708,18 @@ public sealed partial class MainViewModel
     /// archive file after unmounting.
     /// </param>
     /// <returns>
-    /// <c>true</c> if a mounted disk was found and unmounted; <c>false</c> if no disk is
-    /// currently mounted at <paramref name="mountPoint"/>.
+    /// <c>Unmounted</c> is <c>true</c> if a mounted disk was found and unmounted; <c>false</c> if
+    /// no disk is currently mounted at <paramref name="mountPoint"/>. <c>SaveError</c> is the
+    /// message of the failed final image save, or <c>null</c> if it succeeded.
     /// </returns>
-    public async Task<bool> UnmountByMountPointAsync(string mountPoint, bool deleteImage = false)
+    public async Task<(bool Unmounted, string? SaveError)> UnmountByMountPointAsync(string mountPoint, bool deleteImage = false)
     {
         _logger.LogInformation("CLI unmount requested for {MountPoint} (deleteImage: {DeleteImage}).", mountPoint, deleteImage);
 
         var vm = FindDisk(mountPoint);
         if (vm == null)
         {
-            return false;
+            return (false, null);
         }
 
         var persistImagePath = vm.PersistImagePath;
@@ -728,6 +736,6 @@ public sealed partial class MainViewModel
 
         SaveSettings();
         ShowUnmountResult(mountPoint, saveError);
-        return true;
+        return (true, saveError?.Message);
     }
 }
