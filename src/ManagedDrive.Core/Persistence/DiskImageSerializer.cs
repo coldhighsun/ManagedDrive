@@ -1307,7 +1307,7 @@ public static class DiskImageSerializer
                 capturedContentVersion[cursor] = kvp.Value.ContentVersion;
                 nodeSegmentIndex[cursor] = segmentIndex;
                 chunk.Add(kvp);
-                segmentBytes += (long)kvp.Value.FileInfo.AllocationSize;
+                segmentBytes += SegmentWeight(kvp.Key, kvp.Value);
                 cursor++;
             }
             while (cursor < nodes.Count && segmentBytes < segmentTargetBytes);
@@ -1439,6 +1439,58 @@ public static class DiskImageSerializer
         ReportMonotonic(progress, 1.0, progressLock, ref lastReportedFraction);
     }
 
+    /// <summary>
+    /// Copies exactly <paramref name="count"/> bytes from <paramref name="source"/>'s current
+    /// position to <paramref name="destination"/> through a pooled buffer, so a reused segment is
+    /// never held in memory whole. Fails loudly if the source ends early, so a truncated old image
+    /// can't silently produce a new image with a short segment.
+    /// </summary>
+    /// <param name="source">The stream to read from, positioned at the first byte to copy.</param>
+    /// <param name="destination">The stream to append to.</param>
+    /// <param name="count">The number of bytes to copy.</param>
+    /// <exception cref="EndOfStreamException">The source has fewer than <paramref name="count"/> bytes left.</exception>
+    private static void CopyExactly(Stream source, Stream destination, long count)
+    {
+        var buffer = System.Buffers.ArrayPool<byte>.Shared.Rent(81920);
+        try
+        {
+            while (count > 0)
+            {
+                var chunk = (int)Math.Min(count, buffer.Length);
+                var read = source.Read(buffer, 0, chunk);
+                if (read == 0)
+                {
+                    throw new EndOfStreamException("The image ends before its last segment.");
+                }
+
+                destination.Write(buffer, 0, read);
+                count -= read;
+            }
+        }
+        finally
+        {
+            System.Buffers.ArrayPool<byte>.Shared.Return(buffer);
+        }
+    }
+
+    /// <summary>
+    /// Approximate size a node contributes to its segment when deciding segment boundaries: its
+    /// allocation size plus a fixed per-node metadata cost and its path. Counting only the
+    /// allocation size would let directories and empty files (size 0) pile up in one segment that
+    /// grows without bound, which an in-memory segment buffer cannot hold past 2 GB.
+    /// </summary>
+    /// <param name="path">The node's full path.</param>
+    /// <param name="node">The node.</param>
+    /// <returns>The node's weight in bytes.</returns>
+    private static long SegmentWeight(string path, FileNode node) =>
+        (long)node.FileInfo.AllocationSize + SegmentNodeOverheadBytes + (path.Length * 2L);
+
+    /// <summary>
+    /// Fixed per-node metadata cost (attributes, timestamps, sizes, security descriptor header)
+    /// counted by <see cref="SegmentWeight"/>.
+    /// </summary>
+    private const long SegmentNodeOverheadBytes = 256;
+
     private static void SaveSegmentedIncremental(
         FileNodeMap nodeMap,
         ulong capacityBytes,
@@ -1553,38 +1605,32 @@ public static class DiskImageSerializer
             // of a large image's bytes, so progress is reported here too — otherwise a save where
             // most/everything is reused would sit at 0% through this whole pass and then jump
             // straight to done.
-            var reusedSegments = new List<(int OldIndex, SegmentIndexEntry Entry, byte[] Payload)>();
-            try
+            // The old image stays open until its reusable payloads have been copied into the temp
+            // file below (streamed, never held in memory: they are typically most of the image).
+            // The guards close it on every exit path; it is also closed explicitly before the
+            // File.Move, since Windows refuses to replace a file over an open handle to it (even a
+            // shared-read one). Disposing twice is harmless.
+            using var oldStreamGuard = oldStream;
+            using var oldReaderGuard = oldReader;
+
+            var reusedSegments = new List<(int OldIndex, SegmentIndexEntry Entry, long PayloadOffset)>();
+            var oldPayloadOffset = oldStream.Position;
+            for (var i = 0; i < oldSegments.Length; i++)
             {
-                for (var i = 0; i < oldSegments.Length; i++)
+                var entry = oldSegments[i];
+                if (reusable[i])
                 {
-                    var entry = oldSegments[i];
-                    if (reusable[i])
-                    {
-                        var payload = ReadSegmentPayload(oldReader, entry.PayloadLength);
-                        reusedSegments.Add((i, entry, payload));
+                    reusedSegments.Add((i, entry, oldPayloadOffset));
 
-                        foreach (var pos in byOldSegment[i])
-                        {
-                            writtenBytes += nodes[pos].Value.FileInfo.AllocationSize;
-                        }
-
-                        ReportMonotonic(progress, totalBytes == 0 ? 1.0 : (double)writtenBytes / totalBytes, progressLock, ref lastReportedFraction);
-                    }
-                    else
+                    foreach (var pos in byOldSegment[i])
                     {
-                        oldReader.BaseStream.Seek(entry.PayloadLength, SeekOrigin.Current);
+                        writtenBytes += nodes[pos].Value.FileInfo.AllocationSize;
                     }
+
+                    ReportMonotonic(progress, totalBytes == 0 ? 1.0 : (double)writtenBytes / totalBytes, progressLock, ref lastReportedFraction);
                 }
-            }
-            finally
-            {
-                // Close the old image now, before opening the temp file below, whether or not the
-                // loop above succeeded — Windows refuses to replace a file over an open handle to
-                // it (even a shared-read one), so this must happen before the File.Move that
-                // follows, and it must still happen if the loop threw.
-                oldReader.Dispose();
-                oldStream.Dispose();
+
+                oldPayloadOffset += entry.PayloadLength;
             }
 
             poolPositions.Sort();
@@ -1607,7 +1653,7 @@ public static class DiskImageSerializer
                     var node = nodes[pos].Value;
                     capturedContentVersion[pos] = node.ContentVersion;
                     chunkPositions.Add(pos);
-                    segmentBytes += (long)node.FileInfo.AllocationSize;
+                    segmentBytes += SegmentWeight(nodes[pos].Key, node);
                     cursor++;
                 }
                 while (cursor < poolPositions.Count && segmentBytes < segmentTargetBytes);
@@ -1697,9 +1743,11 @@ public static class DiskImageSerializer
                         }
                     }
 
-                    foreach (var (_, _, payload) in reusedSegments)
+                    writer.Flush();
+                    foreach (var (_, entry, payloadOffset) in reusedSegments)
                     {
-                        writer.Write(payload);
+                        oldStream.Position = payloadOffset;
+                        CopyExactly(oldStream, stream, entry.PayloadLength);
                     }
 
                     foreach (var seg in newSegments)
@@ -1711,6 +1759,8 @@ public static class DiskImageSerializer
                     stream.Flush(flushToDisk: true);
                 }
 
+                oldReader.Dispose();
+                oldStream.Dispose();
                 File.Move(tempPath, imagePath, overwrite: true);
             }
             catch
