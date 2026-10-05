@@ -232,6 +232,44 @@ public sealed class SnapshotManagerTests : IDisposable
         Assert.Equal(1, diff.UnchangedFileCount);
     }
 
+    /// <summary>
+    /// A file replaced by a directory at the same path is a change, so an unchanged-since-snapshot
+    /// check doesn't skip taking a new snapshot.
+    /// </summary>
+    [Fact]
+    public void DiffAgainstCurrent_FileReplacedByDirectory_ReportsRemovalAndAddition()
+    {
+        WriteSnapshotWithFile(new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), "\\a", [1, 2, 3]);
+        var snapshot = Assert.Single(SnapshotManager.ListSnapshots(_mainImagePath));
+
+        var current = new FileNodeMap();
+        current.Add("\\", MakeDir());
+        current.Add("\\a", MakeDir());
+
+        var diff = SnapshotManager.DiffAgainstCurrent(snapshot.Path, current);
+
+        Assert.True(diff.HasChanges);
+        Assert.Equal(["\\a"], diff.RemovedFiles);
+        Assert.Equal(["\\a"], diff.AddedDirectories);
+    }
+
+    /// <summary>
+    /// A real disk image that merely has a snapshot-like name is not one of the disk's snapshots,
+    /// so deleting the snapshots must leave it alone.
+    /// </summary>
+    [Fact]
+    public void DeleteAllSnapshots_DiskImageWithSnapshotLikeName_IsLeftAlone()
+    {
+        var lookalike = Path.Combine(_dir, "disk.20240101-120000.mdr");
+        File.WriteAllBytes(lookalike, "MDRD"u8.ToArray());
+
+        var allDeleted = SnapshotManager.DeleteAllSnapshots(_mainImagePath);
+
+        Assert.True(allDeleted);
+        Assert.True(File.Exists(lookalike));
+        Assert.Empty(SnapshotManager.ListSnapshots(_mainImagePath));
+    }
+
     [Fact]
     public void DiffAgainstCurrent_EmptyFileUnchanged_NotListedAsModified()
     {
