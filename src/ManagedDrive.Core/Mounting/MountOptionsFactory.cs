@@ -71,6 +71,7 @@ public static class MountOptionsFactory
                 MountPoint = mountPoint,
                 CapacityBytes = capacityBytes,
                 VolumeLabel = volumeLabel,
+                SourceArchivePath = null,
             }
             : new()
             {

@@ -53,6 +53,25 @@ public sealed class MountOptionsFactoryTests
     }
 
     [Fact]
+    public void BuildImageOptions_ProfileWithSourceArchivePath_ClearsSourceArchivePath()
+    {
+        var profile = new DiskOptions
+        {
+            MountPoint = "OLD:",
+            CapacityBytes = 1,
+            PersistImagePath = Image,
+            SourceArchivePath = Archive,
+        };
+
+        var options = MountOptionsFactory.BuildImageOptions(
+            profile, mountPoint: "R:", imagePath: Image,
+            capacityBytes: 8UL * 1024 * 1024, volumeLabel: "Vol", overrides: new());
+
+        Assert.Null(options.SourceArchivePath);
+        Assert.Equal(Image, options.PersistImagePath);
+    }
+
+    [Fact]
     public void BuildImageOptions_OverridesWinOverProfile()
     {
         var profile = new DiskOptions
