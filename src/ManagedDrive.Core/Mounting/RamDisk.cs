@@ -37,6 +37,23 @@ public sealed class RamDisk : IDisposable
     private static long _nextInstanceId;
 
     private readonly Lock _autoSaveLock = new();
+
+    /// <summary>
+    /// Read side held by exports and node listings while they read <see cref="MemoryFileSystem.NodeMap"/>;
+    /// write side taken by <see cref="Dispose(IProgress{double}?)"/> before it disposes the map. Kept
+    /// separate from <see cref="_autoSaveLock"/> so a long export doesn't stall saves, password
+    /// changes and option edits, yet an unmount still waits for it instead of tearing the map down
+    /// underneath it.
+    /// </summary>
+    private readonly ReaderWriterLockSlim _nodeMapGate = new();
+
+    /// <summary>
+    /// Cancelled as soon as <see cref="Dispose(IProgress{double}?)"/> starts, and linked into every
+    /// export, so an unmount doesn't wait for a long-running export to finish on its own. Never
+    /// disposed: it has no timer or wait handle to release, and exports may still link to it after
+    /// disposal began.
+    /// </summary>
+    private readonly CancellationTokenSource _disposeCts = new();
     private readonly MemoryFileSystem _fs;
     private readonly FileSystemHost _host;
 
@@ -50,6 +67,14 @@ public sealed class RamDisk : IDisposable
     private Timer? _autoSaveTimer;
     private byte[]? _cek;
     private int _disposed;
+
+    /// <summary>
+    /// Set by <see cref="Create"/> just before it disposes a disk whose setup failed, so the
+    /// dispose-time save doesn't write a half-configured disk (e.g. an unencrypted image for a
+    /// disk the caller asked to encrypt) to <see cref="DiskOptions.PersistImagePath"/>.
+    /// </summary>
+    private bool _skipFinalSave;
+
     private string? _lastSavedImagePath;
     private string? _password;
 
@@ -384,6 +409,7 @@ public sealed class RamDisk : IDisposable
                 // same way DisposeFailedMount does for the earlier failure branches above —
                 // otherwise the drive letter stays mounted forever with no RamDisk ever registered
                 // in MountManager._disks to unmount it through.
+                disk._skipFinalSave = true;
                 disk.Dispose();
                 throw;
             }
@@ -397,6 +423,7 @@ public sealed class RamDisk : IDisposable
         {
             // Same teardown as the SetPassword failure above: the volume is already mounted, so
             // an unowned RamDisk would leave the drive letter mounted forever.
+            disk._skipFinalSave = true;
             disk.Dispose();
             throw;
         }
@@ -471,6 +498,10 @@ public sealed class RamDisk : IDisposable
             return;
         }
 
+        // Before anything that can block: running exports notice this at their next node and
+        // release the node map's read side, which the teardown below waits for.
+        _disposeCts.Cancel();
+
         try
         {
             _fs.ContentAccessed -= OnContentAccessed;
@@ -537,15 +568,30 @@ public sealed class RamDisk : IDisposable
                 // The host is unmounted, so no WinFsp callbacks can still touch the map. Runs even
                 // if the final save or the unmount above threw, so the node map's lock and the CEK
                 // are always released rather than leaked.
-                _fs.NodeMap.Dispose();
-
-                if (_cek is not null)
+                try
                 {
-                    System.Security.Cryptography.CryptographicOperations.ZeroMemory(_cek);
-                    _cek = null;
+                    // Waits for exports and node listings still reading the map (they hold the read
+                    // side, see ReadNodeMap); any that start afterwards see _disposed and bail out.
+                    _nodeMapGate.EnterWriteLock();
+                    try
+                    {
+                        _fs.NodeMap.Dispose();
+                    }
+                    finally
+                    {
+                        _nodeMapGate.ExitWriteLock();
+                    }
                 }
+                finally
+                {
+                    if (_cek is not null)
+                    {
+                        System.Security.Cryptography.CryptographicOperations.ZeroMemory(_cek);
+                        _cek = null;
+                    }
 
-                _password = null;
+                    _password = null;
+                }
             }
         }
     }
@@ -560,7 +606,7 @@ public sealed class RamDisk : IDisposable
     /// <param name="progress">Optional progress reporter, updated with a fraction in [0, 1].</param>
     private void SaveOnDispose(IProgress<double>? progress)
     {
-        if (Options.PersistImagePath == null)
+        if (Options.PersistImagePath == null || _skipFinalSave)
         {
             return;
         }
@@ -601,13 +647,57 @@ public sealed class RamDisk : IDisposable
     /// writes to a temp file and only renames it to <paramref name="archivePath"/> on success,
     /// deleting the temp file on any failure including cancellation.
     /// </param>
+    /// <exception cref="ObjectDisposedException">Thrown when the disk has been disposed.</exception>
     public void ExportToArchive(
         string archivePath,
         ArchiveExportFormat format,
         ImageCompressionLevel level,
         IProgress<double>? progress = null,
-        CancellationToken cancellationToken = default) =>
-        ArchiveNodeMapWriter.WriteArchive(_fs.NodeMap, archivePath, format, level, CancellableProgress.Wrap(progress, cancellationToken));
+        CancellationToken cancellationToken = default)
+    {
+        ReadNodeMap(nodeMap =>
+        {
+            using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _disposeCts.Token);
+            ArchiveNodeMapWriter.WriteArchive(nodeMap, archivePath, format, level, CancellableProgress.Wrap(progress, linked.Token));
+        });
+    }
+
+    /// <summary>
+    /// Runs <paramref name="read"/> against the node map while holding the read side of
+    /// <see cref="_nodeMapGate"/>, so a concurrent <see cref="Dispose(IProgress{double}?)"/> waits
+    /// for it before disposing the map. Rejects the call once disposal has started.
+    /// </summary>
+    /// <typeparam name="T">The type <paramref name="read"/> returns.</typeparam>
+    /// <param name="read">The operation to run against the node map.</param>
+    /// <returns>Whatever <paramref name="read"/> returns.</returns>
+    /// <exception cref="ObjectDisposedException">Thrown when the disk has been disposed.</exception>
+    private T ReadNodeMap<T>(Func<FileNodeMap, T> read)
+    {
+        // Checked before and after taking the gate: before, so a disposed disk never blocks here;
+        // after, because Dispose may have started between the check and the lock.
+        ThrowIfDisposed();
+        _nodeMapGate.EnterReadLock();
+        try
+        {
+            ThrowIfDisposed();
+            return read(_fs.NodeMap);
+        }
+        finally
+        {
+            _nodeMapGate.ExitReadLock();
+        }
+    }
+
+    /// <summary>
+    /// <see cref="ReadNodeMap{T}(Func{FileNodeMap, T})"/> for operations without a result.
+    /// </summary>
+    /// <param name="read">The operation to run against the node map.</param>
+    private void ReadNodeMap(Action<FileNodeMap> read) =>
+        ReadNodeMap(nodeMap =>
+        {
+            read(nodeMap);
+            return 0;
+        });
 
     /// <summary>
     /// Writes this disk's current contents to a new image file at <paramref name="imagePath"/>.
@@ -630,20 +720,27 @@ public sealed class RamDisk : IDisposable
     /// to <paramref name="imagePath"/> on success, deleting the temp file on any failure including
     /// cancellation.
     /// </param>
+    /// <exception cref="ObjectDisposedException">Thrown when the disk has been disposed.</exception>
     public void ExportToImage(
         string imagePath,
         ImageCompressionLevel level,
         string? password = null,
         IProgress<double>? progress = null,
-        CancellationToken cancellationToken = default) =>
-        DiskImageSerializer.Save(
-            _fs.NodeMap,
-            Options.CapacityBytes,
-            _fs.VolumeLabel,
-            imagePath,
-            level,
-            password is not null ? new ImageEncryptionInfo(password, DiskImageSerializer.GenerateCek()) : null,
-            CancellableProgress.Wrap(progress, cancellationToken));
+        CancellationToken cancellationToken = default)
+    {
+        ReadNodeMap(nodeMap =>
+        {
+            using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _disposeCts.Token);
+            DiskImageSerializer.Save(
+                nodeMap,
+                Options.CapacityBytes,
+                _fs.VolumeLabel,
+                imagePath,
+                level,
+                password is not null ? new ImageEncryptionInfo(password, DiskImageSerializer.GenerateCek()) : null,
+                CancellableProgress.Wrap(progress, linked.Token));
+        });
+    }
 
     /// <summary>
     /// Removes all files and directories from the disk, leaving it empty.
@@ -704,7 +801,11 @@ public sealed class RamDisk : IDisposable
     /// path. Read-only: intended for UI views (e.g. a disk content browser) that display the
     /// disk's contents without mutating it.
     /// </summary>
-    public IReadOnlyList<KeyValuePair<string, FileNode>> GetAllNodes() => _fs.NodeMap.GetAllNodes();
+    /// <exception cref="ObjectDisposedException">Thrown when the disk has been disposed.</exception>
+    public IReadOnlyList<KeyValuePair<string, FileNode>> GetAllNodes() =>
+        // Not under _autoSaveLock: a UI view calling this would otherwise freeze for as long as a
+        // save holds that lock.
+        ReadNodeMap(nodeMap => nodeMap.GetAllNodes());
 
     /// <summary>
     /// Serializes the current disk contents to <see cref="DiskOptions.PersistImagePath"/>.

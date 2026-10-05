@@ -157,6 +157,7 @@ public static partial class SnapshotManager
         var modifiedFiles = new List<string>();
         var unchangedFileCount = 0;
         var seenPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var typeChangedPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var kvp in currentMap.GetAllNodes())
         {
@@ -175,6 +176,23 @@ public static partial class SnapshotManager
                     addedFiles.Add(path);
                 }
 
+                continue;
+            }
+
+            // A path whose type changed (file replaced by a directory or vice versa) is a removal
+            // of the old node plus an addition of the new one, not "unchanged".
+            if (node.IsDirectory != snapshotEntry.IsDirectory)
+            {
+                if (node.IsDirectory)
+                {
+                    addedDirectories.Add(path);
+                }
+                else
+                {
+                    addedFiles.Add(path);
+                }
+
+                typeChangedPaths.Add(path);
                 continue;
             }
 
@@ -210,7 +228,7 @@ public static partial class SnapshotManager
         var removedDirectories = new List<string>();
         foreach (var entry in snapshotEntries)
         {
-            if (seenPaths.Contains(entry.Path))
+            if (seenPaths.Contains(entry.Path) && !typeChangedPaths.Contains(entry.Path))
             {
                 continue;
             }
@@ -342,10 +360,36 @@ public static partial class SnapshotManager
         foreach (var path in Directory.EnumerateFiles(directory, $"{baseName}.*.mdr"))
         {
             var match = SnapshotPattern().Match(Path.GetFileName(path));
-            if (match.Success && string.Equals(match.Groups["base"].Value, baseName, StringComparison.OrdinalIgnoreCase))
+            if (match.Success
+                && string.Equals(match.Groups["base"].Value, baseName, StringComparison.OrdinalIgnoreCase)
+                && !IsDiskImageFile(path))
             {
                 yield return (path, match);
             }
+        }
+    }
+
+    /// <summary>
+    /// Returns <c>true</c> when <paramref name="path"/> starts with the disk image magic
+    /// (<c>"MDRD"</c>), i.e. it is a real disk image that merely has a snapshot-like file name
+    /// (such as a second disk's <c>disk.20240101-120000.mdr</c>), which snapshot pruning and
+    /// deletion must never touch. Unreadable, short or otherwise unrecognized files return
+    /// <c>false</c>, so a corrupt snapshot index is still matched by name and can be deleted.
+    /// </summary>
+    /// <param name="path">The candidate file.</param>
+    /// <returns><c>true</c> if the file is a disk image.</returns>
+    private static bool IsDiskImageFile(string path)
+    {
+        try
+        {
+            using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+            Span<byte> magic = stackalloc byte[4];
+            return stream.ReadAtLeast(magic, magic.Length, throwOnEndOfStream: false) == magic.Length
+                && magic.SequenceEqual("MDRD"u8);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return false;
         }
     }
 
