@@ -267,7 +267,14 @@ public sealed class RamDisk : IDisposable
         var cancellableProgress = CancellableProgress.Wrap(progress, cancellationToken);
 
         if (options.SourceArchivePath != null &&
-            File.Exists(options.SourceArchivePath))
+            !File.Exists(options.SourceArchivePath))
+        {
+            throw new FileNotFoundException(
+                "The source archive no longer exists.",
+                options.SourceArchivePath);
+        }
+
+        if (options.SourceArchivePath != null)
         {
             ArchiveNodeMapBuilder.PeekArchive(options.SourceArchivePath, out var totalBytes, out _);
             var nodeMap = ArchiveNodeMapBuilder.BuildNodeMap(options.SourceArchivePath, (long)totalBytes, cancellableProgress);
