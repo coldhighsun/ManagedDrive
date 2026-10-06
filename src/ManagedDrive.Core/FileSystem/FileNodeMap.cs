@@ -25,6 +25,18 @@ public sealed class FileNodeMap : IDisposable
     private readonly ReaderWriterLockSlim _syncRoot = new(LockRecursionPolicy.NoRecursion);
 
     /// <summary>
+    /// Whether any node in the map may be a symbolic link or junction. Lets
+    /// <see cref="TryFindReparsePrefix"/>, which runs on every failed lookup (i.e. before every
+    /// create), return immediately on a disk that holds none. Set whenever a link node is added
+    /// (<see cref="AddCore"/>) or made (<see cref="NoteReparsePoint"/>) and never cleared again, so
+    /// it can be <c>true</c> with no link left (the lookup then just does the walk), but never
+    /// <c>false</c> while one exists. Not clearing it when the map is emptied is deliberate: the
+    /// reader doesn't take the lock, so a reset inside <see cref="ReplaceAll"/> would let it read
+    /// <c>false</c> after the old links are gone but before the new ones are added.
+    /// </summary>
+    private bool _mayHaveReparse;
+
+    /// <summary>
     /// Running total of <see cref="Fsp.Interop.FileInfo.AllocationSize"/> across every stored
     /// node, in bytes. Signed (rather than <c>ulong</c>, which the public API still exposes via
     /// <see cref="GetTotalAllocated"/>) because it is updated exclusively via
@@ -224,6 +236,11 @@ public sealed class FileNodeMap : IDisposable
         else
         {
             _sortedKeys.Add(filePath);
+        }
+
+        if (node.ReparseData is not null)
+        {
+            Volatile.Write(ref _mayHaveReparse, true);
         }
 
         node.FilePath = filePath;
@@ -891,6 +908,65 @@ public sealed class FileNodeMap : IDisposable
                 ParentState.NotDirectory => LookupResult.ParentNotDirectory,
                 _ => LookupResult.NotFound,
             };
+        }
+        finally
+        {
+            _syncRoot.ExitReadLock();
+        }
+    }
+
+    /// <summary>
+    /// Records that a node of this map is about to become a symbolic link or junction, so
+    /// <see cref="TryFindReparsePrefix"/> stops short-circuiting. Must be called <em>before</em> the
+    /// node's reparse data is set: a lookup that can see the link must also see this. Uses a full
+    /// fence rather than a release store, which would not stop the caller's following plain write
+    /// of the reparse data from becoming visible to another core first on a weakly ordered CPU.
+    /// </summary>
+    internal void NoteReparsePoint() => Interlocked.Exchange(ref _mayHaveReparse, true);
+
+    /// <summary>
+    /// Gets a value indicating whether <see cref="TryFindReparsePrefix"/> has any work to do; a
+    /// <c>false</c> guarantees the map holds no symbolic link or junction.
+    /// </summary>
+    internal bool MayHaveReparsePoints => Volatile.Read(ref _mayHaveReparse);
+
+    /// <summary>
+    /// Finds the first symbolic link or junction among the directory components of
+    /// <paramref name="filePath"/> (every component except the last one). A path that runs through
+    /// such a node can never exist in the map, so this is what lets a failed lookup be reported as
+    /// <c>STATUS_REPARSE</c> instead of "not found".
+    /// </summary>
+    /// <param name="filePath">Absolute file-system path.</param>
+    /// <param name="reparsePointIndex">
+    /// The index of the last character of the reparse point's own path, which is what WinFsp's
+    /// native <c>FspFileSystemFindReparsePoint</c> reports (for <c>\a\b\c</c> with <c>\a\b</c> a
+    /// reparse point, 3).
+    /// </param>
+    /// <returns><c>true</c> if a reparse point was found.</returns>
+    public bool TryFindReparsePrefix(string filePath, out uint reparsePointIndex)
+    {
+        if (!Volatile.Read(ref _mayHaveReparse))
+        {
+            reparsePointIndex = 0;
+            return false;
+        }
+
+        _syncRoot.EnterReadLock();
+        try
+        {
+            for (var i = 1; i < filePath.Length; i++)
+            {
+                if (filePath[i] == '\\' &&
+                    _map.TryGetValue(filePath[..i], out var prefixNode) &&
+                    prefixNode.ReparseData is not null)
+                {
+                    reparsePointIndex = (uint)(i - 1);
+                    return true;
+                }
+            }
+
+            reparsePointIndex = 0;
+            return false;
         }
         finally
         {

@@ -301,7 +301,8 @@ public sealed class MemoryFileSystem : FileSystemBase
                 : FileNode.DefaultSecurityDescriptorBytes,
             FileInfo =
             {
-                FileAttributes = fileAttributes,
+                // A reparse point is only ever made by SetReparsePoint, never by create attributes.
+                FileAttributes = fileAttributes & ~(uint)FileAttributes.ReparsePoint,
                 AllocationSize = aligned,
                 FileSize       = 0,
                 CreationTime   = now,
@@ -439,6 +440,15 @@ public sealed class MemoryFileSystem : FileSystemBase
         var lookup = NodeMap.TryGetForLookup(fileName, out var node);
         if (LookupFailureStatus(lookup) is int failureStatus)
         {
+            // A path through a symbolic link or junction never exists in the map (a link has no
+            // children), so a failed lookup may really be a path WinFsp has to re-resolve against
+            // the link's target. STATUS_REPARSE carries the index of the link in fileAttributes.
+            if (NodeMap.TryFindReparsePrefix(fileName, out var reparsePointIndex))
+            {
+                fileAttributes = reparsePointIndex;
+                return STATUS_REPARSE;
+            }
+
             fileAttributes = 0;
             return failureStatus;
         }
@@ -450,6 +460,139 @@ public sealed class MemoryFileSystem : FileSystemBase
             securityDescriptor = EffectiveSecurity(node);
         }
 
+        return STATUS_SUCCESS;
+    }
+
+    /// <summary>
+    /// Returns the reparse data of the node at <paramref name="fileName"/>. WinFsp's native
+    /// reparse resolution (<see cref="FileSystemBase.ResolveReparsePoints"/>) calls this to read a
+    /// link's target while rewriting a path that runs through it.
+    /// </summary>
+    /// <returns>
+    /// STATUS_SUCCESS, STATUS_OBJECT_NAME_NOT_FOUND, or STATUS_NOT_A_REPARSE_POINT.
+    /// </returns>
+    public override int GetReparsePointByName(string fileName, bool isDirectory, ref byte[] reparseData)
+    {
+        if (!NodeMap.TryGet(fileName, out var node) || node is null)
+        {
+            return STATUS_OBJECT_NAME_NOT_FOUND;
+        }
+
+        if (node.ReparseData is not { } data)
+        {
+            return STATUS_NOT_A_REPARSE_POINT;
+        }
+
+        reparseData = data;
+        return STATUS_SUCCESS;
+    }
+
+    /// <summary>
+    /// Returns the reparse data of an open symbolic link or junction
+    /// (<c>FSCTL_GET_REPARSE_POINT</c>).
+    /// </summary>
+    /// <returns>
+    /// STATUS_SUCCESS or STATUS_NOT_A_REPARSE_POINT.
+    /// </returns>
+    public override int GetReparsePoint(object fileNode, object fileDesc, string fileName, ref byte[] reparseData)
+    {
+        if (((FileNode)fileNode).ReparseData is not { } data)
+        {
+            return STATUS_NOT_A_REPARSE_POINT;
+        }
+
+        reparseData = data;
+        return STATUS_SUCCESS;
+    }
+
+    /// <summary>
+    /// Turns an open file or empty directory into a symbolic link or junction, or replaces the
+    /// target of an existing one (<c>FSCTL_SET_REPARSE_POINT</c>). Only symbolic-link and
+    /// mount-point tags are accepted, and a junction needs a directory.
+    /// </summary>
+    /// <returns>
+    /// STATUS_SUCCESS, STATUS_MEDIA_WRITE_PROTECTED, STATUS_ACCESS_DENIED (the volume root),
+    /// STATUS_IO_REPARSE_DATA_INVALID, STATUS_IO_REPARSE_TAG_INVALID, STATUS_IO_REPARSE_TAG_MISMATCH
+    /// (replacing a link of another tag), STATUS_NOT_A_DIRECTORY (a junction on a file), or
+    /// STATUS_DIRECTORY_NOT_EMPTY.
+    /// </returns>
+    public override int SetReparsePoint(object fileNode, object fileDesc, string fileName, byte[] reparseData)
+    {
+        if (_readOnly)
+        {
+            return STATUS_MEDIA_WRITE_PROTECTED;
+        }
+
+        // Like NTFS, refuse a reparse point on the volume root: path lookups never inspect the
+        // root, and a root that is a link would break the drive and be saved into the image.
+        if (fileName == "\\")
+        {
+            return STATUS_ACCESS_DENIED;
+        }
+
+        var validation = ReparsePointData.Validate(reparseData);
+        if (validation != STATUS_SUCCESS)
+        {
+            return validation;
+        }
+
+        var node = (FileNode)fileNode;
+        if (node.ReparseData is { } current)
+        {
+            var replaceable = ReparsePointData.CheckReplaceable(current, reparseData);
+            if (replaceable != STATUS_SUCCESS)
+            {
+                return replaceable;
+            }
+        }
+
+        if (!node.IsDirectory && ReparsePointData.GetTag(reparseData) == ReparsePointData.MountPointTag)
+        {
+            return STATUS_NOT_A_DIRECTORY;
+        }
+
+        if (node.IsDirectory && NodeMap.HasChildren(fileName))
+        {
+            return STATUS_DIRECTORY_NOT_EMPTY;
+        }
+
+        NodeMap.NoteReparsePoint();
+        node.ApplyReparseData(reparseData.ToArray());
+        node.MetadataVersion++;
+        MarkDirty();
+        return STATUS_SUCCESS;
+    }
+
+    /// <summary>
+    /// Turns an open symbolic link or junction back into an ordinary file or directory
+    /// (<c>FSCTL_DELETE_REPARSE_POINT</c>); the request must carry the link's own tag.
+    /// </summary>
+    /// <returns>
+    /// STATUS_SUCCESS, STATUS_MEDIA_WRITE_PROTECTED, STATUS_NOT_A_REPARSE_POINT, or
+    /// STATUS_IO_REPARSE_TAG_MISMATCH.
+    /// </returns>
+    public override int DeleteReparsePoint(object fileNode, object fileDesc, string fileName, byte[] reparseData)
+    {
+        if (_readOnly)
+        {
+            return STATUS_MEDIA_WRITE_PROTECTED;
+        }
+
+        var node = (FileNode)fileNode;
+        if (node.ReparseData is not { } current)
+        {
+            return STATUS_NOT_A_REPARSE_POINT;
+        }
+
+        var replaceable = ReparsePointData.CheckReplaceable(current, reparseData);
+        if (replaceable != STATUS_SUCCESS)
+        {
+            return replaceable;
+        }
+
+        node.ApplyReparseData(null);
+        node.MetadataVersion++;
+        MarkDirty();
         return STATUS_SUCCESS;
     }
 
@@ -526,7 +669,7 @@ public sealed class MemoryFileSystem : FileSystemBase
         var lookup = NodeMap.TryGetForLookup(fileName, out var node);
         if (LookupFailureStatus(lookup) is int failureStatus)
         {
-            return failureStatus;
+            return NodeMap.TryFindReparsePrefix(fileName, out _) ? STATUS_REPARSE : failureStatus;
         }
 
         fileNode = node;
@@ -594,14 +737,8 @@ public sealed class MemoryFileSystem : FileSystemBase
             return STATUS_DISK_FULL;
         }
 
-        if (replaceFileAttributes)
-        {
-            node.FileInfo.FileAttributes = fileAttributes;
-        }
-        else
-        {
-            node.FileInfo.FileAttributes |= fileAttributes;
-        }
+        node.FileInfo.FileAttributes = node.WithReparseBit(
+            replaceFileAttributes ? fileAttributes : node.FileInfo.FileAttributes | fileAttributes);
         node.FileInfo.FileSize = 0;
         node.FileData = aligned > 0 ? FileContent.CreateZeroed(aligned) : null;
         node.ContentVersion++;
@@ -769,7 +906,7 @@ public sealed class MemoryFileSystem : FileSystemBase
 
         if (fileAttributes != InvalidFileAttributes)
         {
-            node.FileInfo.FileAttributes = fileAttributes;
+            node.FileInfo.FileAttributes = node.WithReparseBit(fileAttributes);
         }
 
         if (creationTime != 0)

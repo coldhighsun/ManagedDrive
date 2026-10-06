@@ -1294,6 +1294,11 @@ public sealed class RamDisk : IDisposable
         host.CaseSensitiveSearch = false;
         host.UnicodeOnDisk = true;
         host.PersistentAcls = true;
+        // Symbolic links and junctions: WinFsp resolves them against MemoryFileSystem's reparse
+        // callbacks. The access check is off, as in the official memfs sample, so an unprivileged
+        // process can traverse a link without being checked against the link's own descriptor.
+        host.ReparsePoints = true;
+        host.ReparsePointsAccessCheck = false;
         host.FileInfoTimeout = 1000;
         // Only invoke the Cleanup callback when a file was actually modified. Read-only opens (the
         // common read-after-write and random-read path) then skip the user-mode Cleanup round-trip

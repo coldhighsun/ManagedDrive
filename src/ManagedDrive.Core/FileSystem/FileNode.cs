@@ -25,6 +25,13 @@ public sealed class FileNode
     public byte[]? FileSecurity;
 
     /// <summary>
+    /// The complete <c>REPARSE_DATA_BUFFER</c> of a symbolic link or directory junction, or
+    /// <c>null</c> for an ordinary node. While non-<c>null</c>, <see cref="Fsp.Interop.FileInfo.ReparseTag"/>
+    /// holds its tag and <see cref="FileAttributes.ReparsePoint"/> is set in the node's attributes.
+    /// </summary>
+    public byte[]? ReparseData;
+
+    /// <summary>
     /// The allocation granularity in bytes. All allocation sizes are rounded up to this boundary.
     /// </summary>
     internal const ulong AllocationUnit = 512;
@@ -127,6 +134,44 @@ public sealed class FileNode
     public string LeafName { get; set; } = string.Empty;
 
     /// <summary>
+    /// Makes this node a reparse point carrying <paramref name="data"/>, or an ordinary node again
+    /// when <paramref name="data"/> is <c>null</c>, keeping <see cref="ReparseData"/>, the tag in
+    /// <see cref="FileInfo"/> and <see cref="FileAttributes.ReparsePoint"/> consistent with each
+    /// other. Does not touch <see cref="MetadataVersion"/>; callers that change a live node bump it.
+    /// </summary>
+    /// <param name="data">
+    /// A validated <c>REPARSE_DATA_BUFFER</c> (see <see cref="ReparsePointData.Validate"/>), or
+    /// <c>null</c> to clear the reparse point.
+    /// </param>
+    internal void ApplyReparseData(byte[]? data)
+    {
+        ReparseData = data;
+        if (data is null)
+        {
+            FileInfo.ReparseTag = 0;
+            FileInfo.FileAttributes &= ~(uint)FileAttributes.ReparsePoint;
+        }
+        else
+        {
+            FileInfo.ReparseTag = ReparsePointData.GetTag(data);
+            FileInfo.FileAttributes |= (uint)FileAttributes.ReparsePoint;
+        }
+    }
+
+    /// <summary>
+    /// Replaces the <see cref="FileAttributes.ReparsePoint"/> bit of <paramref name="requested"/>
+    /// with this node's real state: the bit is owned by <see cref="ApplyReparseData"/>, never by a
+    /// caller setting attributes directly.
+    /// </summary>
+    /// <param name="requested">Attributes supplied by a create, overwrite or set-attributes request.</param>
+    /// <returns><paramref name="requested"/> with the reparse bit forced to match this node.</returns>
+    internal uint WithReparseBit(uint requested)
+    {
+        var bit = (uint)FileAttributes.ReparsePoint;
+        return ReparseData is null ? requested & ~bit : requested | bit;
+    }
+
+    /// <summary>
     /// Rounds <paramref name="size"/> up to the nearest <see cref="AllocationUnit"/> boundary.
     /// </summary>
     /// <param name="size">The size in bytes to align.</param>
@@ -175,8 +220,8 @@ public sealed class FileNode
     }
 
     /// <summary>
-    /// Returns a deep copy of this node (independent <see cref="FileData"/> and
-    /// <see cref="FileSecurity"/> buffers), for copying a node into a different
+    /// Returns a deep copy of this node (independent <see cref="FileData"/>,
+    /// <see cref="FileSecurity"/> and <see cref="ReparseData"/> buffers), for copying a node into a different
     /// <see cref="FileNodeMap"/> without the two nodes sharing mutable state.
     /// </summary>
     /// <returns>
@@ -201,6 +246,7 @@ public sealed class FileNode
         {
             FileInfo = fileInfo,
             FileSecurity = FileSecurity?.ToArray(),
+            ReparseData = ReparseData?.ToArray(),
             FileData = data,
             FilePath = FilePath,
             LeafName = LeafName,
