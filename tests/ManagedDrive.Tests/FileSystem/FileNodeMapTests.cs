@@ -933,6 +933,127 @@ public sealed class FileNodeMapTests
         Assert.False(map.TryGet("\\x", out _));
     }
 
+    [Fact]
+    public void MayHaveReparsePoints_MapWithoutLinks_IsFalseAndPrefixLookupFindsNothing()
+    {
+        var map = new FileNodeMap();
+        map.Add("\\", MakeDir());
+        map.Add("\\dir", MakeDir());
+        map.Add("\\dir\\file", MakeFile());
+
+        Assert.False(map.MayHaveReparsePoints);
+        Assert.False(map.TryFindReparsePrefix("\\dir\\file\\x", out _));
+    }
+
+    [Fact]
+    public void Add_NodeThatIsALink_TurnsOnPrefixLookupAndFindsIt()
+    {
+        var map = new FileNodeMap();
+        map.Add("\\", MakeDir());
+        var junction = MakeDir();
+        junction.ApplyReparseData(MakeReparseBuffer());
+
+        map.Add("\\j", junction);
+
+        Assert.True(map.MayHaveReparsePoints);
+        Assert.True(map.TryFindReparsePrefix("\\j\\x", out var index));
+        Assert.Equal(1U, index);
+    }
+
+    [Fact]
+    public void ReplaceAll_WithLinkNode_TurnsOnPrefixLookup()
+    {
+        var map = new FileNodeMap();
+        map.Add("\\", MakeDir());
+        var junction = MakeDir();
+        junction.ApplyReparseData(MakeReparseBuffer());
+
+        map.ReplaceAll([KeyValuePair.Create("\\j", junction)]);
+
+        Assert.True(map.MayHaveReparsePoints);
+        Assert.True(map.TryFindReparsePrefix("\\j\\x", out _));
+    }
+
+    [Fact]
+    public void NoteReparsePoint_ThenNodeBecomesLink_PrefixLookupFindsIt()
+    {
+        var map = new FileNodeMap();
+        map.Add("\\", MakeDir());
+        var dir = MakeDir();
+        map.Add("\\j", dir);
+        Assert.False(map.MayHaveReparsePoints);
+
+        map.NoteReparsePoint();
+        dir.ApplyReparseData(MakeReparseBuffer());
+
+        Assert.True(map.TryFindReparsePrefix("\\j\\x", out _));
+    }
+
+    [Fact]
+    public void ClearAll_AfterLinksWereAdded_KeepsPrefixLookupOnButFindsNothing()
+    {
+        var map = new FileNodeMap();
+        map.Add("\\", MakeDir());
+        var junction = MakeDir();
+        junction.ApplyReparseData(MakeReparseBuffer());
+        map.Add("\\j", junction);
+
+        map.ClearAll();
+
+        // Never reset: the lock-free reader could otherwise see false mid-ReplaceAll.
+        Assert.True(map.MayHaveReparsePoints);
+        Assert.False(map.TryFindReparsePrefix("\\j\\x", out _));
+    }
+
+    [Fact]
+    public async Task TryFindReparsePrefix_WhileReplaceAllIsHalfwayThrough_StillFindsTheLink()
+    {
+        // Regression: ReplaceAll used to reset the lock-free flag after emptying the map but before
+        // re-adding the links, so a lookup landing in that window read "no links" for a path that
+        // goes through a link both before and after the swap. ReplaceAll enumerates its input while
+        // holding the write lock, so a slow enumerator holds the map in exactly that state.
+        var map = new FileNodeMap();
+        map.Add("\\", MakeDir());
+        var original = MakeDir();
+        original.ApplyReparseData(MakeReparseBuffer());
+        map.Add("\\j", original);
+        var replacement = MakeDir();
+        replacement.ApplyReparseData(MakeReparseBuffer());
+
+        using var midSwap = new ManualResetEventSlim();
+        IEnumerable<KeyValuePair<string, FileNode>> SlowReplacement()
+        {
+            midSwap.Set();
+            Thread.Sleep(200); // the reader runs now, while the old map is gone and this node isn't in yet
+            yield return KeyValuePair.Create("\\j", replacement);
+        }
+
+        var swap = Task.Run(() => map.ReplaceAll(SlowReplacement()), TestContext.Current.CancellationToken);
+        Assert.True(midSwap.Wait(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken));
+
+        var found = map.TryFindReparsePrefix("\\j\\x", out _);
+        await swap;
+
+        Assert.True(found);
+    }
+
+    [Fact]
+    public void Remove_TheOnlyLink_KeepsPrefixLookupOnButFindsNothing()
+    {
+        var map = new FileNodeMap();
+        map.Add("\\", MakeDir());
+        var junction = MakeDir();
+        junction.ApplyReparseData(MakeReparseBuffer());
+        map.Add("\\j", junction);
+
+        map.Remove("\\j");
+
+        Assert.True(map.MayHaveReparsePoints);
+        Assert.False(map.TryFindReparsePrefix("\\j\\x", out _));
+    }
+
+    private static byte[] MakeReparseBuffer() => [0x03, 0x00, 0x00, 0xA0, 0x00, 0x00, 0x00, 0x00];
+
     private static FileNode MakeDir() => new()
     {
         FileInfo = { FileAttributes = (uint)FileAttributes.Directory },
