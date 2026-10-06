@@ -69,6 +69,13 @@ public static class ArchiveNodeMapWriter
                         continue;
                     }
 
+                    if (node.ReparseData is not null)
+                    {
+                        // Archive formats here carry no link entries, and writing a link as an empty
+                        // file or directory would silently turn it into something it isn't.
+                        continue;
+                    }
+
                     var modificationTime = DateTimeOffset.FromFileTime((long)node.FileInfo.LastWriteTime).UtcDateTime;
 
                     if (node.IsDirectory)

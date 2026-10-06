@@ -137,6 +137,42 @@ public sealed class ArchiveNodeMapWriterTests
         }
     }
 
+    [Fact]
+    public void WriteArchive_NodesThatAreLinks_AreLeftOut()
+    {
+        var nodeMap = BuildSourceNodeMap();
+        var now = (ulong)DateTimeOffset.UtcNow.ToFileTime();
+        var symlink = MakeFile([], now);
+        symlink.ApplyReparseData(MakeSymlinkBuffer());
+        nodeMap.Add("\\link.txt", symlink);
+        var junction = MakeDir(now);
+        junction.ApplyReparseData(MakeSymlinkBuffer());
+        nodeMap.Add("\\junction", junction);
+        var path = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid()}.zip");
+
+        try
+        {
+            ArchiveNodeMapWriter.WriteArchive(nodeMap, path, ArchiveExportFormat.Zip, ImageCompressionLevel.Fastest);
+
+            var restored = ArchiveNodeMapBuilder.BuildNodeMap(path);
+
+            Assert.False(restored.TryGet("\\link.txt", out _));
+            Assert.False(restored.TryGet("\\junction", out _));
+            Assert.True(restored.TryGet("\\Root.txt", out _));
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    private static byte[] MakeSymlinkBuffer()
+    {
+        // Header only: tag IO_REPARSE_TAG_SYMLINK, zero-length payload.
+        byte[] data = [0x0C, 0x00, 0x00, 0xA0, 0x00, 0x00, 0x00, 0x00];
+        return data;
+    }
+
     private static FileNodeMap BuildSourceNodeMap()
     {
         var nodeMap = new FileNodeMap();

@@ -101,6 +101,16 @@ public readonly record struct ImageEncryptionInfo(string Password, byte[] Cek);
 ///       </item>
 ///     </list>
 ///   </item>
+///   <item>
+///     Version 7 (current): every node record ends its metadata with an Int32 reparse-buffer length
+///     (0 for an ordinary node) followed by that many bytes of <c>REPARSE_DATA_BUFFER</c>, which is
+///     how a symbolic link or junction is stored. The header carries one extra byte after
+///     IsEncrypted selecting the node-region layout: 1 = segmented, exactly as version 6
+///     (<see cref="SaveIncremental"/>, which always writes this); 0 = one continuous region, exactly
+///     as version 5 (<see cref="Save"/>, only when the disk holds links - without any it keeps
+///     writing version 5, which older builds can read). Version 6 segments lack the reparse field,
+///     so they are never reused verbatim: the first save over a version 6 image rewrites it in full.
+///   </item>
 /// </list>
 /// </remarks>
 public static class DiskImageSerializer
@@ -151,6 +161,25 @@ public static class DiskImageSerializer
     private const int NonceSize = 12;
     private const int SaltSize = 16;
     private const int SegmentedVersion = 6;
+
+    /// <summary>
+    /// Version 7: every node record also carries the reparse buffer of a symbolic link or junction
+    /// (see <see cref="NodeMetadataIO"/>). The header holds one extra byte after IsEncrypted that
+    /// selects the node-region layout: <see cref="LayoutSegmented"/> (what
+    /// <see cref="SaveIncremental"/> writes) or <see cref="LayoutContinuous"/> (version 5's layout,
+    /// what <see cref="Save"/> writes when the disk has links).
+    /// </summary>
+    private const int ReparseVersion = 7;
+
+    /// <summary>
+    /// Version 7 layout byte for the segmented node region (the version 6 layout).
+    /// </summary>
+    private const byte LayoutSegmented = 1;
+
+    /// <summary>
+    /// Version 7 layout byte for the single continuous node region (the version 5 layout).
+    /// </summary>
+    private const byte LayoutContinuous = 0;
 
     /// <summary>
     /// Target uncompressed byte size per segment in a version 6 image, based on summed
@@ -234,7 +263,7 @@ public static class DiskImageSerializer
 
         using var reader = new BinaryReader(stream, System.Text.Encoding.UTF8, leaveOpen: false);
 
-        ReadHeader(reader, out var version, out var level, out var isEncrypted);
+        ReadHeader(reader, out var version, out var level, out var isEncrypted, out var segmented);
         cek = null;
 
         Action? reportTick = progress is null
@@ -243,7 +272,7 @@ public static class DiskImageSerializer
 
         return version <= 2
             ? LoadLegacy(stream, reader, version, level, out capacityBytes, out volumeLabel, reportTick)
-            : LoadCurrent(stream, reader, version, level, isEncrypted, password, out capacityBytes, out volumeLabel, out cek, reportTick);
+            : LoadCurrent(stream, reader, version, segmented, level, isEncrypted, password, out capacityBytes, out volumeLabel, out cek, reportTick);
     }
 
     /// <summary>
@@ -274,7 +303,7 @@ public static class DiskImageSerializer
         });
         using var reader = new BinaryReader(stream, System.Text.Encoding.UTF8, leaveOpen: false);
 
-        ReadHeader(reader, out var version, out var level, out isEncrypted);
+        ReadHeader(reader, out var version, out var level, out isEncrypted, out _);
 
         if (version <= 2)
         {
@@ -329,6 +358,10 @@ public static class DiskImageSerializer
         int? customZstdLevel = null)
     {
         var compress = level != ImageCompressionLevel.None;
+
+        // Version 5 has no field for a reparse buffer, so a disk with links is written as version 7
+        // (continuous layout) instead; a disk without any keeps version 5, which older builds read.
+        var includeReparse = nodeMap.GetAllNodes().Any(kvp => kvp.Value.ReparseData is not null);
         var directory = Path.GetDirectoryName(imagePath);
         if (!string.IsNullOrEmpty(directory))
         {
@@ -353,9 +386,14 @@ public static class DiskImageSerializer
                 using (var writer = new BinaryWriter(stream, System.Text.Encoding.UTF8, leaveOpen: true))
                 {
                     writer.Write(Magic);
-                    writer.Write(Version);
+                    writer.Write(includeReparse ? ReparseVersion : Version);
                     writer.Write((byte)level);
                     writer.Write((byte)(encryption is not null ? 1 : 0));
+                    if (includeReparse)
+                    {
+                        writer.Write(LayoutContinuous);
+                    }
+
                     writer.Write(capacityBytes);
                     writer.Write(volumeLabel);
 
@@ -377,13 +415,13 @@ public static class DiskImageSerializer
                         // Node data streams straight into chunked AES-GCM encryption below —
                         // never buffered whole, so there is no ~2 GB ceiling on disk content.
                         using var chunkedStream = new ChunkedGcm.WriteStream(stream, enc.Cek, baseNonce, ChunkedGcm.ChunkSize);
-                        WriteNodeRegion(chunkedStream, compress, level, customZstdLevel, nodeMap, progress);
+                        WriteNodeRegion(chunkedStream, compress, level, customZstdLevel, nodeMap, includeReparse, progress);
                         chunkedStream.Complete();
                     }
                     else
                     {
                         writer.Flush();
-                        WriteNodeRegion(stream, compress, level, customZstdLevel, nodeMap, progress);
+                        WriteNodeRegion(stream, compress, level, customZstdLevel, nodeMap, includeReparse, progress);
                     }
                 }
 
@@ -565,7 +603,7 @@ public static class DiskImageSerializer
         {
             foreach (var kvp in chunkNodes)
             {
-                WriteNode(plainWriter, kvp.Key, kvp.Value);
+                WriteNode(plainWriter, kvp.Key, kvp.Value, includeReparse: true);
                 onNodeWritten?.Invoke(kvp.Value);
             }
 
@@ -649,6 +687,7 @@ public static class DiskImageSerializer
     /// default (processor count).
     /// </param>
     /// <param name="maxNodeBytes">Upper bound, in bytes, on any single node's content size accepted while parsing.</param>
+    /// <param name="hasReparse">Whether the segment's node records carry the reparse field (version 7).</param>
     /// <param name="cek">Content-encryption key to decrypt the segment, or <c>null</c> if unencrypted.</param>
     /// <param name="compressed">Whether the segment is compressed.</param>
     /// <param name="payload">The raw payload bytes read from the file, either plaintext or ciphertext.</param>
@@ -659,11 +698,12 @@ public static class DiskImageSerializer
         byte[]? cek,
         bool compressed,
         int? zstdParallelism,
-        ulong maxNodeBytes)
+        ulong maxNodeBytes,
+        bool hasReparse)
     {
         if (cek is null)
         {
-            return ParseNodes(payload, segment, compressed, zstdParallelism, maxNodeBytes);
+            return ParseNodes(payload, segment, compressed, zstdParallelism, maxNodeBytes, hasReparse);
         }
 
         try
@@ -679,7 +719,7 @@ public static class DiskImageSerializer
 
         try
         {
-            return ParseNodes(payload, segment, compressed, zstdParallelism, maxNodeBytes);
+            return ParseNodes(payload, segment, compressed, zstdParallelism, maxNodeBytes, hasReparse);
         }
         finally
         {
@@ -703,6 +743,7 @@ public static class DiskImageSerializer
         bool compressed,
         bool useZstd,
         ulong maxNodeBytes,
+        bool hasReparse,
         Action? reportTick = null)
     {
         var baseNonce = ReadFixedBytes(reader, NonceSize);
@@ -710,7 +751,7 @@ public static class DiskImageSerializer
         try
         {
             using var chunkedStream = new ChunkedGcm.ReadStream(stream, cek, baseNonce);
-            return ReadNodeRegion(chunkedStream, compressed, useZstd, maxNodeBytes, reportTick);
+            return ReadNodeRegion(chunkedStream, compressed, useZstd, maxNodeBytes, hasReparse, reportTick);
         }
         catch (CryptographicException ex)
         {
@@ -732,6 +773,7 @@ public static class DiskImageSerializer
         FileStream stream,
         BinaryReader reader,
         int version,
+        bool segmented,
         ImageCompressionLevel level,
         bool isEncrypted,
         string? password,
@@ -746,19 +788,20 @@ public static class DiskImageSerializer
         var compressed = level != ImageCompressionLevel.None;
         var maxNodeBytes = MaxNodeBytesFor(capacityBytes);
 
-        if (version == SegmentedVersion)
+        if (segmented)
         {
-            return LoadSegmented(reader, compressed, isEncrypted, password, maxNodeBytes, out cek, reportTick);
+            return LoadSegmented(reader, compressed, isEncrypted, password, maxNodeBytes, version >= ReparseVersion, out cek, reportTick);
         }
 
         var useZstd = version >= 5;
+        var hasReparse = version >= ReparseVersion;
 
         if (!isEncrypted)
         {
             // The node region is the last thing in the file for an unencrypted image, so
             // decompressing straight off the file stream (rather than buffering it) is safe —
             // the decompression stream simply reads until end of file.
-            return ReadNodeRegion(stream, compressed, useZstd, maxNodeBytes, reportTick);
+            return ReadNodeRegion(stream, compressed, useZstd, maxNodeBytes, hasReparse, reportTick);
         }
 
         if (password is null)
@@ -778,7 +821,7 @@ public static class DiskImageSerializer
         return version switch
         {
             3 => LoadLegacyEncryptedBlob(stream, reader, resolvedCek, compressed, maxNodeBytes, reportTick),
-            4 or 5 => LoadChunkedEncrypted(stream, reader, resolvedCek, compressed, useZstd, maxNodeBytes, reportTick),
+            4 or 5 or ReparseVersion => LoadChunkedEncrypted(stream, reader, resolvedCek, compressed, useZstd, maxNodeBytes, hasReparse, reportTick),
             _ => throw new InvalidDataException($"Unsupported image version: {version}."),
         };
     }
@@ -800,7 +843,7 @@ public static class DiskImageSerializer
         capacityBytes = payloadReader.ReadUInt64();
         volumeLabel = payloadReader.ReadString();
 
-        return ReadNodes(payloadReader, MaxNodeBytesFor(capacityBytes), reportTick);
+        return ReadNodes(payloadReader, MaxNodeBytesFor(capacityBytes), hasReparse: false, reportTick);
     }
 
     /// <summary>
@@ -839,7 +882,7 @@ public static class DiskImageSerializer
             // already at (or near) end-of-file here — reportTick will jump close to 1.0 on the
             // first node and stay there for the rest of this legacy (version 3) path.
             using var nodeRegionStream = new MemoryStream(plaintext, writable: false);
-            return ReadNodeRegion(nodeRegionStream, compressed, useZstd: false, maxNodeBytes, reportTick);
+            return ReadNodeRegion(nodeRegionStream, compressed, useZstd: false, maxNodeBytes, hasReparse: false, reportTick);
         }
         finally
         {
@@ -864,6 +907,7 @@ public static class DiskImageSerializer
         bool isEncrypted,
         string? password,
         ulong maxNodeBytes,
+        bool hasReparse,
         out byte[]? cek,
         Action? reportTick)
     {
@@ -942,7 +986,7 @@ public static class DiskImageSerializer
                         DrainOne();
                     }
 
-                    pending.Enqueue(Task.Run(() => DecodeSegment(payload, segment, resolvedCek, compressed, zstdParallelism: null, maxNodeBytes)));
+                    pending.Enqueue(Task.Run(() => DecodeSegment(payload, segment, resolvedCek, compressed, zstdParallelism: null, maxNodeBytes, hasReparse)));
                     continue;
                 }
 
@@ -951,7 +995,7 @@ public static class DiskImageSerializer
                     DrainOne();
                 }
 
-                pending.Enqueue(Task.Run(() => DecodeSegment(payload, segment, resolvedCek, compressed, zstdParallelism: 1, maxNodeBytes)));
+                pending.Enqueue(Task.Run(() => DecodeSegment(payload, segment, resolvedCek, compressed, zstdParallelism: 1, maxNodeBytes, hasReparse)));
             }
 
             while (pending.Count > 0)
@@ -995,7 +1039,7 @@ public static class DiskImageSerializer
             : reader;
     }
 
-    private static List<(string Path, FileNode Node)> ParseNodes(byte[] payload, SegmentIndexEntry segment, bool compressed, int? zstdParallelism, ulong maxNodeBytes)
+    private static List<(string Path, FileNode Node)> ParseNodes(byte[] payload, SegmentIndexEntry segment, bool compressed, int? zstdParallelism, ulong maxNodeBytes, bool hasReparse)
     {
         using var payloadStream = new MemoryStream(payload, writable: false);
         using var nodeStream = compressed ? new ParallelZstd.ReadStream(payloadStream, zstdParallelism) : null;
@@ -1014,7 +1058,7 @@ public static class DiskImageSerializer
         var nodes = new List<(string Path, FileNode Node)>(Math.Clamp(segment.NodeCount, 0, 4096));
         for (var i = 0; i < segment.NodeCount; i++)
         {
-            nodes.Add(ReadNode(payloadReader, maxNodeBytes));
+            nodes.Add(ReadNode(payloadReader, maxNodeBytes, hasReparse));
         }
 
         var actualHash = hashingStream.DrainAndGetHash();
@@ -1031,11 +1075,24 @@ public static class DiskImageSerializer
         return nodes;
     }
 
+    /// <summary>
+    /// Reads and validates the fixed image header up to and including the version-dependent flag
+    /// bytes, leaving <paramref name="reader"/> at the capacity field.
+    /// </summary>
+    /// <param name="reader">The reader positioned at the start of the image.</param>
+    /// <param name="version">The image's format version.</param>
+    /// <param name="level">The compression level.</param>
+    /// <param name="isEncrypted">Whether the image is password-protected.</param>
+    /// <param name="segmented">
+    /// Whether the node region uses the segmented layout: always for version 6, never before it,
+    /// and chosen by the layout byte for version 7.
+    /// </param>
     private static void ReadHeader(
             BinaryReader reader,
             out int version,
             out ImageCompressionLevel level,
-            out bool isEncrypted)
+            out bool isEncrypted,
+            out bool segmented)
     {
         var magic = reader.ReadBytes(4);
         if (!magic.SequenceEqual(Magic))
@@ -1044,18 +1101,33 @@ public static class DiskImageSerializer
         }
 
         version = reader.ReadInt32();
-        if (version is not (1 or 2 or 3 or 4 or 5 or SegmentedVersion))
+        if (version is not (1 or 2 or 3 or 4 or 5 or SegmentedVersion or ReparseVersion))
         {
             throw new InvalidDataException($"Unsupported image version: {version}.");
         }
 
         level = version >= 2 ? (ImageCompressionLevel)reader.ReadByte() : ImageCompressionLevel.None;
         isEncrypted = version >= 3 && reader.ReadByte() != 0;
+
+        if (version == ReparseVersion)
+        {
+            var layout = reader.ReadByte();
+            segmented = layout switch
+            {
+                LayoutSegmented => true,
+                LayoutContinuous => false,
+                _ => throw new InvalidDataException($"Unsupported image layout: {layout}."),
+            };
+        }
+        else
+        {
+            segmented = version == SegmentedVersion;
+        }
     }
 
-    private static (string Path, FileNode Node) ReadNode(BinaryReader reader, ulong maxNodeBytes)
+    private static (string Path, FileNode Node) ReadNode(BinaryReader reader, ulong maxNodeBytes, bool hasReparse = false)
     {
-        var metadata = NodeMetadataIO.ReadMetadata(reader);
+        var metadata = NodeMetadataIO.ReadMetadata(reader, hasReparse);
         var path = metadata.Path;
 
         var node = new FileNode
@@ -1063,6 +1135,19 @@ public static class DiskImageSerializer
             FileInfo = metadata.FileInfo,
             FileSecurity = metadata.Security,
         };
+
+        // Also repairs the attribute bit and tag, which are derived from the buffer; a stored
+        // reparse bit with no buffer (an image from before links were supported) is cleared. The
+        // root is never a link (SetReparsePoint refuses it), so a root that claims to be one comes
+        // from a damaged image: it is loaded as a plain directory rather than breaking the drive.
+        var reparseData = metadata.ReparseData;
+        if (path == "\\" && reparseData is not null)
+        {
+            Logger.LogWarning("Ignoring reparse data on the root directory of the image.");
+            reparseData = null;
+        }
+
+        node.ApplyReparseData(reparseData);
 
         var dataLen = reader.ReadInt64();
 
@@ -1121,7 +1206,7 @@ public static class DiskImageSerializer
     /// <paramref name="useZstd"/> is set (version 5, current), otherwise via gzip (versions 1-4,
     /// read-only). Mirrors <see cref="WriteNodeRegion"/>.
     /// </summary>
-    private static FileNodeMap ReadNodeRegion(Stream source, bool compressed, bool useZstd, ulong maxNodeBytes, Action? reportTick = null)
+    private static FileNodeMap ReadNodeRegion(Stream source, bool compressed, bool useZstd, ulong maxNodeBytes, bool hasReparse, Action? reportTick = null)
     {
         // leaveOpen is false for the compressed branches so disposing payloadReader disposes the
         // locally-constructed decompressing wrapper too — it owns no other references, and
@@ -1133,10 +1218,10 @@ public static class DiskImageSerializer
                 : new BinaryReader(new GZipStream(source, CompressionMode.Decompress, leaveOpen: true), System.Text.Encoding.UTF8, leaveOpen: false)
             : new BinaryReader(source, System.Text.Encoding.UTF8, leaveOpen: true);
 
-        return ReadNodes(payloadReader, maxNodeBytes, reportTick);
+        return ReadNodes(payloadReader, maxNodeBytes, hasReparse, reportTick);
     }
 
-    private static FileNodeMap ReadNodes(BinaryReader payloadReader, ulong maxNodeBytes, Action? reportTick = null)
+    private static FileNodeMap ReadNodes(BinaryReader payloadReader, ulong maxNodeBytes, bool hasReparse, Action? reportTick = null)
     {
         var nodeMap = new FileNodeMap();
         var count = payloadReader.ReadInt32();
@@ -1150,7 +1235,7 @@ public static class DiskImageSerializer
 
         for (var i = 0; i < count; i++)
         {
-            var (path, node) = ReadNode(payloadReader, maxNodeBytes);
+            var (path, node) = ReadNode(payloadReader, maxNodeBytes, hasReparse);
             nodeMap.Add(path, node);
             reportTick?.Invoke();
         }
@@ -1359,9 +1444,10 @@ public static class DiskImageSerializer
             using (var writer = new BinaryWriter(stream, System.Text.Encoding.UTF8, leaveOpen: true))
             {
                 writer.Write(Magic);
-                writer.Write(SegmentedVersion);
+                writer.Write(ReparseVersion);
                 writer.Write((byte)level);
                 writer.Write((byte)(encryption is not null ? 1 : 0));
+                writer.Write(LayoutSegmented);
                 writer.Write(capacityBytes);
                 writer.Write(volumeLabel);
 
@@ -1700,9 +1786,10 @@ public static class DiskImageSerializer
                 using (var writer = new BinaryWriter(stream, System.Text.Encoding.UTF8, leaveOpen: true))
                 {
                     writer.Write(Magic);
-                    writer.Write(SegmentedVersion);
+                    writer.Write(ReparseVersion);
                     writer.Write((byte)level);
                     writer.Write((byte)(encryption is not null ? 1 : 0));
+                    writer.Write(LayoutSegmented);
                     writer.Write(capacityBytes);
                     writer.Write(volumeLabel);
 
@@ -1886,7 +1973,7 @@ public static class DiskImageSerializer
             }
 
             var version = candidateReader.ReadInt32();
-            if (version != SegmentedVersion)
+            if (version != ReparseVersion)
             {
                 candidateStream.Dispose();
                 return false;
@@ -1894,7 +1981,7 @@ public static class DiskImageSerializer
 
             var oldLevel = (ImageCompressionLevel)candidateReader.ReadByte();
             var oldIsEncrypted = candidateReader.ReadByte() != 0;
-            if (oldLevel != level || oldIsEncrypted != isEncrypted)
+            if (oldLevel != level || oldIsEncrypted != isEncrypted || candidateReader.ReadByte() != LayoutSegmented)
             {
                 candidateStream.Dispose();
                 return false;
@@ -2076,7 +2163,7 @@ public static class DiskImageSerializer
         }
     }
 
-    private static void WriteNode(BinaryWriter writer, string path, FileNode node)
+    private static void WriteNode(BinaryWriter writer, string path, FileNode node, bool includeReparse)
     {
         // The disk stays mounted while it's saved, so capture the node's metadata and content
         // reference once (Overwrite can swap FileData, a write can resize it) and record sizes
@@ -2093,7 +2180,7 @@ public static class DiskImageSerializer
             info.AllocationSize = Math.Max(info.AllocationSize, FileNode.AlignToAllocationUnit(length));
         }
 
-        NodeMetadataIO.WriteMetadata(writer, path, info, node.FileSecurity);
+        NodeMetadataIO.WriteMetadata(writer, path, info, node.FileSecurity, includeReparse, node.ReparseData);
         writer.Write((long)length);
 
         if (length > 0)
@@ -2119,6 +2206,7 @@ public static class DiskImageSerializer
         ImageCompressionLevel level,
         int? customZstdLevel,
         FileNodeMap nodeMap,
+        bool includeReparse,
         IProgress<double>? progress)
     {
         var payloadStream = compress
@@ -2130,7 +2218,20 @@ public static class DiskImageSerializer
         {
             using var payloadWriter = new BinaryWriter(payloadStream, System.Text.Encoding.UTF8, leaveOpen: true);
 
-            var nodes = nodeMap.GetAllNodes();
+            // The caller checked beforehand whether the disk has links and so whether this writes
+            // version 7 records. A link created after that check (the disk stays mounted while it
+            // saves) can't be stored in a version 5 record and is left out rather than written as a
+            // broken plain file; the next save sees it and writes version 7.
+            var allNodes = nodeMap.GetAllNodes();
+            var nodes = includeReparse ? allNodes : allNodes.Where(kvp => kvp.Value.ReparseData is null).ToList();
+            if (nodes.Count != allNodes.Count)
+            {
+                Logger.LogWarning(
+                    "Skipped {Count} symbolic link(s)/junction(s) created while a version {Version} image was being written.",
+                    allNodes.Count - nodes.Count,
+                    Version);
+            }
+
             payloadWriter.Write(nodes.Count);
 
             var totalBytes = nodeMap.GetTotalAllocated();
@@ -2142,7 +2243,7 @@ public static class DiskImageSerializer
                 var written = 0;
                 foreach (var kvp in nodes)
                 {
-                    WriteNode(payloadWriter, kvp.Key, kvp.Value);
+                    WriteNode(payloadWriter, kvp.Key, kvp.Value, includeReparse);
                     written++;
                     progress?.Report(nodes.Count == 0 ? 1.0 : (double)written / nodes.Count);
                 }
@@ -2157,7 +2258,7 @@ public static class DiskImageSerializer
                 ulong writtenBytes = 0;
                 foreach (var kvp in nodes)
                 {
-                    WriteNode(payloadWriter, kvp.Key, kvp.Value);
+                    WriteNode(payloadWriter, kvp.Key, kvp.Value, includeReparse);
                     writtenBytes += kvp.Value.FileInfo.AllocationSize;
                     progress?.Report((double)writtenBytes / totalBytes);
                 }
