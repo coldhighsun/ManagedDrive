@@ -568,10 +568,10 @@ public sealed class DiskImageSerializerV6Tests
 
     /// <summary>
     /// Offset of the segment count in an unencrypted image saved by
-    /// <see cref="SaveSingleSegmentImage"/>: magic, version, level and encryption flag, capacity,
-    /// then the one-byte-length-prefixed label.
+    /// <see cref="SaveSingleSegmentImage"/>: magic, version, level and encryption flag, the layout
+    /// byte, capacity, then the one-byte-length-prefixed label.
     /// </summary>
-    private const int SegmentCountOffset = 4 + sizeof(int) + 1 + 1 + sizeof(ulong) + 1 + 5;
+    private const int SegmentCountOffset = 4 + sizeof(int) + 1 + 1 + 1 + sizeof(ulong) + 1 + 5;
 
     /// <summary>
     /// Saves an unencrypted, uncompressed version 6 image labelled "Label" holding a root and one

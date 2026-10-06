@@ -13,6 +13,11 @@ namespace ManagedDrive.Core.Snapshots;
 /// </summary>
 internal static class SnapshotStore
 {
+    /// <summary>
+    /// Logger for recoverable anomalies found in a snapshot while loading it.
+    /// </summary>
+    private static readonly ILogger Logger = AppLog.CreateLogger(typeof(SnapshotStore));
+
     private const int BlobFlagCompressed = 0b001;
     private const int BlobFlagEncrypted = 0b010;
 
@@ -34,7 +39,16 @@ internal static class SnapshotStore
 
     private const int BlobNonceSize = 12;
     private const int BlobTagSize = 16;
-    private const int Version = 1;
+    /// <summary>
+    /// The snapshot index version written by this build. Version 2 appends each node's reparse
+    /// buffer (symbolic link or junction) to its metadata record; version 1 indexes stay readable.
+    /// </summary>
+    private const int Version = 2;
+
+    /// <summary>
+    /// The first snapshot index version whose node records carry the reparse field.
+    /// </summary>
+    private const int ReparseVersion = 2;
     private static readonly byte[] Magic = "MDRS"u8.ToArray();
 
     /// <summary>
@@ -101,7 +115,7 @@ internal static class SnapshotStore
         using var stream = new FileStream(indexPath, FileMode.Open, FileAccess.Read);
         using var reader = new BinaryReader(stream, System.Text.Encoding.UTF8, leaveOpen: false);
 
-        ReadHeader(reader);
+        var hasReparse = ReadHeader(reader) >= ReparseVersion;
 
         capacityBytes = reader.ReadUInt64();
         volumeLabel = reader.ReadString();
@@ -119,7 +133,7 @@ internal static class SnapshotStore
 
         for (var i = 0; i < count; i++)
         {
-            var (path, header) = ReadNodeHeader(reader);
+            var (path, header) = ReadNodeHeader(reader, hasReparse);
 
             // Sizes come from the file and size the content's chunk table before any data is read.
             if (header.AllocationSize > maxNodeBytes || header.FileSize > maxNodeBytes)
@@ -133,6 +147,17 @@ internal static class SnapshotStore
                 FileInfo = header.ToFileInfo(),
                 FileSecurity = header.Security,
             };
+
+            // The root is never a link; one that claims to be comes from a damaged snapshot and is
+            // restored as a plain directory so it can't break the drive.
+            var reparseData = header.ReparseData;
+            if (path == "\\" && reparseData is not null)
+            {
+                Logger.LogWarning("Ignoring reparse data on the root directory of a snapshot.");
+                reparseData = null;
+            }
+
+            node.ApplyReparseData(reparseData);
 
             if (!node.IsDirectory)
             {
@@ -163,7 +188,7 @@ internal static class SnapshotStore
         using var stream = new FileStream(indexPath, FileMode.Open, FileAccess.Read);
         using var reader = new BinaryReader(stream, System.Text.Encoding.UTF8, leaveOpen: false);
 
-        ReadHeader(reader);
+        var hasReparse = ReadHeader(reader) >= ReparseVersion;
 
         _ = reader.ReadUInt64(); // capacityBytes
         _ = reader.ReadString(); // volumeLabel
@@ -180,7 +205,7 @@ internal static class SnapshotStore
 
         for (var i = 0; i < count; i++)
         {
-            var (path, header) = ReadNodeHeader(reader);
+            var (path, header) = ReadNodeHeader(reader, hasReparse);
             var isDirectory = (header.FileAttributes & (uint)FileAttributes.Directory) != 0;
 
             byte[]? hash = null;
@@ -632,7 +657,12 @@ internal static class SnapshotStore
         return content;
     }
 
-    private static void ReadHeader(BinaryReader reader)
+    /// <summary>
+    /// Validates the snapshot index header and returns its version.
+    /// </summary>
+    /// <param name="reader">The reader positioned at the start of the index.</param>
+    /// <returns>The index's version, which is 1 or <see cref="Version"/>.</returns>
+    private static int ReadHeader(BinaryReader reader)
     {
         var magic = reader.ReadBytes(4);
         if (!magic.SequenceEqual(Magic))
@@ -641,12 +671,13 @@ internal static class SnapshotStore
         }
 
         var version = reader.ReadInt32();
-        if (version != Version)
+        if (version is not (1 or Version))
         {
             throw new InvalidDataException($"Unsupported snapshot version: {version}.");
         }
 
         _ = reader.ReadByte(); // reserved
+        return version;
     }
 
     private readonly record struct NodeHeader(
@@ -659,7 +690,8 @@ internal static class SnapshotStore
         ulong ChangeTime,
         ulong IndexNumber,
         uint HardLinks,
-        byte[]? Security)
+        byte[]? Security,
+        byte[]? ReparseData)
     {
         public Fsp.Interop.FileInfo ToFileInfo() => new()
         {
@@ -675,9 +707,9 @@ internal static class SnapshotStore
         };
     }
 
-    private static (string Path, NodeHeader Header) ReadNodeHeader(BinaryReader reader)
+    private static (string Path, NodeHeader Header) ReadNodeHeader(BinaryReader reader, bool hasReparse)
     {
-        var metadata = NodeMetadataIO.ReadMetadata(reader);
+        var metadata = NodeMetadataIO.ReadMetadata(reader, hasReparse);
         var fileInfo = metadata.FileInfo;
 
         var header = new NodeHeader(
@@ -690,7 +722,8 @@ internal static class SnapshotStore
             ChangeTime: fileInfo.ChangeTime,
             IndexNumber: fileInfo.IndexNumber,
             HardLinks: fileInfo.HardLinks,
-            Security: metadata.Security);
+            Security: metadata.Security,
+            ReparseData: metadata.ReparseData);
 
         return (metadata.Path, header);
     }
@@ -706,7 +739,7 @@ internal static class SnapshotStore
 
         if (node.IsDirectory)
         {
-            NodeMetadataIO.WriteMetadata(writer, path, info, security);
+            NodeMetadataIO.WriteMetadata(writer, path, info, security, includeReparse: true, node.ReparseData);
             return;
         }
 
@@ -714,7 +747,7 @@ internal static class SnapshotStore
         var length = data is null ? 0L : (long)Math.Min(info.FileSize, (ulong)data.Length);
         info.FileSize = (ulong)length;
         info.AllocationSize = Math.Max(info.AllocationSize, FileNode.AlignToAllocationUnit((ulong)length));
-        NodeMetadataIO.WriteMetadata(writer, path, info, security);
+        NodeMetadataIO.WriteMetadata(writer, path, info, security, includeReparse: true, node.ReparseData);
 
         if (length == 0)
         {

@@ -446,8 +446,9 @@ public sealed class DiskImageSerializerIncrementalTests
 
             // Every save re-wraps the CEK under a fresh salt and nonce, so for an encrypted image
             // compare from the segment index onward: magic(4) version(4) level(1) encrypted(1)
-            // capacity(8) label(1 + 5), then salt(16) iterations(4) nonce(12) tag(16) wrapped CEK(32).
-            var skip = encrypted ? 24 + 80 : 0;
+            // layout(1) capacity(8) label(1 + 5), then salt(16) iterations(4) nonce(12) tag(16)
+            // wrapped CEK(32).
+            var skip = encrypted ? 25 + 80 : 0;
             Assert.Equal(saved.Length, resaved.Length);
             Assert.Equal(saved.AsSpan(skip).ToArray(), resaved.AsSpan(skip).ToArray());
         }
@@ -559,8 +560,8 @@ public sealed class DiskImageSerializerIncrementalTests
             DiskImageSerializer.SaveSegmentedIncrementalForTest(map, 1024 * 1024, "Label", path,
                 ImageCompressionLevel.None, encryption: null, segmentTargetBytes: 1);
 
-            // Magic, version, level, encryption flag, capacity, then "Label" with its length byte.
-            const int segmentCountOffset = 4 + sizeof(int) + 1 + 1 + sizeof(ulong) + 1 + 5;
+            // Magic, version, level, encryption flag, layout byte, capacity, then "Label" with its length byte.
+            const int segmentCountOffset = 4 + sizeof(int) + 1 + 1 + 1 + sizeof(ulong) + 1 + 5;
             var bytes = File.ReadAllBytes(path);
             Assert.True(BitConverter.ToInt32(bytes, segmentCountOffset) > 0);
             BitConverter.TryWriteBytes(bytes.AsSpan(segmentCountOffset), int.MaxValue);
