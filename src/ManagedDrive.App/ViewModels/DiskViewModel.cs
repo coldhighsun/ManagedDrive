@@ -26,9 +26,10 @@ public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
     /// <summary>
     /// Throttle window for <see cref="ActivityObserved"/>: the first access in a burst is
     /// reported immediately, subsequent accesses within this window are coalesced into a single
-    /// trailing report when it elapses.
+    /// trailing report when it elapses. Half a second keeps the file name in the status bar
+    /// readable during a bulk copy (at most two changes a second); 300 ms flickered past too fast.
     /// </summary>
-    private static readonly TimeSpan ActivityThrottleWindow = TimeSpan.FromMilliseconds(300);
+    private static readonly TimeSpan ActivityThrottleWindow = TimeSpan.FromMilliseconds(500);
 
     private readonly DispatcherTimer _activityThrottleTimer;
     private readonly double[] _readSpeedHistory = new double[SpeedHistoryLength];
@@ -44,6 +45,12 @@ public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
     private int _pendingRead;
     private int _pendingWrite;
     private double _readBytesPerSecond;
+
+    /// <summary>
+    /// Non-zero from a failed save until the next successful one, so <see cref="SaveRecovered"/> is
+    /// raised only for a recovery and not after every routine auto-save.
+    /// </summary>
+    private int _saveFailedPending;
     private int _speedHistoryHead;
     private ulong _usedBytes;
     private double _writeBytesPerSecond;
@@ -78,6 +85,8 @@ public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
         _activityThrottleTimer.Tick += OnActivityThrottleTick;
 
         Disk.SaveFailed += OnDiskSaveFailed;
+        Disk.ImageSaved += OnDiskImageSaved;
+        Disk.WriteRejected += OnDiskWriteRejected;
     }
 
     /// <summary>
@@ -114,6 +123,19 @@ public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
     /// originate from a background auto-save timer thread.
     /// </summary>
     public event EventHandler<Exception>? SaveFailed;
+
+    /// <summary>
+    /// Occurs when an image save succeeds after the previous one failed, i.e. the problem
+    /// reported through <see cref="SaveFailed"/> is gone. Raised on the UI dispatcher thread.
+    /// </summary>
+    public event EventHandler? SaveRecovered;
+
+    /// <summary>
+    /// Occurs when a write to this disk is refused because the volume is full or the low-memory
+    /// guard denied it. Limited by the file system to one event per second per reason; always
+    /// raised on the UI dispatcher thread.
+    /// </summary>
+    public event EventHandler<WriteRejectionReason>? WriteRejected;
 
     /// <summary>
     /// Occurs when a user-initiated image save or snapshot ("Save Image" / "Create Snapshot Now",
@@ -380,6 +402,8 @@ public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
         _activityThrottleTimer.Tick -= OnActivityThrottleTick;
         SetActivityTrackingEnabled(false);
         Disk.SaveFailed -= OnDiskSaveFailed;
+        Disk.ImageSaved -= OnDiskImageSaved;
+        Disk.WriteRejected -= OnDiskWriteRejected;
         _readThroughput.Reset();
         _writeThroughput.Reset();
     }
@@ -588,8 +612,31 @@ public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
     /// takes that lock for Format/SetPassword/TryApplyOptions/clone/restore — blocking here until
     /// the UI thread is free would deadlock both threads whenever one of those is in flight.
     /// </summary>
-    private void OnDiskSaveFailed(object? sender, Exception ex) =>
+    private void OnDiskSaveFailed(object? sender, Exception ex)
+    {
+        Interlocked.Exchange(ref _saveFailedPending, 1);
         Application.Current?.Dispatcher.InvokeAsync(() => SaveFailed?.Invoke(this, ex));
+    }
+
+    /// <summary>
+    /// Handler for <see cref="RamDisk.ImageSaved"/>. Raised while the disk's save lock is held, so
+    /// it only posts <see cref="SaveRecovered"/> to the UI thread and never touches the disk.
+    /// </summary>
+    private void OnDiskImageSaved(object? sender, EventArgs e)
+    {
+        if (Interlocked.Exchange(ref _saveFailedPending, 0) != 0)
+        {
+            Application.Current?.Dispatcher.InvokeAsync(() => SaveRecovered?.Invoke(this, EventArgs.Empty));
+        }
+    }
+
+    /// <summary>
+    /// Handler for <see cref="RamDisk.WriteRejected"/>, which fires on a WinFsp driver thread, so
+    /// it is re-raised as <see cref="WriteRejected"/> on the UI thread.
+    /// </summary>
+    /// <param name="reason">Why the write was refused.</param>
+    private void OnDiskWriteRejected(WriteRejectionReason reason) =>
+        Application.Current?.Dispatcher.InvokeAsync(() => WriteRejected?.Invoke(this, reason));
 
     private void OnPropertyChanged(string propertyName) =>
         PropertyChanged?.Invoke(this, new(propertyName));

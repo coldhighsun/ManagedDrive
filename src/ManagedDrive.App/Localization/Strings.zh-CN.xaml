@@ -327,6 +327,14 @@
     <sys:String x:Key="Tray.HighUsageBody">{0}（{1}）已使用 {2:F0}%。</sys:String>
     <sys:String x:Key="Tray.SaveFailedTitle">保存失败</sys:String>
     <sys:String x:Key="Tray.SaveFailedBody">{0}（{1}）：{2}</sys:String>
+    <sys:String x:Key="Tray.SaveRecoveredTitle">保存已恢复正常</sys:String>
+    <sys:String x:Key="Tray.SaveRecoveredBody">{0}（{1}）在之前失败后已成功保存。</sys:String>
+    <sys:String x:Key="Tray.WriteRejectedFullTitle">RAM 磁盘已满</sys:String>
+    <sys:String x:Key="Tray.WriteRejectedFullBody">写入 {0}（{1}）失败：磁盘已满。</sys:String>
+    <sys:String x:Key="Tray.WriteRejectedMemoryTitle">写入被拒绝：内存不足</sys:String>
+    <sys:String x:Key="Tray.WriteRejectedMemoryBody">写入 {0}（{1}）被拒绝：系统可用内存已接近耗尽。</sys:String>
+    <sys:String x:Key="Tray.LowMemoryTitle">系统内存偏低</sys:String>
+    <sys:String x:Key="Tray.LowMemoryBody">可用内存只剩 {0}，用尽后 RAM 磁盘将拒绝写入。</sys:String>
     <sys:String x:Key="Tray.SaveCompletedTitle">保存完成</sys:String>
     <sys:String x:Key="Tray.SaveCompletedBody">{0}（{1}）镜像已保存。</sys:String>
     <sys:String x:Key="Tray.CapacityAdjustedTitle">容量已自动调整</sys:String>
@@ -346,6 +354,9 @@
     <sys:String x:Key="Status.PasswordSet">已为 {0} 设置密码。</sys:String>
     <sys:String x:Key="Status.PasswordRemoved">已移除 {0} 的密码。</sys:String>
     <sys:String x:Key="Status.SaveFailed">{0} 保存失败：{1}</sys:String>
+    <sys:String x:Key="Status.WriteRejectedFull">写入 {0} 失败：磁盘已满</sys:String>
+    <sys:String x:Key="Status.WriteRejectedMemory">写入 {0} 被拒绝：系统内存不足</sys:String>
+    <sys:String x:Key="Status.LowMemory">系统内存偏低：仅剩 {0} 可用</sys:String>
     <sys:String x:Key="Status.CapacityAdjusted">{0}：容量已从 {1} MB 自动提升到 {2} MB，以容纳已加载的镜像</sys:String>
     <sys:String x:Key="Status.Unmounted">已卸载 {0}</sys:String>
     <sys:String x:Key="Status.DiskNoLongerMounted">{0} 已不再挂载</sys:String>

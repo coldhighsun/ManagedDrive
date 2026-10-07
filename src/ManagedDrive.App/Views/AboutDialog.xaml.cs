@@ -8,7 +8,7 @@ namespace ManagedDrive.App.Views;
 public partial class AboutDialog
 {
     private const string GitHubUrl = "https://github.com/coldhighsun/ManagedDrive";
-    private const string ThirdPartyNoticesUrl = "https://github.com/coldhighsun/ManagedDrive/blob/main/THIRD-PARTY-NOTICES.md";
+    private const string ThirdPartyNoticesUrl = "https://github.com/coldhighsun/ManagedDrive/blob/main/docs/THIRD-PARTY-NOTICES.md";
     private readonly UpdateCheckService? _updateCheckService;
     private UpdateInfo? _updateInfo;
 
