@@ -173,7 +173,7 @@ public sealed class MemoryFileSystem : FileSystemBase
 
         var node = (FileNode)fileNode;
 
-        if (node.IsDirectory && NodeMap.HasChildren(fileName))
+        if (node.IsDirectory && NodeMap.HasChildren(AlternateStreamName.KeyOrSelf(fileName)))
         {
             return STATUS_DIRECTORY_NOT_EMPTY;
         }
@@ -201,7 +201,7 @@ public sealed class MemoryFileSystem : FileSystemBase
             // Only this handle's own node: after a format or restore swapped it out, another node
             // may now live at the same path, and it must not be deleted in its place. A directory
             // that gained a child since CanDelete approved it is kept rather than orphaning it.
-            NodeMap.TryDelete(fileName, node);
+            NodeMap.TryDelete(AlternateStreamName.KeyOrSelf(fileName), node);
             MarkDirty();
         }
 
@@ -279,7 +279,20 @@ public sealed class MemoryFileSystem : FileSystemBase
             return STATUS_MEDIA_WRITE_PROTECTED;
         }
 
-        if (NodeMap.TryGet(fileName, out _))
+        if (!AlternateStreamName.TryNormalize(fileName, out var key))
+        {
+            return STATUS_OBJECT_NAME_INVALID;
+        }
+
+        var isStream = AlternateStreamName.IsStreamKey(key);
+        if (isStream && ((createOptions & FILE_DIRECTORY_FILE) != 0 ||
+            (fileAttributes & (uint)FileAttributes.Directory) != 0))
+        {
+            // A stream holds data; it can't be a directory.
+            return STATUS_OBJECT_NAME_INVALID;
+        }
+
+        if (NodeMap.TryGet(key, out _))
         {
             return STATUS_OBJECT_NAME_COLLISION;
         }
@@ -294,24 +307,7 @@ public sealed class MemoryFileSystem : FileSystemBase
         var aligned = FileNode.AlignToAllocationUnit(allocationSize);
 
         var now = FileTimeNow();
-        var node = new FileNode
-        {
-            FileSecurity = securityDescriptor is { Length: > 0 }
-                ? securityDescriptor
-                : FileNode.DefaultSecurityDescriptorBytes,
-            FileInfo =
-            {
-                // A reparse point is only ever made by SetReparsePoint, never by create attributes.
-                FileAttributes = fileAttributes & ~(uint)FileAttributes.ReparsePoint,
-                AllocationSize = aligned,
-                FileSize       = 0,
-                CreationTime   = now,
-                LastAccessTime = now,
-                LastWriteTime  = now,
-                ChangeTime     = now,
-                IndexNumber    = FileNode.NewIndexNumber(),
-            },
-        };
+        var node = NewNode(securityDescriptor, fileAttributes, aligned, now);
 
         if (aligned > 0 && !node.IsDirectory)
         {
@@ -332,22 +328,106 @@ public sealed class MemoryFileSystem : FileSystemBase
         // happen under one NodeMap write-lock acquisition (see TryCreate): a concurrent create of
         // the same name can't be replaced, a node can't land under a directory being deleted, and
         // two concurrent creates can't both pass a stale capacity check.
-        switch (NodeMap.TryCreate(fileName, node, MaxCapacityProvider))
+        FileNode? createdOwner = null;
+        if (isStream)
         {
-            case FileNodeMap.CreateResult.NameCollision:
-                return STATUS_OBJECT_NAME_COLLISION;
-            case FileNodeMap.CreateResult.ParentNotFound:
-                return STATUS_OBJECT_PATH_NOT_FOUND;
-            case FileNodeMap.CreateResult.ParentNotDirectory:
-                return STATUS_NOT_A_DIRECTORY;
-            case FileNodeMap.CreateResult.CapacityExceeded:
-                return STATUS_DISK_FULL;
+            var ownerStatus = EnsureStreamOwner(
+                AlternateStreamName.OwnerOf(key), securityDescriptor, now, out createdOwner);
+            if (ownerStatus != STATUS_SUCCESS)
+            {
+                return ownerStatus;
+            }
+        }
+
+        var created = NodeMap.TryCreate(key, node, MaxCapacityProvider);
+        if (created != FileNodeMap.CreateResult.Created)
+        {
+            if (createdOwner is not null)
+            {
+                // The stream couldn't be created (e.g. the disk is full); don't leave behind the
+                // empty file made only to hold it, unless someone has started using it since.
+                NodeMap.TryDeleteIfUnused(AlternateStreamName.OwnerOf(key), createdOwner);
+            }
+
+            return created switch
+            {
+                // The file the stream belongs to was deleted between the step above and now.
+                FileNodeMap.CreateResult.OwnerNotFound => STATUS_OBJECT_NAME_NOT_FOUND,
+                FileNodeMap.CreateResult.NameCollision => STATUS_OBJECT_NAME_COLLISION,
+                FileNodeMap.CreateResult.ParentNotFound => STATUS_OBJECT_PATH_NOT_FOUND,
+                FileNodeMap.CreateResult.ParentNotDirectory => STATUS_NOT_A_DIRECTORY,
+                _ => STATUS_DISK_FULL,
+            };
         }
 
         MarkDirty();
         fileNode = node;
         fileInfo = node.FileInfo;
         return STATUS_SUCCESS;
+    }
+
+    /// <summary>
+    /// Builds a new, empty node with the given attributes and allocation size.
+    /// </summary>
+    /// <param name="securityDescriptor">The descriptor to store, or <c>null</c>/empty for the default.</param>
+    /// <param name="fileAttributes">Attributes requested by the create call.</param>
+    /// <param name="allocationSize">The (already aligned) allocation size.</param>
+    /// <param name="now">The creation time to stamp, as a FILETIME.</param>
+    private static FileNode NewNode(byte[]? securityDescriptor, uint fileAttributes, ulong allocationSize, ulong now) => new()
+    {
+        FileSecurity = securityDescriptor is { Length: > 0 }
+            ? securityDescriptor
+            : FileNode.DefaultSecurityDescriptorBytes,
+        FileInfo =
+        {
+            // A reparse point is only ever made by SetReparsePoint, never by create attributes.
+            FileAttributes = fileAttributes & ~(uint)FileAttributes.ReparsePoint,
+            AllocationSize = allocationSize,
+            FileSize       = 0,
+            CreationTime   = now,
+            LastAccessTime = now,
+            LastWriteTime  = now,
+            ChangeTime     = now,
+            IndexNumber    = FileNode.NewIndexNumber(),
+        },
+    };
+
+    /// <summary>
+    /// Creates the empty file a new stream belongs to when it doesn't exist yet: like NTFS,
+    /// creating <c>file:stream</c> also creates <c>file</c>. Losing a race with another create of
+    /// the same file is fine, since it exists either way.
+    /// </summary>
+    /// <param name="ownerPath">Absolute path of the file the stream belongs to.</param>
+    /// <param name="securityDescriptor">The descriptor WinFsp computed for the create.</param>
+    /// <param name="now">The creation time to stamp, as a FILETIME.</param>
+    /// <param name="createdOwner">The file this call created, or <c>null</c> if it already existed.</param>
+    /// <returns>
+    /// STATUS_SUCCESS, or the status to fail the stream's create with (the file's parent directory
+    /// is missing or not a directory).
+    /// </returns>
+    private int EnsureStreamOwner(string ownerPath, byte[]? securityDescriptor, ulong now, out FileNode? createdOwner)
+    {
+        createdOwner = null;
+        if (NodeMap.TryGet(ownerPath, out _))
+        {
+            return STATUS_SUCCESS;
+        }
+
+        var owner = NewNode(securityDescriptor, (uint)FileAttributes.Archive, 0, now);
+        switch (NodeMap.TryCreate(ownerPath, owner, MaxCapacityProvider))
+        {
+            case FileNodeMap.CreateResult.Created:
+                createdOwner = owner;
+                return STATUS_SUCCESS;
+            case FileNodeMap.CreateResult.ParentNotFound:
+                return STATUS_OBJECT_PATH_NOT_FOUND;
+            case FileNodeMap.CreateResult.ParentNotDirectory:
+                return STATUS_NOT_A_DIRECTORY;
+            default:
+                // Lost a race with another create of the same file (it exists either way) or
+                // the volume is full, which the stream's own create reports.
+                return STATUS_SUCCESS;
+        }
     }
 
     /// <summary>
@@ -382,7 +462,8 @@ public sealed class MemoryFileSystem : FileSystemBase
             ? (dir.FilePath + fileName)
             : (dir.FilePath + "\\" + fileName);
 
-        if (!NodeMap.TryGet(childPath, out var child) || child == null)
+        // A stream is not an entry of the directory, so a name with a colon never matches one.
+        if (!NodeMap.TryGet(childPath, out var child) || child == null || child.IsStream)
         {
             normalizedName = fileName;
             fileInfo = default;
@@ -419,7 +500,7 @@ public sealed class MemoryFileSystem : FileSystemBase
         ref byte[] securityDescriptor)
     {
         var node = (FileNode)fileNode;
-        securityDescriptor = EffectiveSecurity(node);
+        securityDescriptor = SecurityOf(node);
         return STATUS_SUCCESS;
     }
 
@@ -437,6 +518,12 @@ public sealed class MemoryFileSystem : FileSystemBase
         out uint fileAttributes,
         ref byte[] securityDescriptor)
     {
+        if (!AlternateStreamName.TryNormalize(fileName, out fileName))
+        {
+            fileAttributes = 0;
+            return STATUS_OBJECT_NAME_INVALID;
+        }
+
         var lookup = NodeMap.TryGetForLookup(fileName, out var node);
         if (LookupFailureStatus(lookup) is int failureStatus)
         {
@@ -457,7 +544,7 @@ public sealed class MemoryFileSystem : FileSystemBase
 
         if (securityDescriptor != null)
         {
-            securityDescriptor = EffectiveSecurity(node);
+            securityDescriptor = SecurityOf(node);
         }
 
         return STATUS_SUCCESS;
@@ -537,6 +624,12 @@ public sealed class MemoryFileSystem : FileSystemBase
         }
 
         var node = (FileNode)fileNode;
+        if (node.IsStream)
+        {
+            // Only a file or directory can be a link, not one of its streams.
+            return STATUS_INVALID_PARAMETER;
+        }
+
         if (node.ReparseData is { } current)
         {
             var replaceable = ReparsePointData.CheckReplaceable(current, reparseData);
@@ -666,10 +759,15 @@ public sealed class MemoryFileSystem : FileSystemBase
         fileInfo = default;
         normalizedName = fileName;
 
-        var lookup = NodeMap.TryGetForLookup(fileName, out var node);
+        if (!AlternateStreamName.TryNormalize(fileName, out var key))
+        {
+            return STATUS_OBJECT_NAME_INVALID;
+        }
+
+        var lookup = NodeMap.TryGetForLookup(key, out var node);
         if (LookupFailureStatus(lookup) is int failureStatus)
         {
-            return NodeMap.TryFindReparsePrefix(fileName, out _) ? STATUS_REPARSE : failureStatus;
+            return NodeMap.TryFindReparsePrefix(key, out _) ? STATUS_REPARSE : failureStatus;
         }
 
         fileNode = node;
@@ -816,6 +914,89 @@ public sealed class MemoryFileSystem : FileSystemBase
     }
 
     /// <summary>
+    /// Returns the next stream of the file or directory behind an open handle during a
+    /// <c>FileStreamInformation</c> query: first the unnamed data stream (files only; a directory
+    /// has none, as on NTFS), then every named stream, ordered by name. A handle to a stream
+    /// reports the streams of its file.
+    /// </summary>
+    /// <returns>
+    /// <c>true</c> if an entry was written to the out parameters; <c>false</c> when the
+    /// enumeration is complete.
+    /// </returns>
+    public override bool GetStreamEntry(
+        object fileNode,
+        object fileDesc,
+        ref object? context,
+        out string? streamName,
+        out ulong streamSize,
+        out ulong streamAllocationSize)
+    {
+        context ??= BuildStreamList((FileNode)fileNode);
+
+        return ((StreamList)context).TryNext(out streamName, out streamSize, out streamAllocationSize);
+    }
+
+    /// <summary>
+    /// Snapshots the streams reported for <paramref name="node"/>.
+    /// </summary>
+    /// <param name="node">The node behind the open handle.</param>
+    private StreamList BuildStreamList(FileNode node)
+    {
+        var ownerPath = node.IsStream ? AlternateStreamName.OwnerOf(node.FilePath) : node.FilePath;
+        var owner = (FileNode?)node;
+        if (node.IsStream && !NodeMap.TryGet(ownerPath, out owner))
+        {
+            return new([]);
+        }
+
+        List<(string Name, ulong Size, ulong AllocationSize)> entries = [];
+        if (!owner!.IsDirectory)
+        {
+            entries.Add((string.Empty, owner.FileInfo.FileSize, owner.FileInfo.AllocationSize));
+        }
+
+        foreach (var (path, stream) in NodeMap.GetStreams(ownerPath))
+        {
+            entries.Add((AlternateStreamName.NameOf(path), stream.FileInfo.FileSize, stream.FileInfo.AllocationSize));
+        }
+
+        return new(entries);
+    }
+
+    /// <summary>
+    /// Enumeration state of <see cref="GetStreamEntry"/>.
+    /// </summary>
+    /// <param name="entries">The streams to report, in order.</param>
+    private sealed class StreamList(List<(string Name, ulong Size, ulong AllocationSize)> entries)
+    {
+        /// <summary>
+        /// Index of the next entry to report.
+        /// </summary>
+        private int _next;
+
+        /// <summary>
+        /// Advances to the next stream.
+        /// </summary>
+        /// <param name="name">Receives the stream name; empty for the unnamed data stream.</param>
+        /// <param name="size">Receives the stream's size in bytes.</param>
+        /// <param name="allocationSize">Receives the stream's allocation size in bytes.</param>
+        /// <returns><c>false</c> when every stream has been reported.</returns>
+        public bool TryNext(out string? name, out ulong size, out ulong allocationSize)
+        {
+            if (_next >= entries.Count)
+            {
+                name = null;
+                size = 0;
+                allocationSize = 0;
+                return false;
+            }
+
+            (name, size, allocationSize) = entries[_next++];
+            return true;
+        }
+    }
+
+    /// <summary>
     /// Renames a file or directory. When the target already exists,
     /// it is replaced only if <paramref name="replaceIfExists"/> is <c>true</c>.
     /// </summary>
@@ -838,7 +1019,25 @@ public sealed class MemoryFileSystem : FileSystemBase
             return STATUS_MEDIA_WRITE_PROTECTED;
         }
 
+        if (!AlternateStreamName.TryNormalize(fileName, out fileName) ||
+            !AlternateStreamName.TryNormalize(newFileName, out newFileName))
+        {
+            return STATUS_OBJECT_NAME_INVALID;
+        }
+
         var node = (FileNode)fileNode;
+
+        // A stream can be renamed within its own file, but a file can't become a stream or the
+        // other way round, and a stream can't move to another file.
+        var newIsStream = AlternateStreamName.IsStreamKey(newFileName);
+        if (node.IsStream != newIsStream ||
+            (newIsStream && !string.Equals(
+                AlternateStreamName.OwnerOf(fileName),
+                AlternateStreamName.OwnerOf(newFileName),
+                StringComparison.OrdinalIgnoreCase)))
+        {
+            return STATUS_OBJECT_NAME_INVALID;
+        }
 
         if (node.IsDirectory &&
             newFileName.Length > fileName.Length &&
@@ -1000,7 +1199,14 @@ public sealed class MemoryFileSystem : FileSystemBase
             return STATUS_MEDIA_WRITE_PROTECTED;
         }
 
+        // A stream has no security of its own; it shares its file's.
         var node = (FileNode)fileNode;
+        if (node.IsStream &&
+            NodeMap.TryGet(AlternateStreamName.OwnerOf(node.FilePath), out var owner) &&
+            owner is not null)
+        {
+            node = owner;
+        }
 
         byte[] merged = [];
         var result = ModifySecurityDescriptorEx(
@@ -1277,6 +1483,18 @@ public sealed class MemoryFileSystem : FileSystemBase
     /// Updates the volume label reported by <see cref="GetVolumeInfo"/>.
     /// </summary>
     internal void UpdateVolumeLabel(string label) => _volumeLabel = label;
+
+    /// <summary>
+    /// Returns the security descriptor WinFsp should see for <paramref name="node"/>: its own, or
+    /// for an alternate data stream the one of the file it belongs to, as on NTFS.
+    /// </summary>
+    /// <param name="node">The node being opened or queried.</param>
+    private byte[] SecurityOf(FileNode node) =>
+        node.IsStream &&
+        NodeMap.TryGet(AlternateStreamName.OwnerOf(node.FilePath), out var owner) &&
+        owner is not null
+            ? EffectiveSecurity(owner)
+            : EffectiveSecurity(node);
 
     /// <summary>
     /// Returns the security descriptor WinFsp should see for <paramref name="node"/>. Nodes that
