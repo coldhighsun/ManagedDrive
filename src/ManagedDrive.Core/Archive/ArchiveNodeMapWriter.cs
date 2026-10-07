@@ -47,7 +47,7 @@ public static class ArchiveNodeMapWriter
         var totalBytes = 0L;
         foreach (var (_, node) in nodes)
         {
-            if (!node.IsDirectory)
+            if (!node.IsDirectory && !node.IsStream)
             {
                 totalBytes += (long)node.FileInfo.FileSize;
             }
@@ -73,6 +73,13 @@ public static class ArchiveNodeMapWriter
                     {
                         // Archive formats here carry no link entries, and writing a link as an empty
                         // file or directory would silently turn it into something it isn't.
+                        continue;
+                    }
+
+                    if (node.IsStream)
+                    {
+                        // A colon is not valid in an archive entry name, and an extractor would
+                        // either fail on it or write the data into a file of its own.
                         continue;
                     }
 

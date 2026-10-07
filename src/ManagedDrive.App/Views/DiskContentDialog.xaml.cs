@@ -128,7 +128,8 @@ public partial class DiskContentDialog
 
         foreach (var (path, node) in nodes)
         {
-            if (path == "\\")
+            // A stream is part of its file; listing it would show a second, colon-named entry.
+            if (path == "\\" || node.IsStream)
             {
                 continue;
             }

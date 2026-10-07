@@ -176,6 +176,11 @@ internal static class SnapshotStore
             nodeMap.Add(path, node);
         }
 
+        foreach (var path in nodeMap.RemoveInvalidStreams())
+        {
+            Logger.LogWarning("Dropped invalid alternate data stream '{Path}' while loading a snapshot.", path);
+        }
+
         return nodeMap;
     }
 
