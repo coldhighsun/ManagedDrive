@@ -811,6 +811,24 @@ public sealed partial class MainViewModel
         _logger.LogInformation("Unmount completed for {MountPoint}.", mountPoint);
     }
 
+    /// <summary>
+    /// Opens the space-usage analysis of <paramref name="vm"/>.
+    /// </summary>
+    /// <param name="vm">The disk to analyse; nothing happens for <c>null</c>.</param>
+    private void ExecuteAnalyzeSpace(DiskViewModel? vm)
+    {
+        if (vm == null)
+        {
+            return;
+        }
+
+        var dialog = new SpaceUsageDialog(vm)
+        {
+            Owner = Application.Current.MainWindow
+        };
+        dialog.ShowDialog();
+    }
+
     private void ExecuteViewDiskContents(DiskViewModel? vm)
     {
         if (vm == null)

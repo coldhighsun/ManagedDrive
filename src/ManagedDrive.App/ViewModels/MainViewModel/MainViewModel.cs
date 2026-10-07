@@ -105,6 +105,9 @@ public sealed partial class MainViewModel : INotifyPropertyChanged, IDisposable
         ViewDiskContentsCommand = new(
             p => ExecuteViewDiskContents(ResolveTarget(p)),
             p => ResolveTarget(p) != null);
+        AnalyzeSpaceCommand = new(
+            p => ExecuteAnalyzeSpace(ResolveTarget(p)),
+            p => ResolveTarget(p) != null);
         RefreshCommand = new(_ => RefreshAll());
         ResetTempDirsCommand = new(_ => ExecuteResetTempDirs());
         ToggleTempDirCommand = new(
@@ -448,6 +451,15 @@ public sealed partial class MainViewModel : INotifyPropertyChanged, IDisposable
     /// tree and per-node space usage.
     /// </summary>
     public RelayCommand ViewDiskContentsCommand
+    {
+        get;
+    }
+
+    /// <summary>
+    /// Gets the command that opens the space-usage analysis (treemap and top lists) of the
+    /// selected disk.
+    /// </summary>
+    public RelayCommand AnalyzeSpaceCommand
     {
         get;
     }

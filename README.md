@@ -65,7 +65,7 @@ Create, mount and manage in-memory volumes that appear as normal drive letters i
 - Per-disk high-usage warning with a configurable threshold
 - Temp directory redirection to a disk's `Temp` folder, with a startup warning if TEMP is left on a RAM disk
 - Exit confirmation with a saving overlay while pending saves finish
-- Double-click to open a disk in Explorer; right-click for shortcuts or **View Disk Contents...**
+- Double-click to open a disk in Explorer; right-click for shortcuts, **View Disk Contents...** or **Space Usage...** (a treemap of what fills the disk, colored by file type, with top folder/file/type lists)
 
 **UI**
 - Bilingual (English / Simplified Chinese) and light/dark themes, auto-detected with manual override
@@ -113,6 +113,7 @@ mdrive list --json
 mdrive ls R: \Projects
 mdrive ls R: \Projects --json
 mdrive info R:
+mdrive usage R: --top 20
 mdrive save R:
 mdrive set-password R: --password-file C:\secrets\scratch.pwd
 mdrive export R: C:\backups\scratch.mdr
@@ -143,6 +144,7 @@ mdrive exit
 | `list` | Lists currently mounted disks with usage and capacity. |
 | `ls <drive-letter> [path]` | Lists the immediate children (name, type, size) of a directory on a mounted disk. `path` (e.g. `\Folder`) defaults to the root. |
 | `info <drive-letter>` | Shows a mounted disk's configuration and state: usage, read-only, image path, encryption, auto-save interval, compression, snapshot limits and count, last save time. |
+| `usage <drive-letter> [--top N] [--by dir\|file\|ext]` | Shows what uses the memory of a mounted disk: the biggest directories (each counting everything below it), the biggest files (alternate data streams counted with their file) and the biggest file extensions, with each one's share of the used memory. `--top` (1-1000, default 10) sets the list length; `--by` prints just one list. With `--json` all three lists are printed. |
 | `watch` | Prints disk events as they happen — `mounted`, `unmounted`, `save-completed`, `save-failed`, `high-usage` — until interrupted with Ctrl+C. Does not block other `mdrive` commands; at most two watches run at once. With `--json`, prints one JSON object per line. |
 | `snapshot create <drive-letter>` | Writes a timestamped snapshot of a mounted disk right now, independent of a regular save. Requires an image path and snapshot retention (`--max-snapshot-count`/`--max-snapshot-size-mb`) to be configured. |
 | `snapshot list <drive-letter>` | Lists a mounted disk's snapshots, newest first (index 1 = newest). |
@@ -261,7 +263,7 @@ This project bundles [WinFsp](https://winfsp.dev/) and [SharpCompress](https://g
 - 每磁盘可配置高用量警告阈值
 - 临时目录重定向到某磁盘的 `Temp` 文件夹，TEMP 遗留在内存盘上时启动提示
 - 退出确认并显示保存遮罩直至待处理保存完成
-- 双击在资源管理器中打开磁盘；右键提供快捷方式或**磁盘内容...**
+- 双击在资源管理器中打开磁盘；右键提供快捷方式、**磁盘内容...** 或**空间占用分析...**（以矩形树图显示磁盘空间被什么占用，按文件类型着色，并附带占用最大的文件夹/文件/类型列表）
 
 **界面**
 - 双语（中/英）及浅色/深色主题，均可自动检测或手动切换
@@ -314,6 +316,7 @@ mdrive list --json
 mdrive ls R: \Projects
 mdrive ls R: \Projects --json
 mdrive info R:
+mdrive usage R: --top 20
 mdrive save R:
 mdrive set-password R: --password-file C:\secrets\scratch.pwd
 mdrive export R: C:\backups\scratch.mdr
@@ -344,6 +347,7 @@ mdrive exit
 | `list` | 列出当前已挂载的磁盘及其用量与容量。 |
 | `ls <盘符> [路径]` | 列出已挂载磁盘上某目录的直接子项（名称、类型、大小）。`路径`（如 `\Folder`）省略时列出根目录。 |
 | `info <盘符>` | 显示已挂载磁盘的配置与状态：用量、是否只读、镜像路径、是否加密、自动保存间隔、压缩级别、快照上限与数量、上次保存时间。 |
+| `usage <盘符> [--top N] [--by dir\|file\|ext]` | 显示已挂载磁盘的内存都用在了哪里：占用最大的目录（含其下全部内容）、最大的文件（备用数据流计入所属文件）和占用最大的扩展名，并给出各自占已用内存的比例。`--top`（1-1000，默认 10）设置列表长度；`--by` 只输出其中一个列表；加 `--json` 时输出全部三个列表。 |
 | `watch` | 实时输出磁盘事件——`mounted`、`unmounted`、`save-completed`、`save-failed`、`high-usage`——直到按 Ctrl+C 中断。不会阻塞其他 `mdrive` 命令；同时最多运行两个 watch。加 `--json` 时每行输出一个 JSON 对象。 |
 | `snapshot create <盘符>` | 立即为已挂载磁盘写入一个带时间戳的快照，独立于常规保存。需要该磁盘已配置镜像路径及快照保留策略（`--max-snapshot-count`/`--max-snapshot-size-mb`）。 |
 | `snapshot list <盘符>` | 列出已挂载磁盘的快照，按时间倒序排列（序号 1 为最新）。 |
