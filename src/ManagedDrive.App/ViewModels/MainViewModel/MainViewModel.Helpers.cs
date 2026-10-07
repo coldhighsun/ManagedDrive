@@ -128,8 +128,82 @@ public sealed partial class MainViewModel
         {
             i++;
         }
+        _disksAcceptingEffects[vm.Disk] = 0;
         Disks.Insert(i, vm);
+        _ = ApplyDiskEffectsAsync(vm.Disk);
     }
+
+    /// <summary>
+    /// Creates a freshly mounted disk's folders and points its environment variables into it.
+    /// Does nothing for a disk that has neither. Reports anything that could not be done in the
+    /// status line; the disk itself is unaffected.
+    /// </summary>
+    /// <param name="disk">The mounted disk.</param>
+    /// <returns>A task completing when the effects are applied.</returns>
+    private async Task ApplyDiskEffectsAsync(RamDisk disk)
+    {
+        var options = disk.Options;
+        if (options.Folders is not { Count: > 0 } && options.EnvRedirects is not { Count: > 0 })
+        {
+            return;
+        }
+
+        try
+        {
+            var result = await Task.Run(() => _envRedirector.ApplyDiskEffects(options, () => _disksAcceptingEffects.ContainsKey(disk)));
+            if (!result.IsComplete)
+            {
+                _logger.LogWarning(
+                    "Preset effects on {MountPoint} incomplete. Rejected: {Rejected}. Failed: {Failed}.",
+                    options.MountPoint, string.Join(", ", result.Rejected), string.Join(", ", result.Failed));
+                ShowStickyStatus(Loc.Format("Status.PresetEffectsIncomplete", options.MountPoint, string.Join(", ", result.Rejected.Concat(result.Failed))));
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Applying preset effects on {MountPoint} failed.", options.MountPoint);
+        }
+    }
+
+    /// <summary>
+    /// Puts back the environment variables that pointed into a disk when it leaves
+    /// <see cref="Disks"/>, however it was unmounted.
+    /// </summary>
+    /// <param name="sender">The disk list.</param>
+    /// <param name="e">What changed.</param>
+    private void OnDisksChangedRestoreEnvRedirects(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
+    {
+        if (e.Action == System.Collections.Specialized.NotifyCollectionChangedAction.Reset)
+        {
+            _disksAcceptingEffects.Clear();
+            RestoreDanglingEnvRedirects();
+            return;
+        }
+
+        foreach (var removed in e.OldItems?.OfType<DiskViewModel>() ?? [])
+        {
+            // First, so an apply still queued for this disk skips instead of running after the restore.
+            _disksAcceptingEffects.TryRemove(removed.Disk, out _);
+            _envRedirector.Restore(removed.MountPoint);
+        }
+    }
+
+    /// <summary>
+    /// Puts back every environment variable that points into a RAM disk. Called when the app
+    /// exits, before the disks are torn down.
+    /// </summary>
+    /// <param name="broadcast">
+    /// Whether to announce the change to running programs; <c>false</c> when the session is ending.
+    /// </param>
+    public void RestoreAllEnvRedirects(bool broadcast = true) => _envRedirector.RestoreAll(broadcast);
+
+    /// <summary>
+    /// Puts back the environment variables that point into a disk that is not mounted — what a
+    /// crash leaves behind. Called at startup before the auto-mount, when no disk is mounted yet.
+    /// </summary>
+    public void RestoreDanglingEnvRedirects() =>
+        _envRedirector.RestoreDangling(mountPoint =>
+            Disks.Any(disk => string.Equals(disk.MountPoint, mountPoint, StringComparison.OrdinalIgnoreCase)));
 
     /// <summary>
     /// Deletes a disk's backing <c>.mdr</c> image (plus its snapshots) or source archive file, if

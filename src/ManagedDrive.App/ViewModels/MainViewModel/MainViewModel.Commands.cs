@@ -143,7 +143,9 @@ public sealed partial class MainViewModel
         var dialog = new CreateDiskDialog(
             GetOtherDiskOptions(excluding: null),
             config.DefaultCompressionLevel,
-            config.DefaultImageDirectory)
+            config.DefaultImageDirectory,
+            config.Presets,
+            presets => _settingsStore.Update(current => current with { Presets = presets.ToList() }))
         {
             Owner = Application.Current.MainWindow
         };
@@ -156,6 +158,13 @@ public sealed partial class MainViewModel
         _logger.LogInformation("Create disk requested: {MountPoint}, capacity {CapacityBytes} bytes.",
             dialog.Result!.MountPoint, dialog.Result!.CapacityBytes);
         await MountAndAddAsync(dialog.Result!, dialog.PasswordChanged ? dialog.Password : null);
+
+        // A preset can ask for the new disk to be the temp directory; that goes through the same
+        // confirmation as the context-menu item.
+        if (dialog.UseAsTemp && Disks.FirstOrDefault(d => string.Equals(d.MountPoint, dialog.Result!.MountPoint, StringComparison.OrdinalIgnoreCase)) is { } created)
+        {
+            ExecuteToggleTempDir(created);
+        }
     }
 
     private async void ExecuteEditDisk(DiskViewModel? vm)
@@ -247,7 +256,7 @@ public sealed partial class MainViewModel
 
             if (vm.IsCurrentTempDir)
             {
-                await Task.Run(TempDirResetService.Reset);
+                await Task.Run(() => TempDirResetService.Reset());
             }
 
             var currentPassword = vm.Disk.CurrentPassword;
@@ -608,7 +617,7 @@ public sealed partial class MainViewModel
         }
 
         _logger.LogInformation("Reset TEMP dirs confirmed.");
-        var success = await Task.Run(TempDirResetService.Reset);
+        var success = await Task.Run(() => TempDirResetService.Reset());
 
         if (success)
         {
@@ -713,7 +722,7 @@ public sealed partial class MainViewModel
         if (vm.IsCurrentTempDir)
         {
             _logger.LogInformation("TEMP dir reset requested (was pointing at {MountPoint}).", vm.MountPoint);
-            var success = await Task.Run(TempDirResetService.Reset);
+            var success = await Task.Run(() => TempDirResetService.Reset());
 
             if (success)
             {
@@ -798,7 +807,7 @@ public sealed partial class MainViewModel
 
         if (vm.IsCurrentTempDir)
         {
-            await Task.Run(TempDirResetService.Reset);
+            await Task.Run(() => TempDirResetService.Reset());
         }
 
         var mountPoint = vm.Disk.Options.MountPoint;

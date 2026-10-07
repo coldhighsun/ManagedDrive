@@ -57,6 +57,11 @@ public sealed class SettingsStore
     }
 
     /// <summary>
+    /// Gets the folder that holds the settings file, where the app keeps its other small state files.
+    /// </summary>
+    internal string DirectoryPath => Path.GetDirectoryName(_settingsPath)!;
+
+    /// <summary>
     /// Loads the application configuration from disk.
     /// Returns a default <see cref="AppConfiguration"/> when the file does not exist
     /// or cannot be parsed. An unparseable file is first copied aside (see

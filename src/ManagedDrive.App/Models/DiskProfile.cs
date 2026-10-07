@@ -108,4 +108,20 @@ public sealed record DiskProfile
     /// OS shutdown. Defaults to <c>true</c>.
     /// </summary>
     public bool SaveImageOnExit { get; init; } = true;
+
+    /// <summary>
+    /// Gets or sets the folders, relative to the disk's root, created after every mount.
+    /// </summary>
+    public IReadOnlyList<string>? Folders
+    {
+        get; init;
+    }
+
+    /// <summary>
+    /// Gets or sets the environment variables pointed into the disk while it is mounted.
+    /// </summary>
+    public IReadOnlyList<EnvRedirect>? EnvRedirects
+    {
+        get; init;
+    }
 }

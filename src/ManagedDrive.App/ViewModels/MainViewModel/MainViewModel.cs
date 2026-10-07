@@ -18,6 +18,19 @@ public sealed partial class MainViewModel : INotifyPropertyChanged, IDisposable
     private readonly SettingsStore _settingsStore;
 
     /// <summary>
+    /// Points environment variables into mounted disks (see <see cref="DiskOptions.EnvRedirects"/>)
+    /// and puts them back when the disk goes away.
+    /// </summary>
+    private readonly UserEnvironmentRedirector _envRedirector;
+
+    /// <summary>
+    /// The disks whose preset effects may still be applied: added when a disk is added to
+    /// <see cref="Disks"/>, removed before its variables are restored. Lets a queued apply notice
+    /// that its disk is already gone. Used from the UI thread and the thread pool.
+    /// </summary>
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<RamDisk, byte> _disksAcceptingEffects = new();
+
+    /// <summary>
     /// Disks that were removed from <see cref="Disks"/> but are still running their final save
     /// inside <see cref="MountManager.Unmount"/>. Only touched on the UI thread.
     /// </summary>
@@ -54,6 +67,8 @@ public sealed partial class MainViewModel : INotifyPropertyChanged, IDisposable
         _mountManager = mountManager;
         _settingsStore = settingsStore;
         _logger = logger;
+        var backupStore = new EnvRedirectBackupStore(Path.Combine(settingsStore.DirectoryPath, "env-redirects.json"));
+        _envRedirector = new(new RegistryUserEnvironment(), backupStore.Read, backupStore.Write);
 
         // Before anything can call SaveSettings (startup dialogs, tray commands, the auto-mount
         // loop): none of these profiles is mounted yet.
@@ -64,6 +79,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged, IDisposable
         // Surface an empty-list flag for the main window's empty-state guidance overlay.
         // Subscribing to CollectionChanged covers every add/remove path in one place.
         Disks.CollectionChanged += (_, _) => OnPropertyChanged(nameof(IsEmpty));
+        Disks.CollectionChanged += OnDisksChangedRestoreEnvRedirects;
 
         CreateDiskCommand = new(_ => ExecuteCreateDisk());
         ImportDiskCommand = new(_ => ExecuteImportDisk(), _ => !BusyOverlay.IsBusy);

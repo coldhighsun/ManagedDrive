@@ -18,6 +18,11 @@ public sealed class SessionEndingSaveHandler
     private readonly ILogger<SessionEndingSaveHandler> _logger;
     private readonly MountManager _mountManager;
 
+    /// <summary>
+    /// Run before the disks are saved; puts back the environment variables that point into them.
+    /// </summary>
+    private readonly Action? _beforeSave;
+
     /// <param name="mountManager">Source of the disks to save.</param>
     /// <param name="mainWindowHandleProvider">
     /// Lazily supplies the main window's HWND (captured once on the UI thread at startup) so this
@@ -26,8 +31,17 @@ public sealed class SessionEndingSaveHandler
     /// handle is actually assigned.
     /// </param>
     /// <param name="logger">Logger for the save-on-session-ending flow.</param>
-    public SessionEndingSaveHandler(MountManager mountManager, Func<IntPtr> mainWindowHandleProvider, ILogger<SessionEndingSaveHandler> logger)
+    /// <param name="beforeSave">
+    /// Optional step run on the <see cref="SystemEvents"/> thread before any disk is saved, used to
+    /// restore the TEMP directory and the preset environment variables: the process may be killed
+    /// right after the save budget, and a variable left pointing at a drive that is not mounted yet
+    /// breaks every program that starts before this app at the next sign-in. A failure in it is
+    /// logged and never stops the saves.
+    /// </param>
+    public SessionEndingSaveHandler(
+        MountManager mountManager, Func<IntPtr> mainWindowHandleProvider, ILogger<SessionEndingSaveHandler> logger, Action? beforeSave = null)
     {
+        _beforeSave = beforeSave;
         _mountManager = mountManager;
         _mainWindowHandleProvider = mainWindowHandleProvider;
         _logger = logger;
@@ -62,6 +76,8 @@ public sealed class SessionEndingSaveHandler
 
         try
         {
+            RunBeforeSave();
+
             var saveTasks = disks
                 .Select(disk => Task.Run(() =>
                 {
@@ -94,6 +110,21 @@ public sealed class SessionEndingSaveHandler
                 // done (or has timed out).
                 ShutdownBlockReasonDestroy(mainWindowHandle);
             }
+        }
+    }
+
+    /// <summary>
+    /// Runs the optional step before the saves, logging instead of throwing.
+    /// </summary>
+    private void RunBeforeSave()
+    {
+        try
+        {
+            _beforeSave?.Invoke();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Restoring the environment before the session ends failed.");
         }
     }
 

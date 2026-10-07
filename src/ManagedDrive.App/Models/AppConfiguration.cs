@@ -117,4 +117,13 @@ public sealed record AppConfiguration
     {
         get; init;
     }
+
+    /// <summary>
+    /// Gets or sets the presets the user saved from the create-disk dialog. May be <c>null</c> in
+    /// hand-edited files; readers treat that as empty.
+    /// </summary>
+    public List<DiskPreset>? Presets
+    {
+        get; init;
+    }
 }

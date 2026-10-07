@@ -106,6 +106,8 @@ public sealed partial class MainViewModel
         MaxSnapshotSizeBytes = options.MaxSnapshotSizeBytes,
         HighUsageWarnPercent = options.HighUsageWarnPercent,
         SaveImageOnExit = options.SaveImageOnExit,
+        Folders = options.Folders,
+        EnvRedirects = options.EnvRedirects,
     };
 
     /// <summary>
@@ -203,6 +205,7 @@ public sealed partial class MainViewModel
             SkippedVersion = current.SkippedVersion,
             DefaultCompressionLevel = current.DefaultCompressionLevel,
             DefaultImageDirectory = current.DefaultImageDirectory,
+            Presets = current.Presets,
         });
     }
 
@@ -224,5 +227,7 @@ public sealed partial class MainViewModel
         MaxSnapshotSizeBytes = p.MaxSnapshotSizeBytes,
         HighUsageWarnPercent = p.HighUsageWarnPercent,
         SaveImageOnExit = p.SaveImageOnExit,
+        Folders = p.Folders,
+        EnvRedirects = p.EnvRedirects,
     };
 }

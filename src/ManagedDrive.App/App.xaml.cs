@@ -142,6 +142,11 @@ public partial class App
             return;
         }
 
+        // Nothing is mounted yet, so every environment variable still pointing into a RAM disk is a
+        // leftover of a crash. Restored now rather than after auto-mount, which can take a while
+        // (large or encrypted images); disks that redirect variables set them again once mounted.
+        _mainViewModel!.RestoreDanglingEnvRedirects();
+
         // Listening before auto-mount so a command sent meanwhile (e.g. from the Explorer context
         // menu) is queued rather than refused, but not run until auto-mount has finished.
         var autoMountDone = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -229,7 +234,8 @@ public partial class App
         _sessionEndingSaveHandler = new(
             _mountManager,
             () => _mainWindowHandle,
-            _serviceProvider!.GetRequiredService<ILogger<SessionEndingSaveHandler>>());
+            _serviceProvider!.GetRequiredService<ILogger<SessionEndingSaveHandler>>(),
+            ResetEnvironmentForSessionEnding);
         SystemEvents.SessionEnding += _sessionEndingSaveHandler.OnSessionEnding;
         _mainViewModel = new(_mountManager, settings, _serviceProvider!.GetRequiredService<ILogger<MainViewModel>>(), config.Disks);
         _mainViewModel.ExitRequested += async (_, _) => await ShutdownAsync();
@@ -571,6 +577,25 @@ public partial class App
         _mainViewModel?.SettingsCommand.Execute(null);
     }
 
+    /// <summary>
+    /// Puts the user's TEMP directory and the preset environment variables back before Windows
+    /// logs off or shuts down, which skips the normal exit path. Runs on the
+    /// <see cref="SystemEvents"/> thread, so it only uses thread-safe state (the mount manager, the
+    /// registry, the redirector) and never the <c>Disks</c> collection.
+    /// No change is broadcast: the process may be killed any moment and nothing is left to notify, so
+    /// only the registry writes, which are what the next sign-in reads, are done.
+    /// </summary>
+    private void ResetEnvironmentForSessionEnding()
+    {
+        if (_mountManager is { } mountManager &&
+            TempDirCompatChecker.IsTempOnAnyMountPoint(mountManager.GetAll().Select(disk => disk.Options.MountPoint)))
+        {
+            TempDirResetService.Reset(broadcast: false);
+        }
+
+        _mainViewModel?.RestoreAllEnvRedirects(broadcast: false);
+    }
+
     private async Task ShutdownAsync()
     {
         // A second exit request (CLI `exit` twice, or CLI exit plus tray Exit) must not start a
@@ -589,6 +614,9 @@ public partial class App
         {
             _mainViewModel.IsExiting = true;
             ShowMainWindow();
+
+            // Before the disks go away: the variables must not be left pointing at them.
+            _mainViewModel.RestoreAllEnvRedirects();
         }
 
         // The view models unsubscribe from each disk's SaveFailed while being disposed in the
@@ -633,6 +661,10 @@ public partial class App
                 MessageBoxButton.OK,
                 MessageBoxImage.Error);
         }
+
+        // The environment changes made on the way out are announced on a background thread; give the
+        // announcement a moment so programs started afterwards (e.g. from Explorer) see them.
+        await Task.Run(() => TempDirResetService.WaitForPendingBroadcasts(TimeSpan.FromSeconds(3)));
 
         _logger.LogInformation("ShutdownAsync completed; shutting down application.");
         Shutdown();
