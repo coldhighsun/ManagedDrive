@@ -70,6 +70,9 @@ internal sealed class MainViewModelCliDiskController(MainViewModel mainViewModel
     public Task<(bool Success, string Message, CliDiskDetails? Details)> GetDiskInfoAsync(string mountPoint) =>
         mainViewModel.GetDiskInfoByMountPointAsync(mountPoint);
 
+    public Task<(bool Success, string Message, CliSpaceUsage? Usage)> GetSpaceUsageAsync(string mountPoint, int top) =>
+        mainViewModel.GetSpaceUsageByMountPointAsync(mountPoint, top);
+
     public Task<(bool Success, string Message)> CloneAsync(string sourceMountPoint, string targetMountPoint) =>
         mainViewModel.CloneByMountPointAsync(sourceMountPoint, targetMountPoint);
 
