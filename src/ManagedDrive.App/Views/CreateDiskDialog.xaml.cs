@@ -333,7 +333,7 @@ public partial class CreateDiskDialog
             // backing image file to configure persistence for, and the high-usage warning is
             // unavailable (forced off) rather than just defaulted.
             _isImportMode = true;
-        PresetTabItem.Visibility = Visibility.Collapsed;
+            PresetTabItem.Visibility = Visibility.Collapsed;
             _isArchiveImportMode = true;
             _importArchivePath = sourceArchivePath;
             _importCapacityBytes = existing.CapacityBytes;
