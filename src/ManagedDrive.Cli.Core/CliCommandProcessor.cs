@@ -823,8 +823,7 @@ public static class CliCommandProcessor
             ? ["No presets available."]
             : presets.Select(preset =>
                 $"{preset.Id}  {preset.Name}  {ByteFormatter.Format(preset.CapacityBytes)}"
-                + (preset.Variables.Count == 0 ? string.Empty : $"  {string.Join(' ', preset.Variables)}")
-                + (preset.SetAsTemp ? "  (temp directory)" : string.Empty)).ToList();
+                + (preset.Variables.Count == 0 ? string.Empty : $"  {string.Join(' ', preset.Variables)}")).ToList();
         setOutcome(new(true, string.Join(Environment.NewLine, lines), null, 0, Data: presets));
         return 0;
     }

@@ -32,14 +32,14 @@ public static partial class EnvRedirectPolicy
     private const int MaxVariableLength = 128;
 
     /// <summary>
-    /// Variables that must never be redirected. TEMP and TMP are handled by the dedicated
-    /// "use as temp directory" action, which has its own safeguards.
+    /// Variables that must never be redirected. TEMP and TMP are not among them: the temp preset
+    /// redirects them like any other cache variable.
     /// </summary>
     private static readonly HashSet<string> Reserved = new(StringComparer.OrdinalIgnoreCase)
     {
         "PATH", "PATHEXT", "COMSPEC", "SYSTEMROOT", "SYSTEMDRIVE", "WINDIR", "USERPROFILE", "APPDATA",
         "LOCALAPPDATA", "PROGRAMDATA", "PROGRAMFILES", "HOMEDRIVE", "HOMEPATH", "USERNAME",
-        "COMPUTERNAME", "PSMODULEPATH", "TEMP", "TMP",
+        "COMPUTERNAME", "PSMODULEPATH",
     };
 
     /// <summary>

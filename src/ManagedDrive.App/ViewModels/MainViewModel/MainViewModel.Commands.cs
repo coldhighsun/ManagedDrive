@@ -144,8 +144,7 @@ public sealed partial class MainViewModel
             GetOtherDiskOptions(excluding: null),
             config.DefaultCompressionLevel,
             config.DefaultImageDirectory,
-            config.Presets,
-            presets => _settingsStore.Update(current => current with { Presets = presets.ToList() }))
+            ConfirmTempDirWarning)
         {
             Owner = Application.Current.MainWindow
         };
@@ -157,13 +156,11 @@ public sealed partial class MainViewModel
 
         _logger.LogInformation("Create disk requested: {MountPoint}, capacity {CapacityBytes} bytes.",
             dialog.Result!.MountPoint, dialog.Result!.CapacityBytes);
+        var moved = await ReleaseClaimedPresetsAsync(dialog.Result!, null, null);
         await MountAndAddAsync(dialog.Result!, dialog.PasswordChanged ? dialog.Password : null);
-
-        // A preset can ask for the new disk to be the temp directory; that goes through the same
-        // confirmation as the context-menu item.
-        if (dialog.UseAsTemp && Disks.FirstOrDefault(d => string.Equals(d.MountPoint, dialog.Result!.MountPoint, StringComparison.OrdinalIgnoreCase)) is { } created)
+        if (moved is not null)
         {
-            ExecuteToggleTempDir(created);
+            StatusText = $"{StatusText} {moved}";
         }
     }
 
@@ -174,7 +171,8 @@ public sealed partial class MainViewModel
             return;
         }
 
-        var dialog = new CreateDiskDialog(vm.Disk.Options, GetOtherDiskOptions(excluding: vm), vm.Disk.CurrentPassword)
+        var effectiveOptions = WithEnvironmentPresets(vm.Disk.Options);
+        var dialog = new CreateDiskDialog(effectiveOptions, GetOtherDiskOptions(excluding: vm), vm.Disk.CurrentPassword, ConfirmTempDirWarning)
         {
             Owner = Application.Current.MainWindow
         };
@@ -189,6 +187,7 @@ public sealed partial class MainViewModel
         var needsRemount = newOptions.MountPoint != old.MountPoint || newOptions.ReadOnly != old.ReadOnly;
 
         _logger.LogInformation("Edit disk requested: {MountPoint} (remount: {NeedsRemount}).", vm.MountPoint, needsRemount);
+        string? movedPresets = null;
 
         if (dialog.PasswordChanged && dialog.Password is null && vm.Disk.IsPasswordProtected)
         {
@@ -256,7 +255,7 @@ public sealed partial class MainViewModel
 
             if (vm.IsCurrentTempDir)
             {
-                await Task.Run(() => TempDirResetService.Reset());
+                await Task.Run(() => RestoreUserTemp());
             }
 
             var currentPassword = vm.Disk.CurrentPassword;
@@ -281,11 +280,18 @@ public sealed partial class MainViewModel
                     return mounted;
                 });
 
+                // The new mount worked; only now are the presets taken from the other disks, before
+                // AddDiskSorted applies this disk's variables.
+                movedPresets = await ReleaseClaimedPresetsAsync(newOptions, effectiveOptions, vm);
                 vm.Dispose();
                 Disks.Remove(vm);
                 AddDiskSorted(new(disk));
                 SaveSettings();
                 StatusText = Loc.Format("Status.MountedWithCapacity", disk.MountPoint, newOptions.VolumeLabel, newOptions.CapacityBytes / (1024 * 1024));
+                if (movedPresets is not null)
+                {
+                    StatusText = $"{StatusText} {movedPresets}";
+                }
                 if (passwordError != null)
                 {
                     ShowError(passwordError);
@@ -338,9 +344,15 @@ public sealed partial class MainViewModel
                 return;
             }
 
+            movedPresets = await ReleaseClaimedPresetsAsync(newOptions, effectiveOptions, vm);
+            await SyncDiskEffectsAsync(vm.Disk, effectiveOptions, newOptions);
             vm.Refresh();
             SaveSettings();
             StatusText = Loc.Format("Status.MountedWithCapacity", vm.MountPoint, newOptions.VolumeLabel, newOptions.CapacityBytes / (1024 * 1024));
+            if (movedPresets is not null)
+            {
+                StatusText = $"{StatusText} {movedPresets}";
+            }
             if (passwordError != null)
             {
                 ShowError(passwordError);
@@ -378,7 +390,7 @@ public sealed partial class MainViewModel
         {
             if (tempOnRamDisk)
             {
-                TempDirResetService.Reset();
+                RestoreUserTemp();
             }
             ExitRequested?.Invoke(this, EventArgs.Empty);
         }
@@ -616,18 +628,23 @@ public sealed partial class MainViewModel
             return;
         }
 
-        _logger.LogInformation("Reset TEMP dirs confirmed.");
-        var success = await Task.Run(() => TempDirResetService.Reset());
+        _logger.LogInformation("Restore TEMP dirs confirmed.");
+        var result = await Task.Run(RestoreRecordedTemp);
 
-        if (success)
+        switch (result)
         {
-            _logger.LogInformation("Reset TEMP dirs succeeded.");
-            ShowInfo(Loc.Get("Msg.ResetTempSuccess"));
-        }
-        else
-        {
-            _logger.LogWarning("Reset TEMP dirs failed.");
-            ShowError(Loc.Get("Msg.ResetTempFailed"));
+            case TempRestoreResult.Restored:
+                _logger.LogInformation("Restore TEMP dirs succeeded.");
+                ShowInfo(Loc.Get("Msg.ResetTempSuccess"));
+                break;
+            case TempRestoreResult.NothingToRestore:
+                _logger.LogInformation("Restore TEMP dirs: nothing to restore.");
+                ShowInfo(Loc.Get("Msg.ResetTempNothing"));
+                break;
+            default:
+                _logger.LogWarning("Restore TEMP dirs failed.");
+                ShowError(Loc.Get("Msg.ResetTempFailed"));
+                break;
         }
     }
 
@@ -712,62 +729,110 @@ public sealed partial class MainViewModel
         }
     }
 
-    private async void ExecuteToggleTempDir(DiskViewModel? vm)
+    /// <summary>
+    /// Gets the ids of the presets that are in effect on a disk: those that redirect variables when
+    /// the user's environment really points them into the disk, and folder-only ones when the disk
+    /// lists their folders.
+    /// </summary>
+    /// <param name="vm">The disk.</param>
+    /// <returns>The preset ids.</returns>
+    public IReadOnlyList<string> GetActivePresetIds(DiskViewModel vm)
     {
-        if (vm == null)
+        var effective = WithEnvironmentPresets(vm.Disk.Options);
+        return PresetSelection.Detect(BuiltInPresets.All, effective.Folders ?? [], effective.EnvRedirects ?? []);
+    }
+
+    /// <summary>
+    /// Turns a preset on or off for a mounted disk, from the disk's context menu. The change is
+    /// applied at once and saved; a preset that redirects variables is taken from the disk that had
+    /// it, and TEMP asks for the compatibility warning first.
+    /// </summary>
+    /// <param name="vm">The disk.</param>
+    /// <param name="presetId">The id of the preset.</param>
+    /// <param name="enabled"><c>true</c> to turn the preset on, <c>false</c> to turn it off.</param>
+    /// <returns>A task completing when the change is applied.</returns>
+    public async Task SetPresetAsync(DiskViewModel? vm, string presetId, bool enabled)
+    {
+        var preset = BuiltInPresets.All.FirstOrDefault(p => p.Id == presetId);
+        if (vm is null || preset is null || RejectIfBusy() || !IsStillMounted(vm) || vm.Disk.Options.ReadOnly)
         {
             return;
         }
 
-        if (vm.IsCurrentTempDir)
+        try
         {
-            _logger.LogInformation("TEMP dir reset requested (was pointing at {MountPoint}).", vm.MountPoint);
-            var success = await Task.Run(() => TempDirResetService.Reset());
-
-            if (success)
+            var effective = WithEnvironmentPresets(vm.Disk.Options);
+            var active = PresetSelection.Detect(BuiltInPresets.All, effective.Folders ?? [], effective.EnvRedirects ?? []);
+            if (active.Contains(presetId) == enabled)
             {
-                ShowInfo(Loc.Get("Msg.ResetTempSuccess"));
-                vm.Refresh();
+                return;
             }
-            else
+
+            if (enabled &&
+                preset.EnvRedirects.Any(r => TempVariables.Contains(r.Variable, StringComparer.OrdinalIgnoreCase)) &&
+                !ConfirmTempDirWarning(Application.Current.MainWindow))
             {
-                _logger.LogWarning("TEMP dir reset failed.");
-                ShowError(Loc.Get("Msg.ResetTempFailed"));
+                return;
+            }
+
+            // Presets the saved settings list but the environment does not back (another disk owns the
+            // variables, or applying them failed) are not touched by changing a different item.
+            var unbacked = PresetSelection
+                .Detect(BuiltInPresets.All, vm.Disk.Options.Folders ?? [], vm.Disk.Options.EnvRedirects ?? [])
+                .Where(id => id != presetId && !active.Contains(id))
+                .ToList();
+            var kept = BuiltInPresets.All.Where(p => unbacked.Contains(p.Id)).ToList();
+            var before = PresetSelection.Apply(
+                BuiltInPresets.All, BuiltInPresets.All.Where(p => active.Contains(p.Id)).Concat(kept).ToList(),
+                effective.Folders ?? [], effective.EnvRedirects ?? []);
+            effective = effective with
+            {
+                Folders = before.Folders.Count == 0 ? null : before.Folders,
+                EnvRedirects = before.EnvRedirects.Count == 0 ? null : before.EnvRedirects,
+            };
+
+            var selected = BuiltInPresets.All
+                .Where(p => p.Id == presetId ? enabled : active.Contains(p.Id))
+                .Concat(kept)
+                .ToList();
+            var result = PresetSelection.Apply(BuiltInPresets.All, selected, effective.Folders ?? [], effective.EnvRedirects ?? []);
+            if (result.Conflicts.Count > 0)
+            {
+                ShowError(Loc.Format("Msg.PresetConflict", string.Join(", ", result.Conflicts)));
+                return;
+            }
+
+            var newOptions = vm.Disk.Options with
+            {
+                Folders = result.Folders.Count == 0 ? null : result.Folders,
+                EnvRedirects = result.EnvRedirects.Count == 0 ? null : result.EnvRedirects,
+            };
+            _logger.LogInformation("Preset {PresetId} {Action} on {MountPoint}.", presetId, enabled ? "turned on" : "turned off", vm.MountPoint);
+
+            var error = await Task.Run(() => vm.Disk.TryApplyOptions(newOptions, out var applyError) ? null : applyError);
+            if (error is not null)
+            {
+                _logger.LogWarning("Changing preset {PresetId} on {MountPoint} failed: {Error}", presetId, vm.MountPoint, error);
+                MessageBox.Show(error, Loc.Get("Msg.EditDiskConfirmTitle"), MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            // Only now that this disk has the change are the presets taken from the others.
+            var moved = await ReleaseClaimedPresetsAsync(newOptions, effective, vm);
+            await SyncDiskEffectsAsync(vm.Disk, effective, newOptions);
+            vm.Refresh();
+            SaveSettings();
+            StatusText = Loc.Format(
+                enabled ? "Status.PresetEnabled" : "Status.PresetDisabled", vm.MountPoint, Loc.Get($"Preset.{presetId}.Name"));
+            if (moved is not null)
+            {
+                StatusText = $"{StatusText} {moved}";
             }
         }
-        else
+        catch (Exception ex)
         {
-            if (!_settingsStore.Load().TempDirCompatWarningShown)
-            {
-                var warn = new ConfirmDialog(
-                    Loc.Get("Msg.SetTempDirWarningTitle"),
-                    Loc.Get("Msg.SetTempDirWarningBody"))
-                {
-                    Owner = Application.Current.MainWindow
-                };
-                if (warn.ShowDialog() != true || !IsStillMounted(vm))
-                {
-                    return;
-                }
-
-                _settingsStore.Update(current => current with { TempDirCompatWarningShown = true });
-            }
-
-            var tempPath = Path.Combine(vm.MountPoint, "Temp");
-            _logger.LogInformation("Set TEMP dir requested: {TempPath}.", tempPath);
-            var success = await Task.Run(() => TempDirResetService.Set(tempPath));
-
-            if (success)
-            {
-                ShowInfo(Loc.Format("Msg.SetTempDirSuccess", tempPath));
-                StatusText = Loc.Format("Status.TempDirSet", tempPath);
-                vm.Refresh();
-            }
-            else
-            {
-                _logger.LogWarning("Set TEMP dir failed: {TempPath}.", tempPath);
-                ShowError(Loc.Get("Msg.SetTempDirFailed"));
-            }
+            _logger.LogError(ex, "Changing preset {PresetId} on {MountPoint} failed.", presetId, vm.MountPoint);
+            ShowError(ex.Message);
         }
     }
 
@@ -807,7 +872,7 @@ public sealed partial class MainViewModel
 
         if (vm.IsCurrentTempDir)
         {
-            await Task.Run(() => TempDirResetService.Reset());
+            await Task.Run(() => RestoreUserTemp());
         }
 
         var mountPoint = vm.Disk.Options.MountPoint;

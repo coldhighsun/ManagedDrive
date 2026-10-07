@@ -8,19 +8,9 @@ namespace ManagedDrive.Core.DiskCreation;
 public sealed record DiskPreset
 {
     /// <summary>
-    /// Gets the stable identifier. Built-in presets use a fixed lower-case id; user presets get a
-    /// generated one.
+    /// Gets the stable, fixed lower-case identifier; the app localizes the preset's name from it.
     /// </summary>
     public string Id { get; init; } = string.Empty;
-
-    /// <summary>
-    /// Gets the display name of a user preset. <c>null</c> for built-in presets, whose names are
-    /// localized by the app from the id.
-    /// </summary>
-    public string? Name
-    {
-        get; init;
-    }
 
     /// <summary>
     /// Gets the suggested capacity in bytes.
@@ -55,12 +45,4 @@ public sealed record DiskPreset
     /// Gets the environment variables pointed into the disk.
     /// </summary>
     public IReadOnlyList<EnvRedirect> EnvRedirects { get; init; } = [];
-
-    /// <summary>
-    /// Gets a value indicating whether the disk is also offered as the user's temp directory.
-    /// </summary>
-    public bool SetAsTemp
-    {
-        get; init;
-    }
 }

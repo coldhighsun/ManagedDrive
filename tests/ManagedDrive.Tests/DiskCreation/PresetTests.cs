@@ -30,8 +30,6 @@ public sealed class EnvRedirectPolicyTests
     [Theory]
     [InlineData("Path")]
     [InlineData("PATH")]
-    [InlineData("temp")]
-    [InlineData("TMP")]
     [InlineData("USERPROFILE")]
     [InlineData("SystemRoot")]
     public void Validate_ReservedVariable_ReturnsReservedVariable(string variable)
@@ -39,6 +37,16 @@ public sealed class EnvRedirectPolicyTests
         var result = EnvRedirectPolicy.Validate(new() { Variable = variable, SubPath = "x" });
 
         Assert.Equal(EnvRedirectError.ReservedVariable, result);
+    }
+
+    [Theory]
+    [InlineData("TEMP")]
+    [InlineData("tmp")]
+    public void Validate_TempVariables_AreAccepted(string variable)
+    {
+        var result = EnvRedirectPolicy.Validate(new() { Variable = variable, SubPath = "Temp" });
+
+        Assert.Equal(EnvRedirectError.None, result);
     }
 
     [Theory]
@@ -83,7 +91,6 @@ public sealed class PresetComposerTests
         Assert.Null(result.VolumeLabel);
         Assert.Empty(result.Folders);
         Assert.Empty(result.EnvRedirects);
-        Assert.False(result.SetAsTemp);
         Assert.Empty(result.Conflicts);
     }
 
@@ -133,7 +140,8 @@ public sealed class PresetComposerTests
     {
         var result = PresetComposer.Merge([BuiltInPresets.Temp, BuiltInPresets.Node]);
 
-        Assert.True(result.SetAsTemp);
+        Assert.Contains(result.EnvRedirects, r => r is { Variable: "TEMP", SubPath: "Temp" });
+        Assert.Contains(result.EnvRedirects, r => r is { Variable: "TMP", SubPath: "Temp" });
         Assert.Contains("Temp", result.Folders);
         Assert.Contains("npm-cache", result.Folders);
     }

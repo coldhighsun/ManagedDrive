@@ -63,6 +63,7 @@ public sealed class RegistryUserEnvironment : IUserEnvironment
         using var key = Registry.CurrentUser.OpenSubKey(KeyPath, writable: true)
             ?? throw new InvalidOperationException("The user environment key is not available.");
         key.SetValue(name, value, kind);
+        UserTempCache.Shared.Invalidate();
     }
 
     /// <inheritdoc />
@@ -70,6 +71,7 @@ public sealed class RegistryUserEnvironment : IUserEnvironment
     {
         using var key = Registry.CurrentUser.OpenSubKey(KeyPath, writable: true);
         key?.DeleteValue(name, throwOnMissingValue: false);
+        UserTempCache.Shared.Invalidate();
     }
 
     /// <inheritdoc />
@@ -209,11 +211,55 @@ public sealed class UserEnvironmentRedirector(
     }
 
     /// <summary>
+    /// Whether a variable currently points at the folder a redirection names on a disk, whoever set it.
+    /// </summary>
+    /// <param name="mountPoint">The disk's mount point.</param>
+    /// <param name="redirect">The redirection to look for.</param>
+    /// <returns><c>true</c> when the variable is set to that folder, ignoring case and a trailing slash.</returns>
+    public bool PointsInto(string mountPoint, EnvRedirect redirect)
+    {
+        try
+        {
+            if (environment.Read(redirect.Variable) is not { } current ||
+                !EnvRedirectPolicy.IsValidSubPath(redirect.SubPath))
+            {
+                return false;
+            }
+
+            var target = EnvRedirectPolicy.Resolve(mountPoint, redirect.SubPath);
+            return string.Equals(
+                Environment.ExpandEnvironmentVariables(current.Text).TrimEnd('\\', '/'),
+                target.TrimEnd('\\', '/'),
+                StringComparison.OrdinalIgnoreCase);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException or System.Security.SecurityException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
     /// Puts back every variable that points into the disk at <paramref name="mountPoint"/>.
     /// </summary>
     /// <param name="mountPoint">The disk's mount point.</param>
     /// <returns>The number of variables restored.</returns>
     public int Restore(string mountPoint) => RestoreWhere(backup => SameName(backup.MountPoint, mountPoint));
+
+    /// <summary>
+    /// Puts back the named variables where they point into a RAM disk.
+    /// </summary>
+    /// <param name="variables">The variable names; compared ignoring case.</param>
+    /// <param name="broadcast">Whether to announce the change to running programs.</param>
+    /// <param name="mountPoint">
+    /// Only restore variables that point into the disk at this mount point; <c>null</c> restores
+    /// them whichever disk they point into.
+    /// </param>
+    /// <returns>The number of variables restored.</returns>
+    public int RestoreVariables(IReadOnlyCollection<string> variables, bool broadcast = true, string? mountPoint = null) =>
+        RestoreWhere(
+            backup => variables.Any(name => SameName(name, backup.Variable)) &&
+                (mountPoint is null || SameName(backup.MountPoint, mountPoint)),
+            broadcast);
 
     /// <summary>
     /// Puts back every variable that points into any RAM disk, whichever disk it is. Used when the

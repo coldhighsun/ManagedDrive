@@ -41,14 +41,6 @@ public sealed record PresetComposition
     public IReadOnlyList<EnvRedirect> EnvRedirects { get; init; } = [];
 
     /// <summary>
-    /// Gets a value indicating whether any preset asks for the disk to be the temp directory.
-    /// </summary>
-    public bool SetAsTemp
-    {
-        get; init;
-    }
-
-    /// <summary>
     /// Gets the variables that two presets point at different folders.
     /// </summary>
     public IReadOnlyList<string> Conflicts { get; init; } = [];
@@ -69,7 +61,6 @@ public static class PresetComposer
         var capacity = 0UL;
         string? label = null;
         ImageCompressionLevel? compression = null;
-        var setAsTemp = false;
         var folders = new List<string>();
         var redirects = new List<EnvRedirect>();
         var conflicts = new List<string>();
@@ -79,7 +70,6 @@ public static class PresetComposer
             capacity = ulong.MaxValue - capacity < preset.CapacityBytes ? ulong.MaxValue : capacity + preset.CapacityBytes;
             label ??= preset.VolumeLabel;
             compression ??= preset.CompressionLevel;
-            setAsTemp |= preset.SetAsTemp;
 
             foreach (var folder in preset.Folders)
             {
@@ -111,7 +101,6 @@ public static class PresetComposer
             CompressionLevel = compression,
             Folders = folders,
             EnvRedirects = redirects,
-            SetAsTemp = setAsTemp,
             Conflicts = conflicts,
         };
     }

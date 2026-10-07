@@ -142,11 +142,6 @@ public partial class App
             return;
         }
 
-        // Nothing is mounted yet, so every environment variable still pointing into a RAM disk is a
-        // leftover of a crash. Restored now rather than after auto-mount, which can take a while
-        // (large or encrypted images); disks that redirect variables set them again once mounted.
-        _mainViewModel!.RestoreDanglingEnvRedirects();
-
         // Listening before auto-mount so a command sent meanwhile (e.g. from the Explorer context
         // menu) is queued rather than refused, but not run until auto-mount has finished.
         var autoMountDone = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -253,7 +248,9 @@ public partial class App
             Dispatcher, iconStream, _mainViewModel, ShowMainWindow, ShowMainWindowAndCreate, ResetTempDirsFromTrayAsync,
             ShowMainWindowAndSettings, ShowAboutDialog, ExitApplication);
         _trayTooltipController = new(_mainViewModel, _trayIconController);
-        _tempDirCompatChecker = new(settings, _trayIconController, () => _mainWindow is { IsVisible: true, WindowState: not WindowState.Minimized } ? _mainWindow : null);
+        _tempDirCompatChecker = new(
+            settings, _trayIconController, () => _mainWindow is { IsVisible: true, WindowState: not WindowState.Minimized } ? _mainWindow : null,
+            () => _mainViewModel!.RestoreRecordedTemp());
         _mountManager.ActivityDetected += _trayIconController.OnActivityDetected;
         _diskNotificationService = new(
             _mainViewModel, _trayIconController, () => WindowVisibility.IsShownToUser(_mainWindow),
@@ -263,6 +260,12 @@ public partial class App
         // TEMP target gets its global symlink published at startup. Rooted as a field only to keep
         // its Disks.CollectionChanged subscription alive.
         _globalMountCoordinator = new(_mainViewModel, _serviceProvider!.GetRequiredService<ILogger<GlobalMountCoordinator>>());
+
+        // Nothing is mounted yet, so every environment variable still pointing into a RAM disk is a
+        // leftover of a crash. Restored now rather than after auto-mount, which can take a while
+        // (large or encrypted images); disks that redirect variables set them again once mounted.
+        // Before the TEMP check, which resets what is left to the Windows defaults.
+        _mainViewModel.RestoreDanglingEnvRedirects();
 
         _tempDirCompatChecker.CheckOnStartup(config);
 
@@ -415,7 +418,7 @@ public partial class App
 
             if (tempOnRamDisk)
             {
-                TempDirResetService.Reset();
+                _mainViewModel!.RestoreUserTemp();
             }
         }
 
@@ -587,13 +590,15 @@ public partial class App
     /// </summary>
     private void ResetEnvironmentForSessionEnding()
     {
+        // First, so TEMP gets back what it held before; the reset below only catches a TEMP set by
+        // an older version, which nothing recorded.
+        _mainViewModel?.RestoreAllEnvRedirects(broadcast: false);
+
         if (_mountManager is { } mountManager &&
             TempDirCompatChecker.IsTempOnAnyMountPoint(mountManager.GetAll().Select(disk => disk.Options.MountPoint)))
         {
             TempDirResetService.Reset(broadcast: false);
         }
-
-        _mainViewModel?.RestoreAllEnvRedirects(broadcast: false);
     }
 
     private async Task ShutdownAsync()

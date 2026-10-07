@@ -110,7 +110,7 @@ public interface ICliDiskController
     /// <param name="volumeLabel">The volume label, or <c>null</c> to take it from the presets.</param>
     /// <param name="imagePath">Optional path to persist the disk to.</param>
     /// <param name="password">Optional password to encrypt <paramref name="imagePath"/> with.</param>
-    /// <param name="presets">Ids or names of the presets to combine.</param>
+    /// <param name="presets">Ids of the presets to combine.</param>
     /// <returns><c>(true, message)</c> on success; <c>(false, message)</c> with the reason otherwise.</returns>
     Task<(bool Success, string Message)> CreateWithPresetsAsync(
         string mountPoint, ulong? capacityBytes, string? volumeLabel, string? imagePath, string? password, IReadOnlyList<string> presets) =>
@@ -386,13 +386,11 @@ public sealed record CliDiskDetails(
 /// </summary>
 /// <param name="Id">The id to pass to <c>create --preset</c>.</param>
 /// <param name="Name">The display name.</param>
-/// <param name="BuiltIn"><c>true</c> for a preset that ships with the app.</param>
 /// <param name="CapacityBytes">The suggested capacity in bytes.</param>
 /// <param name="Folders">The folders created on every mount.</param>
 /// <param name="Variables">The environment variables pointed into the disk, as <c>NAME=folder</c>.</param>
-/// <param name="SetAsTemp"><c>true</c> if the preset is meant to host the user's temp directory.</param>
 public sealed record CliPreset(
-    string Id, string Name, bool BuiltIn, ulong CapacityBytes, IReadOnlyList<string> Folders, IReadOnlyList<string> Variables, bool SetAsTemp);
+    string Id, string Name, ulong CapacityBytes, IReadOnlyList<string> Folders, IReadOnlyList<string> Variables);
 
 /// <summary>
 /// A directory or file in a top list of the CLI <c>usage</c> output.

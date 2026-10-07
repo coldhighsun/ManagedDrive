@@ -7,7 +7,69 @@ namespace ManagedDrive.App.ViewModels;
 /// </summary>
 public sealed partial class MainViewModel
 {
-    private static void ResetTempIfPointingAt(string mountPoint)
+    /// <summary>
+    /// The variables the temp preset redirects.
+    /// </summary>
+    private static readonly string[] TempVariables = ["TEMP", "TMP"];
+
+    /// <summary>
+    /// Puts the user's TEMP and TMP back to what they held before they were pointed into a RAM
+    /// disk. When nothing was recorded (a setting made by an older version) they are reset to the
+    /// Windows defaults instead. Call it only while TEMP points into a RAM disk.
+    /// </summary>
+    /// <param name="broadcast">Whether to announce the change to running programs.</param>
+    /// <returns><c>true</c> on success; <c>false</c> if the Windows defaults could not be written.</returns>
+    public bool RestoreUserTemp(bool broadcast = true) =>
+        _envRedirector.RestoreVariables(TempVariables, broadcast) > 0 || TempDirResetService.Reset(broadcast);
+
+    /// <summary>
+    /// Puts TEMP and TMP back for an explicit "restore" request from the user, who may not have a RAM
+    /// disk as TEMP at all: what was recorded is restored; without a record the Windows defaults are
+    /// written only when TEMP really points into a mounted RAM disk, so a TEMP the user chose
+    /// themselves is never overwritten.
+    /// </summary>
+    /// <returns>What was done.</returns>
+    public TempRestoreResult RestoreRecordedTemp()
+    {
+        if (_envRedirector.RestoreVariables(TempVariables) > 0)
+        {
+            return TempRestoreResult.Restored;
+        }
+
+        // Disks is bound to the UI, so it is only read on the UI thread; this method runs on a pool thread.
+        var dispatcher = Application.Current.Dispatcher;
+        var onKnownDisk = dispatcher.CheckAccess() ? IsTempOnKnownDisk() : dispatcher.Invoke(IsTempOnKnownDisk);
+        if (!onKnownDisk)
+        {
+            return TempRestoreResult.NothingToRestore;
+        }
+
+        return TempDirResetService.Reset() ? TempRestoreResult.Restored : TempRestoreResult.Failed;
+    }
+
+    /// <summary>
+    /// Whether the user's TEMP points into a mounted RAM disk or into a disk of a saved profile, so a
+    /// TEMP left pointing at a disk that is not mounted any more (set by an older version, no backup)
+    /// is still recognised as ours. Must run on the UI thread.
+    /// </summary>
+    /// <returns><c>true</c> when TEMP is on one of the app's disks.</returns>
+    private bool IsTempOnKnownDisk()
+    {
+        if (TempDirCompatChecker.IsTempOnAnyDisk(Disks))
+        {
+            return true;
+        }
+
+        var userTemp = Environment.GetEnvironmentVariable("TEMP", EnvironmentVariableTarget.User);
+        return !string.IsNullOrEmpty(userTemp) &&
+            TempDirCompatChecker.FindProfileContainingPath(Environment.ExpandEnvironmentVariables(userTemp), _settingsStore.Load().Disks) is not null;
+    }
+
+    /// <summary>
+    /// Restores TEMP and TMP when TEMP points into the disk at <paramref name="mountPoint"/>.
+    /// </summary>
+    /// <param name="mountPoint">The mount point of a disk that is not available.</param>
+    private void ResetTempIfPointingAt(string mountPoint)
     {
         var userTemp = Environment.GetEnvironmentVariable("TEMP", EnvironmentVariableTarget.User);
         if (!string.IsNullOrEmpty(userTemp))
@@ -15,9 +77,37 @@ public sealed partial class MainViewModel
             var expanded = Environment.ExpandEnvironmentVariables(userTemp);
             if (MountPointValidator.IsPathOnMountPoint(expanded, mountPoint))
             {
-                TempDirResetService.Reset();
+                RestoreUserTemp();
             }
         }
+    }
+
+    /// <summary>
+    /// Asks the user, once, to accept that a RAM disk as TEMP can break installers run by a
+    /// system-level service. The first showing is remembered in the settings.
+    /// </summary>
+    /// <param name="owner">The window the confirmation belongs to.</param>
+    /// <returns><c>true</c> when the warning was already shown or the user accepts it.</returns>
+    public bool ConfirmTempDirWarning(Window owner)
+    {
+        if (_settingsStore.Load().TempDirCompatWarningShown)
+        {
+            return true;
+        }
+
+        var warn = new ConfirmDialog(
+            Loc.Get("Msg.SetTempDirWarningTitle"),
+            Loc.Get("Msg.SetTempDirWarningBody"))
+        {
+            Owner = owner
+        };
+        if (warn.ShowDialog() != true)
+        {
+            return false;
+        }
+
+        _settingsStore.Update(current => current with { TempDirCompatWarningShown = true });
+        return true;
     }
 
     /// <summary>
@@ -162,6 +252,211 @@ public sealed partial class MainViewModel
         catch (Exception ex)
         {
             _logger.LogError(ex, "Applying preset effects on {MountPoint} failed.", options.MountPoint);
+        }
+    }
+
+    /// <summary>
+    /// Returns a disk's options with the presets that redirect variables decided by the user's
+    /// environment: the edit dialog ticks them from what the variables really point at, not from
+    /// what the saved settings say.
+    /// </summary>
+    /// <param name="options">The disk's options.</param>
+    /// <returns>The options with matching folders and redirections.</returns>
+    private DiskOptions WithEnvironmentPresets(DiskOptions options)
+    {
+        var effective = PresetSelection.Reconcile(
+            BuiltInPresets.All,
+            options.Folders ?? [],
+            options.EnvRedirects ?? [],
+            redirect => _envRedirector.PointsInto(options.MountPoint, redirect));
+        return options with
+        {
+            Folders = effective.Folders.Count == 0 ? null : effective.Folders,
+            EnvRedirects = effective.EnvRedirects.Count == 0 ? null : effective.EnvRedirects,
+        };
+    }
+
+    /// <summary>
+    /// Takes the presets that redirect environment variables away from every other disk when a
+    /// disk is created or edited to have them: such a preset can be on one disk only, so the disk
+    /// the user just chose wins and the others lose it (their variables are put back, their folders
+    /// stay). Presets that only create folders are left alone. Disks that are not mounted lose them
+    /// from their saved profile.
+    /// </summary>
+    /// <param name="newOptions">The options of the disk being created or edited.</param>
+    /// <param name="oldOptions">The disk's options before the edit, or <c>null</c> for a new disk.</param>
+    /// <param name="excluding">The disk being edited, which is not one of the "other" disks.</param>
+    /// <returns>A sentence saying what moved, or <c>null</c> when nothing did.</returns>
+    private async Task<string?> ReleaseClaimedPresetsAsync(DiskOptions newOptions, DiskOptions? oldOptions, DiskViewModel? excluding)
+    {
+        // This runs before a mount or an edit that has already locked the disk (IsRemounting); a failure
+        // here must not abort that flow, the disks just keep what they had.
+        try
+        {
+            return await ReleaseClaimedPresetsCoreAsync(newOptions, oldOptions, excluding);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Taking presets away from other disks failed for {MountPoint}.", newOptions.MountPoint);
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Does the work of <see cref="ReleaseClaimedPresetsAsync"/>; may throw.
+    /// </summary>
+    /// <param name="newOptions">The options of the disk being created or edited.</param>
+    /// <param name="oldOptions">The disk's options before the edit, or <c>null</c> for a new disk.</param>
+    /// <param name="excluding">The disk being edited, which is not one of the "other" disks.</param>
+    /// <returns>A sentence saying what moved, or <c>null</c> when nothing did.</returns>
+    private async Task<string?> ReleaseClaimedPresetsCoreAsync(DiskOptions newOptions, DiskOptions? oldOptions, DiskViewModel? excluding)
+    {
+        var all = BuiltInPresets.All;
+        var before = oldOptions is null
+            ? []
+            : PresetSelection.Detect(all, oldOptions.Folders ?? [], oldOptions.EnvRedirects ?? []);
+        var now = PresetSelection.Detect(all, newOptions.Folders ?? [], newOptions.EnvRedirects ?? []);
+        var claimed = all
+            .Where(preset => PresetSelection.IsExclusive(preset) && now.Contains(preset.Id) && !before.Contains(preset.Id))
+            .ToList();
+        if (claimed.Count == 0)
+        {
+            return null;
+        }
+
+        var notes = new List<string>();
+        foreach (var other in Disks.Where(d => !ReferenceEquals(d, excluding) &&
+            !string.Equals(d.MountPoint, newOptions.MountPoint, StringComparison.OrdinalIgnoreCase)).ToList())
+        {
+            var options = other.Disk.Options;
+            var release = PresetSelection.Release(all, options.Folders ?? [], options.EnvRedirects ?? [], claimed);
+            if (release.IsEmpty)
+            {
+                continue;
+            }
+
+            var trimmed = options with
+            {
+                Folders = release.Folders.Count == 0 ? null : release.Folders,
+                EnvRedirects = release.EnvRedirects.Count == 0 ? null : release.EnvRedirects,
+            };
+            var error = await Task.Run(() =>
+            {
+                if (!other.Disk.TryApplyOptions(trimmed, out var applyError))
+                {
+                    return applyError;
+                }
+
+                _envRedirector.RestoreVariables(release.ReleasedVariables, mountPoint: options.MountPoint);
+                return null;
+            });
+            if (error is not null)
+            {
+                _logger.LogWarning("Taking presets away from {MountPoint} failed: {Error}", options.MountPoint, error);
+                continue;
+            }
+
+            other.Refresh();
+            notes.Add(DescribeMovedPresets(release.ReleasedPresetIds, options.MountPoint, newOptions.MountPoint));
+        }
+
+        for (var i = 0; i < _unmountedProfiles.Count; i++)
+        {
+            var profile = _unmountedProfiles[i];
+            if (string.Equals(profile.MountPoint, newOptions.MountPoint, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            // Saved profiles keep the variable-redirecting presets as ids, so look at the full list.
+            var expanded = PresetSelection.Expand(all, profile.PresetIds ?? [], profile.Folders ?? [], profile.EnvRedirects ?? []);
+            var release = PresetSelection.Release(all, expanded.Folders, expanded.EnvRedirects, claimed);
+            if (release.IsEmpty)
+            {
+                continue;
+            }
+
+            var stored = PresetSelection.Split(all, release.Folders, release.EnvRedirects);
+            _unmountedProfiles[i] = profile with
+            {
+                PresetIds = stored.PresetIds.Count == 0 ? null : stored.PresetIds,
+                Folders = stored.Folders.Count == 0 ? null : stored.Folders,
+                EnvRedirects = stored.EnvRedirects.Count == 0 ? null : stored.EnvRedirects,
+            };
+            notes.Add(DescribeMovedPresets(release.ReleasedPresetIds, profile.MountPoint, newOptions.MountPoint));
+        }
+
+        if (notes.Count == 0)
+        {
+            return null;
+        }
+
+        SaveSettings();
+        var message = string.Join(" ", notes);
+        _logger.LogInformation("{Message}", message);
+        return message;
+    }
+
+    /// <summary>
+    /// Says that presets moved from one disk to another.
+    /// </summary>
+    /// <param name="presetIds">The ids of the presets.</param>
+    /// <param name="from">The mount point that lost them.</param>
+    /// <param name="to">The mount point that has them now.</param>
+    /// <returns>The sentence.</returns>
+    private static string DescribeMovedPresets(IReadOnlyList<string> presetIds, string from, string to) =>
+        Loc.Format("Status.PresetMoved", string.Join(", ", presetIds.Select(id => Loc.Get($"Preset.{id}.Name"))), from, to);
+
+    /// <summary>
+    /// Brings a mounted disk's folders and environment variables in line with an edit that did not
+    /// remount it: new folders are created, new or changed variables are pointed into the disk and
+    /// variables that are no longer wanted are put back. Folders that are no longer wanted stay on
+    /// the disk, since they may hold cache data. Reports anything that could not be done in the
+    /// status line; the disk itself is unaffected.
+    /// </summary>
+    /// <param name="disk">The mounted disk, already carrying the new options.</param>
+    /// <param name="oldOptions">The options before the edit.</param>
+    /// <param name="newOptions">The options after the edit.</param>
+    /// <returns>A task completing when the changes are applied.</returns>
+    private async Task SyncDiskEffectsAsync(RamDisk disk, DiskOptions oldOptions, DiskOptions newOptions)
+    {
+        var change = DiskEffectsDiff.Compute(oldOptions.Folders, oldOptions.EnvRedirects, newOptions.Folders, newOptions.EnvRedirects);
+        if (change.IsEmpty)
+        {
+            return;
+        }
+
+        try
+        {
+            var result = await Task.Run(() =>
+            {
+                _envRedirector.RestoreVariables(change.RemovedVariables, mountPoint: newOptions.MountPoint);
+
+                // A TEMP set by an older version has no backup to restore from; it would keep pointing
+                // into the disk, so it goes back to the Windows defaults instead.
+                if ((oldOptions.EnvRedirects ?? []).Any(redirect =>
+                        change.RemovedVariables.Contains(redirect.Variable, StringComparer.OrdinalIgnoreCase) &&
+                        TempVariables.Contains(redirect.Variable, StringComparer.OrdinalIgnoreCase) &&
+                        _envRedirector.PointsInto(newOptions.MountPoint, redirect)))
+                {
+                    TempDirResetService.Reset();
+                }
+
+                return _envRedirector.ApplyDiskEffects(
+                    newOptions with { Folders = change.AddedFolders, EnvRedirects = change.AddedRedirects },
+                    () => _disksAcceptingEffects.ContainsKey(disk));
+            });
+            if (!result.IsComplete)
+            {
+                _logger.LogWarning(
+                    "Preset effects on {MountPoint} incomplete after an edit. Rejected: {Rejected}. Failed: {Failed}.",
+                    newOptions.MountPoint, string.Join(", ", result.Rejected), string.Join(", ", result.Failed));
+                ShowStickyStatus(Loc.Format("Status.PresetEffectsIncomplete", newOptions.MountPoint, string.Join(", ", result.Rejected.Concat(result.Failed))));
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Applying preset effects on {MountPoint} after an edit failed.", newOptions.MountPoint);
         }
     }
 

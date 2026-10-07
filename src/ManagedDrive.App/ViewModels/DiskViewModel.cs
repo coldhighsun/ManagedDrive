@@ -204,7 +204,6 @@ public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
 
             _isCurrentTempDir = value;
             OnPropertyChanged(nameof(IsCurrentTempDir));
-            OnPropertyChanged(nameof(IsNotCurrentTempDir));
         }
     }
 
@@ -215,11 +214,6 @@ public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
     {
         get; private set;
     }
-
-    /// <summary>
-    /// Gets the inverse of <see cref="IsCurrentTempDir"/> for visibility binding.
-    /// </summary>
-    public bool IsNotCurrentTempDir => !_isCurrentTempDir;
 
     /// <summary>
     /// Gets the inverse of <see cref="IsReadOnly"/> for visibility binding.
@@ -538,7 +532,7 @@ public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
         // including while the window is hidden. TempDirResetService invalidates it when the app
         // itself changes TEMP.
         var userTemp = UserTempCache.Shared.Get();
-        var diskTemp = Path.Combine(MountPoint, "Temp");
+        var diskTemp = EnvRedirectPolicy.Resolve(MountPoint, "Temp");
         return string.Equals(userTemp, diskTemp, StringComparison.OrdinalIgnoreCase);
     }
 

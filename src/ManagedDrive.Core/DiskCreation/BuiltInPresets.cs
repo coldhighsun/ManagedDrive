@@ -19,7 +19,11 @@ public static class BuiltInPresets
         CapacityBytes = 4 * Gib,
         VolumeLabel = "Temp",
         Folders = ["Temp"],
-        SetAsTemp = true,
+        EnvRedirects =
+        [
+            new() { Variable = "TEMP", SubPath = "Temp" },
+            new() { Variable = "TMP", SubPath = "Temp" },
+        ],
     };
 
     /// <summary>

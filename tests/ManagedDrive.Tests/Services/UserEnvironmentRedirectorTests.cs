@@ -256,6 +256,80 @@ public sealed class UserEnvironmentRedirectorTests : IDisposable
     }
 
     [Fact]
+    public void RestoreVariables_OnlyTouchesTheNamedVariablesOfAnyDisk()
+    {
+        _env.Values["TEMP"] = new(@"%USERPROFILE%\AppData\Local\Temp", RegistryValueKind.ExpandString);
+        _env.Values["TMP"] = new(@"%USERPROFILE%\AppData\Local\Temp", RegistryValueKind.ExpandString);
+        var redirector = CreateRedirector();
+        var temp = new DiskOptions
+        {
+            MountPoint = Path.Combine(_root, "t"),
+            CapacityBytes = 1024 * 1024,
+            EnvRedirects = [new() { Variable = "TEMP", SubPath = "Temp" }, new() { Variable = "tmp", SubPath = "Temp" }],
+        };
+        redirector.ApplyDiskEffects(temp);
+        redirector.ApplyDiskEffects(DiskAt(Path.Combine(_root, "c"), "MY_CACHE", "cache"));
+
+        var restored = redirector.RestoreVariables(["TEMP", "TMP"]);
+
+        Assert.Equal(2, restored);
+        Assert.Equal(new(@"%USERPROFILE%\AppData\Local\Temp", RegistryValueKind.ExpandString), _env.Values["TEMP"]);
+        Assert.Equal(RegistryValueKind.ExpandString, _env.Values["tmp"].Kind);
+        Assert.Equal(Path.Combine(_root, "c", "cache"), _env.Values["MY_CACHE"].Text);
+        Assert.Equal(["MY_CACHE"], _backups.Select(b => b.Variable));
+    }
+
+    [Fact]
+    public void RestoreVariables_WithMountPoint_LeavesTheSameVariableOfAnotherDisk()
+    {
+        var redirector = CreateRedirector();
+        var first = Path.Combine(_root, "a");
+        var second = Path.Combine(_root, "b");
+        redirector.ApplyDiskEffects(DiskAt(first, "MY_CACHE", "c"));
+        redirector.ApplyDiskEffects(DiskAt(second, "OTHER_CACHE", "c"));
+
+        var restored = redirector.RestoreVariables(["MY_CACHE", "OTHER_CACHE"], mountPoint: first);
+
+        Assert.Equal(1, restored);
+        Assert.False(_env.Values.ContainsKey("MY_CACHE"));
+        Assert.Equal(Path.Combine(second, "c"), _env.Values["OTHER_CACHE"].Text);
+        Assert.Equal(["OTHER_CACHE"], _backups.Select(b => b.Variable));
+    }
+
+    [Fact]
+    public void PointsInto_VariableSetToTheDisksFolder_IsTrueWhoeverSetIt()
+    {
+        var mount = Path.Combine(_root, "d");
+        _env.Values["MY_CACHE"] = new(Path.Combine(mount, "cache") + @"\", RegistryValueKind.String);
+
+        Assert.True(CreateRedirector().PointsInto(mount, new() { Variable = "my_cache", SubPath = "cache" }));
+    }
+
+    [Fact]
+    public void PointsInto_UnsetOtherFolderOrOtherDisk_IsFalse()
+    {
+        var mount = Path.Combine(_root, "d");
+        _env.Values["MY_CACHE"] = new(Path.Combine(_root, "other", "cache"), RegistryValueKind.String);
+        var redirector = CreateRedirector();
+
+        Assert.False(redirector.PointsInto(mount, new() { Variable = "MY_CACHE", SubPath = "cache" }));
+        Assert.False(redirector.PointsInto(mount, new() { Variable = "NOT_SET", SubPath = "cache" }));
+        Assert.False(redirector.PointsInto(mount, new() { Variable = "MY_CACHE", SubPath = ".." }));
+    }
+
+    [Fact]
+    public void RestoreVariables_NothingRecorded_RestoresNothing()
+    {
+        _env.Values["TEMP"] = new(@"R:\Temp", RegistryValueKind.String);
+
+        var restored = CreateRedirector().RestoreVariables(["TEMP", "TMP"]);
+
+        Assert.Equal(0, restored);
+        Assert.Equal(@"R:\Temp", _env.Values["TEMP"].Text);
+        Assert.Equal(0, _env.Broadcasts);
+    }
+
+    [Fact]
     public void Restore_UnknownMountPoint_ChangesNothing()
     {
         var redirector = CreateRedirector();

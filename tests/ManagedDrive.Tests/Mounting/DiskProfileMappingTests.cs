@@ -52,6 +52,49 @@ public sealed class DiskProfileMappingTests
     }
 
     [Fact]
+    public void ToProfile_VariableRedirectingPresets_AreSavedAsIdsOnly()
+    {
+        var presets = PresetComposer.Merge([BuiltInPresets.Node, BuiltInPresets.Temp, BuiltInPresets.Browser]);
+        var options = new DiskOptions
+        {
+            MountPoint = "T:",
+            CapacityBytes = 1_048_576UL,
+            Folders = presets.Folders,
+            EnvRedirects = presets.EnvRedirects,
+        };
+
+        var profile = MainViewModel.ToProfile(options);
+        var roundTripped = MainViewModel.ProfileToOptions(profile);
+
+        Assert.Equal(["temp", "node"], profile.PresetIds);
+        Assert.Equal(BuiltInPresets.Browser.Folders, profile.Folders);
+        Assert.Null(profile.EnvRedirects);
+        Assert.Equal(options.Folders!.Order(), roundTripped.Folders!.Order());
+        Assert.Equal(
+            options.EnvRedirects!.Select(r => r.Variable).Order(),
+            roundTripped.EnvRedirects!.Select(r => r.Variable).Order());
+    }
+
+    [Fact]
+    public void ProfileToOptions_LegacyProfileWithExpandedPresets_LoadsAndIsSavedAsIdsNextTime()
+    {
+        var profile = new DiskProfile
+        {
+            MountPoint = "T:",
+            Folders = BuiltInPresets.NuGet.Folders,
+            EnvRedirects = BuiltInPresets.NuGet.EnvRedirects,
+        };
+
+        var options = MainViewModel.ProfileToOptions(profile);
+        var saved = MainViewModel.ToProfile(options);
+
+        Assert.Equal(BuiltInPresets.NuGet.EnvRedirects, options.EnvRedirects);
+        Assert.Equal(["nuget"], saved.PresetIds);
+        Assert.Null(saved.Folders);
+        Assert.Null(saved.EnvRedirects);
+    }
+
+    [Fact]
     public void ToProfile_ThenProfileToOptions_RoundTripsNullableFieldsWhenUnset()
     {
         var options = new DiskOptions
