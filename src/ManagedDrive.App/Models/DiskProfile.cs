@@ -110,7 +110,18 @@ public sealed record DiskProfile
     public bool SaveImageOnExit { get; init; } = true;
 
     /// <summary>
-    /// Gets or sets the folders, relative to the disk's root, created after every mount.
+    /// Gets or sets the ids of the presets that redirect environment variables into the disk. Only
+    /// the ids are saved for these: their folders and variables are known from the preset, and
+    /// whether one is in effect is read from the environment. <c>null</c> for none.
+    /// </summary>
+    public IReadOnlyList<string>? PresetIds
+    {
+        get; init;
+    }
+
+    /// <summary>
+    /// Gets or sets the folders, relative to the disk's root, created after every mount, besides
+    /// those of <see cref="PresetIds"/>.
     /// </summary>
     public IReadOnlyList<string>? Folders
     {
@@ -118,7 +129,8 @@ public sealed record DiskProfile
     }
 
     /// <summary>
-    /// Gets or sets the environment variables pointed into the disk while it is mounted.
+    /// Gets or sets the environment variables pointed into the disk while it is mounted, besides
+    /// those of <see cref="PresetIds"/>.
     /// </summary>
     public IReadOnlyList<EnvRedirect>? EnvRedirects
     {

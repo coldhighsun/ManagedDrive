@@ -90,7 +90,17 @@ public sealed partial class MainViewModel
     /// field mapping can be round-trip tested independently of any live <see cref="MainViewModel"/>
     /// or mounted disk.
     /// </summary>
-    internal static DiskProfile ToProfile(DiskOptions options) => new()
+    internal static DiskProfile ToProfile(DiskOptions options) =>
+        ToProfile(options, PresetSelection.Split(BuiltInPresets.All, options.Folders ?? [], options.EnvRedirects ?? []));
+
+    /// <summary>
+    /// Builds the profile for <paramref name="options"/>, saving the presets that redirect
+    /// variables as ids only (see <see cref="PresetSelection.Split"/>).
+    /// </summary>
+    /// <param name="options">The live disk's options.</param>
+    /// <param name="stored">The disk's folders and redirections split for saving.</param>
+    /// <returns>The profile.</returns>
+    private static DiskProfile ToProfile(DiskOptions options, PresetStorage stored) => new()
     {
         MountPoint = options.MountPoint,
         VolumeLabel = options.VolumeLabel,
@@ -106,8 +116,9 @@ public sealed partial class MainViewModel
         MaxSnapshotSizeBytes = options.MaxSnapshotSizeBytes,
         HighUsageWarnPercent = options.HighUsageWarnPercent,
         SaveImageOnExit = options.SaveImageOnExit,
-        Folders = options.Folders,
-        EnvRedirects = options.EnvRedirects,
+        PresetIds = stored.PresetIds.Count == 0 ? null : stored.PresetIds,
+        Folders = stored.PresetIds.Count == 0 ? options.Folders : (stored.Folders.Count == 0 ? null : stored.Folders),
+        EnvRedirects = stored.PresetIds.Count == 0 ? options.EnvRedirects : (stored.EnvRedirects.Count == 0 ? null : stored.EnvRedirects),
     };
 
     /// <summary>
@@ -205,11 +216,20 @@ public sealed partial class MainViewModel
             SkippedVersion = current.SkippedVersion,
             DefaultCompressionLevel = current.DefaultCompressionLevel,
             DefaultImageDirectory = current.DefaultImageDirectory,
-            Presets = current.Presets,
         });
     }
 
-    internal static DiskOptions ProfileToOptions(DiskProfile p) => new()
+    internal static DiskOptions ProfileToOptions(DiskProfile p) =>
+        ProfileToOptions(p, PresetSelection.Expand(BuiltInPresets.All, p.PresetIds ?? [], p.Folders ?? [], p.EnvRedirects ?? []));
+
+    /// <summary>
+    /// Builds the options for <paramref name="p"/> with the saved preset ids expanded to their
+    /// folders and redirections.
+    /// </summary>
+    /// <param name="p">The saved profile.</param>
+    /// <param name="expanded">The profile's folders and redirections with its presets added.</param>
+    /// <returns>The options.</returns>
+    private static DiskOptions ProfileToOptions(DiskProfile p, PresetStorage expanded) => new()
     {
         MountPoint = p.MountPoint,
         VolumeLabel = p.VolumeLabel,
@@ -227,7 +247,7 @@ public sealed partial class MainViewModel
         MaxSnapshotSizeBytes = p.MaxSnapshotSizeBytes,
         HighUsageWarnPercent = p.HighUsageWarnPercent,
         SaveImageOnExit = p.SaveImageOnExit,
-        Folders = p.Folders,
-        EnvRedirects = p.EnvRedirects,
+        Folders = expanded.PresetIds.Count == 0 ? p.Folders : expanded.Folders,
+        EnvRedirects = expanded.PresetIds.Count == 0 ? p.EnvRedirects : expanded.EnvRedirects,
     };
 }

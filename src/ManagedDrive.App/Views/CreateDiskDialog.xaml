@@ -139,20 +139,16 @@
                         <RowDefinition Height="*"/>
                         <RowDefinition Height="8"/>
                         <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="8"/>
-                        <RowDefinition Height="Auto"/>
                     </Grid.RowDefinitions>
-                    <TextBlock Grid.Row="0" Text="{DynamicResource CreateDisk.Presets.Hint}" TextWrapping="Wrap"
+                    <TextBlock Grid.Row="0" x:Name="PresetHintText" Text="{DynamicResource CreateDisk.Presets.Hint}" TextWrapping="Wrap"
                                Foreground="{DynamicResource AppForegroundLight}"/>
                     <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto">
                         <StackPanel x:Name="PresetPanel"/>
                     </ScrollViewer>
-                    <TextBlock Grid.Row="4" x:Name="PresetSummaryText" TextWrapping="Wrap"
-                               Foreground="{DynamicResource AppForegroundLight}"/>
-                    <Button Grid.Row="6" x:Name="SavePresetButton" HorizontalAlignment="Left" Padding="12,4"
-                            Content="{DynamicResource CreateDisk.Presets.Save}"
-                            ToolTip="{DynamicResource Tip.SavePreset}"
-                            Style="{StaticResource RaisedButton}" Click="SavePreset_Click"/>
+                    <ScrollViewer Grid.Row="4" MaxHeight="120" VerticalScrollBarVisibility="Auto">
+                        <TextBlock x:Name="PresetSummaryText" TextWrapping="Wrap"
+                                   Foreground="{DynamicResource AppForegroundLight}"/>
+                    </ScrollViewer>
                 </Grid>
             </TabItem>
 

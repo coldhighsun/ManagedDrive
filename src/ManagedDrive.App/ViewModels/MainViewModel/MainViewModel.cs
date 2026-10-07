@@ -126,13 +126,6 @@ public sealed partial class MainViewModel : INotifyPropertyChanged, IDisposable
             p => ResolveTarget(p) != null);
         RefreshCommand = new(_ => RefreshAll());
         ResetTempDirsCommand = new(_ => ExecuteResetTempDirs());
-        ToggleTempDirCommand = new(
-            p => ExecuteToggleTempDir(ResolveTarget(p)),
-            p =>
-            {
-                var vm = ResolveTarget(p);
-                return vm is { Disk.Options.ReadOnly: false };
-            });
         SettingsCommand = new(_ => ExecuteSettings());
         AboutCommand = new(_ => ExecuteAbout());
 
@@ -379,7 +372,8 @@ public sealed partial class MainViewModel : INotifyPropertyChanged, IDisposable
     }
 
     /// <summary>
-    /// Gets the command that resets Windows TEMP and TMP directories to their OS defaults.
+    /// Gets the command that puts Windows TEMP and TMP back to what they held before they were
+    /// pointed into a RAM disk.
     /// </summary>
     public RelayCommand ResetTempDirsCommand
     {
@@ -433,15 +427,6 @@ public sealed partial class MainViewModel : INotifyPropertyChanged, IDisposable
         get;
     }
 
-
-    /// <summary>
-    /// Gets the command that toggles the user's TEMP/TMP between the selected disk's
-    /// Temp folder and the Windows default, depending on the current state.
-    /// </summary>
-    public RelayCommand ToggleTempDirCommand
-    {
-        get;
-    }
 
     /// <summary>
     /// Gets the command that unmounts the selected disk.
@@ -505,7 +490,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged, IDisposable
 
         if (TempDirCompatChecker.IsTempOnAnyDisk(Disks))
         {
-            TempDirResetService.Reset();
+            RestoreUserTemp();
         }
 
         ExitRequested?.Invoke(this, EventArgs.Empty);

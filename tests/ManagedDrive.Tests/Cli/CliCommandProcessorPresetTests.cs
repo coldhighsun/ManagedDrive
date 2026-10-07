@@ -82,7 +82,7 @@ public class CliCommandProcessorPresetTests
         Assert.Contains("Node.js caches", outcome.Message);
         Assert.Contains("npm_config_cache=npm-cache", outcome.Message);
         Assert.Contains("temp", outcome.Message);
-        Assert.Contains("(temp directory)", outcome.Message);
+        Assert.Contains("TEMP=Temp", outcome.Message);
     }
 
     [Fact]
@@ -150,8 +150,8 @@ public class CliCommandProcessorPresetTests
         /// <inheritdoc />
         public override Task<IReadOnlyList<CliPreset>> GetPresetsAsync() => Task.FromResult<IReadOnlyList<CliPreset>>(
         [
-            new("node", "Node.js caches", true, 2UL * 1024 * 1024 * 1024, ["npm-cache"], ["npm_config_cache=npm-cache"], false),
-            new("temp", "Temp directory", true, 4UL * 1024 * 1024 * 1024, ["Temp"], [], true),
+            new("node", "Node.js caches", 2UL * 1024 * 1024 * 1024, ["npm-cache"], ["npm_config_cache=npm-cache"]),
+            new("temp", "Temp directory", 4UL * 1024 * 1024 * 1024, ["Temp"], ["TEMP=Temp", "TMP=Temp"]),
         ]);
     }
 

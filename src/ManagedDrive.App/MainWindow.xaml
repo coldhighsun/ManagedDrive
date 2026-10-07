@@ -209,7 +209,7 @@
                             <MouseBinding MouseAction="LeftDoubleClick" Command="{Binding OpenInExplorerCommand}"/>
                         </Border.InputBindings>
                         <Border.ContextMenu>
-                            <ContextMenu>
+                            <ContextMenu Opened="DiskContextMenu_Opened">
                                 <!-- Navigation -->
                                 <MenuItem Header="{DynamicResource Btn.OpenInExplorer}"
                                           Command="{Binding PlacementTarget.DataContext.OpenInExplorerCommand,
@@ -224,22 +224,9 @@
                                                     RelativeSource={RelativeSource AncestorType=ContextMenu}}"
                                           CommandParameter="{Binding PlacementTarget.DataContext,
                                                     RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
-                                <MenuItem Header="{DynamicResource Btn.SetAsTempDir}"
-                                          Visibility="{Binding PlacementTarget.DataContext.IsNotCurrentTempDir,
-                                                        RelativeSource={RelativeSource AncestorType=ContextMenu},
-                                                        Converter={StaticResource BoolToVis}}"
-                                          Command="{Binding PlacementTarget.Tag.ToggleTempDirCommand,
-                                                    RelativeSource={RelativeSource AncestorType=ContextMenu}}"
-                                          CommandParameter="{Binding PlacementTarget.DataContext,
-                                                    RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
-                                <MenuItem Header="{DynamicResource Btn.RestoreDefaultTemp}"
-                                          Visibility="{Binding PlacementTarget.DataContext.IsCurrentTempDir,
-                                                        RelativeSource={RelativeSource AncestorType=ContextMenu},
-                                                        Converter={StaticResource BoolToVis}}"
-                                          Command="{Binding PlacementTarget.Tag.ToggleTempDirCommand,
-                                                    RelativeSource={RelativeSource AncestorType=ContextMenu}}"
-                                          CommandParameter="{Binding PlacementTarget.DataContext,
-                                                    RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
+                                <!-- The check items are created on Initialized and ticked in DiskContextMenu_Opened, from what the environment says. -->
+                                <MenuItem Header="{DynamicResource Btn.Presets}" Tag="PresetsMenu"
+                                          Initialized="PresetsMenuItem_Initialized"/>
                                 <MenuItem Header="{DynamicResource Btn.ViewDiskContents}"
                                           Command="{Binding PlacementTarget.Tag.ViewDiskContentsCommand,
                                                     RelativeSource={RelativeSource AncestorType=ContextMenu}}"

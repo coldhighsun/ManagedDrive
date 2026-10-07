@@ -42,7 +42,7 @@ public sealed class SettingsStoreTests : IDisposable
     }
 
     [Fact]
-    public void SaveThenLoad_RoundTripsPresetsFoldersAndRedirects()
+    public void SaveThenLoad_RoundTripsDiskFoldersAndRedirects()
     {
         var store = new SettingsStore(SettingsPath);
         var config = new AppConfiguration
@@ -56,19 +56,6 @@ public sealed class SettingsStoreTests : IDisposable
                     EnvRedirects = [new() { Variable = "npm_config_cache", SubPath = "npm-cache" }],
                 },
             ],
-            Presets =
-            [
-                new DiskPreset
-                {
-                    Id = "user:mine",
-                    Name = "Mine",
-                    CapacityBytes = 512UL * 1024 * 1024,
-                    CompressionLevel = ImageCompressionLevel.Optimal,
-                    Folders = ["x"],
-                    EnvRedirects = [new() { Variable = "MY_VAR", SubPath = "x" }],
-                    SetAsTemp = true,
-                },
-            ],
         };
 
         store.Save(config);
@@ -77,23 +64,43 @@ public sealed class SettingsStoreTests : IDisposable
         var profile = Assert.Single(loaded.Disks);
         Assert.Equal(["npm-cache"], profile.Folders);
         Assert.Equal("npm_config_cache", Assert.Single(profile.EnvRedirects!).Variable);
-        var preset = Assert.Single(loaded.Presets!);
-        Assert.Equal(config.Presets![0].Id, preset.Id);
-        Assert.Equal(ImageCompressionLevel.Optimal, preset.CompressionLevel);
-        Assert.True(preset.SetAsTemp);
-        Assert.Equal("MY_VAR", Assert.Single(preset.EnvRedirects).Variable);
     }
 
     [Fact]
-    public void Load_ConfigWithoutPresetFields_LeavesThemNull()
+    public void SaveThenLoad_RoundTripsPresetIds()
+    {
+        var store = new SettingsStore(SettingsPath);
+
+        store.Save(new AppConfiguration { Disks = [new DiskProfile { MountPoint = "R:", PresetIds = ["node", "temp"] }] });
+        var loaded = store.Load();
+
+        Assert.Equal(["node", "temp"], Assert.Single(loaded.Disks).PresetIds);
+    }
+
+    [Fact]
+    public void Load_ConfigWithoutFolderFields_LeavesThemNull()
     {
         Directory.CreateDirectory(_dir);
         File.WriteAllText(SettingsPath, "{ \"Disks\": [ { \"MountPoint\": \"R:\" } ] }");
 
         var loaded = new SettingsStore(SettingsPath).Load();
 
-        Assert.Null(loaded.Presets);
         Assert.Null(Assert.Single(loaded.Disks).Folders);
+    }
+
+    [Fact]
+    public void Load_LegacyConfigWithSavedPresets_IgnoresThemAndKeepsTheRest()
+    {
+        Directory.CreateDirectory(_dir);
+        File.WriteAllText(
+            SettingsPath,
+            "{ \"Language\": \"zh-CN\", \"Disks\": [ { \"MountPoint\": \"R:\" } ], "
+            + "\"Presets\": [ { \"Id\": \"user:mine\", \"Name\": \"Mine\", \"CapacityBytes\": 1024 } ] }");
+
+        var loaded = new SettingsStore(SettingsPath).Load();
+
+        Assert.Equal("zh-CN", loaded.Language);
+        Assert.Equal("R:", Assert.Single(loaded.Disks).MountPoint);
     }
 
     [Fact]

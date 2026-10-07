@@ -135,38 +135,6 @@ public static class TempDirResetService
     }
 
     /// <summary>
-    /// Sets the current user's TEMP and TMP environment variables to <paramref name="tempPath"/>,
-    /// creating the directory first if it does not already exist.
-    /// </summary>
-    /// <param name="tempPath">The absolute path to use as the temp directory.</param>
-    /// <returns><c>true</c> on success; <c>false</c> if the directory or registry write failed.</returns>
-    public static bool Set(string tempPath)
-    {
-        try
-        {
-            Directory.CreateDirectory(tempPath);
-
-            using var key = Registry.CurrentUser.OpenSubKey(UserEnvKeyPath, writable: true);
-            if (key == null)
-            {
-                return false;
-            }
-
-            key.SetValue("TEMP", tempPath, RegistryValueKind.String);
-            key.SetValue("TMP", tempPath, RegistryValueKind.String);
-            UserTempCache.Shared.Invalidate();
-
-            BroadcastEnvironmentChange();
-
-            return true;
-        }
-        catch
-        {
-            return false;
-        }
-    }
-
-    /// <summary>
     /// Tells running programs that the user's environment variables changed.
     /// </summary>
     internal static void BroadcastEnvironmentChange() => Broadcaster.Request();
@@ -188,6 +156,21 @@ public static class TempDirResetService
         uint fuFlags,
         uint uTimeout,
         out UIntPtr lpdwResult);
+}
+
+/// <summary>
+/// What a "restore TEMP" request did.
+/// </summary>
+public enum TempRestoreResult
+{
+    /// <summary>TEMP and TMP do not point into a RAM disk and nothing was recorded, so nothing was changed.</summary>
+    NothingToRestore,
+
+    /// <summary>TEMP and TMP were put back.</summary>
+    Restored,
+
+    /// <summary>TEMP and TMP could not be written.</summary>
+    Failed,
 }
 
 /// <summary>

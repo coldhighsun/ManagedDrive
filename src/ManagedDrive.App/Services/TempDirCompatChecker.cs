@@ -11,14 +11,28 @@ public sealed class TempDirCompatChecker
     private readonly SettingsStore _settings;
     private readonly TrayIconController _trayIconController;
 
+    /// <summary>
+    /// Puts TEMP and TMP back for the tray action: to what they held before they were pointed into a
+    /// RAM disk, so the recorded backups are used up too, or to the Windows defaults when nothing was recorded.
+    /// </summary>
+    private readonly Func<TempRestoreResult> _restoreTemp;
+
     /// <param name="settings">Used to persist <see cref="AppConfiguration.TempDirCompatWarningShown"/>.</param>
     /// <param name="trayIconController">Used to show the reset-result balloon tip.</param>
     /// <param name="ownerWindowProvider">Supplies the confirm dialog's owner window, or <c>null</c> if none is loaded.</param>
-    public TempDirCompatChecker(SettingsStore settings, TrayIconController trayIconController, Func<Window?> ownerWindowProvider)
+    /// <param name="restoreTemp">
+    /// Restores TEMP and TMP for the tray action; <c>null</c> resets them to the Windows defaults.
+    /// </param>
+    public TempDirCompatChecker(
+        SettingsStore settings,
+        TrayIconController trayIconController,
+        Func<Window?> ownerWindowProvider,
+        Func<TempRestoreResult>? restoreTemp = null)
     {
         _settings = settings;
         _trayIconController = trayIconController;
         _ownerWindowProvider = ownerWindowProvider;
+        _restoreTemp = restoreTemp ?? (() => TempDirResetService.Reset() ? TempRestoreResult.Restored : TempRestoreResult.Failed);
     }
 
     /// <summary>
@@ -180,10 +194,15 @@ public sealed class TempDirCompatChecker
             return;
         }
 
-        var success = await Task.Run(() => TempDirResetService.Reset());
+        var result = await Task.Run(_restoreTemp);
         _trayIconController.ShowBalloonTip(
             "ManagedDrive",
-            success ? Loc.Get("Msg.ResetTempSuccess") : Loc.Get("Msg.ResetTempFailed"),
-            success ? System.Windows.Forms.ToolTipIcon.Info : System.Windows.Forms.ToolTipIcon.Warning);
+            result switch
+            {
+                TempRestoreResult.Restored => Loc.Get("Msg.ResetTempSuccess"),
+                TempRestoreResult.NothingToRestore => Loc.Get("Msg.ResetTempNothing"),
+                _ => Loc.Get("Msg.ResetTempFailed"),
+            },
+            result == TempRestoreResult.Failed ? System.Windows.Forms.ToolTipIcon.Warning : System.Windows.Forms.ToolTipIcon.Info);
     }
 }

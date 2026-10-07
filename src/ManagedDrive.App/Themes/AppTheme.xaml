@@ -516,12 +516,56 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="MenuItem">
-                    <Border x:Name="Bd" Background="{TemplateBinding Background}"
-                            Padding="{TemplateBinding Padding}"
-                            CornerRadius="3">
-                        <ContentPresenter ContentSource="Header" VerticalAlignment="Center"/>
-                    </Border>
+                    <Grid>
+                        <Border x:Name="Bd" Background="{TemplateBinding Background}"
+                                Padding="{TemplateBinding Padding}"
+                                CornerRadius="3">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition x:Name="CheckColumn" Width="0"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <Border x:Name="CheckBox" Grid.Column="0" Width="16" Height="16" Margin="0,0,8,0"
+                                        CornerRadius="3" BorderThickness="1" VerticalAlignment="Center"
+                                        BorderBrush="{DynamicResource AppForegroundLight}" Background="Transparent"
+                                        Visibility="Collapsed">
+                                    <TextBlock x:Name="CheckMark" Text="&#xE73E;" Style="{StaticResource IconText}"
+                                               FontSize="11" Foreground="{DynamicResource AppPrimaryForeground}"
+                                               Visibility="Hidden"/>
+                                </Border>
+                                <ContentPresenter Grid.Column="1" ContentSource="Header" VerticalAlignment="Center"/>
+                                <TextBlock x:Name="SubmenuArrow" Grid.Column="2" Text="&#xE76C;"
+                                           Style="{StaticResource IconText}" FontSize="10" Margin="16,0,0,0"
+                                           Visibility="Collapsed"/>
+                            </Grid>
+                        </Border>
+                        <Popup x:Name="PART_Popup" Placement="Right" HorizontalOffset="-2" AllowsTransparency="True"
+                               Focusable="False" PopupAnimation="Fade"
+                               IsOpen="{Binding IsSubmenuOpen, RelativeSource={RelativeSource TemplatedParent}}">
+                            <Border Background="{DynamicResource AppSurface}"
+                                    BorderBrush="{DynamicResource AppDivider}"
+                                    BorderThickness="1" Padding="4" CornerRadius="4" Margin="0,0,8,8">
+                                <Border.Effect>
+                                    <DropShadowEffect ShadowDepth="1" BlurRadius="8" Opacity="0.25"/>
+                                </Border.Effect>
+                                <ItemsPresenter KeyboardNavigation.DirectionalNavigation="Cycle"/>
+                            </Border>
+                        </Popup>
+                    </Grid>
                     <ControlTemplate.Triggers>
+                        <Trigger Property="IsCheckable" Value="True">
+                            <Setter TargetName="CheckColumn" Property="Width" Value="Auto"/>
+                            <Setter TargetName="CheckBox" Property="Visibility" Value="Visible"/>
+                        </Trigger>
+                        <Trigger Property="IsChecked" Value="True">
+                            <Setter TargetName="CheckMark" Property="Visibility" Value="Visible"/>
+                            <Setter TargetName="CheckBox" Property="Background" Value="{DynamicResource AppPrimary}"/>
+                            <Setter TargetName="CheckBox" Property="BorderBrush" Value="{DynamicResource AppPrimary}"/>
+                        </Trigger>
+                        <Trigger Property="HasItems" Value="True">
+                            <Setter TargetName="SubmenuArrow" Property="Visibility" Value="Visible"/>
+                        </Trigger>
                         <Trigger Property="IsHighlighted" Value="True">
                             <Setter TargetName="Bd" Property="Background" Value="{DynamicResource AppHover}"/>
                         </Trigger>
