@@ -29,9 +29,10 @@ Create, mount and manage in-memory volumes that appear as normal drive letters i
   <img src="docs/screenshots/right_menu.png" alt="Disk context menu" width="400">
 </p>
 <p align="center">
-  <img src="docs/screenshots/settings_window.png" alt="Settings window" width="260">
-  <img src="docs/screenshots/ram_settings_1.png" alt="RAM disk settings (1)" width="260">
-  <img src="docs/screenshots/ram_settings_2.png" alt="RAM disk settings (2)" width="260">
+  <img src="docs/screenshots/settings_window.png" alt="Settings window" width="200">
+  <img src="docs/screenshots/ram_settings_1.png" alt="RAM disk settings (1)" width="200">
+  <img src="docs/screenshots/ram_settings_presets.png" alt="RAM disk settings: Temp &amp; Caches" width="200">
+  <img src="docs/screenshots/ram_settings_2.png" alt="RAM disk settings (2)" width="200">
 </p>
 
 ### Features
@@ -236,9 +237,10 @@ This project bundles [WinFsp](https://winfsp.dev/) and [SharpCompress](https://g
   <img src="docs/screenshots/right_menu_ch.png" alt="磁盘右键菜单" width="400">
 </p>
 <p align="center">
-  <img src="docs/screenshots/settings_window_ch.png" alt="设置窗口" width="260">
-  <img src="docs/screenshots/ram_settings_1_ch.png" alt="内存盘设置（一）" width="260">
-  <img src="docs/screenshots/ram_settings_2_ch.png" alt="内存盘设置（二）" width="260">
+  <img src="docs/screenshots/settings_window_ch.png" alt="设置窗口" width="200">
+  <img src="docs/screenshots/ram_settings_1_ch.png" alt="内存盘设置（一）" width="200">
+  <img src="docs/screenshots/ram_settings_presets_ch.png" alt="内存盘设置：临时与缓存" width="200">
+  <img src="docs/screenshots/ram_settings_2_ch.png" alt="内存盘设置（二）" width="200">
 </p>
 
 ### 功能特性
