@@ -135,32 +135,13 @@ public static class CliPipeClient
 
         using var pipe = new NamedPipeClientStream(".", PipeName, PipeDirection.InOut, PipeOptions.Asynchronous);
 
-        try
+        switch (Connect(pipe, out var refusal))
         {
-            pipe.Connect(ConnectTimeout);
-        }
-        catch (Exception ex) when (ex is TimeoutException or IOException)
-        {
-            return false;
-        }
-        catch (UnauthorizedAccessException)
-        {
-            // An instance is listening but its pipe rejects this process — typically it's running
-            // elevated or as another user. Report that as the answer rather than "nothing
-            // listening": the caller would otherwise launch a second instance and then time out
-            // waiting for a pipe it can never reach.
-            response = new(false, AccessDeniedMessage, null, 1);
-            return true;
-        }
-
-        if (!PipeSecurityRules.IsTrustedOwner(PipeSecurityRules.TryGetOwner(pipe), CurrentUserSid))
-        {
-            // Any local user can create a pipe under this well-known name while no instance is
-            // running, so never hand the arguments (which may include a --password) to a server
-            // neither this user nor an administrator created. Reported as an answer, not as
-            // "nothing listening": launching the app would not help while the name is taken.
-            response = new(false, UntrustedServerMessage, null, 1);
-            return true;
+            case ConnectResult.NotListening:
+                return false;
+            case ConnectResult.Refused:
+                response = refusal;
+                return true;
         }
 
         var reader = new StreamReader(pipe, leaveOpen: true);
@@ -179,6 +160,171 @@ public static class CliPipeClient
             try { writer.Dispose(); } catch (Exception) { }
         }
     }
+
+    /// <summary>
+    /// Outcome of <see cref="Connect"/>.
+    /// </summary>
+    private enum ConnectResult
+    {
+        /// <summary>
+        /// No instance accepted the connection in time; nothing was sent, so retrying is safe.
+        /// </summary>
+        NotListening,
+
+        /// <summary>
+        /// An instance is there but must not be sent the request: its pipe denied this process, or
+        /// another user created it. The reason is the refusal response.
+        /// </summary>
+        Refused,
+
+        /// <summary>
+        /// Connected to a server this user (or an administrator) created.
+        /// </summary>
+        Connected,
+    }
+
+    /// <summary>
+    /// Connects <paramref name="pipe"/> to the running instance and checks who created the server
+    /// end, before anything — the arguments may include a <c>--password</c> — is sent over it.
+    /// </summary>
+    /// <param name="pipe">The client end to connect.</param>
+    /// <param name="refusal">The failure to report when the result is <see cref="ConnectResult.Refused"/>.</param>
+    /// <returns>How the connection attempt ended.</returns>
+    private static ConnectResult Connect(NamedPipeClientStream pipe, out CliResponse refusal)
+    {
+        refusal = new(false, string.Empty, null, 1);
+
+        try
+        {
+            pipe.Connect(ConnectTimeout);
+        }
+        catch (Exception ex) when (ex is TimeoutException or IOException)
+        {
+            return ConnectResult.NotListening;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            // An instance is listening but its pipe rejects this process — typically it's running
+            // elevated or as another user. Report that as the answer rather than "nothing
+            // listening": the caller would otherwise launch a second instance and then time out
+            // waiting for a pipe it can never reach.
+            refusal = new(false, AccessDeniedMessage, null, 1);
+            return ConnectResult.Refused;
+        }
+
+        if (!PipeSecurityRules.IsTrustedOwner(PipeSecurityRules.TryGetOwner(pipe), CurrentUserSid))
+        {
+            // Any local user can create a pipe under this well-known name while no instance is
+            // running, so never hand the arguments (which may include a --password) to a server
+            // neither this user nor an administrator created. Reported as an answer, not as
+            // "nothing listening": launching the app would not help while the name is taken.
+            refusal = new(false, UntrustedServerMessage, null, 1);
+            return ConnectResult.Refused;
+        }
+
+        return ConnectResult.Connected;
+    }
+
+    /// <summary>
+    /// How a <see cref="WatchAsync"/> stream ended.
+    /// </summary>
+    public enum WatchEnd
+    {
+        /// <summary>
+        /// The request was never delivered (no instance was listening), so retrying is safe.
+        /// </summary>
+        NotDelivered,
+
+        /// <summary>
+        /// The server stopped the stream: it refused the request or closed the connection.
+        /// </summary>
+        Closed,
+
+        /// <summary>
+        /// The caller cancelled the watch.
+        /// </summary>
+        Cancelled,
+    }
+
+    /// <summary>
+    /// Forwards a <c>watch</c> command to the running instance and passes each response line it
+    /// streams back to <paramref name="onResponse"/>, until the caller cancels or the server ends
+    /// the stream. Unlike <see cref="TrySend"/>, no read timeout applies: events may be hours apart.
+    /// </summary>
+    /// <param name="args">The command-line arguments (<c>watch</c>, optionally <c>--json</c>).</param>
+    /// <param name="onResponse">
+    /// Called for each response line. A failure response (a refusal) is also the last one.
+    /// </param>
+    /// <param name="cancellationToken">Ends the watch, e.g. on Ctrl+C.</param>
+    /// <returns>Why the watch ended; see <see cref="WatchEnd"/>.</returns>
+    public static async Task<WatchEnd> WatchAsync(
+        string[] args, Action<CliResponse> onResponse, CancellationToken cancellationToken)
+    {
+        using var pipe = new NamedPipeClientStream(".", PipeName, PipeDirection.InOut, PipeOptions.Asynchronous);
+
+        switch (Connect(pipe, out var refusal))
+        {
+            case ConnectResult.NotListening:
+                return WatchEnd.NotDelivered;
+            case ConnectResult.Refused:
+                onResponse(refusal);
+                return WatchEnd.Closed;
+        }
+
+        // Closing the pipe is what unblocks a pending overlapped read; the token alone may not.
+        await using var closeOnCancel = cancellationToken.Register(pipe.Dispose);
+
+        try
+        {
+            using var reader = new StreamReader(pipe, leaveOpen: true);
+            using var writer = new StreamWriter(pipe, leaveOpen: true) { AutoFlush = true };
+
+            using var writeCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            writeCts.CancelAfter(WatchRequestTimeout);
+            try
+            {
+                await writer.WriteLineAsync(
+                    CliPipeProtocol.SerializeRequest(args, Environment.CurrentDirectory).AsMemory(), writeCts.Token);
+            }
+            catch (IOException)
+            {
+                // The instance dropped the connection before taking the request.
+                return WatchEnd.NotDelivered;
+            }
+
+            while (true)
+            {
+                // Not ReadBoundedLineAsync: that one drops whatever follows the first line in the
+                // block it read, which is right for a single response but would lose events here.
+                // The server was verified above to be this user's (or an administrator's).
+                var line = await reader.ReadLineAsync(cancellationToken);
+                if (line is null)
+                {
+                    return WatchEnd.Closed;
+                }
+
+                try
+                {
+                    onResponse(CliPipeProtocol.DeserializeResponse(line));
+                }
+                catch (JsonException)
+                {
+                    onResponse(new(false, InvalidResponseMessage, null, 1));
+                    return WatchEnd.Closed;
+                }
+            }
+        }
+        catch (Exception ex) when (ex is OperationCanceledException or IOException or ObjectDisposedException)
+        {
+            return cancellationToken.IsCancellationRequested ? WatchEnd.Cancelled : WatchEnd.Closed;
+        }
+    }
+
+    /// <summary>
+    /// Upper bound on handing a <c>watch</c> request to the instance, which only completes once the
+    /// instance reads it (its pipe has no inbound buffer).
+    /// </summary>
+    private static readonly TimeSpan WatchRequestTimeout = TimeSpan.FromSeconds(30);
 
     /// <summary>
     /// Calls <see cref="TrySend"/> until the request is delivered, <paramref name="timeout"/> has

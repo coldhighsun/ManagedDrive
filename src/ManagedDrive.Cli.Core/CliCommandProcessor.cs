@@ -19,6 +19,42 @@ public static class CliCommandProcessor
         args is [var only] && string.Equals(only, "exit", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
+    /// Determines whether <paramref name="args"/> is the <c>watch</c> command (optionally with
+    /// <c>--json</c>, before or after it). Unlike every other command it is not answered with one
+    /// response but with a stream of them, so the pipe server and client handle it themselves
+    /// instead of passing it to <see cref="ExecuteAsync"/>. <c>watch --help</c> and other argument
+    /// errors are not matched and go to <see cref="ExecuteAsync"/> like any command.
+    /// </summary>
+    /// <param name="args">The command-line arguments.</param>
+    /// <param name="json">Whether events are to be printed as JSON lines.</param>
+    /// <returns><c>true</c> for <c>watch</c> and <c>watch --json</c>.</returns>
+    public static bool IsWatchCommand(string[] args, out bool json)
+    {
+        json = false;
+        var seenWatch = false;
+
+        foreach (var arg in args)
+        {
+            if (!seenWatch && string.Equals(arg, "watch", StringComparison.OrdinalIgnoreCase))
+            {
+                seenWatch = true;
+            }
+            else if (string.Equals(arg, "--json", StringComparison.OrdinalIgnoreCase))
+            {
+                json = true;
+            }
+            else
+            {
+                json = false;
+                return false;
+            }
+        }
+
+        json &= seenWatch;
+        return seenWatch;
+    }
+
+    /// <summary>
     /// Parses <paramref name="args"/> and executes the matching subcommand against
     /// <paramref name="diskController"/>.
     /// </summary>
@@ -34,6 +70,12 @@ public static class CliCommandProcessor
     {
         var buffer = new StringWriter();
         CliOutcome? outcome = null;
+
+        var jsonOption = new Option<bool>("--json")
+        {
+            Description = "Print the result as JSON instead of text, for scripting. Argument errors and --help are still plain text.",
+            Recursive = true,
+        };
 
         var mountImageArgument = new Argument<string>("image-path")
         {
@@ -370,6 +412,15 @@ public static class CliCommandProcessor
                 diskController,
                 o => outcome = o));
 
+        var infoDriveArgument = new Argument<string>("drive-letter")
+        {
+            Description = "Drive letter of a currently mounted disk, e.g. R:",
+        };
+        var infoCommand = new Command("info", "Shows the configuration and current state of a mounted disk.");
+        infoCommand.Arguments.Add(infoDriveArgument);
+        infoCommand.SetAction(async (parseResult, _) =>
+            await InfoAsync(parseResult.GetValue(infoDriveArgument)!, diskController, o => outcome = o));
+
         var snapshotCreateDriveArgument = new Argument<string>("drive-letter")
         {
             Description = "Drive letter of a currently mounted disk, e.g. R:",
@@ -442,12 +493,49 @@ public static class CliCommandProcessor
                 diskController,
                 o => outcome = o));
 
+        var snapshotExtractDriveArgument = new Argument<string>("drive-letter")
+        {
+            Description = "Drive letter of a currently mounted disk, e.g. R:",
+        };
+        var snapshotExtractIndexArgument = new Argument<int>("index")
+        {
+            Description = "1-based snapshot index from 'snapshot list' (1 = newest).",
+        };
+        var snapshotExtractPathArgument = new Argument<string>("snapshot-path")
+        {
+            Description = "File or directory inside the snapshot, e.g. \\Folder\\a.txt. Use \\ for the whole disk.",
+        };
+        var snapshotExtractOutputArgument = new Argument<string>("output-path")
+        {
+            Description = "Host path to write to. A file goes to this path (or into it, if it is a directory); a directory's contents go into it.",
+        };
+        var snapshotExtractForceOption = new Option<bool>("--force", "-f")
+        {
+            Description = "Overwrite existing files in the output.",
+        };
+        var snapshotExtractCommand = new Command("extract", "Copies a file or directory out of a snapshot to the host, leaving the disk untouched.");
+        snapshotExtractCommand.Arguments.Add(snapshotExtractDriveArgument);
+        snapshotExtractCommand.Arguments.Add(snapshotExtractIndexArgument);
+        snapshotExtractCommand.Arguments.Add(snapshotExtractPathArgument);
+        snapshotExtractCommand.Arguments.Add(snapshotExtractOutputArgument);
+        snapshotExtractCommand.Options.Add(snapshotExtractForceOption);
+        snapshotExtractCommand.SetAction(async (parseResult, _) =>
+            await SnapshotExtractAsync(
+                parseResult.GetValue(snapshotExtractDriveArgument)!,
+                parseResult.GetValue(snapshotExtractIndexArgument),
+                parseResult.GetValue(snapshotExtractPathArgument)!,
+                ResolvePath(parseResult.GetValue(snapshotExtractOutputArgument)!, workingDirectory),
+                parseResult.GetValue(snapshotExtractForceOption),
+                diskController,
+                o => outcome = o));
+
         var snapshotCommand = new Command("snapshot", "Manages timestamped snapshots of a mounted disk's backing image.");
         snapshotCommand.Subcommands.Add(snapshotCreateCommand);
         snapshotCommand.Subcommands.Add(snapshotListCommand);
         snapshotCommand.Subcommands.Add(snapshotRestoreCommand);
         snapshotCommand.Subcommands.Add(snapshotDeleteCommand);
         snapshotCommand.Subcommands.Add(snapshotDiffCommand);
+        snapshotCommand.Subcommands.Add(snapshotExtractCommand);
 
         var editDriveArgument = new Argument<string>("drive-letter")
         {
@@ -597,17 +685,23 @@ public static class CliCommandProcessor
             return exitCode;
         });
 
-        var listJsonOption = new Option<bool>("--json")
-        {
-            Description = "Output the disk list as JSON instead of a table.",
-        };
         var listCommand = new Command("list", "Lists currently mounted disks.");
-        listCommand.Options.Add(listJsonOption);
         listCommand.SetAction((parseResult, _) =>
         {
             var disks = diskController.ListDisks();
-            outcome = new(true, string.Empty, disks, 0, Json: parseResult.GetValue(listJsonOption));
+            outcome = new(true, string.Empty, disks, 0, Json: parseResult.GetValue(jsonOption));
             return Task.FromResult(0);
+        });
+
+        // Registered so --help lists it. The pipe server and client run `watch` themselves (see
+        // IsWatchCommand); it only gets here when ExecuteAsync is called without that path.
+        var watchCommand = new Command(
+            "watch",
+            "Prints disk events (mounted, unmounted, save-completed, save-failed, high-usage) as they happen, until interrupted with Ctrl+C. With --json, one JSON object per line.");
+        watchCommand.SetAction((_, _) =>
+        {
+            outcome = new(false, "watch streams events and can only be run through the mdrive command-line client.", null, 1);
+            return Task.FromResult(1);
         });
 
         var exitCommand = new Command("exit", "Exits the running ManagedDrive application.");
@@ -619,6 +713,7 @@ public static class CliCommandProcessor
         });
 
         var rootCommand = new RootCommand("ManagedDrive CLI — quick mount/unmount for RAM disks.");
+        rootCommand.Options.Add(jsonOption);
         rootCommand.Subcommands.Add(mountCommand);
         rootCommand.Subcommands.Add(mountArchiveCommand);
         rootCommand.Subcommands.Add(createCommand);
@@ -631,7 +726,9 @@ public static class CliCommandProcessor
         rootCommand.Subcommands.Add(exportCommand);
         rootCommand.Subcommands.Add(listCommand);
         rootCommand.Subcommands.Add(lsCommand);
+        rootCommand.Subcommands.Add(infoCommand);
         rootCommand.Subcommands.Add(snapshotCommand);
+        rootCommand.Subcommands.Add(watchCommand);
         rootCommand.Subcommands.Add(exitCommand);
 
         var invocationConfiguration = new InvocationConfiguration
@@ -640,11 +737,12 @@ public static class CliCommandProcessor
             Error = buffer,
         };
 
-        var exitCode = await rootCommand.Parse(args).InvokeAsync(invocationConfiguration);
+        var parseResult = rootCommand.Parse(args);
+        var exitCode = await parseResult.InvokeAsync(invocationConfiguration);
 
         if (outcome != null)
         {
-            return outcome;
+            return parseResult.GetValue(jsonOption) ? CliJson.ToJsonOutcome(outcome) : outcome;
         }
 
         // No handler ran to completion (parse error, --help, unknown subcommand, etc.) — fall
@@ -703,7 +801,7 @@ public static class CliCommandProcessor
             return 1;
         }
 
-        setOutcome(new(true, FormatSnapshotDiff(diff!), null, 0));
+        setOutcome(new(true, FormatSnapshotDiff(diff!), null, 0, Data: diff));
         return 0;
     }
 
@@ -759,8 +857,70 @@ public static class CliCommandProcessor
         }
 
         var lines = entries!.Select(e => e.IsDirectory ? $"{e.Name}/" : $"{e.Name}\t{e.SizeBytes}");
-        setOutcome(new(true, string.Join('\n', lines), null, 0));
+        setOutcome(new(true, string.Join('\n', lines), null, 0, Data: entries));
         return 0;
+    }
+
+    private static async Task<int> InfoAsync(string driveLetter, ICliDiskController diskController, Action<CliOutcome> setOutcome)
+    {
+        driveLetter = NormalizeDriveLetter(driveLetter);
+
+        var (success, message, details) = await diskController.GetDiskInfoAsync(driveLetter);
+        if (!success)
+        {
+            setOutcome(new(
+                false,
+                string.IsNullOrEmpty(message) ? $"No disk is currently mounted at {driveLetter}." : message,
+                null,
+                1));
+            return 1;
+        }
+
+        setOutcome(new(true, FormatDiskDetails(details!), null, 0, Data: details));
+        return 0;
+    }
+
+    /// <summary>
+    /// Renders a <see cref="CliDiskDetails"/> into the aligned <c>label: value</c> lines of the
+    /// <c>info</c> command's text output.
+    /// </summary>
+    /// <param name="details">The disk's configuration and state.</param>
+    /// <returns>The lines, joined with newlines.</returns>
+    private static string FormatDiskDetails(CliDiskDetails details)
+    {
+        var usedPercent = details.TotalBytes > 0 ? (double)details.UsedBytes / details.TotalBytes * 100.0 : 0.0;
+        var snapshotLimits = new List<string>();
+        if (details.MaxSnapshotCount is { } maxCount)
+        {
+            snapshotLimits.Add($"at most {maxCount}");
+        }
+
+        if (details.MaxSnapshotSizeBytes is { } maxSize)
+        {
+            snapshotLimits.Add($"at most {ByteFormatter.Format(maxSize)}");
+        }
+
+        var snapshots = snapshotLimits.Count == 0
+            ? "not enabled"
+            : $"{details.SnapshotCount?.ToString() ?? "0"} kept ({string.Join(", ", snapshotLimits)})";
+
+        var lines = new (string Label, string Value)[]
+        {
+            ("Mount point", details.MountPoint),
+            ("Label", details.VolumeLabel),
+            ("Used", $"{ByteFormatter.Format(details.UsedBytes)} of {ByteFormatter.Format(details.TotalBytes)} ({usedPercent:0.#}%)"),
+            ("Read-only", details.ReadOnly ? "yes" : "no"),
+            ("Image", details.ImagePath ?? "(memory only)"),
+            ("Source archive", details.SourceArchivePath ?? "(none)"),
+            ("Encrypted", details.PasswordProtected ? "yes" : "no"),
+            ("Auto-save", details.AutoSaveIntervalMinutes is > 0 and var minutes ? $"every {minutes} min" : "off"),
+            ("Compression", details.CompressionLevel),
+            ("Snapshots", snapshots),
+            ("Last save", details.LastSaveTime is { } saved ? saved.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss") : "(not saved yet)"),
+        };
+
+        var width = lines.Max(l => l.Label.Length) + 2;
+        return string.Join('\n', lines.Select(l => $"{(l.Label + ":").PadRight(width)}{l.Value}"));
     }
 
     private static async Task<int> ExportAsync(
@@ -960,6 +1120,21 @@ public static class CliCommandProcessor
         return success ? 0 : 1;
     }
 
+    private static async Task<int> SnapshotExtractAsync(
+        string driveLetter, int index, string snapshotPath, string outputPath, bool overwrite,
+        ICliDiskController diskController, Action<CliOutcome> setOutcome)
+    {
+        driveLetter = NormalizeDriveLetter(driveLetter);
+
+        var (success, message) = await diskController.ExtractSnapshotAsync(driveLetter, index, snapshotPath, outputPath, overwrite);
+        setOutcome(new(
+            success,
+            string.IsNullOrEmpty(message) ? $"No disk is currently mounted at {driveLetter}." : message,
+            null,
+            success ? 0 : 1));
+        return success ? 0 : 1;
+    }
+
     private static async Task<int> SnapshotDeleteAsync(string driveLetter, int index, ICliDiskController diskController, Action<CliOutcome> setOutcome)
     {
         driveLetter = NormalizeDriveLetter(driveLetter);
@@ -988,7 +1163,7 @@ public static class CliCommandProcessor
             return 1;
         }
 
-        setOutcome(new(true, message, null, 0, snapshots));
+        setOutcome(new(true, message, null, 0, snapshots, Data: snapshots));
         return 0;
     }
 
@@ -1037,10 +1212,25 @@ public static class CliCommandProcessor
 /// an optional disk list (populated only by <c>list</c>), and the process exit code. Rendering
 /// this into terminal output (colors, tables) is the caller's responsibility.
 /// </summary>
+/// <param name="Success">Whether the command succeeded.</param>
+/// <param name="Message">
+/// The text to print; when <paramref name="Json"/> is set and <paramref name="Disks"/> is not, it
+/// is already the JSON document and is printed verbatim.
+/// </param>
+/// <param name="Disks">The mounted disks, populated only by <c>list</c>.</param>
+/// <param name="ExitCode">The process exit code.</param>
+/// <param name="Snapshots">The snapshot history, populated only by <c>snapshot list</c> in text mode.</param>
+/// <param name="Json">Whether the result is to be printed as JSON.</param>
+/// <param name="Data">
+/// What a data-returning command prints under <c>--json</c> (an <c>ls</c> listing, a snapshot
+/// diff, ...). Consumed by <see cref="CliJson"/> inside <see cref="CliCommandProcessor.ExecuteAsync"/>
+/// and never sent over the pipe.
+/// </param>
 public sealed record CliOutcome(
     bool Success,
     string Message,
     IReadOnlyList<CliDiskInfo>? Disks,
     int ExitCode,
     IReadOnlyList<CliSnapshotInfo>? Snapshots = null,
-    bool Json = false);
+    bool Json = false,
+    object? Data = null);

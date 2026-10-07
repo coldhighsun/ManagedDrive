@@ -32,6 +32,11 @@ public static class Program
         // legacy code page would print as '?'.
         ConsoleUnicodeOutput.Enable();
 
+        if (CliCommandProcessor.IsWatchCommand(args, out _))
+        {
+            return await WatchAsync(args);
+        }
+
         if (CliPipeClient.TrySend(args, out var response))
         {
             return CliOutputRenderer.Render(response);
@@ -66,6 +71,69 @@ public static class Program
             ? "Timed out waiting for ManagedDrive to accept the command; it may be busy with another one."
             : "Timed out waiting for ManagedDrive to start.");
         return 1;
+    }
+
+    /// <summary>
+    /// Runs <c>mdrive watch</c>: connects to the running app (starting it if needed) and prints each
+    /// event line the app streams back, until Ctrl+C or the app goes away.
+    /// </summary>
+    /// <param name="args">The command-line arguments.</param>
+    /// <returns>0 after Ctrl+C; 1 if the app refused the watch, closed it, or could not be reached.</returns>
+    private static async Task<int> WatchAsync(string[] args)
+    {
+        using var cts = new CancellationTokenSource();
+        Console.CancelKeyPress += (_, e) =>
+        {
+            // Let the watch wind down and return normally instead of killing the process.
+            e.Cancel = true;
+            cts.Cancel();
+        };
+
+        var exitCode = 0;
+        var printedFailure = false;
+        void OnResponse(CliResponse response)
+        {
+            if (response.Success)
+            {
+                Console.WriteLine(response.Message);
+                return;
+            }
+
+            printedFailure = true;
+            exitCode = response.ExitCode;
+            Console.Error.WriteLine(response.Message);
+        }
+
+        var end = await CliPipeClient.WatchAsync(args, OnResponse, cts.Token);
+        if (end == CliPipeClient.WatchEnd.NotDelivered)
+        {
+            if (!AppInstance.IsRunning() && !TryLaunchApp())
+            {
+                await Console.Error.WriteLineAsync("Could not find or start ManagedDrive.exe.");
+                return 1;
+            }
+
+            var waited = Stopwatch.StartNew();
+            while (end == CliPipeClient.WatchEnd.NotDelivered && waited.Elapsed < LaunchWaitTimeout && !cts.IsCancellationRequested)
+            {
+                await Task.Delay(RetryInterval);
+                end = await CliPipeClient.WatchAsync(args, OnResponse, cts.Token);
+            }
+
+            if (end == CliPipeClient.WatchEnd.NotDelivered)
+            {
+                await Console.Error.WriteLineAsync("Timed out waiting for ManagedDrive to accept the command; it may be busy with another one.");
+                return 1;
+            }
+        }
+
+        if (end == CliPipeClient.WatchEnd.Closed && !printedFailure)
+        {
+            await Console.Error.WriteLineAsync("ManagedDrive stopped sending events.");
+            return 1;
+        }
+
+        return end == CliPipeClient.WatchEnd.Cancelled ? 0 : exitCode;
     }
 
     private static bool TryLaunchApp()

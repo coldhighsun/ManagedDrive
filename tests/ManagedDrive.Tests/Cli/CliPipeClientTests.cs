@@ -346,6 +346,96 @@ public sealed class CliPipeClientTests : IDisposable
         Assert.Null(response);
     }
 
+    [Fact]
+    public async Task WatchAsync_NothingListens_ReturnsNotDelivered()
+    {
+        var end = await CliPipeClient.WatchAsync(["watch"], _ => { }, TestContext.Current.CancellationToken)
+            .WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+
+        Assert.Equal(CliPipeClient.WatchEnd.NotDelivered, end);
+    }
+
+    [Fact]
+    public async Task WatchAsync_ServerStreamsEvents_PassesThemInOrderUntilCancelled()
+    {
+        var source = new FakeCliEventSource();
+        using var server = new ManagedDrive.App.Cli.CliPipeServer(
+            CliPipeClient.TestPipeNameOverride!,
+            _ => Task.FromResult(new CliOutcome(true, string.Empty, null, 0)),
+            eventSource: source);
+        server.Start();
+        var received = new List<CliResponse>();
+        var gotThree = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
+
+        var watching = CliPipeClient.WatchAsync(
+            ["watch", "--json"],
+            response =>
+            {
+                lock (received)
+                {
+                    received.Add(response);
+                    if (received.Count == 3)
+                    {
+                        gotThree.SetResult();
+                    }
+                }
+            },
+            cts.Token);
+        await source.WaitForSubscribersAsync(1);
+        source.Raise(new(CliEventNames.Mounted, "R:", DateTimeOffset.Now, "A"));
+        source.Raise(new(CliEventNames.SaveCompleted, "R:", DateTimeOffset.Now));
+        source.Raise(new(CliEventNames.Unmounted, "R:", DateTimeOffset.Now));
+        await gotThree.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+
+        await cts.CancelAsync();
+        var end = await watching.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+
+        Assert.Equal(CliPipeClient.WatchEnd.Cancelled, end);
+        Assert.All(received, r => Assert.True(r.Success && r.Json));
+        Assert.Contains("\"mounted\"", received[0].Message);
+        Assert.Contains("\"save-completed\"", received[1].Message);
+        Assert.Contains("\"unmounted\"", received[2].Message);
+        await source.WaitForSubscribersAsync(0);
+    }
+
+    [Fact]
+    public async Task WatchAsync_ServerRefuses_ReportsTheFailureAndEnds()
+    {
+        using var server = new ManagedDrive.App.Cli.CliPipeServer(
+            CliPipeClient.TestPipeNameOverride!,
+            _ => Task.FromResult(new CliOutcome(true, string.Empty, null, 0)),
+            eventSource: null);
+        server.Start();
+        var received = new List<CliResponse>();
+
+        var end = await CliPipeClient.WatchAsync(["watch"], received.Add, TestContext.Current.CancellationToken)
+            .WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+
+        Assert.Equal(CliPipeClient.WatchEnd.Closed, end);
+        var refusal = Assert.Single(received);
+        Assert.False(refusal.Success);
+        Assert.Equal(1, refusal.ExitCode);
+    }
+
+    [Fact]
+    public async Task WatchAsync_ServerGoesAway_EndsAsClosed()
+    {
+        var source = new FakeCliEventSource();
+        var server = new ManagedDrive.App.Cli.CliPipeServer(
+            CliPipeClient.TestPipeNameOverride!,
+            _ => Task.FromResult(new CliOutcome(true, string.Empty, null, 0)),
+            eventSource: source);
+        server.Start();
+
+        var watching = CliPipeClient.WatchAsync(["watch"], _ => { }, TestContext.Current.CancellationToken);
+        await source.WaitForSubscribersAsync(1);
+        server.Dispose();
+
+        var end = await watching.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+        Assert.Equal(CliPipeClient.WatchEnd.Closed, end);
+    }
+
     private static async Task AwaitIgnoringCancellationAsync(Task task)
     {
         try
