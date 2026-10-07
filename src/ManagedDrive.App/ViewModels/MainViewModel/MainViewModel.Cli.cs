@@ -589,7 +589,8 @@ public sealed partial class MainViewModel
         }
 
         var entries = nodes
-            .Where(n => n.Key != "\\" && string.Equals(GetParentPath(n.Key), normalizedPath, StringComparison.OrdinalIgnoreCase))
+            .Where(n => n.Key != "\\" && !n.Value.IsStream &&
+                string.Equals(GetParentPath(n.Key), normalizedPath, StringComparison.OrdinalIgnoreCase))
             .Select(n => new CliFileEntry(n.Value.LeafName, n.Value.IsDirectory, n.Value.FileInfo.FileSize))
             .ToList();
 

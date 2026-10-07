@@ -1022,7 +1022,23 @@ public static class DiskImageSerializer
             throw;
         }
 
+        DropInvalidStreams(nodeMap);
         return nodeMap;
+    }
+
+    /// <summary>
+    /// Removes the alternate data streams a loaded image holds that the file system could not have
+    /// created (no file to belong to, or a directory; see <see cref="FileNodeMap.RemoveInvalidStreams"/>)
+    /// and logs each one. Such a node is damage or a hand-made image. Nodes whose name has a colon
+    /// without being a stream name are kept, so an image from an older build loses nothing.
+    /// </summary>
+    /// <param name="nodeMap">The freshly loaded node map.</param>
+    private static void DropInvalidStreams(FileNodeMap nodeMap)
+    {
+        foreach (var path in nodeMap.RemoveInvalidStreams())
+        {
+            Logger.LogWarning("Dropped invalid alternate data stream '{Path}' while loading an image.", path);
+        }
     }
 
     /// <summary>
@@ -1240,6 +1256,7 @@ public static class DiskImageSerializer
             reportTick?.Invoke();
         }
 
+        DropInvalidStreams(nodeMap);
         return nodeMap;
     }
 

@@ -13,6 +13,11 @@ namespace ManagedDrive.Core.Archive;
 public static class ArchiveNodeMapBuilder
 {
     /// <summary>
+    /// Logger for archive entries that can't be imported.
+    /// </summary>
+    private static readonly ILogger Logger = AppLog.CreateLogger(typeof(ArchiveNodeMapBuilder));
+
+    /// <summary>
     /// 1601-01-01 UTC, the earliest instant a Windows FILETIME can represent.
     /// </summary>
     private static readonly DateTime FileTimeEpoch = DateTime.FromFileTimeUtc(0);
@@ -51,6 +56,14 @@ public static class ArchiveNodeMapBuilder
                 var path = NormalizeEntryPath(entry.Key);
                 if (path is null)
                 {
+                    return;
+                }
+
+                if (path.Contains(AlternateStreamName.Separator))
+                {
+                    // A colon makes the name an alternate data stream on the mounted disk, which
+                    // would have no file to belong to; Windows can't name such an entry anyway.
+                    Logger.LogWarning("Skipping archive entry '{Path}': its name contains a colon.", path);
                     return;
                 }
 
