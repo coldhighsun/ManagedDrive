@@ -327,6 +327,14 @@
     <sys:String x:Key="Tray.HighUsageBody">{0} ({1}) is {2:F0}% full.</sys:String>
     <sys:String x:Key="Tray.SaveFailedTitle">Save Failed</sys:String>
     <sys:String x:Key="Tray.SaveFailedBody">{0} ({1}): {2}</sys:String>
+    <sys:String x:Key="Tray.SaveRecoveredTitle">Saving Works Again</sys:String>
+    <sys:String x:Key="Tray.SaveRecoveredBody">{0} ({1}) was saved successfully after an earlier failure.</sys:String>
+    <sys:String x:Key="Tray.WriteRejectedFullTitle">RAM Disk Full</sys:String>
+    <sys:String x:Key="Tray.WriteRejectedFullBody">A write to {0} ({1}) failed because the disk is full.</sys:String>
+    <sys:String x:Key="Tray.WriteRejectedMemoryTitle">Write Refused: Low Memory</sys:String>
+    <sys:String x:Key="Tray.WriteRejectedMemoryBody">A write to {0} ({1}) was refused because the system is nearly out of free memory.</sys:String>
+    <sys:String x:Key="Tray.LowMemoryTitle">System Memory Is Low</sys:String>
+    <sys:String x:Key="Tray.LowMemoryBody">Only {0} of memory is available. RAM disks refuse writes when it runs out.</sys:String>
     <sys:String x:Key="Tray.SaveCompletedTitle">Save Complete</sys:String>
     <sys:String x:Key="Tray.SaveCompletedBody">{0} ({1}) image has been saved.</sys:String>
     <sys:String x:Key="Tray.CapacityAdjustedTitle">Capacity Adjusted</sys:String>
@@ -346,6 +354,9 @@
     <sys:String x:Key="Status.PasswordSet">Password set for {0}.</sys:String>
     <sys:String x:Key="Status.PasswordRemoved">Password removed for {0}.</sys:String>
     <sys:String x:Key="Status.SaveFailed">Save failed for {0}: {1}</sys:String>
+    <sys:String x:Key="Status.WriteRejectedFull">Write to {0} failed: the disk is full</sys:String>
+    <sys:String x:Key="Status.WriteRejectedMemory">Write to {0} refused: system memory is low</sys:String>
+    <sys:String x:Key="Status.LowMemory">System memory is low: only {0} available</sys:String>
     <sys:String x:Key="Status.CapacityAdjusted">{0}: capacity auto-raised from {1} MB to {2} MB to fit the loaded image</sys:String>
     <sys:String x:Key="Status.Unmounted">Unmounted {0}</sys:String>
     <sys:String x:Key="Status.DiskNoLongerMounted">{0} is no longer mounted</sys:String>

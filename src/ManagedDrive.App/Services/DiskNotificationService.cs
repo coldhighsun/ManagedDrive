@@ -1,15 +1,44 @@
+using ManagedDrive.Cli.Core;
 using ThrottledLogging;
 
 namespace ManagedDrive.App.Services;
 
 /// <summary>
-/// Wires each <see cref="DiskViewModel"/>'s usage/save/activity events to tray balloon tips and
-/// status-bar text as disks are added to and removed from <see cref="MainViewModel.Disks"/>.
+/// Wires each <see cref="DiskViewModel"/>'s usage/save/activity/write-rejection events, and the
+/// system's available memory, to tray balloon tips and status-bar text as disks are added to and
+/// removed from <see cref="MainViewModel.Disks"/>.
 /// Extracted from <see cref="App"/>'s <c>SetupUsageWarnings</c>.
 /// </summary>
 public sealed class DiskNotificationService
 {
+    /// <summary>
+    /// How long a refused-write balloon tip stays quiet for the same disk and reason. A copy that
+    /// hits a full disk fails again on every retry, and one balloon per attempt would bury it.
+    /// </summary>
+    private static readonly TimeSpan WriteRejectedCooldown = TimeSpan.FromMinutes(10);
+
+    /// <summary>
+    /// How often available system memory is checked. Runs whether or not the main window is
+    /// visible: the balloon tip it can raise exists for when the window is hidden.
+    /// </summary>
+    private static readonly TimeSpan LowMemoryPollInterval = TimeSpan.FromSeconds(10);
+
+    /// <summary>
+    /// The problem a refused write's sticky status reports, so <see cref="MainViewModel.ClearStickyStatus"/>
+    /// can remove it once memory recovers.
+    /// </summary>
+    private const string WriteRejectedProblem = "WriteRejected";
+
+    /// <summary>
+    /// Stands in for a mount point on the sticky status of the system-wide low-memory warning,
+    /// which belongs to no single disk.
+    /// </summary>
+    private const string LowMemoryStatusKey = "system-memory";
+
     private readonly HashSet<DiskViewModel> _highUsageDisks = [];
+    private readonly DispatcherTimer _lowMemoryTimer;
+    private readonly LowMemoryMonitor _lowMemoryMonitor = new();
+    private readonly NotificationCooldown _writeRejectedCooldown = new(WriteRejectedCooldown);
     /// <summary>
     /// Returns whether the main window (and so its status bar) is in front of the user, i.e. shown
     /// and not minimized; see <see cref="WindowVisibility.IsShownToUser(Window?)"/>.
@@ -51,6 +80,8 @@ public sealed class DiskNotificationService
                     vm.HighUsageWarning += OnDiskHighUsageWarning;
                     vm.SaveFailed += OnDiskSaveFailed;
                     vm.SaveCompleted += OnDiskSaveCompleted;
+                    vm.SaveRecovered += OnDiskSaveRecovered;
+                    vm.WriteRejected += OnDiskWriteRejected;
                     vm.ActivityObserved += OnDiskActivityObserved;
                     vm.PropertyChanged += OnDiskPropertyChanged;
                     vm.SetActivityTrackingEnabled(_isMainWindowShown());
@@ -75,6 +106,8 @@ public sealed class DiskNotificationService
                     vm.HighUsageWarning -= OnDiskHighUsageWarning;
                     vm.SaveFailed -= OnDiskSaveFailed;
                     vm.SaveCompleted -= OnDiskSaveCompleted;
+                    vm.SaveRecovered -= OnDiskSaveRecovered;
+                    vm.WriteRejected -= OnDiskWriteRejected;
                     vm.ActivityObserved -= OnDiskActivityObserved;
                     vm.PropertyChanged -= OnDiskPropertyChanged;
 
@@ -90,6 +123,13 @@ public sealed class DiskNotificationService
                 }
             }
         };
+
+        _lowMemoryTimer = new()
+        {
+            Interval = LowMemoryPollInterval
+        };
+        _lowMemoryTimer.Tick += OnLowMemoryTick;
+        _lowMemoryTimer.Start();
     }
 
     private void OnDiskActivityObserved(object? sender, DiskViewModel.DiskActivityEventArgs e)
@@ -222,6 +262,113 @@ public sealed class DiskNotificationService
             Loc.Get("Tray.SaveFailedTitle"),
             Loc.Format("Tray.SaveFailedBody", vm.VolumeLabel, vm.MountPoint, ex.Message),
             System.Windows.Forms.ToolTipIcon.Error);
+    }
+
+    /// <summary>
+    /// Clears the sticky save-failure report once a save succeeds again, and says so with a
+    /// balloon tip when the main window isn't in front, since that is where the failure was
+    /// reported too.
+    /// </summary>
+    private void OnDiskSaveRecovered(object? sender, EventArgs e)
+    {
+        if (sender is not DiskViewModel vm)
+        {
+            return;
+        }
+
+        if (_mainViewModel.ClearStickyStatus(vm.MountPoint, nameof(DiskViewModel.SaveFailed)))
+        {
+            ShowRemainingHighUsageStatus();
+        }
+
+        ShowBalloonTipUnlessWindowShown(
+            Loc.Get("Tray.SaveRecoveredTitle"),
+            Loc.Format("Tray.SaveRecoveredBody", vm.VolumeLabel, vm.MountPoint),
+            System.Windows.Forms.ToolTipIcon.Info);
+    }
+
+    /// <summary>
+    /// Tells the user why a write was refused. The application that issued it only gets an error
+    /// code, so without this a failed copy gives no hint that the disk is full or memory is low.
+    /// A low-memory refusal stays in the status bar until memory recovers; a full disk is already
+    /// visible in the usage bar, so it only replaces the status text. The balloon tip is limited to
+    /// one per disk and reason per <see cref="WriteRejectedCooldown"/>, and is only spent when it
+    /// is actually shown.
+    /// </summary>
+    private void OnDiskWriteRejected(object? sender, WriteRejectionReason reason)
+    {
+        if (sender is not DiskViewModel vm)
+        {
+            return;
+        }
+
+        var isLowMemory = reason == WriteRejectionReason.LowMemory;
+        var status = Loc.Format(isLowMemory ? "Status.WriteRejectedMemory" : "Status.WriteRejectedFull", vm.MountPoint);
+        if (isLowMemory)
+        {
+            _mainViewModel.ShowStickyStatus(status, vm.MountPoint, WriteRejectedProblem);
+        }
+        else
+        {
+            _mainViewModel.ShowTransientStatus(status);
+        }
+
+        _logger.LogWarningThrottled(
+            $"write-rejected:{vm.MountPoint}:{reason}", WriteRejectedCooldown,
+            "Disk {MountPoint} ({VolumeLabel}) refused a write: {Reason}.",
+            vm.MountPoint, vm.VolumeLabel, reason);
+
+        if (_isMainWindowShown() || !_writeRejectedCooldown.TryAcquire($"{vm.MountPoint}|{reason}"))
+        {
+            return;
+        }
+
+        _trayIconController.ShowBalloonTip(
+            Loc.Get(isLowMemory ? "Tray.WriteRejectedMemoryTitle" : "Tray.WriteRejectedFullTitle"),
+            Loc.Format(isLowMemory ? "Tray.WriteRejectedMemoryBody" : "Tray.WriteRejectedFullBody", vm.VolumeLabel, vm.MountPoint),
+            System.Windows.Forms.ToolTipIcon.Warning);
+    }
+
+    /// <summary>
+    /// Checks available system memory and warns when it gets low, ahead of the RAM disks' own
+    /// guard refusing writes, or clears the refused-write reports once it has recovered. Does
+    /// nothing while no disk is mounted, since then no RAM disk contributes to the pressure.
+    /// </summary>
+    private void OnLowMemoryTick(object? sender, EventArgs e)
+    {
+        var available = SystemMemoryInfo.GetAvailablePhysicalBytes();
+        var cleared = false;
+        switch (_lowMemoryMonitor.Evaluate(available, DateTimeOffset.UtcNow))
+        {
+            case LowMemoryTransition.Warn when _mainViewModel.Disks.Count > 0:
+                var formatted = ByteFormatter.Format(available);
+                _mainViewModel.ShowStickyStatus(Loc.Format("Status.LowMemory", formatted), LowMemoryStatusKey, nameof(LowMemoryMonitor));
+                ShowBalloonTipUnlessWindowShown(
+                    Loc.Get("Tray.LowMemoryTitle"),
+                    Loc.Format("Tray.LowMemoryBody", formatted),
+                    System.Windows.Forms.ToolTipIcon.Warning);
+                _logger.LogWarning("Available system memory is down to {Available}.", formatted);
+                break;
+
+            case LowMemoryTransition.Recovered:
+                cleared = _mainViewModel.ClearStickyStatus(LowMemoryStatusKey);
+                break;
+        }
+
+        // Independent of the monitor's state: a refusal can come and go between two polls, so the
+        // monitor never saw memory low and reports no recovery.
+        if (available > LowMemoryMonitor.RecoverAboveBytes)
+        {
+            foreach (var vm in _mainViewModel.Disks)
+            {
+                cleared |= _mainViewModel.ClearStickyStatus(vm.MountPoint, WriteRejectedProblem);
+            }
+        }
+
+        if (cleared)
+        {
+            ShowRemainingHighUsageStatus();
+        }
     }
 
     /// <summary>

@@ -92,6 +92,23 @@ public sealed partial class MainViewModel
     }
 
     /// <summary>
+    /// Shows a transient status-bar message, unless a problem report is shown, and reverts it to
+    /// <c>Status.Ready</c> after <see cref="DiskActivityStatusDuration"/> like a disk activity message.
+    /// </summary>
+    /// <param name="text">The status text to show.</param>
+    internal void ShowTransientStatus(string text)
+    {
+        if (_stickyStatus is not null)
+        {
+            return;
+        }
+
+        StatusText = text;
+        _diskActivityStatusTimer.Stop();
+        _diskActivityStatusTimer.Start();
+    }
+
+    /// <summary>
     /// Shows a problem report (a failed save or auto-mount, an adjusted capacity, a nearly full
     /// disk) in the status bar and keeps it there until an explicit status replaces it — without
     /// this, the next disk read or write would overwrite it within milliseconds, and the revert
