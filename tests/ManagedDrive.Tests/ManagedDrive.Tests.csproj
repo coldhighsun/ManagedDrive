@@ -35,6 +35,7 @@
     <Using Include="ManagedDrive.App.Controls" />
     <Using Include="ManagedDrive.App.Infrastructure" />
     <Using Include="ManagedDrive.Core.Archive" />
+    <Using Include="ManagedDrive.Core.Diagnostics" />
     <Using Include="ManagedDrive.Core.DiskCreation" />
     <Using Include="ManagedDrive.Core.FileSystem" />
     <Using Include="ManagedDrive.Core.Mounting" />
