@@ -130,6 +130,32 @@
                 </Grid>
             </TabItem>
 
+            <!-- Presets -->
+            <TabItem x:Name="PresetTabItem" Header="{DynamicResource CreateDisk.Section.Presets}">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="8"/>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="8"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="8"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+                    <TextBlock Grid.Row="0" Text="{DynamicResource CreateDisk.Presets.Hint}" TextWrapping="Wrap"
+                               Foreground="{DynamicResource AppForegroundLight}"/>
+                    <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto">
+                        <StackPanel x:Name="PresetPanel"/>
+                    </ScrollViewer>
+                    <TextBlock Grid.Row="4" x:Name="PresetSummaryText" TextWrapping="Wrap"
+                               Foreground="{DynamicResource AppForegroundLight}"/>
+                    <Button Grid.Row="6" x:Name="SavePresetButton" HorizontalAlignment="Left" Padding="12,4"
+                            Content="{DynamicResource CreateDisk.Presets.Save}"
+                            ToolTip="{DynamicResource Tip.SavePreset}"
+                            Style="{StaticResource RaisedButton}" Click="SavePreset_Click"/>
+                </Grid>
+            </TabItem>
+
             <!-- Persistence -->
             <TabItem x:Name="PersistenceTabItem" Header="{DynamicResource CreateDisk.Section.Persistence}">
                 <Grid>

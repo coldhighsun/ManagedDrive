@@ -25,17 +25,31 @@ public sealed class TempDirCompatChecker
     /// Returns <c>true</c> when the user-level TEMP variable currently points into any of
     /// <paramref name="disks"/>.
     /// </summary>
-    public static bool IsTempOnAnyDisk(IEnumerable<DiskViewModel> disks)
+    public static bool IsTempOnAnyDisk(IEnumerable<DiskViewModel> disks) =>
+        IsTempOnAnyMountPoint(disks.Select(d => d.MountPoint));
+
+    /// <summary>
+    /// Returns <c>true</c> when the user-level TEMP variable currently points into any of
+    /// <paramref name="mountPoints"/>. Takes plain strings so it can run off the UI thread, where
+    /// the disk view models must not be touched.
+    /// </summary>
+    /// <param name="mountPoints">The mount points (drive letters or directories) to check.</param>
+    /// <returns><c>true</c> if TEMP is set and lies on one of them.</returns>
+    public static bool IsTempOnAnyMountPoint(IEnumerable<string> mountPoints)
     {
         var userTemp = Environment.GetEnvironmentVariable("TEMP", EnvironmentVariableTarget.User);
-        if (string.IsNullOrEmpty(userTemp))
-        {
-            return false;
-        }
-
-        var expanded = Environment.ExpandEnvironmentVariables(userTemp);
-        return disks.Any(d => MountPointValidator.IsPathOnMountPoint(expanded, d.MountPoint));
+        return !string.IsNullOrEmpty(userTemp)
+            && IsPathOnAnyMountPoint(Environment.ExpandEnvironmentVariables(userTemp), mountPoints);
     }
+
+    /// <summary>
+    /// Whether <paramref name="path"/> lies on any of <paramref name="mountPoints"/>.
+    /// </summary>
+    /// <param name="path">The path to classify.</param>
+    /// <param name="mountPoints">The mount points to compare with.</param>
+    /// <returns><c>true</c> if at least one contains the path.</returns>
+    internal static bool IsPathOnAnyMountPoint(string path, IEnumerable<string> mountPoints) =>
+        mountPoints.Any(mountPoint => MountPointValidator.IsPathOnMountPoint(path, mountPoint));
 
     /// <summary>
     /// Returns the saved disk profile whose mount point (drive letter or directory) contains
@@ -166,7 +180,7 @@ public sealed class TempDirCompatChecker
             return;
         }
 
-        var success = await Task.Run(TempDirResetService.Reset);
+        var success = await Task.Run(() => TempDirResetService.Reset());
         _trayIconController.ShowBalloonTip(
             "ManagedDrive",
             success ? Loc.Get("Msg.ResetTempSuccess") : Loc.Get("Msg.ResetTempFailed"),

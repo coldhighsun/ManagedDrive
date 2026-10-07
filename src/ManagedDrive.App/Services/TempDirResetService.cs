@@ -17,6 +17,14 @@ public static class TempDirResetService
     private static readonly IntPtr HwndBroadcast = new(-1);
 
     /// <summary>
+    /// Sends the environment-change broadcast off the caller's thread: it waits on every top-level
+    /// window, so one hung window would otherwise freeze the caller for seconds.
+    /// </summary>
+    private static readonly CoalescingBroadcaster Broadcaster = new(() =>
+        SendMessageTimeout(HwndBroadcast, WmSettingChange, UIntPtr.Zero, "Environment",
+            SendMessageTimeoutAbortIfHung, 5000, out _));
+
+    /// <summary>
     /// Captures the current user's TEMP and TMP registry values exactly as stored (unexpanded, with their
     /// value kinds) so <see cref="Restore"/> can put them back byte for byte.
     /// </summary>
@@ -57,8 +65,7 @@ public static class TempDirResetService
             WriteValue(key, "TMP", snapshot.Tmp);
             UserTempCache.Shared.Invalidate();
 
-            SendMessageTimeout(HwndBroadcast, WmSettingChange, UIntPtr.Zero, "Environment",
-                SendMessageTimeoutAbortIfHung, 5000, out _);
+            BroadcastEnvironmentChange();
 
             return true;
         }
@@ -95,8 +102,12 @@ public static class TempDirResetService
     /// Writes the default values to <c>HKCU\Environment</c> and broadcasts
     /// <c>WM_SETTINGCHANGE</c> so running processes pick up the change.
     /// </summary>
+    /// <param name="broadcast">
+    /// Whether to announce the change to running programs. <c>false</c> when the session is ending
+    /// and nothing is left to notify; only the registry write matters then.
+    /// </param>
     /// <returns><c>true</c> on success; <c>false</c> if the registry write failed.</returns>
-    public static bool Reset()
+    public static bool Reset(bool broadcast = true)
     {
         try
         {
@@ -110,8 +121,10 @@ public static class TempDirResetService
             key.SetValue("TMP", DefaultUserTemp, RegistryValueKind.ExpandString);
             UserTempCache.Shared.Invalidate();
 
-            SendMessageTimeout(HwndBroadcast, WmSettingChange, UIntPtr.Zero, "Environment",
-                SendMessageTimeoutAbortIfHung, 5000, out _);
+            if (broadcast)
+            {
+                BroadcastEnvironmentChange();
+            }
 
             return true;
         }
@@ -143,8 +156,7 @@ public static class TempDirResetService
             key.SetValue("TMP", tempPath, RegistryValueKind.String);
             UserTempCache.Shared.Invalidate();
 
-            SendMessageTimeout(HwndBroadcast, WmSettingChange, UIntPtr.Zero, "Environment",
-                SendMessageTimeoutAbortIfHung, 5000, out _);
+            BroadcastEnvironmentChange();
 
             return true;
         }
@@ -153,6 +165,19 @@ public static class TempDirResetService
             return false;
         }
     }
+
+    /// <summary>
+    /// Tells running programs that the user's environment variables changed.
+    /// </summary>
+    internal static void BroadcastEnvironmentChange() => Broadcaster.Request();
+
+    /// <summary>
+    /// Waits for broadcasts requested so far to be delivered, so the last change is announced before
+    /// the process ends.
+    /// </summary>
+    /// <param name="timeout">The longest to wait.</param>
+    /// <returns><c>true</c> if all of them were sent.</returns>
+    public static bool WaitForPendingBroadcasts(TimeSpan timeout) => Broadcaster.Wait(timeout);
 
     [DllImport("user32.dll", CharSet = CharSet.Auto)]
     private static extern IntPtr SendMessageTimeout(

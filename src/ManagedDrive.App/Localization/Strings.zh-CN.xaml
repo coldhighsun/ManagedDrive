@@ -70,6 +70,27 @@
     <sys:String x:Key="CreateDisk.CustomZstdLevel">自定义 Zstd 级别：</sys:String>
     <sys:String x:Key="Tip.CustomZstdLevel">高级选项：用精确的 Zstd 级别覆盖上方的预设档位（1=最快，22=最小）。不勾选则使用预设档位对应的级别。</sys:String>
     <sys:String x:Key="Val.BadCustomZstdLevel">请输入 1 到 22 之间的自定义 Zstd 级别。</sys:String>
+    <sys:String x:Key="Val.BadFolder">预设文件夹无效，必须是磁盘内的相对路径。</sys:String>
+    <sys:String x:Key="Val.BadEnvRedirect">环境变量重定向无效，或同一个变量出现了多次。</sys:String>
+    <sys:String x:Key="CreateDisk.Section.Presets">预设</sys:String>
+    <sys:String x:Key="CreateDisk.Presets.Hint">勾选一个或多个预设：自动填入容量和卷标，每次挂载时创建对应文件夹，并把相应环境变量指向本盘。只有之后启动的程序才能看到新的环境变量。</sys:String>
+    <sys:String x:Key="CreateDisk.Presets.Save">另存为预设</sys:String>
+    <sys:String x:Key="CreateDisk.Presets.Delete">删除预设</sys:String>
+    <sys:String x:Key="CreateDisk.Presets.Summary">本盘将设置：</sys:String>
+    <sys:String x:Key="Tip.SavePreset">以卷标为名，保存当前容量、压缩级别以及已勾选预设的文件夹和环境变量。</sys:String>
+    <sys:String x:Key="Msg.PresetConflict">这些预设把同一个变量指向了不同的文件夹，无法同时使用：{0}</sys:String>
+    <sys:String x:Key="Msg.PresetNeedsLabel">请先填写卷标，预设会以它命名保存。</sys:String>
+    <sys:String x:Key="Status.PresetEffectsIncomplete">磁盘 {0}：未能设置 {1}（已被其他磁盘占用，或文件夹创建失败）。</sys:String>
+    <sys:String x:Key="Preset.temp.Name">临时目录</sys:String>
+    <sys:String x:Key="Preset.temp.Desc">创建 Temp 文件夹，并可将本盘设为用户 TEMP 目录。</sys:String>
+    <sys:String x:Key="Preset.node.Name">Node.js 缓存</sys:String>
+    <sys:String x:Key="Preset.node.Desc">npm_config_cache、YARN_CACHE_FOLDER 和 npm_config_store_dir（pnpm 存储）指向本盘。</sys:String>
+    <sys:String x:Key="Preset.nuget.Name">NuGet 包缓存</sys:String>
+    <sys:String x:Key="Preset.nuget.Desc">NUGET_PACKAGES 指向本盘。</sys:String>
+    <sys:String x:Key="Preset.python.Name">Python pip 缓存</sys:String>
+    <sys:String x:Key="Preset.python.Desc">PIP_CACHE_DIR 指向本盘。</sys:String>
+    <sys:String x:Key="Preset.browser.Name">浏览器缓存</sys:String>
+    <sys:String x:Key="Preset.browser.Desc">创建 BrowserCache 文件夹。浏览器没有对应的环境变量，需要用 --disk-cache-dir 参数启动浏览器并指向该文件夹。</sys:String>
     <sys:String x:Key="CreateDisk.SaveOnExit">退出时保存镜像</sys:String>
     <sys:String x:Key="CreateDisk.AutoSave">自动保存镜像，间隔（分钟）：</sys:String>
     <sys:String x:Key="CreateDisk.AutoSaveInterval">间隔（分钟）</sys:String>
@@ -142,6 +163,8 @@
     <sys:String x:Key="Val.CliPasswordRequired">该镜像已加密，请提供 --password 或 --password-file。</sys:String>
     <sys:String x:Key="Val.CliPasswordIncorrect">提供的密码不正确。</sys:String>
     <sys:String x:Key="Val.CliBadCapacity">容量必须大于 0。</sys:String>
+    <sys:String x:Key="Val.CliUnknownPreset">未知预设“{0}”。运行 'mdrive preset list' 查看可用预设。</sys:String>
+    <sys:String x:Key="Msg.CliPresetTempNotApplied">未将该磁盘设为 TEMP 目录，请在应用中通过磁盘菜单设置。</sys:String>
     <sys:String x:Key="Msg.CliPathNotFound">路径不存在：{0}</sys:String>
     <sys:String x:Key="Msg.CliMountPointNotMounted">{0} 当前没有挂载磁盘。</sys:String>
     <sys:String x:Key="Val.CliCloneTargetReadOnly">{0} 是只读磁盘，不能作为克隆目标。</sys:String>

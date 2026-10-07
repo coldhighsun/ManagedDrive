@@ -86,6 +86,53 @@ public partial class CreateDiskDialog
     private int _snapshotSizeValue = 2;
 
     /// <summary>
+    /// The presets the user saved earlier; shown after the built-in ones.
+    /// </summary>
+    private readonly List<DiskPreset> _userPresets = [];
+
+    /// <summary>
+    /// Called with the full list of user presets after one is saved or deleted, so the change
+    /// outlives the dialog even if it is cancelled.
+    /// </summary>
+    private readonly Action<IReadOnlyList<DiskPreset>>? _savePresets;
+
+    /// <summary>
+    /// Whether the preset check boxes are being rebuilt or reverted, so toggling them is ignored.
+    /// </summary>
+    private bool _presetsUpdating;
+
+    /// <summary>
+    /// The folders to create on every mount: the checked presets' union, or an edited disk's own.
+    /// </summary>
+    private IReadOnlyList<string> _folders = [];
+
+    /// <summary>
+    /// The environment variables to point into the disk: the checked presets' union, or an edited
+    /// disk's own.
+    /// </summary>
+    private IReadOnlyList<EnvRedirect> _envRedirects = [];
+
+    /// <summary>
+    /// The volume label last written by a preset, so a later preset change may replace it but a
+    /// label the user typed is left alone.
+    /// </summary>
+    private string? _presetLabel;
+
+    /// <summary>
+    /// Whether the checked presets ask for the disk to become the temp directory.
+    /// </summary>
+    private bool _useAsTemp;
+
+    /// <summary>
+    /// Gets a value indicating whether a checked preset asks for the new disk to become the user's
+    /// temp directory. The caller applies it after mounting, through the usual confirmation.
+    /// </summary>
+    public bool UseAsTemp
+    {
+        get; private set;
+    }
+
+    /// <summary>
     /// Initializes the dialog in create mode.
     /// </summary>
     /// <param name="otherDisks">
@@ -102,12 +149,19 @@ public partial class CreateDiskDialog
     /// Directory preselected when browsing for an image file path via
     /// <see cref="OpenImagePathDialog"/>, from <see cref="AppConfiguration.DefaultImageDirectory"/>.
     /// </param>
+    /// <param name="userPresets">The presets the user saved earlier.</param>
+    /// <param name="savePresets">Persists the user presets whenever the list changes.</param>
     public CreateDiskDialog(
         IReadOnlyList<DiskOptions>? otherDisks = null,
         ImageCompressionLevel? defaultCompressionLevel = null,
-        string? defaultImageDirectory = null)
+        string? defaultImageDirectory = null,
+        IReadOnlyList<DiskPreset>? userPresets = null,
+        Action<IReadOnlyList<DiskPreset>>? savePresets = null)
     {
         InitializeComponent();
+        _userPresets.AddRange(userPresets ?? []);
+        _savePresets = savePresets;
+        BuildPresetList();
         _otherDisks = otherDisks ?? [];
         _defaultImageDirectory = defaultImageDirectory;
         _maxCapacityBytes = (ulong)GC.GetGCMemoryInfo().TotalAvailableMemoryBytes;
@@ -162,6 +216,11 @@ public partial class CreateDiskDialog
     public CreateDiskDialog(DiskOptions existing, IReadOnlyList<DiskOptions>? otherDisks = null, string? currentPassword = null) : this(otherDisks)
     {
         Title = Loc.Get("CreateDisk.TitleEdit");
+
+        // The folders and variables stay as they are; presets only apply to new disks.
+        PresetTabItem.Visibility = Visibility.Collapsed;
+        _folders = existing.Folders ?? [];
+        _envRedirects = existing.EnvRedirects ?? [];
         _originalPassword = currentPassword;
         _originalCapacityBytes = existing.CapacityBytes;
         _wasEncrypted = currentPassword is not null;
@@ -274,6 +333,7 @@ public partial class CreateDiskDialog
             // backing image file to configure persistence for, and the high-usage warning is
             // unavailable (forced off) rather than just defaulted.
             _isImportMode = true;
+        PresetTabItem.Visibility = Visibility.Collapsed;
             _isArchiveImportMode = true;
             _importArchivePath = sourceArchivePath;
             _importCapacityBytes = existing.CapacityBytes;
@@ -312,6 +372,7 @@ public partial class CreateDiskDialog
         IReadOnlyList<DiskOptions>? otherDisks = null) : this(otherDisks)
     {
         _isImportMode = true;
+        PresetTabItem.Visibility = Visibility.Collapsed;
         _importCapacityBytes = importCapacityBytes;
         _importVolumeLabel = importVolumeLabel;
 
@@ -358,6 +419,7 @@ public partial class CreateDiskDialog
         IReadOnlyList<DiskOptions> otherDisks, bool archiveImportOverloadTag) : this(otherDisks)
     {
         _isImportMode = true;
+        PresetTabItem.Visibility = Visibility.Collapsed;
         _isArchiveImportMode = true;
         _importArchivePath = importArchivePath;
         _importCapacityBytes = importTotalBytes;
@@ -575,6 +637,8 @@ public partial class CreateDiskDialog
             CustomZstdLevelEnabled = CustomZstdLevelRow.IsEnabled && CustomZstdLevelBox.IsChecked == true,
             CustomZstdLevelValue = _customZstdLevelValue,
             SaveImageOnExit = SaveOnExitBox.IsChecked == true,
+            Folders = _folders,
+            EnvRedirects = _envRedirects,
             EncryptChecked = EncryptImageBox.IsChecked == true,
             Password1 = PasswordBox1.Password,
             Password2 = PasswordBox2.Password,
@@ -792,6 +856,8 @@ public partial class CreateDiskDialog
         CreateDiskValidationError.BadSnapshotSize => Loc.Get("Val.BadSnapshotSize"),
         CreateDiskValidationError.BadHighUsagePercent => Loc.Get("Val.BadHighUsagePercent"),
         CreateDiskValidationError.BadCustomZstdLevel => Loc.Get("Val.BadCustomZstdLevel"),
+        CreateDiskValidationError.BadFolder => Loc.Get("Val.BadFolder"),
+        CreateDiskValidationError.BadEnvRedirect => Loc.Get("Val.BadEnvRedirect"),
         CreateDiskValidationError.PasswordRequired => Loc.Get("Val.PasswordRequired"),
         CreateDiskValidationError.PasswordMismatch => Loc.Get("Val.PasswordMismatch"),
         CreateDiskValidationError.PasswordTooShort =>
@@ -810,7 +876,178 @@ public partial class CreateDiskDialog
         }
 
         Result = options;
+        UseAsTemp = _useAsTemp;
         DialogResult = true;
+    }
+
+    /// <summary>
+    /// Gets the name shown for a preset: built-in presets are localized from their id.
+    /// </summary>
+    /// <param name="preset">The preset.</param>
+    /// <returns>The display name.</returns>
+    private static string PresetName(DiskPreset preset) => preset.Name ?? Loc.Get($"Preset.{preset.Id}.Name");
+
+    /// <summary>
+    /// Describes what a preset does, for its tooltip.
+    /// </summary>
+    /// <param name="preset">The preset.</param>
+    /// <returns>A short description.</returns>
+    private static string PresetDescription(DiskPreset preset) =>
+        preset.Name is null ? Loc.Get($"Preset.{preset.Id}.Desc") : DescribeEffects(preset.Folders, preset.EnvRedirects);
+
+    /// <summary>
+    /// Lists the folders and variables a disk will get, one per line.
+    /// </summary>
+    /// <param name="folders">The folders.</param>
+    /// <param name="redirects">The redirections.</param>
+    /// <returns>The text, empty when there is nothing.</returns>
+    private static string DescribeEffects(IReadOnlyList<string> folders, IReadOnlyList<EnvRedirect> redirects)
+    {
+        var lines = redirects.Select(r => $"{r.Variable} \u2192 {r.SubPath}")
+            .Concat(folders.Where(f => !redirects.Any(r => string.Equals(r.SubPath, f, StringComparison.OrdinalIgnoreCase))).Select(f => f + "\\"));
+        return string.Join(Environment.NewLine, lines);
+    }
+
+    /// <summary>
+    /// Rebuilds the preset check boxes from the built-in and user presets, keeping the checked ones.
+    /// </summary>
+    private void BuildPresetList()
+    {
+        var checkedIds = PresetPanel.Children.OfType<CheckBox>()
+            .Where(box => box.IsChecked == true).Select(box => (string)box.Tag).ToHashSet();
+        _presetsUpdating = true;
+        PresetPanel.Children.Clear();
+        foreach (var preset in BuiltInPresets.All.Concat(_userPresets))
+        {
+            var box = new CheckBox
+            {
+                Content = $"{PresetName(preset)} ({ManagedDrive.Cli.Core.ByteFormatter.Format(preset.CapacityBytes)})",
+                Tag = preset.Id,
+                IsChecked = checkedIds.Contains(preset.Id),
+                Margin = new(0, 0, 0, 6),
+                ToolTip = PresetDescription(preset),
+            };
+            box.SetResourceReference(Control.ForegroundProperty, "AppForeground");
+            box.Checked += PresetBox_Toggled;
+            box.Unchecked += PresetBox_Toggled;
+            if (preset.Name is not null)
+            {
+                var delete = new MenuItem { Header = Loc.Get("CreateDisk.Presets.Delete"), Tag = preset.Id };
+                delete.Click += DeletePreset_Click;
+                box.ContextMenu = new() { Items = { delete } };
+            }
+
+            PresetPanel.Children.Add(box);
+        }
+
+        _presetsUpdating = false;
+    }
+
+    /// <summary>
+    /// Recomputes the disk settings from the checked presets.
+    /// </summary>
+    /// <param name="sender">The preset check box.</param>
+    /// <param name="e">Unused.</param>
+    private void PresetBox_Toggled(object sender, RoutedEventArgs e)
+    {
+        if (_presetsUpdating)
+        {
+            return;
+        }
+
+        var all = BuiltInPresets.All.Concat(_userPresets).ToList();
+        var selected = PresetPanel.Children.OfType<CheckBox>().Where(box => box.IsChecked == true)
+            .Select(box => all.First(p => p.Id == (string)box.Tag)).ToList();
+        var merged = PresetComposer.Merge(selected);
+        if (merged.Conflicts.Count > 0)
+        {
+            _presetsUpdating = true;
+            ((CheckBox)sender).IsChecked = false;
+            _presetsUpdating = false;
+            MessageBox.Show(Loc.Format("Msg.PresetConflict", string.Join(", ", merged.Conflicts)), Loc.Get("Val.Title"), MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
+        _folders = merged.Folders;
+        _envRedirects = merged.EnvRedirects;
+        _useAsTemp = merged.SetAsTemp;
+        if (selected.Count > 0)
+        {
+            ApplyCapacity(merged.CapacityBytes);
+            if (merged.VolumeLabel is { } label &&
+                (string.IsNullOrWhiteSpace(VolumeLabelBox.Text) || VolumeLabelBox.Text == Loc.Get("CreateDisk.DefaultLabel") || VolumeLabelBox.Text == _presetLabel))
+            {
+                VolumeLabelBox.Text = label;
+                _presetLabel = label;
+            }
+
+            if (merged.CompressionLevel is { } level)
+            {
+                CompressionLevelBox.SelectedIndex = CompressionLevels.IndexOf(level);
+            }
+        }
+
+        var effects = DescribeEffects(_folders, _envRedirects);
+        PresetSummaryText.Text = effects.Length == 0 ? string.Empty : Loc.Get("CreateDisk.Presets.Summary") + Environment.NewLine + effects;
+    }
+
+    /// <summary>
+    /// Sets the capacity controls to <paramref name="bytes"/>, limited to what the machine offers.
+    /// </summary>
+    /// <param name="bytes">The wanted capacity.</param>
+    private void ApplyCapacity(ulong bytes)
+    {
+        var (value, isGb) = ByteUnitConverter.SplitToUnit(Math.Min(bytes, _maxCapacityBytes));
+        CapacityUnitBox.SelectedItem = isGb ? "GB" : "MB";
+        _capacityMaximum = GetCapacityMaximum();
+        CapacitySlider.Maximum = _capacityMaximum;
+        CapacityValue = Math.Clamp(value, 1, _capacityMaximum);
+    }
+
+    /// <summary>
+    /// Saves the current capacity, label, compression and the checked presets' folders and
+    /// variables as a user preset named after the volume label.
+    /// </summary>
+    /// <param name="sender">The save button.</param>
+    /// <param name="e">Unused.</param>
+    private void SavePreset_Click(object sender, RoutedEventArgs e)
+    {
+        var name = VolumeLabelBox.Text.Trim();
+        if (name.Length == 0)
+        {
+            MessageBox.Show(Loc.Get("Msg.PresetNeedsLabel"), Loc.Get("Val.Title"), MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
+        var unit = CapacityUnitBox.SelectedItem as string == "GB" ? 1024UL * 1024 * 1024 : 1024UL * 1024;
+        var preset = new DiskPreset
+        {
+            Id = "user:" + name.ToLowerInvariant(),
+            Name = name,
+            CapacityBytes = (ulong)_capacityValue * unit,
+            VolumeLabel = name,
+            CompressionLevel = (CompressionLevelBox.SelectedItem as CompressionLevelItem)?.Level,
+            Folders = _folders,
+            EnvRedirects = _envRedirects,
+            SetAsTemp = _useAsTemp,
+        };
+        _userPresets.RemoveAll(p => p.Id == preset.Id);
+        _userPresets.Add(preset);
+        _savePresets?.Invoke(_userPresets.ToList());
+        BuildPresetList();
+    }
+
+    /// <summary>
+    /// Deletes a user preset.
+    /// </summary>
+    /// <param name="sender">The context-menu item.</param>
+    /// <param name="e">Unused.</param>
+    private void DeletePreset_Click(object sender, RoutedEventArgs e)
+    {
+        var id = (string)((MenuItem)sender).Tag;
+        _userPresets.RemoveAll(p => p.Id == id);
+        _savePresets?.Invoke(_userPresets.ToList());
+        BuildPresetList();
     }
 
     private void OpenImagePathDialog()

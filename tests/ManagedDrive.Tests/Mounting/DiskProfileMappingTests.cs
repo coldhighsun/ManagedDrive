@@ -33,6 +33,25 @@ public sealed class DiskProfileMappingTests
     }
 
     [Fact]
+    public void ToProfile_ThenProfileToOptions_RoundTripsFoldersAndEnvRedirects()
+    {
+        var options = new DiskOptions
+        {
+            MountPoint = "T:",
+            CapacityBytes = 1_048_576UL,
+            Folders = ["npm-cache", @"a\b"],
+            EnvRedirects = [new() { Variable = "npm_config_cache", SubPath = "npm-cache" }],
+        };
+
+        var profile = MainViewModel.ToProfile(options);
+        var roundTripped = MainViewModel.ProfileToOptions(profile);
+
+        Assert.Equal(options.Folders, profile.Folders);
+        Assert.Equal(options.EnvRedirects, profile.EnvRedirects);
+        Assert.Equal(options, roundTripped);
+    }
+
+    [Fact]
     public void ToProfile_ThenProfileToOptions_RoundTripsNullableFieldsWhenUnset()
     {
         var options = new DiskOptions

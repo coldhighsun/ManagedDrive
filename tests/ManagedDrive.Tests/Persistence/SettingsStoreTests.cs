@@ -42,6 +42,61 @@ public sealed class SettingsStoreTests : IDisposable
     }
 
     [Fact]
+    public void SaveThenLoad_RoundTripsPresetsFoldersAndRedirects()
+    {
+        var store = new SettingsStore(SettingsPath);
+        var config = new AppConfiguration
+        {
+            Disks =
+            [
+                new DiskProfile
+                {
+                    MountPoint = "R:",
+                    Folders = ["npm-cache"],
+                    EnvRedirects = [new() { Variable = "npm_config_cache", SubPath = "npm-cache" }],
+                },
+            ],
+            Presets =
+            [
+                new DiskPreset
+                {
+                    Id = "user:mine",
+                    Name = "Mine",
+                    CapacityBytes = 512UL * 1024 * 1024,
+                    CompressionLevel = ImageCompressionLevel.Optimal,
+                    Folders = ["x"],
+                    EnvRedirects = [new() { Variable = "MY_VAR", SubPath = "x" }],
+                    SetAsTemp = true,
+                },
+            ],
+        };
+
+        store.Save(config);
+        var loaded = store.Load();
+
+        var profile = Assert.Single(loaded.Disks);
+        Assert.Equal(["npm-cache"], profile.Folders);
+        Assert.Equal("npm_config_cache", Assert.Single(profile.EnvRedirects!).Variable);
+        var preset = Assert.Single(loaded.Presets!);
+        Assert.Equal(config.Presets![0].Id, preset.Id);
+        Assert.Equal(ImageCompressionLevel.Optimal, preset.CompressionLevel);
+        Assert.True(preset.SetAsTemp);
+        Assert.Equal("MY_VAR", Assert.Single(preset.EnvRedirects).Variable);
+    }
+
+    [Fact]
+    public void Load_ConfigWithoutPresetFields_LeavesThemNull()
+    {
+        Directory.CreateDirectory(_dir);
+        File.WriteAllText(SettingsPath, "{ \"Disks\": [ { \"MountPoint\": \"R:\" } ] }");
+
+        var loaded = new SettingsStore(SettingsPath).Load();
+
+        Assert.Null(loaded.Presets);
+        Assert.Null(Assert.Single(loaded.Disks).Folders);
+    }
+
+    [Fact]
     public void Save_OverExistingFile_ReplacesIt()
     {
         var store = new SettingsStore(SettingsPath);

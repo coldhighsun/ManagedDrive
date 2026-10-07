@@ -70,6 +70,27 @@
     <sys:String x:Key="CreateDisk.CustomZstdLevel">Custom Zstd level:</sys:String>
     <sys:String x:Key="Tip.CustomZstdLevel">Advanced: override the compression preset above with an exact Zstd level (1 = fastest, 22 = smallest). Leave unchecked to use the preset's level.</sys:String>
     <sys:String x:Key="Val.BadCustomZstdLevel">Enter a custom Zstd level between 1 and 22.</sys:String>
+    <sys:String x:Key="Val.BadFolder">A preset folder is not valid. It must be a relative path inside the disk.</sys:String>
+    <sys:String x:Key="Val.BadEnvRedirect">An environment variable redirection is not valid, or a variable is listed twice.</sys:String>
+    <sys:String x:Key="CreateDisk.Section.Presets">Presets</sys:String>
+    <sys:String x:Key="CreateDisk.Presets.Hint">Tick one or more presets to fill in size and label, create their folders on every mount and point their environment variables at the disk. Only programs started afterwards see the new variables.</sys:String>
+    <sys:String x:Key="CreateDisk.Presets.Save">Save as preset</sys:String>
+    <sys:String x:Key="CreateDisk.Presets.Delete">Delete preset</sys:String>
+    <sys:String x:Key="CreateDisk.Presets.Summary">This disk will get:</sys:String>
+    <sys:String x:Key="Tip.SavePreset">Saves the current size, compression and the ticked presets' folders and variables under the volume label.</sys:String>
+    <sys:String x:Key="Msg.PresetConflict">These presets point the same variable at different folders and cannot be combined: {0}</sys:String>
+    <sys:String x:Key="Msg.PresetNeedsLabel">Enter a volume label first; the preset is saved under that name.</sys:String>
+    <sys:String x:Key="Status.PresetEffectsIncomplete">Disk {0}: could not set up {1} (already used by another disk, or a folder could not be created).</sys:String>
+    <sys:String x:Key="Preset.temp.Name">Temp directory</sys:String>
+    <sys:String x:Key="Preset.temp.Desc">Creates a Temp folder and offers to use the disk as the user TEMP directory.</sys:String>
+    <sys:String x:Key="Preset.node.Name">Node.js caches</sys:String>
+    <sys:String x:Key="Preset.node.Desc">npm_config_cache, YARN_CACHE_FOLDER and npm_config_store_dir (pnpm store) point into the disk.</sys:String>
+    <sys:String x:Key="Preset.nuget.Name">NuGet packages</sys:String>
+    <sys:String x:Key="Preset.nuget.Desc">NUGET_PACKAGES points into the disk.</sys:String>
+    <sys:String x:Key="Preset.python.Name">Python pip cache</sys:String>
+    <sys:String x:Key="Preset.python.Desc">PIP_CACHE_DIR points into the disk.</sys:String>
+    <sys:String x:Key="Preset.browser.Name">Browser cache</sys:String>
+    <sys:String x:Key="Preset.browser.Desc">Creates a BrowserCache folder. Browsers have no environment variable for this: start the browser with --disk-cache-dir pointing at it.</sys:String>
     <sys:String x:Key="CreateDisk.SaveOnExit">Save image on exit</sys:String>
     <sys:String x:Key="CreateDisk.AutoSave">Auto-save the image, interval (minutes):</sys:String>
     <sys:String x:Key="CreateDisk.AutoSaveInterval">Interval (min)</sys:String>
@@ -142,6 +163,8 @@
     <sys:String x:Key="Val.CliPasswordRequired">This image is password-protected. Supply --password or --password-file.</sys:String>
     <sys:String x:Key="Val.CliPasswordIncorrect">The supplied password is incorrect.</sys:String>
     <sys:String x:Key="Val.CliBadCapacity">Capacity must be greater than 0.</sys:String>
+    <sys:String x:Key="Val.CliUnknownPreset">Unknown preset "{0}". Run 'mdrive preset list' to see the available presets.</sys:String>
+    <sys:String x:Key="Msg.CliPresetTempNotApplied">The disk was not made the TEMP directory; do that from the app's disk menu.</sys:String>
     <sys:String x:Key="Msg.CliPathNotFound">Path not found: {0}</sys:String>
     <sys:String x:Key="Msg.CliMountPointNotMounted">No disk is currently mounted at {0}.</sys:String>
     <sys:String x:Key="Val.CliCloneTargetReadOnly">{0} is read-only and cannot be a clone target.</sys:String>
