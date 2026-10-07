@@ -603,6 +603,45 @@ public sealed partial class MainViewModel
     }
 
     /// <summary>
+    /// Analyses what uses the memory of the disk currently mounted at <paramref name="mountPoint"/>,
+    /// for use by the CLI command channel.
+    /// </summary>
+    /// <param name="mountPoint">The mount point to analyse, e.g. <c>"R:"</c>.</param>
+    /// <param name="top">How many entries each top list holds.</param>
+    /// <returns>
+    /// <c>(true, string.Empty, usage)</c> on success, or <c>(false, string.Empty, null)</c> if no
+    /// disk is currently mounted at <paramref name="mountPoint"/>.
+    /// </returns>
+    public async Task<(bool Success, string Message, CliSpaceUsage? Usage)> GetSpaceUsageByMountPointAsync(string mountPoint, int top)
+    {
+        _logger.LogInformation("CLI usage requested for {MountPoint}.", mountPoint);
+
+        var vm = FindDisk(mountPoint);
+        if (vm == null)
+        {
+            return (false, string.Empty, null);
+        }
+
+        var disk = vm.Disk;
+        var report = await Task.Run(() => SpaceUsageAnalyzer.Analyze(disk.GetAllNodes(), top));
+
+        static CliSpaceEntry ToEntry(SpaceUsageEntry e) => new(e.Path, e.Allocated, e.Logical, e.FileCount);
+
+        return (true, string.Empty, new CliSpaceUsage(
+            vm.MountPoint,
+            disk.TotalBytes,
+            report.TotalAllocated,
+            report.TotalLogical,
+            report.FileCount,
+            report.DirectoryCount,
+            report.LinkCount,
+            report.StreamCount,
+            report.TopDirectories.Select(ToEntry).ToList(),
+            report.TopFiles.Select(ToEntry).ToList(),
+            report.TopExtensions.Select(e => new CliSpaceExtension(e.Extension, e.FileCount, e.Allocated, e.Logical)).ToList()));
+    }
+
+    /// <summary>
     /// Lists the immediate children of <paramref name="path"/> on the disk currently mounted at
     /// <paramref name="mountPoint"/>, for use by the CLI command channel.
     /// </summary>

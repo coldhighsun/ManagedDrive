@@ -137,6 +137,9 @@ public class CliCommandProcessorSnapshotTests
         public Task<(bool Success, string Message, CliDiskDetails? Details)> GetDiskInfoAsync(string mountPoint) =>
             Task.FromResult<(bool, string, CliDiskDetails?)>((false, string.Empty, null));
 
+        public Task<(bool Success, string Message, CliSpaceUsage? Usage)> GetSpaceUsageAsync(string mountPoint, int top) =>
+            Task.FromResult<(bool, string, CliSpaceUsage?)>((false, string.Empty, null));
+
         public Task<(bool Success, string Message)> ExtractSnapshotAsync(string mountPoint, int index, string snapshotPath, string outputPath, bool overwrite) =>
             Task.FromResult((false, string.Empty));
 

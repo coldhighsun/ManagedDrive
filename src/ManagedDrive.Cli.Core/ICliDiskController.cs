@@ -130,6 +130,20 @@ public interface ICliDiskController
     Task<(bool Success, string Message, CliDiskDetails? Details)> GetDiskInfoAsync(string mountPoint);
 
     /// <summary>
+    /// Works out where the memory of the disk mounted at <paramref name="mountPoint"/> goes: the
+    /// biggest directories, files and extensions.
+    /// </summary>
+    /// <param name="mountPoint">The mount point to analyse, e.g. <c>"R:"</c>.</param>
+    /// <param name="top">How many entries each top list holds, 1 to 1000.</param>
+    /// <returns>
+    /// <c>(true, message, usage)</c> on success; <c>(false, message, null)</c> with a
+    /// human-readable reason otherwise. <paramref name="mountPoint"/> not being mounted is reported
+    /// as <c>(false, string.Empty, null)</c> so the CLI layer can render its own not-mounted
+    /// message.
+    /// </returns>
+    Task<(bool Success, string Message, CliSpaceUsage? Usage)> GetSpaceUsageAsync(string mountPoint, int top);
+
+    /// <summary>
     /// Replaces the contents of the disk mounted at <paramref name="targetMountPoint"/> with a
     /// copy of the disk mounted at <paramref name="sourceMountPoint"/>'s current contents.
     /// </summary>
@@ -341,6 +355,51 @@ public sealed record CliDiskDetails(
     ulong? MaxSnapshotSizeBytes,
     int? SnapshotCount,
     DateTimeOffset? LastSaveTime);
+
+/// <summary>
+/// A directory or file in a top list of the CLI <c>usage</c> output.
+/// </summary>
+/// <param name="Path">Full path on the disk.</param>
+/// <param name="AllocatedBytes">Memory occupied, in bytes (streams included; a directory counts everything below it).</param>
+/// <param name="LogicalBytes">Logical size, in bytes.</param>
+/// <param name="FileCount">Number of files (1 for a file).</param>
+public sealed record CliSpaceEntry(string Path, ulong AllocatedBytes, ulong LogicalBytes, int FileCount);
+
+/// <summary>
+/// Space taken by the files of one extension, in the CLI <c>usage</c> output.
+/// </summary>
+/// <param name="Extension">Lower-case extension with the dot, or <c>(none)</c>.</param>
+/// <param name="FileCount">Number of files.</param>
+/// <param name="AllocatedBytes">Memory occupied, in bytes.</param>
+/// <param name="LogicalBytes">Logical size, in bytes.</param>
+public sealed record CliSpaceExtension(string Extension, int FileCount, ulong AllocatedBytes, ulong LogicalBytes);
+
+/// <summary>
+/// Where a mounted disk's memory goes, as needed to render the CLI <c>usage</c> output.
+/// </summary>
+/// <param name="MountPoint">The drive letter or directory the disk is mounted at.</param>
+/// <param name="CapacityBytes">The disk's capacity, in bytes.</param>
+/// <param name="UsedBytes">Memory the disk's contents occupy, in bytes.</param>
+/// <param name="LogicalBytes">The summed logical file sizes, in bytes.</param>
+/// <param name="FileCount">Number of regular files.</param>
+/// <param name="DirectoryCount">Number of directories, the root not counted.</param>
+/// <param name="LinkCount">Number of symbolic links and junctions.</param>
+/// <param name="StreamCount">Number of alternate data streams.</param>
+/// <param name="TopDirectories">The directories using the most, largest first.</param>
+/// <param name="TopFiles">The files using the most, largest first.</param>
+/// <param name="TopExtensions">The extensions using the most, largest first.</param>
+public sealed record CliSpaceUsage(
+    string MountPoint,
+    ulong CapacityBytes,
+    ulong UsedBytes,
+    ulong LogicalBytes,
+    int FileCount,
+    int DirectoryCount,
+    int LinkCount,
+    int StreamCount,
+    IReadOnlyList<CliSpaceEntry> TopDirectories,
+    IReadOnlyList<CliSpaceEntry> TopFiles,
+    IReadOnlyList<CliSpaceExtension> TopExtensions);
 
 /// <summary>
 /// One entry of a disk's snapshot history, as needed to render the CLI <c>snapshot list</c>

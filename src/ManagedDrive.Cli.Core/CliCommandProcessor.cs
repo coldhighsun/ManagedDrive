@@ -421,6 +421,30 @@ public static class CliCommandProcessor
         infoCommand.SetAction(async (parseResult, _) =>
             await InfoAsync(parseResult.GetValue(infoDriveArgument)!, diskController, o => outcome = o));
 
+        var usageDriveArgument = new Argument<string>("drive-letter")
+        {
+            Description = "Drive letter of a currently mounted disk, e.g. R:",
+        };
+        var usageTopOption = new Option<int?>("--top")
+        {
+            Description = $"How many entries each list shows, 1-{UsageMaxTop}. Default: {UsageDefaultTop}.",
+        };
+        var usageByOption = new Option<string?>("--by")
+        {
+            Description = "Show only one list: dir (directories), file (files) or ext (extensions). Default: all three. Ignored with --json, which always has everything.",
+        };
+        var usageCommand = new Command("usage", "Shows what uses the memory of a mounted disk: the biggest directories, files and extensions.");
+        usageCommand.Arguments.Add(usageDriveArgument);
+        usageCommand.Options.Add(usageTopOption);
+        usageCommand.Options.Add(usageByOption);
+        usageCommand.SetAction(async (parseResult, _) =>
+            await UsageAsync(
+                parseResult.GetValue(usageDriveArgument)!,
+                parseResult.GetValue(usageTopOption),
+                parseResult.GetValue(usageByOption),
+                diskController,
+                o => outcome = o));
+
         var snapshotCreateDriveArgument = new Argument<string>("drive-letter")
         {
             Description = "Drive letter of a currently mounted disk, e.g. R:",
@@ -727,6 +751,7 @@ public static class CliCommandProcessor
         rootCommand.Subcommands.Add(listCommand);
         rootCommand.Subcommands.Add(lsCommand);
         rootCommand.Subcommands.Add(infoCommand);
+        rootCommand.Subcommands.Add(usageCommand);
         rootCommand.Subcommands.Add(snapshotCommand);
         rootCommand.Subcommands.Add(watchCommand);
         rootCommand.Subcommands.Add(exitCommand);
@@ -922,6 +947,122 @@ public static class CliCommandProcessor
         var width = lines.Max(l => l.Label.Length) + 2;
         return string.Join('\n', lines.Select(l => $"{(l.Label + ":").PadRight(width)}{l.Value}"));
     }
+
+    /// <summary>
+    /// How many entries each <c>usage</c> list shows when <c>--top</c> is not given.
+    /// </summary>
+    private const int UsageDefaultTop = 10;
+
+    /// <summary>
+    /// The largest <c>--top</c> the <c>usage</c> command accepts.
+    /// </summary>
+    private const int UsageMaxTop = 1000;
+
+    /// <summary>
+    /// Handles <c>usage</c>: validates the options, asks the controller for the analysis and renders it.
+    /// </summary>
+    /// <param name="driveLetter">The disk to analyse.</param>
+    /// <param name="top">The <c>--top</c> value, or <c>null</c> for the default.</param>
+    /// <param name="by">The <c>--by</c> value, or <c>null</c> for all lists.</param>
+    /// <param name="diskController">The controller providing the analysis.</param>
+    /// <param name="setOutcome">Receives the result.</param>
+    /// <returns>The process exit code.</returns>
+    private static async Task<int> UsageAsync(
+        string driveLetter, int? top, string? by, ICliDiskController diskController, Action<CliOutcome> setOutcome)
+    {
+        driveLetter = NormalizeDriveLetter(driveLetter);
+
+        var count = top ?? UsageDefaultTop;
+        if (count is < 1 or > UsageMaxTop)
+        {
+            setOutcome(new(false, $"--top must be between 1 and {UsageMaxTop}.", null, 1));
+            return 1;
+        }
+
+        var list = by?.ToLowerInvariant();
+        if (list is not (null or "dir" or "file" or "ext"))
+        {
+            setOutcome(new(false, "--by must be dir, file or ext.", null, 1));
+            return 1;
+        }
+
+        var (success, message, usage) = await diskController.GetSpaceUsageAsync(driveLetter, count);
+        if (!success)
+        {
+            setOutcome(new(
+                false,
+                string.IsNullOrEmpty(message) ? $"No disk is currently mounted at {driveLetter}." : message,
+                null,
+                1));
+            return 1;
+        }
+
+        setOutcome(new(true, FormatSpaceUsage(usage!, list), null, 0, Data: usage));
+        return 0;
+    }
+
+    /// <summary>
+    /// Renders a <see cref="CliSpaceUsage"/> as the text of the <c>usage</c> command: a summary line
+    /// followed by the requested lists.
+    /// </summary>
+    /// <param name="usage">The analysis.</param>
+    /// <param name="list">
+    /// <c>dir</c>, <c>file</c> or <c>ext</c> to print only that list; <c>null</c> prints all three.
+    /// </param>
+    /// <returns>The lines, joined with newlines.</returns>
+    private static string FormatSpaceUsage(CliSpaceUsage usage, string? list)
+    {
+        var lines = new List<string>
+        {
+            $"{usage.MountPoint}  {ByteFormatter.Format(usage.UsedBytes)} of {ByteFormatter.Format(usage.CapacityBytes)} used, "
+                + $"{usage.FileCount} files, {usage.DirectoryCount} directories, {usage.LinkCount} links, {usage.StreamCount} streams "
+                + $"(logical size {ByteFormatter.Format(usage.LogicalBytes)})",
+        };
+
+        if (list is null or "dir")
+        {
+            AppendEntries(lines, "Directories", usage.TopDirectories, usage.UsedBytes);
+        }
+
+        if (list is null or "file")
+        {
+            AppendEntries(lines, "Files", usage.TopFiles, usage.UsedBytes);
+        }
+
+        if (list is null or "ext")
+        {
+            lines.Add(string.Empty);
+            lines.Add("Extensions (size, share of used, files):");
+            lines.AddRange(usage.TopExtensions.Select(e =>
+                $"  {ByteFormatter.Format(e.AllocatedBytes),10}  {Share(e.AllocatedBytes, usage.UsedBytes),6}  {e.FileCount,7}  {e.Extension}"));
+        }
+
+        return string.Join('\n', lines);
+    }
+
+    /// <summary>
+    /// Adds one titled list of directories or files to the <c>usage</c> text.
+    /// </summary>
+    /// <param name="lines">The text so far.</param>
+    /// <param name="title">The list's heading.</param>
+    /// <param name="entries">The entries, largest first.</param>
+    /// <param name="usedBytes">The disk's used bytes, the base of the shares.</param>
+    private static void AppendEntries(List<string> lines, string title, IReadOnlyList<CliSpaceEntry> entries, ulong usedBytes)
+    {
+        lines.Add(string.Empty);
+        lines.Add($"{title} (size, share of used, files):");
+        lines.AddRange(entries.Select(e =>
+            $"  {ByteFormatter.Format(e.AllocatedBytes),10}  {Share(e.AllocatedBytes, usedBytes),6}  {e.FileCount,7}  {e.Path}"));
+    }
+
+    /// <summary>
+    /// Formats <paramref name="part"/> as a percentage of <paramref name="whole"/>.
+    /// </summary>
+    /// <param name="part">The part, in bytes.</param>
+    /// <param name="whole">The whole, in bytes.</param>
+    /// <returns>For example <c>12.3%</c>; <c>0%</c> when the whole is zero.</returns>
+    private static string Share(ulong part, ulong whole) =>
+        whole == 0 ? "0%" : $"{(double)part / whole * 100.0:0.#}%";
 
     private static async Task<int> ExportAsync(
         string driveLetter, string outputPath, ArchiveExportFormat? archiveFormat, ImageCompressionLevel compressionLevel,
