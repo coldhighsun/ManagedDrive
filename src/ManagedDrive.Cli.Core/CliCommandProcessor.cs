@@ -327,10 +327,14 @@ public static class CliCommandProcessor
         {
             Description = "Drive letter to mount the new disk at (e.g. R:), or the path of an existing empty directory.",
         };
-        var createCapacityMbOption = new Option<uint>("--capacity-mb")
+        var createCapacityMbOption = new Option<uint?>("--capacity-mb")
         {
-            Description = "The disk's capacity in MB.",
-            Required = true,
+            Description = "The disk's capacity in MB. Required unless --preset supplies it; an explicit value overrides the presets.",
+        };
+        var createPresetOption = new Option<string[]>("--preset")
+        {
+            Description = "A preset to build the disk from (see 'preset list'). Repeat to combine several, e.g. --preset node --preset nuget.",
+            AllowMultipleArgumentsPerToken = false,
         };
         var createLabelOption = new Option<string?>("--label")
         {
@@ -352,6 +356,7 @@ public static class CliCommandProcessor
         var createCommand = new Command("create", "Creates a brand-new, empty RAM disk.");
         createCommand.Arguments.Add(createDriveArgument);
         createCommand.Options.Add(createCapacityMbOption);
+        createCommand.Options.Add(createPresetOption);
         createCommand.Options.Add(createLabelOption);
         createCommand.Options.Add(createImageOption);
         createCommand.Options.Add(createPasswordOption);
@@ -382,9 +387,18 @@ public static class CliCommandProcessor
                 return 1;
             }
 
+            var capacityMb = parseResult.GetValue(createCapacityMbOption);
+            var presets = parseResult.GetValue(createPresetOption) ?? [];
+            if (capacityMb is null && presets.Length == 0)
+            {
+                outcome = new(false, "Specify --capacity-mb or at least one --preset.", null, 1);
+                return 1;
+            }
+
             var exitCode = await CreateAsync(
                 ResolveMountPoint(parseResult.GetValue(createDriveArgument)!, workingDirectory),
-                parseResult.GetValue(createCapacityMbOption) * 1024UL * 1024UL,
+                capacityMb is { } mb ? mb * 1024UL * 1024UL : null,
+                presets,
                 parseResult.GetValue(createLabelOption),
                 imagePath,
                 password,
@@ -444,6 +458,11 @@ public static class CliCommandProcessor
                 parseResult.GetValue(usageByOption),
                 diskController,
                 o => outcome = o));
+
+        var presetListCommand = new Command("list", "Lists the presets 'create --preset' accepts.");
+        presetListCommand.SetAction(async (_, _) => await PresetListAsync(diskController, o => outcome = o));
+        var presetCommand = new Command("preset", "Disk presets: ready-made capacity, folders and environment variables for caches.");
+        presetCommand.Subcommands.Add(presetListCommand);
 
         var snapshotCreateDriveArgument = new Argument<string>("drive-letter")
         {
@@ -752,6 +771,7 @@ public static class CliCommandProcessor
         rootCommand.Subcommands.Add(lsCommand);
         rootCommand.Subcommands.Add(infoCommand);
         rootCommand.Subcommands.Add(usageCommand);
+        rootCommand.Subcommands.Add(presetCommand);
         rootCommand.Subcommands.Add(snapshotCommand);
         rootCommand.Subcommands.Add(watchCommand);
         rootCommand.Subcommands.Add(exitCommand);
@@ -776,14 +796,37 @@ public static class CliCommandProcessor
     }
 
     private static async Task<int> CreateAsync(
-        string driveLetter, ulong capacityBytes, string? volumeLabel, string? imagePath, string? password,
+        string driveLetter, ulong? capacityBytes, IReadOnlyList<string> presets, string? volumeLabel, string? imagePath, string? password,
         ICliDiskController diskController, Action<CliOutcome> setOutcome)
     {
         driveLetter = NormalizeDriveLetter(driveLetter);
 
-        var (success, message) = await diskController.CreateAsync(driveLetter, capacityBytes, volumeLabel, imagePath, password);
+        // Without presets this is the plain create, so controllers that know nothing of presets
+        // are called exactly as before.
+        var (success, message) = presets.Count == 0
+            ? await diskController.CreateAsync(driveLetter, capacityBytes!.Value, volumeLabel, imagePath, password)
+            : await diskController.CreateWithPresetsAsync(driveLetter, capacityBytes, volumeLabel, imagePath, password, presets);
         setOutcome(new(success, message, null, success ? 0 : 1));
         return success ? 0 : 1;
+    }
+
+    /// <summary>
+    /// Handles <c>preset list</c>.
+    /// </summary>
+    /// <param name="diskController">The controller that knows the presets.</param>
+    /// <param name="setOutcome">Receives the result.</param>
+    /// <returns>The exit code.</returns>
+    private static async Task<int> PresetListAsync(ICliDiskController diskController, Action<CliOutcome> setOutcome)
+    {
+        var presets = await diskController.GetPresetsAsync();
+        var lines = presets.Count == 0
+            ? ["No presets available."]
+            : presets.Select(preset =>
+                $"{preset.Id}  {preset.Name}  {ByteFormatter.Format(preset.CapacityBytes)}"
+                + (preset.Variables.Count == 0 ? string.Empty : $"  {string.Join(' ', preset.Variables)}")
+                + (preset.SetAsTemp ? "  (temp directory)" : string.Empty)).ToList();
+        setOutcome(new(true, string.Join(Environment.NewLine, lines), null, 0, Data: presets));
+        return 0;
     }
 
     private static async Task<int> CloneAsync(string sourceDriveLetter, string targetDriveLetter, ICliDiskController diskController, Action<CliOutcome> setOutcome)

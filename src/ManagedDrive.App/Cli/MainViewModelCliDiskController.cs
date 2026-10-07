@@ -70,6 +70,12 @@ internal sealed class MainViewModelCliDiskController(MainViewModel mainViewModel
     public Task<(bool Success, string Message, CliDiskDetails? Details)> GetDiskInfoAsync(string mountPoint) =>
         mainViewModel.GetDiskInfoByMountPointAsync(mountPoint);
 
+    public Task<(bool Success, string Message)> CreateWithPresetsAsync(
+        string mountPoint, ulong? capacityBytes, string? volumeLabel, string? imagePath, string? password, IReadOnlyList<string> presets) =>
+        mainViewModel.CreateWithPresetsByOptionsAsync(mountPoint, capacityBytes, volumeLabel, imagePath, password, presets);
+
+    public Task<IReadOnlyList<CliPreset>> GetPresetsAsync() => Task.FromResult(mainViewModel.GetCliPresets());
+
     public Task<(bool Success, string Message, CliSpaceUsage? Usage)> GetSpaceUsageAsync(string mountPoint, int top) =>
         mainViewModel.GetSpaceUsageByMountPointAsync(mountPoint, top);
 

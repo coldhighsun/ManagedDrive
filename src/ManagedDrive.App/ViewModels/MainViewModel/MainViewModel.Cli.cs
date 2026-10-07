@@ -264,7 +264,8 @@ public sealed partial class MainViewModel
     /// otherwise (mount point already in use, invalid capacity, or image path collision).
     /// </returns>
     public async Task<(bool Success, string Message)> CreateByOptionsAsync(
-        string mountPoint, ulong capacityBytes, string? volumeLabel, string? imagePath, string? password)
+        string mountPoint, ulong capacityBytes, string? volumeLabel, string? imagePath, string? password,
+        PresetComposition? preset = null)
     {
         _logger.LogInformation("CLI create requested: {MountPoint}, capacity {CapacityBytes} bytes.", mountPoint, capacityBytes);
 
@@ -307,6 +308,9 @@ public sealed partial class MainViewModel
             VolumeLabel = string.IsNullOrWhiteSpace(volumeLabel) ? "RAM Disk" : volumeLabel.Trim(),
             CapacityBytes = capacityBytes,
             PersistImagePath = imagePath,
+            CompressionLevel = preset?.CompressionLevel ?? ManagedDrive.Core.Mounting.ImageCompressionLevel.Fastest,
+            Folders = preset is { Folders.Count: > 0 } ? preset.Folders : null,
+            EnvRedirects = preset is { EnvRedirects.Count: > 0 } ? preset.EnvRedirects : null,
         };
 
         try
@@ -324,6 +328,67 @@ public sealed partial class MainViewModel
             return (false, Loc.Format("Msg.MountFailed", ex.Message));
         }
     }
+
+    /// <summary>
+    /// Creates a disk from presets for the CLI <c>create --preset</c>. An explicit capacity or label
+    /// overrides what the presets suggest.
+    /// </summary>
+    /// <param name="mountPoint">The mount point of the new disk.</param>
+    /// <param name="capacityBytes">The capacity, or <c>null</c> to use the presets' total.</param>
+    /// <param name="volumeLabel">The label, or <c>null</c> to use the first preset's.</param>
+    /// <param name="imagePath">Optional image path.</param>
+    /// <param name="password">Optional image password.</param>
+    /// <param name="presetNames">Ids or names of the presets to combine.</param>
+    /// <returns><c>(true, message)</c> on success; <c>(false, message)</c> with the reason otherwise.</returns>
+    public async Task<(bool Success, string Message)> CreateWithPresetsByOptionsAsync(
+        string mountPoint, ulong? capacityBytes, string? volumeLabel, string? imagePath, string? password, IReadOnlyList<string> presetNames)
+    {
+        var available = AllPresets();
+        var chosen = new List<DiskPreset>();
+        foreach (var name in presetNames)
+        {
+            var preset = available.FirstOrDefault(p => string.Equals(p.Id, name, StringComparison.OrdinalIgnoreCase))
+                ?? available.FirstOrDefault(p => string.Equals(p.Name, name, StringComparison.OrdinalIgnoreCase));
+            if (preset is null)
+            {
+                return (false, Loc.Format("Val.CliUnknownPreset", name));
+            }
+
+            chosen.Add(preset);
+        }
+
+        var merged = PresetComposer.Merge(chosen);
+        if (merged.Conflicts.Count > 0)
+        {
+            return (false, Loc.Format("Msg.PresetConflict", string.Join(", ", merged.Conflicts)));
+        }
+
+        var result = await CreateByOptionsAsync(
+            mountPoint, capacityBytes ?? merged.CapacityBytes, volumeLabel ?? merged.VolumeLabel, imagePath, password, merged);
+        return result.Success && merged.SetAsTemp
+            ? (true, result.Message + " " + Loc.Get("Msg.CliPresetTempNotApplied"))
+            : result;
+    }
+
+    /// <summary>
+    /// Lists the built-in and the user's presets for the CLI <c>preset list</c>.
+    /// </summary>
+    /// <returns>The presets, built-in first.</returns>
+    public IReadOnlyList<CliPreset> GetCliPresets() =>
+        AllPresets().Select(preset => new CliPreset(
+            preset.Id,
+            preset.Name ?? Loc.Get($"Preset.{preset.Id}.Name"),
+            preset.Name is null,
+            preset.CapacityBytes,
+            preset.Folders,
+            preset.EnvRedirects.Select(r => $"{r.Variable}={r.SubPath}").ToList(),
+            preset.SetAsTemp)).ToList();
+
+    /// <summary>
+    /// Gets the built-in presets followed by the ones the user saved.
+    /// </summary>
+    /// <returns>All presets.</returns>
+    private List<DiskPreset> AllPresets() => [.. BuiltInPresets.All, .. _settingsStore.Load().Presets ?? []];
 
     /// <summary>
     /// Applies non-destructive option changes (capacity, volume label, auto-save interval) to the
@@ -812,7 +877,7 @@ public sealed partial class MainViewModel
 
         if (vm.IsCurrentTempDir)
         {
-            await Task.Run(TempDirResetService.Reset);
+            await Task.Run(() => TempDirResetService.Reset());
         }
 
         var saveError = await UnmountDiskAsync(vm);
