@@ -135,6 +135,14 @@ public sealed class RamDisk : IDisposable
     public event EventHandler<Exception>? SaveFailed;
 
     /// <summary>
+    /// Raised after every successful write of the disk image, whoever triggered it: a manual or
+    /// CLI save, a snapshot, the periodic auto-save timer, or the final save on unmount. Fires on
+    /// whichever thread saved, not the UI thread, while <see cref="_autoSaveLock"/> may be held,
+    /// so handlers must be quick and must not call back into this disk.
+    /// </summary>
+    public event EventHandler? ImageSaved;
+
+    /// <summary>
     /// Gets the password currently protecting this disk (if any), so a caller performing an
     /// in-process unmount/remount of the same disk (e.g. applying an edit that requires a full
     /// remount) can carry it forward to unlock the reloaded image without re-prompting the user.
@@ -459,6 +467,32 @@ public sealed class RamDisk : IDisposable
         lock (_autoSaveLock)
         {
             return SnapshotManager.DiffAgainstCurrent(snapshotPath, _fs.NodeMap);
+        }
+    }
+
+    /// <summary>
+    /// Copies a file or directory out of the snapshot at <paramref name="snapshotPath"/> to the
+    /// host, leaving this disk's live contents alone. The snapshot is loaded into memory under
+    /// <see cref="_autoSaveLock"/> (so it cannot be deleted from under the load) and written out
+    /// after the lock is released, so a slow host disk does not hold up saving.
+    /// </summary>
+    /// <param name="snapshotPath">Path to the snapshot index file.</param>
+    /// <param name="sourcePath">The file or directory inside the snapshot, e.g. <c>\Folder\a.txt</c>.</param>
+    /// <param name="outputPath">Absolute host path to write to; see <see cref="SnapshotExtractor.Extract"/>.</param>
+    /// <param name="overwrite">Whether existing host files may be replaced.</param>
+    /// <returns>What was written.</returns>
+    public SnapshotExtractResult ExtractFromSnapshot(string snapshotPath, string sourcePath, string outputPath, bool overwrite)
+    {
+        FileNodeMap nodeMap;
+        lock (_autoSaveLock)
+        {
+            ThrowIfDisposed();
+            nodeMap = SnapshotManager.LoadSnapshot(snapshotPath, out _, out _, _cek);
+        }
+
+        using (nodeMap)
+        {
+            return SnapshotExtractor.Extract(nodeMap, sourcePath, outputPath, overwrite);
         }
     }
 
@@ -897,6 +931,7 @@ public sealed class RamDisk : IDisposable
         _fs.ClearDirtySince(versionAtSaveStart);
         _lastSavedImagePath = Options.PersistImagePath;
         Logger.LogInformation("Saved disk image to {ImagePath}.", Options.PersistImagePath);
+        ImageSaved?.Invoke(this, EventArgs.Empty);
     }
 
     /// <summary>
