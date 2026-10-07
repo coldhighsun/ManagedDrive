@@ -41,6 +41,7 @@ Create, mount and manage in-memory volumes that appear as normal drive letters i
 - Dynamic memory allocation — capacity is a ceiling, not a reservation; anything that actually allocates memory (writing data, loading an image or archive on mount, restoring a snapshot, cloning a disk) is also rejected once it would leave the host machine critically low on physical memory, independent of the disk's own configured capacity
 - Live-edit a mounted disk (label, capacity, auto-mount, image path); changing the drive letter or read-only flag remounts it
 - NTFS-compatible, so RAM disks work with tools that require NTFS (WinGet, Windows Update staging, BITS)
+- Symbolic links and directory junctions (as used by pnpm, `git worktree` and build caches), and alternate data streams such as `Zone.Identifier`; both are kept in saved images and snapshots. Hard links are not supported (WinFsp has no hook for them)
 - Auto-mount saved profiles on startup
 - **Format** instantly clears a disk's contents (read-only disks are protected)
 
@@ -60,7 +61,7 @@ Create, mount and manage in-memory volumes that appear as normal drive letters i
 
 **Convenience & safety**
 - Optional Explorer right-click integration: **"Mount as RAM disk (ManagedDrive)"** for zip/7z/rar/tar archives
-- Tray icon with a hover tooltip (per-disk usage + available memory), quick menu with a per-disk submenu (open in Explorer / save image / unmount), and optional start-minimized mode
+- Tray icon with a hover tooltip (per-disk usage + available memory), quick menu with a per-disk submenu (open in Explorer / save image / unmount), and optional start-minimized mode; balloon notifications (while the window is hidden) for a nearly full disk, a refused write (disk full / low memory), low system memory and failed or recovered saves
 - Live status bar: available system memory and most recently accessed file
 - Per-disk high-usage warning with a configurable threshold
 - Temp directory redirection to a disk's `Temp` folder, with a startup warning if TEMP is left on a RAM disk
@@ -219,7 +220,7 @@ Building from source, solution structure, internals, and performance benchmarks 
 
 MIT
 
-This project bundles [WinFsp](https://winfsp.dev/) and [SharpCompress](https://github.com/adamhathcock/sharpcompress); see [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) for their copyright and license information.
+This project bundles [WinFsp](https://winfsp.dev/) and [SharpCompress](https://github.com/adamhathcock/sharpcompress); see [THIRD-PARTY-NOTICES.md](docs/THIRD-PARTY-NOTICES.md) for their copyright and license information.
 
 ---
 
@@ -247,6 +248,7 @@ This project bundles [WinFsp](https://winfsp.dev/) and [SharpCompress](https://g
 - 动态内存分配——容量为上限而非预分配；当真正需要分配内存的操作（写入数据、挂载时加载镜像或压缩包、恢复快照、克隆磁盘）会导致宿主机物理内存严重不足时，即使磁盘自身配置的容量还有余量，也会被拒绝
 - 实时编辑已挂载磁盘（卷标、容量、自动挂载、镜像路径）；更改盘符或只读标志会自动重挂
 - NTFS 兼容，可作为需要 NTFS 卷的工具（WinGet、Windows Update 暂存、BITS）的目标路径
+- 支持符号链接和目录联接（pnpm、`git worktree`、构建缓存会用到）以及 `Zone.Identifier` 这类备用数据流；二者都会随镜像和快照保存。不支持硬链接（WinFsp 没有对应的回调）
 - 启动时自动挂载已保存的磁盘配置
 - **格式化**立即清空磁盘内容（只读磁盘受保护）
 
@@ -262,7 +264,7 @@ This project bundles [WinFsp](https://winfsp.dev/) and [SharpCompress](https://g
 
 **便利与安全**
 - 可选资源管理器右键集成：**"挂载为内存盘 (ManagedDrive)"**菜单项，用于 zip/7z/rar/tar
-- 托盘图标带悬浮提示（各盘用量+可用内存）、带每盘子菜单（在资源管理器中打开/保存映像/卸载）的快捷菜单、可选最小化启动
+- 托盘图标带悬浮提示（各盘用量+可用内存）、带每盘子菜单（在资源管理器中打开/保存映像/卸载）的快捷菜单、可选最小化启动；窗口隐藏时通过气泡通知提示磁盘将满、写入被拒绝（磁盘已满/内存不足）、系统内存偏低以及保存失败和恢复
 - 状态栏实时显示可用系统内存和最近访问的文件
 - 每磁盘可配置高用量警告阈值
 - 临时目录重定向到某磁盘的 `Temp` 文件夹，TEMP 遗留在内存盘上时启动提示
@@ -424,4 +426,4 @@ ManagedDrive 会在 TEMP 被设为内存盘时提示一次，此后只要 TEMP �
 
 MIT
 
-本项目内置了 [WinFsp](https://winfsp.dev/) 和 [SharpCompress](https://github.com/adamhathcock/sharpcompress)，其版权与许可证信息见 [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md)。
+本项目内置了 [WinFsp](https://winfsp.dev/) 和 [SharpCompress](https://github.com/adamhathcock/sharpcompress)，其版权与许可证信息见 [THIRD-PARTY-NOTICES.md](docs/THIRD-PARTY-NOTICES.md)。
