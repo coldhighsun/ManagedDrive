@@ -10,7 +10,7 @@
     <File Path="LICENSE" />
     <File Path="nuget.config" />
     <File Path="README.md" />
-    <File Path="THIRD-PARTY-NOTICES.md" />
+    <File Path="docs/THIRD-PARTY-NOTICES.md" />
   </Folder>
   <Folder Name="/.github/">
     <File Path=".github/dependabot.yml" />
