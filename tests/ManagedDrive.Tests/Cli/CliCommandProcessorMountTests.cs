@@ -507,6 +507,12 @@ public class CliCommandProcessorMountTests
         public Task<(bool Success, string Message)> RestoreSnapshotAsync(string mountPoint, int index) =>
             Task.FromResult((false, string.Empty));
 
+        public Task<(bool Success, string Message, CliDiskDetails? Details)> GetDiskInfoAsync(string mountPoint) =>
+            Task.FromResult<(bool, string, CliDiskDetails?)>((false, string.Empty, null));
+
+        public Task<(bool Success, string Message)> ExtractSnapshotAsync(string mountPoint, int index, string snapshotPath, string outputPath, bool overwrite) =>
+            Task.FromResult((false, string.Empty));
+
         public Task RequestExitAsync()
         {
             ExitRequested = true;

@@ -2,6 +2,7 @@ using ManagedDrive.Cli.Core;
 using ManagedDrive.HelperProtocol;
 using System.IO.Pipes;
 using System.Security.Principal;
+using System.Threading.Channels;
 using ThrottledLogging;
 
 namespace ManagedDrive.App.Cli;
@@ -23,6 +24,25 @@ public sealed class CliPipeServer : IDisposable
     /// command is still running, instead of failing to connect at all.
     /// </summary>
     internal const int MaxInstances = 4;
+
+    /// <summary>
+    /// Most <c>watch</c> clients served at once. Each holds a pipe instance for as long as it
+    /// watches, so the cap keeps the others of <see cref="MaxInstances"/> free for ordinary commands.
+    /// </summary>
+    internal const int MaxWatchers = 2;
+
+    /// <summary>
+    /// Failure message sent when a <c>watch</c> client was refused because <see cref="MaxWatchers"/>
+    /// others were already watching.
+    /// </summary>
+    internal const string TooManyWatchersMessage =
+        "ManagedDrive already has the maximum number of mdrive watch sessions open. Close one and try again.";
+
+    /// <summary>
+    /// Most events held for a watcher that is slower than the events arrive; the oldest are dropped
+    /// past it, so a stalled client cannot make the app buffer without bound.
+    /// </summary>
+    private const int WatchBufferCapacity = 256;
 
     /// <summary>
     /// Upper bound on reading the request line and writing the response line of a single
@@ -102,9 +122,19 @@ public sealed class CliPipeServer : IDisposable
     private readonly PipeListener _listener;
 
     /// <summary>
+    /// Where <c>watch</c> clients get their events, or <c>null</c> if this server has none to offer.
+    /// </summary>
+    private readonly ICliEventSource? _eventSource;
+
+    /// <summary>
     /// The listener run started by <see cref="Start"/>.
     /// </summary>
     private Task? _run;
+
+    /// <summary>
+    /// How many <c>watch</c> clients are being served; compared against <see cref="MaxWatchers"/>.
+    /// </summary>
+    private int _watcherCount;
 
     /// <summary>
     /// Whether <see cref="Dispose"/> has run.
@@ -121,7 +151,11 @@ public sealed class CliPipeServer : IDisposable
     /// wait for it.
     /// </param>
     public CliPipeServer(MainViewModel mainViewModel, Task ready)
-        : this(CliPipeProtocol.PipeName, CreateUiThreadExecutor(new MainViewModelCliDiskController(mainViewModel)), ready: ready)
+        : this(
+            CliPipeProtocol.PipeName,
+            CreateUiThreadExecutor(new MainViewModelCliDiskController(mainViewModel)),
+            ready: ready,
+            eventSource: new MainViewModelCliEventSource(mainViewModel))
     {
     }
 
@@ -138,13 +172,18 @@ public sealed class CliPipeServer : IDisposable
     /// <param name="ready">
     /// Completes once commands may run, or <c>null</c> if they may run right away.
     /// </param>
+    /// <param name="eventSource">
+    /// Feeds <c>watch</c> clients, or <c>null</c> to refuse them.
+    /// </param>
     internal CliPipeServer(
         string pipeName,
         Func<CliRequest, Task<CliOutcome>> execute,
         TimeSpan? executionQueueTimeout = null,
-        Task? ready = null)
+        Task? ready = null,
+        ICliEventSource? eventSource = null)
     {
         _execute = execute;
+        _eventSource = eventSource;
         _executionQueueTimeout = executionQueueTimeout ?? DefaultExecutionQueueTimeout;
         _ready = ready ?? Task.CompletedTask;
         _listener = new(
@@ -279,6 +318,15 @@ public sealed class CliPipeServer : IDisposable
 
         var request = CliPipeProtocol.DeserializeRequest(requestJson);
 
+        // A watch is a long-lived stream, not a command: it must not take the execution gate (it
+        // would block every other command for as long as it runs) nor be cut off by the command
+        // timeout.
+        if (CliCommandProcessor.IsWatchCommand(request.Args, out var watchJson))
+        {
+            await WatchAsync(reader, writer, watchJson, ct);
+            return;
+        }
+
         // Not counted against _executionQueueTimeout: startup auto-mount can legitimately take
         // longer than that, and the client's own read timeout still bounds the wait.
         await _ready.WaitAsync(ct);
@@ -301,6 +349,97 @@ public sealed class CliPipeServer : IDisposable
         }
 
         await PipeIo.WriteLineWithTimeoutAsync(writer, CliPipeProtocol.SerializeResponse(response), PerIoTimeout, ct);
+    }
+
+    /// <summary>
+    /// Serves one <c>watch</c> client: sends a response line per disk event until the client
+    /// disconnects, stops reading, or the server shuts down. A refusal (no event source, too many
+    /// watchers) is a single failure response, after which the connection closes.
+    /// </summary>
+    /// <param name="reader">The client's end, read only to notice the client going away.</param>
+    /// <param name="writer">Where the event lines go.</param>
+    /// <param name="json">Whether to send events as JSON documents rather than text lines.</param>
+    /// <param name="ct">Stops the watch when the server shuts down.</param>
+    private async Task WatchAsync(StreamReader reader, StreamWriter writer, bool json, CancellationToken ct)
+    {
+        if (_eventSource is null)
+        {
+            await PipeIo.WriteLineWithTimeoutAsync(
+                writer, CliPipeProtocol.SerializeResponse(new(false, "This ManagedDrive instance cannot stream events.", null, 1)), PerIoTimeout, ct);
+            return;
+        }
+
+        if (Interlocked.Increment(ref _watcherCount) > MaxWatchers)
+        {
+            Interlocked.Decrement(ref _watcherCount);
+            await PipeIo.WriteLineWithTimeoutAsync(
+                writer, CliPipeProtocol.SerializeResponse(new(false, TooManyWatchersMessage, null, 1)), PerIoTimeout, ct);
+            return;
+        }
+
+        try
+        {
+            // Cancelled when the client goes away or the server shuts down.
+            using var watchCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            var pending = Channel.CreateBounded<string>(new BoundedChannelOptions(WatchBufferCapacity)
+            {
+                FullMode = BoundedChannelFullMode.DropOldest,
+                SingleReader = true,
+            });
+
+            using var subscription = await _eventSource.SubscribeAsync(
+                e => pending.Writer.TryWrite(json ? e.ToJson() : e.ToText()));
+
+            var disconnected = WaitForDisconnectAsync(reader, watchCts);
+
+            try
+            {
+                await foreach (var line in pending.Reader.ReadAllAsync(watchCts.Token))
+                {
+                    // Unlike the one-shot reply, a failed write here must end the watch rather
+                    // than be swallowed, so the write is bounded by hand.
+                    using var writeCts = CancellationTokenSource.CreateLinkedTokenSource(watchCts.Token);
+                    writeCts.CancelAfter(PerIoTimeout);
+                    await writer.WriteLineAsync(
+                        CliPipeProtocol.SerializeResponse(new(true, line, null, 0, Json: json)).AsMemory(), writeCts.Token);
+                }
+            }
+            catch (Exception ex) when (ex is OperationCanceledException or IOException or ObjectDisposedException)
+            {
+                // The client left, stopped reading, or the server is shutting down: the watch is over.
+            }
+
+            await watchCts.CancelAsync();
+            await disconnected;
+        }
+        finally
+        {
+            Interlocked.Decrement(ref _watcherCount);
+        }
+    }
+
+    /// <summary>
+    /// Completes when the client closes its end of the pipe, cancelling <paramref name="watchCts"/>
+    /// so the watch loop stops at once instead of at the next event it fails to write. A watch
+    /// client sends nothing after its request, so anything it does send is discarded.
+    /// </summary>
+    /// <param name="reader">The client's end of the pipe.</param>
+    /// <param name="watchCts">Cancelled on disconnect; also the token that ends this wait.</param>
+    private static async Task WaitForDisconnectAsync(StreamReader reader, CancellationTokenSource watchCts)
+    {
+        var buffer = new char[256];
+        try
+        {
+            while (await reader.ReadAsync(buffer.AsMemory(), watchCts.Token) > 0)
+            {
+            }
+        }
+        catch (Exception ex) when (ex is OperationCanceledException or IOException or ObjectDisposedException)
+        {
+            // Either the watch already ended, or the pipe broke, which is a disconnect too.
+        }
+
+        await watchCts.CancelAsync();
     }
 
     /// <summary>

@@ -228,6 +228,67 @@ public sealed partial class MainViewModel
     }
 
     /// <summary>
+    /// Copies a file or directory out of a snapshot of the disk currently mounted at
+    /// <paramref name="mountPoint"/> to the host, for use by the CLI command channel.
+    /// </summary>
+    /// <param name="mountPoint">The mount point whose snapshot to read, e.g. <c>"R:"</c>.</param>
+    /// <param name="index">
+    /// 1-based snapshot index, newest first (1 = newest), re-resolved against the live snapshot
+    /// directory at call time, as for <see cref="RestoreSnapshotByMountPointAsync"/>.
+    /// </param>
+    /// <param name="snapshotPath">The file or directory inside the snapshot.</param>
+    /// <param name="outputPath">Absolute host path to write to.</param>
+    /// <param name="overwrite">Whether existing host files may be replaced.</param>
+    /// <returns>
+    /// <c>(true, message)</c> on success; <c>(false, message)</c> if no image path is configured,
+    /// <paramref name="index"/> is out of range, the path is not in the snapshot, the output is in
+    /// the way, or the snapshot could not be read; or <c>(false, string.Empty)</c> if no disk is
+    /// currently mounted at <paramref name="mountPoint"/>.
+    /// </returns>
+    public async Task<(bool Success, string Message)> ExtractSnapshotByMountPointAsync(
+        string mountPoint, int index, string snapshotPath, string outputPath, bool overwrite)
+    {
+        _logger.LogInformation(
+            "CLI snapshot extract requested for {MountPoint}, index {Index}, {SnapshotPath} -> {OutputPath}.",
+            mountPoint, index, snapshotPath, outputPath);
+
+        var vm = FindDisk(mountPoint);
+        if (vm == null)
+        {
+            return (false, string.Empty);
+        }
+
+        if (vm.Disk.Options.PersistImagePath is not { } imagePath)
+        {
+            return (false, Loc.Get("Msg.SaveImageNoPath"));
+        }
+
+        var ordered = await GetOrderedSnapshotsAsync(imagePath);
+        if (index < 1 || index > ordered.Count)
+        {
+            return (false, Loc.Format("Msg.SnapshotIndexOutOfRange", ordered.Count));
+        }
+
+        var target = ordered[index - 1];
+        try
+        {
+            var result = await Task.Run(() => vm.Disk.ExtractFromSnapshot(target.Path, snapshotPath, outputPath, overwrite));
+
+            _logger.LogInformation("CLI snapshot extract completed for {MountPoint}.", mountPoint);
+            var message = Loc.Format(
+                "Status.SnapshotExtracted", result.Files, ByteFormatter.Format(result.Bytes), outputPath);
+            return (true, result.SkippedLinks > 0
+                ? $"{message} {Loc.Format("Status.SnapshotExtractedSkippedLinks", result.SkippedLinks)}"
+                : message);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ObjectDisposedException)
+        {
+            _logger.LogWarning(ex, "CLI snapshot extract failed for {MountPoint}.", mountPoint);
+            return (false, ex.Message);
+        }
+    }
+
+    /// <summary>
     /// Lists <paramref name="imagePath"/>'s snapshots newest first — the ordering that gives
     /// <see cref="ListSnapshotsByMountPointAsync"/>, <see cref="RestoreSnapshotByMountPointAsync"/>,
     /// and <see cref="DeleteSnapshotByMountPointAsync"/> their shared 1-based, "1 = newest" index.

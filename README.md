@@ -111,6 +111,8 @@ mdrive mount C:\disks\scratch.mdr C:\Mounts\Scratch
 mdrive list
 mdrive list --json
 mdrive ls R: \Projects
+mdrive ls R: \Projects --json
+mdrive info R:
 mdrive save R:
 mdrive set-password R: --password-file C:\secrets\scratch.pwd
 mdrive export R: C:\backups\scratch.mdr
@@ -119,7 +121,9 @@ mdrive format R: --yes
 mdrive snapshot create R:
 mdrive snapshot list R:
 mdrive snapshot diff R: 1
+mdrive snapshot extract R: 1 \Projects\notes.txt C:\restore\notes.txt
 mdrive snapshot restore R: 1
+mdrive watch --json
 mdrive unmount R:
 mdrive exit
 ```
@@ -136,14 +140,19 @@ mdrive exit
 | `save <drive-letter>` | Saves a mounted disk's contents to its backing image immediately. |
 | `set-password <drive-letter> [options]` | Sets or removes a mounted disk's encryption password, taking effect on the next save. Exactly one of `--password`, `--password-file` (reads the first line of a file; recommended over `--password` to avoid exposing it in shell history or the process list), or `--remove` (removes password protection) must be given. |
 | `export <drive-letter> <output-path> [options]` | Exports a mounted disk to a standalone `.mdr` image or archive file, without touching the disk's own persistence settings. Options: `--format <Zip\|SevenZip>` (exports an archive instead of a `.mdr` image), `--compression <None\|Fastest\|Optimal\|SmallestSize>`, `--password`, `--password-file` (encrypt the exported `.mdr` image; not valid together with `--format`, since archive formats don't support encryption), `--force`/`-f` (overwrite an existing output file; without it an existing file is an error). The output path must not be a mounted disk's own image, a snapshot file name, or on a RAM disk. |
-| `list [--json]` | Lists currently mounted disks with usage and capacity. `--json` outputs the list as JSON instead of a table, for scripting. |
+| `list` | Lists currently mounted disks with usage and capacity. |
 | `ls <drive-letter> [path]` | Lists the immediate children (name, type, size) of a directory on a mounted disk. `path` (e.g. `\Folder`) defaults to the root. |
+| `info <drive-letter>` | Shows a mounted disk's configuration and state: usage, read-only, image path, encryption, auto-save interval, compression, snapshot limits and count, last save time. |
+| `watch` | Prints disk events as they happen — `mounted`, `unmounted`, `save-completed`, `save-failed`, `high-usage` — until interrupted with Ctrl+C. Does not block other `mdrive` commands; at most two watches run at once. With `--json`, prints one JSON object per line. |
 | `snapshot create <drive-letter>` | Writes a timestamped snapshot of a mounted disk right now, independent of a regular save. Requires an image path and snapshot retention (`--max-snapshot-count`/`--max-snapshot-size-mb`) to be configured. |
 | `snapshot list <drive-letter>` | Lists a mounted disk's snapshots, newest first (index 1 = newest). |
 | `snapshot diff <drive-letter> <index>` | Compares a snapshot against the disk's current live contents, listing added/removed/modified files and directories. |
+| `snapshot extract <drive-letter> <index> <snapshot-path> <output-path> [--force]` | Copies a file, or a whole directory tree, out of a snapshot to the host without touching the disk. A file goes to `output-path` (or into it, if that is an existing directory); a directory's contents go into `output-path`. Nothing is written if an existing file would be replaced, unless `--force`/`-f` is given. Alternate data streams and symbolic links/junctions are not copied. The whole snapshot is loaded into memory while it runs. |
 | `snapshot restore <drive-letter> <index>` | Restores a mounted disk's contents from the given snapshot, replacing its current contents. |
 | `snapshot delete <drive-letter> <index>` | Deletes a single snapshot of a mounted disk. |
 | `exit` | Exits the running ManagedDrive application. |
+
+Every command accepts the global `--json` option, which prints the result as JSON instead of text: `ls`, `list`, `info`, `snapshot list` and `snapshot diff` print their data, the others print `{ "Success", "Message" }`. The exit code is unchanged. Argument errors and `--help` are always plain text.
 
 Run `mdrive --help` or `mdrive <command> --help` for the full option list.
 
@@ -303,6 +312,8 @@ mdrive mount C:\disks\scratch.mdr C:\Mounts\Scratch
 mdrive list
 mdrive list --json
 mdrive ls R: \Projects
+mdrive ls R: \Projects --json
+mdrive info R:
 mdrive save R:
 mdrive set-password R: --password-file C:\secrets\scratch.pwd
 mdrive export R: C:\backups\scratch.mdr
@@ -311,7 +322,9 @@ mdrive format R: --yes
 mdrive snapshot create R:
 mdrive snapshot list R:
 mdrive snapshot diff R: 1
+mdrive snapshot extract R: 1 \Projects\notes.txt C:\restore\notes.txt
 mdrive snapshot restore R: 1
+mdrive watch --json
 mdrive unmount R:
 mdrive exit
 ```
@@ -328,14 +341,19 @@ mdrive exit
 | `save <盘符>` | 立即将已挂载磁盘的内容保存到其绑定的镜像文件。 |
 | `set-password <盘符> [选项]` | 设置或移除已挂载磁盘的加密密码，下次保存时生效。`--password`、`--password-file`（读取文件首行作为密码，推荐使用以避免密码出现在 shell 历史或进程列表中）、`--remove`（移除密码保护）三者须指定且只能指定一个。 |
 | `export <盘符> <输出路径> [选项]` | 将已挂载磁盘导出为独立的 `.mdr` 镜像或压缩包文件，不影响该磁盘自身的持久化配置。可选项：`--format <Zip\|SevenZip>`（导出为压缩包而非 `.mdr` 镜像）、`--compression <None\|Fastest\|Optimal\|SmallestSize>`、`--password`、`--password-file`（为导出的 `.mdr` 镜像加密；与 `--format` 互斥，因为压缩包格式不支持加密）、`--force`/`-f`（覆盖已存在的输出文件；不加时目标文件已存在会报错）。输出路径不能是已挂载磁盘自身的镜像、快照文件名，也不能位于 RAM 盘上。 |
-| `list [--json]` | 列出当前已挂载的磁盘及其用量与容量。`--json` 以 JSON 而非表格形式输出，便于脚本处理。 |
+| `list` | 列出当前已挂载的磁盘及其用量与容量。 |
 | `ls <盘符> [路径]` | 列出已挂载磁盘上某目录的直接子项（名称、类型、大小）。`路径`（如 `\Folder`）省略时列出根目录。 |
+| `info <盘符>` | 显示已挂载磁盘的配置与状态：用量、是否只读、镜像路径、是否加密、自动保存间隔、压缩级别、快照上限与数量、上次保存时间。 |
+| `watch` | 实时输出磁盘事件——`mounted`、`unmounted`、`save-completed`、`save-failed`、`high-usage`——直到按 Ctrl+C 中断。不会阻塞其他 `mdrive` 命令；同时最多运行两个 watch。加 `--json` 时每行输出一个 JSON 对象。 |
 | `snapshot create <盘符>` | 立即为已挂载磁盘写入一个带时间戳的快照，独立于常规保存。需要该磁盘已配置镜像路径及快照保留策略（`--max-snapshot-count`/`--max-snapshot-size-mb`）。 |
 | `snapshot list <盘符>` | 列出已挂载磁盘的快照，按时间倒序排列（序号 1 为最新）。 |
 | `snapshot diff <盘符> <序号>` | 将指定快照与磁盘当前实际内容进行比较，列出新增/删除/修改的文件和目录。 |
+| `snapshot extract <盘符> <序号> <快照内路径> <输出路径> [--force]` | 把快照中的某个文件或整个目录树复制到宿主机，不影响磁盘本身。文件写到`输出路径`（若它是已存在的目录则写入其中）；目录则把其内容写入`输出路径`。若会覆盖已有文件则一个也不写，除非加 `--force`/`-f`。备用数据流和符号链接/联接不会被复制。执行期间会把整个快照载入内存。 |
 | `snapshot restore <盘符> <序号>` | 用指定序号的快照恢复已挂载磁盘的内容，会替换当前内容。 |
 | `snapshot delete <盘符> <序号>` | 删除已挂载磁盘的某个快照。 |
 | `exit` | 退出正在运行的 ManagedDrive 应用。 |
+
+所有命令都接受全局选项 `--json`，以 JSON 而非文本输出结果：`ls`、`list`、`info`、`snapshot list`、`snapshot diff` 输出其数据，其余命令输出 `{ "Success", "Message" }`，退出码不变。参数错误和 `--help` 始终是纯文本。
 
 运行 `mdrive --help` 或 `mdrive <命令> --help` 可查看完整的选项列表。
 

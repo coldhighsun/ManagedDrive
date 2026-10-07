@@ -67,6 +67,9 @@ internal sealed class MainViewModelCliDiskController(MainViewModel mainViewModel
     public Task<(bool Success, string Message, IReadOnlyList<CliFileEntry>? Entries)> ListFilesAsync(string mountPoint, string? path) =>
         mainViewModel.ListFilesByMountPointAsync(mountPoint, path);
 
+    public Task<(bool Success, string Message, CliDiskDetails? Details)> GetDiskInfoAsync(string mountPoint) =>
+        mainViewModel.GetDiskInfoByMountPointAsync(mountPoint);
+
     public Task<(bool Success, string Message)> CloneAsync(string sourceMountPoint, string targetMountPoint) =>
         mainViewModel.CloneByMountPointAsync(sourceMountPoint, targetMountPoint);
 
@@ -86,6 +89,9 @@ internal sealed class MainViewModelCliDiskController(MainViewModel mainViewModel
 
         return (true, message, new(d.AddedFiles, d.RemovedFiles, d.ModifiedFiles, d.AddedDirectories, d.RemovedDirectories, d.UnchangedFileCount));
     }
+
+    public Task<(bool Success, string Message)> ExtractSnapshotAsync(string mountPoint, int index, string snapshotPath, string outputPath, bool overwrite) =>
+        mainViewModel.ExtractSnapshotByMountPointAsync(mountPoint, index, snapshotPath, outputPath, overwrite);
 
     public Task<(bool Success, string Message)> EditAsync(string mountPoint, ulong? capacityBytes, string? volumeLabel, uint? autoSaveIntervalMinutes, bool disableAutoSave) =>
         mainViewModel.EditByMountPointAsync(mountPoint, capacityBytes, volumeLabel, autoSaveIntervalMinutes, disableAutoSave);

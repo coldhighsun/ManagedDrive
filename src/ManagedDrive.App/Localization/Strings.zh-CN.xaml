@@ -191,6 +191,8 @@
     <sys:String x:Key="Msg.SnapshotIndexOutOfRange">快照序号无效。该磁盘共有 {0} 个快照。</sys:String>
     <sys:String x:Key="Msg.RestoreSnapshotFailedUnknown">恢复快照失败，原因未知。</sys:String>
     <sys:String x:Key="Status.SnapshotDeleted">已删除 {0} 的一个快照</sys:String>
+    <sys:String x:Key="Status.SnapshotExtracted">已提取 {0} 个文件（{1}）到 {2}。</sys:String>
+    <sys:String x:Key="Status.SnapshotExtractedSkippedLinks">已跳过 {0} 个符号链接或联接。</sys:String>
 
     <!-- SnapshotDiffDialog -->
     <sys:String x:Key="SnapshotDiff.Title">快照变化</sys:String>

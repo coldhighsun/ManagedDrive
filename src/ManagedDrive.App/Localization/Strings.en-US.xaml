@@ -191,6 +191,8 @@
     <sys:String x:Key="Msg.SnapshotIndexOutOfRange">Invalid snapshot index. This disk has {0} snapshot(s).</sys:String>
     <sys:String x:Key="Msg.RestoreSnapshotFailedUnknown">Failed to restore the snapshot for an unknown reason.</sys:String>
     <sys:String x:Key="Status.SnapshotDeleted">Deleted a snapshot of {0}</sys:String>
+    <sys:String x:Key="Status.SnapshotExtracted">Extracted {0} file(s) ({1}) to {2}.</sys:String>
+    <sys:String x:Key="Status.SnapshotExtractedSkippedLinks">Skipped {0} symbolic link(s) or junction(s).</sys:String>
 
     <!-- SnapshotDiffDialog -->
     <sys:String x:Key="SnapshotDiff.Title">Snapshot Changes</sys:String>

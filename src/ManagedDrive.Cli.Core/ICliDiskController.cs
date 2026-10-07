@@ -117,6 +117,19 @@ public interface ICliDiskController
     Task<(bool Success, string Message, IReadOnlyList<CliFileEntry>? Entries)> ListFilesAsync(string mountPoint, string? path);
 
     /// <summary>
+    /// Reads the configuration and current state of the disk mounted at
+    /// <paramref name="mountPoint"/>.
+    /// </summary>
+    /// <param name="mountPoint">The mount point to describe, e.g. <c>"R:"</c>.</param>
+    /// <returns>
+    /// <c>(true, message, details)</c> on success; <c>(false, message, null)</c> with a
+    /// human-readable reason otherwise. <paramref name="mountPoint"/> not being mounted is reported
+    /// as <c>(false, string.Empty, null)</c> so the CLI layer can render its own not-mounted
+    /// message.
+    /// </returns>
+    Task<(bool Success, string Message, CliDiskDetails? Details)> GetDiskInfoAsync(string mountPoint);
+
+    /// <summary>
     /// Replaces the contents of the disk mounted at <paramref name="targetMountPoint"/> with a
     /// copy of the disk mounted at <paramref name="sourceMountPoint"/>'s current contents.
     /// </summary>
@@ -202,6 +215,27 @@ public interface ICliDiskController
     Task<(bool Success, string Message, CliSnapshotDiff? Diff)> DiffSnapshotAsync(string mountPoint, int index);
 
     /// <summary>
+    /// Copies a file or directory out of a previously saved snapshot of the disk currently mounted
+    /// at <paramref name="mountPoint"/> to the host, without touching the disk's live contents.
+    /// </summary>
+    /// <param name="mountPoint">The mount point whose snapshot to read, e.g. <c>"R:"</c>.</param>
+    /// <param name="index">
+    /// 1-based snapshot index as returned by <see cref="ListSnapshotsAsync"/> (1 = newest).
+    /// </param>
+    /// <param name="snapshotPath">The file or directory inside the snapshot, e.g. <c>"\Folder\a.txt"</c>.</param>
+    /// <param name="outputPath">Absolute host path to write to.</param>
+    /// <param name="overwrite">Whether existing host files may be replaced.</param>
+    /// <returns>
+    /// <c>(true, message)</c> on success; <c>(false, message)</c> with a human-readable reason
+    /// otherwise — including an out-of-range <paramref name="index"/>, a <paramref name="snapshotPath"/>
+    /// that is not in the snapshot, or an output that already exists.
+    /// <paramref name="mountPoint"/> not being mounted is reported as <c>(false, string.Empty)</c>
+    /// so the CLI layer can render its own not-mounted message.
+    /// </returns>
+    Task<(bool Success, string Message)> ExtractSnapshotAsync(
+        string mountPoint, int index, string snapshotPath, string outputPath, bool overwrite);
+
+    /// <summary>
     /// Applies non-destructive option changes (capacity, volume label, auto-save interval) to the
     /// disk currently mounted at <paramref name="mountPoint"/>. Drive-letter and read-only changes,
     /// which require a full remount, are not supported by this method.
@@ -274,6 +308,39 @@ public interface ICliDiskController
 /// Read-only snapshot of a mounted disk, as needed to render the CLI <c>list</c> table.
 /// </summary>
 public sealed record CliDiskInfo(string MountPoint, string VolumeLabel, ulong UsedBytes, ulong TotalBytes);
+
+/// <summary>
+/// Configuration and state of one mounted disk, as needed to render the CLI <c>info</c> output.
+/// </summary>
+/// <param name="MountPoint">The drive letter or directory the disk is mounted at.</param>
+/// <param name="VolumeLabel">The volume label.</param>
+/// <param name="UsedBytes">Bytes currently allocated on the disk.</param>
+/// <param name="TotalBytes">The disk's capacity, in bytes.</param>
+/// <param name="ReadOnly">Whether the disk is mounted read-only.</param>
+/// <param name="ImagePath">The backing <c>.mdr</c> image, or <c>null</c> for a memory-only disk.</param>
+/// <param name="SourceArchivePath">The archive the disk was mounted from, or <c>null</c>.</param>
+/// <param name="PasswordProtected">Whether the image is encrypted.</param>
+/// <param name="AutoSaveIntervalMinutes">The auto-save interval, or <c>null</c> when auto-save is off.</param>
+/// <param name="CompressionLevel">The image compression level, by name.</param>
+/// <param name="MaxSnapshotCount">The snapshot count limit, or <c>null</c> for none.</param>
+/// <param name="MaxSnapshotSizeBytes">The snapshot total-size limit in bytes, or <c>null</c> for none.</param>
+/// <param name="SnapshotCount">How many snapshots exist, or <c>null</c> when the disk has no image to hold them.</param>
+/// <param name="LastSaveTime">When the image was last written, or <c>null</c> if it has not been this session.</param>
+public sealed record CliDiskDetails(
+    string MountPoint,
+    string VolumeLabel,
+    ulong UsedBytes,
+    ulong TotalBytes,
+    bool ReadOnly,
+    string? ImagePath,
+    string? SourceArchivePath,
+    bool PasswordProtected,
+    uint? AutoSaveIntervalMinutes,
+    string CompressionLevel,
+    uint? MaxSnapshotCount,
+    ulong? MaxSnapshotSizeBytes,
+    int? SnapshotCount,
+    DateTimeOffset? LastSaveTime);
 
 /// <summary>
 /// One entry of a disk's snapshot history, as needed to render the CLI <c>snapshot list</c>

@@ -558,6 +558,51 @@ public sealed partial class MainViewModel
     }
 
     /// <summary>
+    /// Describes the configuration and current state of the disk currently mounted at
+    /// <paramref name="mountPoint"/>, for use by the CLI command channel.
+    /// </summary>
+    /// <param name="mountPoint">The mount point to describe, e.g. <c>"R:"</c>.</param>
+    /// <returns>
+    /// <c>(true, string.Empty, details)</c> on success, or <c>(false, string.Empty, null)</c> if no
+    /// disk is currently mounted at <paramref name="mountPoint"/>.
+    /// </returns>
+    public async Task<(bool Success, string Message, CliDiskDetails? Details)> GetDiskInfoByMountPointAsync(string mountPoint)
+    {
+        _logger.LogInformation("CLI info requested for {MountPoint}.", mountPoint);
+
+        var vm = FindDisk(mountPoint);
+        if (vm == null)
+        {
+            return (false, string.Empty, null);
+        }
+
+        var disk = vm.Disk;
+        var options = disk.Options;
+
+        int? snapshotCount = null;
+        if (options.PersistImagePath is { } imagePath)
+        {
+            snapshotCount = (await Task.Run(() => SnapshotManager.ListSnapshots(imagePath))).Count;
+        }
+
+        return (true, string.Empty, new CliDiskDetails(
+            vm.MountPoint,
+            vm.VolumeLabel,
+            disk.UsedBytes,
+            disk.TotalBytes,
+            options.ReadOnly,
+            options.PersistImagePath,
+            options.SourceArchivePath,
+            disk.IsPasswordProtected,
+            options.AutoSaveIntervalMinutes,
+            options.CompressionLevel.ToString(),
+            options.MaxSnapshotCount,
+            options.MaxSnapshotSizeBytes,
+            snapshotCount,
+            disk.LastSaveTime));
+    }
+
+    /// <summary>
     /// Lists the immediate children of <paramref name="path"/> on the disk currently mounted at
     /// <paramref name="mountPoint"/>, for use by the CLI command channel.
     /// </summary>

@@ -19,6 +19,14 @@ public static class CliOutputRenderer
     /// </summary>
     public static int Render(CliResponse response)
     {
+        // The command already produced the JSON document (see CliJson); printing it through the
+        // markup path would let a '[' in a file name be read as a style tag.
+        if (response.Json && response.Disks == null)
+        {
+            Console.WriteLine(response.Message);
+            return response.ExitCode;
+        }
+
         if (response.Disks != null)
         {
             if (response.Json)

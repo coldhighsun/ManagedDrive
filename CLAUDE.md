@@ -83,7 +83,7 @@ Integrity/hardening notes: a v6 segment's plaintext is verified against its inde
 
 ### CLI layer
 
-`mdrive.exe` is a thin pipe client → running `ManagedDrive.exe`. If no server, it launches the app and polls until connected. `CliCommandProcessor` renders via `Spectre.Console` into memory buffers (not real console). `ICliDiskController` is the seam avoiding circular references.
+`mdrive.exe` is a thin pipe client → running `ManagedDrive.exe`. If no server, it launches the app and polls until connected. `CliCommandProcessor` renders via `Spectre.Console` into memory buffers (not real console). `ICliDiskController` is the seam avoiding circular references. `--json` is a recursive option on the root command: handlers fill `CliOutcome` as usual (data commands also set `Data`) and `ExecuteAsync` converts the outcome at the end via `CliJson`, so the renderer just prints `Message` verbatim when `Json` is set. `watch` is the one command that is not request/response: `CliPipeServer.HandleConnectionAsync` branches on `CliCommandProcessor.IsWatchCommand` before taking the execution gate and streams `CliResponse` lines from an `ICliEventSource` (the app's implementation hooks `MainViewModel.Disks` and each `DiskViewModel`'s events), capped at `MaxWatchers` so ordinary commands keep pipe instances; the client side is `CliPipeClient.WatchAsync`. `snapshot extract` loads a snapshot with `SnapshotManager.LoadSnapshot` and writes it out through `SnapshotExtractor` (streams and links skipped, conflicts checked before anything is written).
 
 ### Localization & Theming
 

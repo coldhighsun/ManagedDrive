@@ -39,6 +39,44 @@ public sealed class CliOutputRendererTests : IDisposable
     }
 
     [Fact]
+    public void Render_JsonWithMarkupBrackets_PrintsTheDocumentVerbatim()
+    {
+        var originalOut = Console.Out;
+        var captured = new StringWriter();
+        Console.SetOut(captured);
+        try
+        {
+            var response = new CliResponse(true, "[{\"Name\":\"[red]x\"}]", null, 0, Json: true);
+
+            var exitCode = CliOutputRenderer.Render(response);
+
+            Assert.Equal(0, exitCode);
+            Assert.Equal("[{\"Name\":\"[red]x\"}]" + Environment.NewLine, captured.ToString());
+        }
+        finally
+        {
+            Console.SetOut(originalOut);
+        }
+    }
+
+    [Fact]
+    public void Render_JsonFailure_KeepsTheExitCode()
+    {
+        var originalOut = Console.Out;
+        Console.SetOut(new StringWriter());
+        try
+        {
+            var response = new CliResponse(false, "{\"Success\":false}", null, 1, Json: true);
+
+            Assert.Equal(1, CliOutputRenderer.Render(response));
+        }
+        finally
+        {
+            Console.SetOut(originalOut);
+        }
+    }
+
+    [Fact]
     public void Render_DiskListLabelWithMarkupBrackets_RendersItLiterally()
     {
         var response = new CliResponse(true, string.Empty, [new("R:", "[red]x", 0, 1024 * 1024)], 0);
