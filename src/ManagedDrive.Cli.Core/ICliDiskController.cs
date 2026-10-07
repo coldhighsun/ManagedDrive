@@ -100,6 +100,31 @@ public interface ICliDiskController
     Task<(bool Success, string Message)> CreateAsync(string mountPoint, ulong capacityBytes, string? volumeLabel, string? imagePath, string? password);
 
     /// <summary>
+    /// Creates a brand-new disk from one or more presets, which fill in the capacity, label,
+    /// folders and environment variables; an explicit capacity or label overrides the presets.
+    /// The default implementation supports no presets and requires a capacity, so controllers
+    /// that predate presets keep working.
+    /// </summary>
+    /// <param name="mountPoint">The mount point of the new disk.</param>
+    /// <param name="capacityBytes">The capacity in bytes, or <c>null</c> to take it from the presets.</param>
+    /// <param name="volumeLabel">The volume label, or <c>null</c> to take it from the presets.</param>
+    /// <param name="imagePath">Optional path to persist the disk to.</param>
+    /// <param name="password">Optional password to encrypt <paramref name="imagePath"/> with.</param>
+    /// <param name="presets">Ids or names of the presets to combine.</param>
+    /// <returns><c>(true, message)</c> on success; <c>(false, message)</c> with the reason otherwise.</returns>
+    Task<(bool Success, string Message)> CreateWithPresetsAsync(
+        string mountPoint, ulong? capacityBytes, string? volumeLabel, string? imagePath, string? password, IReadOnlyList<string> presets) =>
+        presets.Count == 0 && capacityBytes is { } capacity
+            ? CreateAsync(mountPoint, capacity, volumeLabel, imagePath, password)
+            : Task.FromResult((false, "Presets are not supported."));
+
+    /// <summary>
+    /// Lists the presets a new disk can be created from: the built-in ones and the user's own.
+    /// </summary>
+    /// <returns>The presets, built-in first. Empty when the controller has none.</returns>
+    Task<IReadOnlyList<CliPreset>> GetPresetsAsync() => Task.FromResult<IReadOnlyList<CliPreset>>([]);
+
+    /// <summary>
     /// Lists the immediate children of <paramref name="path"/> on the disk currently mounted at
     /// <paramref name="mountPoint"/>.
     /// </summary>
@@ -355,6 +380,19 @@ public sealed record CliDiskDetails(
     ulong? MaxSnapshotSizeBytes,
     int? SnapshotCount,
     DateTimeOffset? LastSaveTime);
+
+/// <summary>
+/// A disk preset as listed by <c>preset list</c>.
+/// </summary>
+/// <param name="Id">The id to pass to <c>create --preset</c>.</param>
+/// <param name="Name">The display name.</param>
+/// <param name="BuiltIn"><c>true</c> for a preset that ships with the app.</param>
+/// <param name="CapacityBytes">The suggested capacity in bytes.</param>
+/// <param name="Folders">The folders created on every mount.</param>
+/// <param name="Variables">The environment variables pointed into the disk, as <c>NAME=folder</c>.</param>
+/// <param name="SetAsTemp"><c>true</c> if the preset is meant to host the user's temp directory.</param>
+public sealed record CliPreset(
+    string Id, string Name, bool BuiltIn, ulong CapacityBytes, IReadOnlyList<string> Folders, IReadOnlyList<string> Variables, bool SetAsTemp);
 
 /// <summary>
 /// A directory or file in a top list of the CLI <c>usage</c> output.

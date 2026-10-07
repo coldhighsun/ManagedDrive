@@ -40,6 +40,14 @@ internal abstract class StubCliDiskController : ICliDiskController
         Task.FromResult(NotMounted);
 
     /// <inheritdoc />
+    public virtual Task<(bool Success, string Message)> CreateWithPresetsAsync(
+        string mountPoint, ulong? capacityBytes, string? volumeLabel, string? imagePath, string? password, IReadOnlyList<string> presets) =>
+        Task.FromResult((false, "Presets are not supported."));
+
+    /// <inheritdoc />
+    public virtual Task<IReadOnlyList<CliPreset>> GetPresetsAsync() => Task.FromResult<IReadOnlyList<CliPreset>>([]);
+
+    /// <inheritdoc />
     public virtual Task<(bool Success, string Message, IReadOnlyList<CliFileEntry>? Entries)> ListFilesAsync(string mountPoint, string? path) =>
         Task.FromResult<(bool, string, IReadOnlyList<CliFileEntry>?)>((false, string.Empty, null));
 
