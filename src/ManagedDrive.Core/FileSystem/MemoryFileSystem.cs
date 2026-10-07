@@ -29,6 +29,22 @@ public sealed class MemoryFileSystem : FileSystemBase
     private readonly bool _readOnly;
 
     /// <summary>
+    /// Minimum time between two <see cref="WriteRejected"/> events of the same reason.
+    /// </summary>
+    internal static readonly TimeSpan WriteRejectedMinInterval = TimeSpan.FromSeconds(1);
+
+    /// <summary>
+    /// Marks a <see cref="_lastWriteRejectedTicks"/> slot as never raised.
+    /// </summary>
+    private const long NeverRaised = -1;
+
+    /// <summary>
+    /// <see cref="Environment.TickCount64"/> of the last <see cref="WriteRejected"/> event for each
+    /// <see cref="WriteRejectionReason"/>, or <see cref="NeverRaised"/>.
+    /// </summary>
+    private readonly long[] _lastWriteRejectedTicks = [NeverRaised, NeverRaised];
+
+    /// <summary>
     /// Monotonically increasing counter bumped by every mutation (see <see cref="MarkDirty()"/>).
     /// Compared against <see cref="_savedVersion"/> to determine <see cref="IsDirty"/>.
     /// </summary>
@@ -105,6 +121,14 @@ public sealed class MemoryFileSystem : FileSystemBase
     /// their own thread safety.
     /// </summary>
     internal event Action<bool>? ContentAccessed;
+
+    /// <summary>
+    /// Raised when a write or a growing resize is refused because the volume is full or the
+    /// low-memory guard denied it. Fired synchronously from WinFsp driver threads, at most once
+    /// per <see cref="WriteRejectedMinInterval"/> for each reason, so a copy that keeps retrying
+    /// does not flood subscribers; subscribers must not assume the UI thread.
+    /// </summary>
+    internal event Action<WriteRejectionReason>? WriteRejected;
 
     /// <summary>
     /// Gets a value indicating whether the disk's content has changed since the last
@@ -1292,6 +1316,7 @@ public sealed class MemoryFileSystem : FileSystemBase
             // An offset this close to ulong.MaxValue can never fit within any real capacity;
             // reject it before the addition below wraps around and is mistaken for a small,
             // already-covered write.
+            RaiseWriteRejected(WriteRejectionReason.DiskFull);
             return STATUS_DISK_FULL;
         }
 
@@ -1322,6 +1347,7 @@ public sealed class MemoryFileSystem : FileSystemBase
                 }
 
                 fileInfo = node.FileInfo;
+                RaiseWriteRejected(WriteRejectionReason.LowMemory);
                 return STATUS_INSUFFICIENT_RESOURCES;
             }
 
@@ -1569,6 +1595,36 @@ public sealed class MemoryFileSystem : FileSystemBase
     }
 
     /// <summary>
+    /// Raises <see cref="WriteRejected"/> unless one with the same <paramref name="reason"/> was
+    /// raised within <see cref="WriteRejectedMinInterval"/>. Called only on the refusal paths, so
+    /// the successful write path pays nothing.
+    /// </summary>
+    /// <param name="reason">Why the operation was refused.</param>
+    private void RaiseWriteRejected(WriteRejectionReason reason)
+    {
+        var handler = WriteRejected;
+        if (handler is null)
+        {
+            return;
+        }
+
+        var now = Environment.TickCount64;
+        var previous = Volatile.Read(ref _lastWriteRejectedTicks[(int)reason]);
+        if (previous != NeverRaised && TimeSpan.FromMilliseconds(now - previous) < WriteRejectedMinInterval)
+        {
+            return;
+        }
+
+        // Of several threads racing past the check, only the one that wins the swap raises it.
+        if (Interlocked.CompareExchange(ref _lastWriteRejectedTicks[(int)reason], now, previous) != previous)
+        {
+            return;
+        }
+
+        handler(reason);
+    }
+
+    /// <summary>
     /// Core implementation for both file-size and allocation-size changes.
     /// When <paramref name="setAllocationSize"/> is <c>true</c>, resizes the backing buffer and
     /// clamps FileSize. When <c>false</c>, extends/truncates FileSize and grows allocation
@@ -1584,6 +1640,7 @@ public sealed class MemoryFileSystem : FileSystemBase
             // No single file can outgrow the volume. Rejecting this up front also keeps a size
             // near ulong.MaxValue from wrapping around to a small value when aligned below — which
             // would drop the file's data while its FileSize claimed the huge size.
+            RaiseWriteRejected(WriteRejectionReason.DiskFull);
             return STATUS_DISK_FULL;
         }
 
@@ -1604,6 +1661,7 @@ public sealed class MemoryFileSystem : FileSystemBase
             // total past _maxCapacity.
             if (!NodeMap.TryUpdateAllocationSizeWithinCapacity(node, aligned, MaxCapacityProvider))
             {
+                RaiseWriteRejected(WriteRejectionReason.DiskFull);
                 return STATUS_DISK_FULL;
             }
 
@@ -1618,6 +1676,7 @@ public sealed class MemoryFileSystem : FileSystemBase
                         // The capacity reservation above already applied; undo it since the growth
                         // didn't actually happen.
                         NodeMap.UpdateAllocationSize(node, previousAllocationSize);
+                        RaiseWriteRejected(WriteRejectionReason.LowMemory);
                         return STATUS_INSUFFICIENT_RESOURCES;
                     }
                 }

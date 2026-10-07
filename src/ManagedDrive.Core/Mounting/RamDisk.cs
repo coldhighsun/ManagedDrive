@@ -92,6 +92,7 @@ public sealed class RamDisk : IDisposable
         _host = host;
         Options = options;
         _fs.ContentAccessed += OnContentAccessed;
+        _fs.WriteRejected += OnWriteRejected;
 
         // Keeps Options (read by the UI and saved into the profile) in step with a rename made
         // in Explorer, which only touches the file system's own label.
@@ -123,6 +124,14 @@ public sealed class RamDisk : IDisposable
     /// fires on WinFsp driver threads, not the UI thread.
     /// </summary>
     public event Action<bool>? ContentAccessed;
+
+    /// <summary>
+    /// Raised when a write or growing resize on this disk is refused because the volume is full or
+    /// the low-memory guard denied it. Forwarded from the underlying <see cref="MemoryFileSystem"/>,
+    /// which limits it to one event per second for each reason; fires on WinFsp driver threads,
+    /// not the UI thread.
+    /// </summary>
+    public event Action<WriteRejectionReason>? WriteRejected;
 
     /// <summary>
     /// Raised whenever an image save or snapshot write fails, whether triggered manually,
@@ -539,6 +548,7 @@ public sealed class RamDisk : IDisposable
         try
         {
             _fs.ContentAccessed -= OnContentAccessed;
+            _fs.WriteRejected -= OnWriteRejected;
             _autoSaveTimer?.Dispose();
             _autoSaveTimer = null;
 
@@ -1470,6 +1480,12 @@ public sealed class RamDisk : IDisposable
     private bool NeedsSave() => RamDiskSaveDecisions.NeedsSave(_fs.IsDirty, Options.PersistImagePath, _lastSavedImagePath);
 
     private void OnContentAccessed(bool isWrite) => ContentAccessed?.Invoke(isWrite);
+
+    /// <summary>
+    /// Forwards <see cref="MemoryFileSystem.WriteRejected"/> as <see cref="WriteRejected"/>.
+    /// </summary>
+    /// <param name="reason">Why the write was refused.</param>
+    private void OnWriteRejected(WriteRejectionReason reason) => WriteRejected?.Invoke(reason);
 
     /// <summary>
     /// Saves the disk image on the periodic timer tick, swallowing any exception so a failed
