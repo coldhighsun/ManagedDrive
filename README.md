@@ -64,8 +64,8 @@ Create, mount and manage in-memory volumes that appear as normal drive letters i
 - Tray icon with a hover tooltip (per-disk usage + available memory), quick menu with a per-disk submenu (open in Explorer / save image / unmount), and optional start-minimized mode; balloon notifications (while the window is hidden) for a nearly full disk, a refused write (disk full / low memory), low system memory and failed or recovered saves
 - Live status bar: available system memory and most recently accessed file
 - Per-disk high-usage warning with a configurable threshold
-- Temp directory redirection to a disk's `Temp` folder, with a startup warning if TEMP is left on a RAM disk
-- Disk presets (Temp, Node.js, NuGet, pip, browser cache) that can be combined on one disk: they fill in size and label, create their folders on every mount and point the matching per-user environment variables (`npm_config_cache`, `NUGET_PACKAGES`, `PIP_CACHE_DIR`, ...) into the disk, restoring your previous values on unmount or exit. Save your own presets from the create dialog
+- Temp directory redirection to a disk's `Temp` folder (the **Temp** preset): TEMP and TMP get their previous values back on unmount, exit or after a crash, and a startup warning appears if TEMP is left on a RAM disk
+- **Temp & Caches** presets (Temp, Node.js, NuGet, pip, browser cache) that can be combined on one disk: they create their folders on every mount and point the matching per-user environment variables (`TEMP`/`TMP`, `npm_config_cache`, `NUGET_PACKAGES`, `PIP_CACHE_DIR`, ...) into the disk, restoring your previous values on unmount, exit or when you untick them. Tick them when creating a disk (which also fills in size and label), in the edit dialog, or from the **Temp & Caches** submenu of a disk's right-click menu, which stays open so you can toggle several at once; what is ticked follows what your environment variables really point at. A preset that redirects variables can be on one disk only: choosing it on another disk takes it from the first (the browser cache only creates a folder and can be on several)
 - Exit confirmation with a saving overlay while pending saves finish
 - Double-click to open a disk in Explorer; right-click for shortcuts, **View Disk Contents...** or **Space Usage...** (a treemap of what fills the disk, colored by file type, with top folder/file/type lists)
 
@@ -135,8 +135,8 @@ mdrive exit
 
 | Command | Description |
 |---|---|
-| `create <drive-letter> [--capacity-mb <n>] [--preset <id>]... [options]` | Creates a brand-new, empty RAM disk. `--capacity-mb` is required unless at least one `--preset` is given; repeat `--preset` to combine presets on one disk (capacities add up, folders and environment variables are merged, and an explicit `--capacity-mb`/`--label` overrides them). Options: `--label` (defaults to "RAM Disk"), `--image` (path to persist the disk to; omit for a memory-only disk discarded on unmount), `--password`, `--password-file` (encrypt `--image` with a password; requires `--image`; mutually exclusive with each other). The `temp` preset creates the `Temp` folder but does not switch your TEMP directory; do that from the disk's menu in the app. |
-| `preset list` | Lists the presets `create --preset` accepts (built-in and your own): id, name, capacity and the environment variables each one sets. Supports `--json`. |
+| `create <drive-letter> [--capacity-mb <n>] [--preset <id>]... [options]` | Creates a brand-new, empty RAM disk. `--capacity-mb` is required unless at least one `--preset` is given; repeat `--preset` to combine presets on one disk (capacities add up, folders and environment variables are merged, and an explicit `--capacity-mb`/`--label` overrides them). Options: `--label` (defaults to "RAM Disk"), `--image` (path to persist the disk to; omit for a memory-only disk discarded on unmount), `--password`, `--password-file` (encrypt `--image` with a password; requires `--image`; mutually exclusive with each other). The `temp` preset also points your user TEMP/TMP at the disk's `Temp` folder, and a preset that redirects variables is taken from the disk that had it. |
+| `preset list` | Lists the presets `create --preset` accepts: id, name, capacity and the environment variables each one sets. Supports `--json`. |
 | `clone <source-drive-letter> <target-drive-letter>` | Replaces the target disk's contents with a copy of the source disk's current contents. The target must already be mounted and writable, with capacity at least the source's used bytes. Fails, leaving the target unchanged, if the host doesn't have enough free memory for the copy. |
 | `edit <drive-letter> [options]` | Applies non-destructive changes to a mounted disk. Options: `--capacity-mb`, `--label`, `--auto-save-minutes`, `--disable-auto-save` (mutually exclusive with `--auto-save-minutes`). At least one option is required. Drive-letter and read-only changes, which require a full remount, are not supported by this command. |
 | `mount <image-path> <drive-letter> [options]` | Mounts an existing `.mdr` image. `drive-letter` may be a drive letter (`R:`) or the path of an existing, empty directory. Options: `--read-only`, `--auto-mount`, `--auto-save-minutes`, `--compression <None\|Fastest\|Optimal\|SmallestSize>`, `--custom-zstd-level <1-22>` (overrides the preset Zstd level mapped from `--compression`; only takes effect when the compression level is not `None`), `--max-snapshot-count`, `--max-snapshot-size-mb`, `--high-usage-warn-percent`, `--password`, `--password-file` (mutually exclusive; needed only if the image is encrypted — `--password-file` reads the first line of a file and is recommended over `--password` to avoid exposing it in shell history or the process list). Any option left unset keeps the image's saved profile value (or its default). |
@@ -202,7 +202,7 @@ WinFsp mounts a drive letter into the **current logon session's** device namespa
   reg add HKLM\SOFTWARE\ManagedDrive\Helper /v AllowNonAdminPublish /t REG_DWORD /d 1 /f
   ```
 
-**Fixing MSI installs:** reset TEMP to the Windows default (toolbar button) before installing MSI-based software, then retry — or download the installer from the vendor and run it manually. Or use [`wingetx`](#wingetx-winget-wrapper) in place of `winget`, which works around both failure modes without touching TEMP.
+**Fixing MSI installs:** restore TEMP (toolbar button, or untick **Temp** in the disk's **Temp & Caches** menu) before installing MSI-based software, then retry — or download the installer from the vendor and run it manually. Or use [`wingetx`](#wingetx-winget-wrapper) in place of `winget`, which works around both failure modes without touching TEMP.
 
 ManagedDrive warns once when TEMP is set to a RAM disk, and again on every startup while it stays that way.
 
@@ -267,8 +267,8 @@ This project bundles [WinFsp](https://winfsp.dev/) and [SharpCompress](https://g
 - 托盘图标带悬浮提示（各盘用量+可用内存）、带每盘子菜单（在资源管理器中打开/保存映像/卸载）的快捷菜单、可选最小化启动；窗口隐藏时通过气泡通知提示磁盘将满、写入被拒绝（磁盘已满/内存不足）、系统内存偏低以及保存失败和恢复
 - 状态栏实时显示可用系统内存和最近访问的文件
 - 每磁盘可配置高用量警告阈值
-- 临时目录重定向到某磁盘的 `Temp` 文件夹，TEMP 遗留在内存盘上时启动提示
-- 磁盘预设（临时目录、Node.js、NuGet、pip、浏览器缓存），可在同一块盘上叠加：自动填入容量和卷标，每次挂载时创建对应文件夹，并把相应的用户级环境变量（`npm_config_cache`、`NUGET_PACKAGES`、`PIP_CACHE_DIR` 等）指向本盘，卸载或退出时还原为你原来的值。可在创建对话框中保存自己的预设
+- 临时目录重定向到某磁盘的 `Temp` 文件夹（**临时目录**预设）：卸载、退出或崩溃后重启时，TEMP 和 TMP 会恢复为原来的值；TEMP 遗留在内存盘上时启动提示
+- **临时与缓存**预设（临时目录、Node.js、NuGet、pip、浏览器缓存），可在同一块盘上叠加：每次挂载时创建对应文件夹，并把相应的用户级环境变量（`TEMP`/`TMP`、`npm_config_cache`、`NUGET_PACKAGES`、`PIP_CACHE_DIR` 等）指向本盘，卸载、退出或取消勾选时还原为你原来的值。可在创建磁盘时勾选（同时自动填入容量和卷标）、在编辑对话框中勾选，或在磁盘右键菜单的**临时与缓存**子菜单里直接勾选（菜单不会关闭，可连续勾选多项）；勾选状态以环境变量的实际指向为准。会修改环境变量的预设只能用于一块磁盘：在另一块盘上选用它，会把它从原来的磁盘上取消（浏览器缓存只创建文件夹，可用于多块盘）
 - 退出确认并显示保存遮罩直至待处理保存完成
 - 双击在资源管理器中打开磁盘；右键提供快捷方式、**磁盘内容...** 或**空间占用分析...**（以矩形树图显示磁盘空间被什么占用，按文件类型着色，并附带占用最大的文件夹/文件/类型列表）
 
@@ -343,8 +343,8 @@ mdrive exit
 
 | 命令 | 说明 |
 |---|---|
-| `create <盘符> [--capacity-mb <数值>] [--preset <id>]... [选项]` | 新建一块全新的空白 RAM 盘。未指定任何 `--preset` 时必须给出 `--capacity-mb`；重复 `--preset` 可在同一块盘上叠加多个预设（容量相加，文件夹和环境变量合并，显式的 `--capacity-mb`/`--label` 优先）。可选项：`--label`（默认 "RAM Disk"）、`--image`（持久化镜像路径；省略则为仅内存磁盘，卸载后即丢弃）、`--password`、`--password-file`（为 `--image` 加密；需配合 `--image` 使用；二者互斥）。`temp` 预设只会创建 `Temp` 文件夹，不会切换你的 TEMP 目录，请在应用中通过该磁盘的菜单设置。 |
-| `preset list` | 列出 `create --preset` 可用的预设（内置和你自己保存的）：id、名称、容量以及各自设置的环境变量。支持 `--json`。 |
+| `create <盘符> [--capacity-mb <数值>] [--preset <id>]... [选项]` | 新建一块全新的空白 RAM 盘。未指定任何 `--preset` 时必须给出 `--capacity-mb`；重复 `--preset` 可在同一块盘上叠加多个预设（容量相加，文件夹和环境变量合并，显式的 `--capacity-mb`/`--label` 优先）。可选项：`--label`（默认 "RAM Disk"）、`--image`（持久化镜像路径；省略则为仅内存磁盘，卸载后即丢弃）、`--password`、`--password-file`（为 `--image` 加密；需配合 `--image` 使用；二者互斥）。`temp` 预设还会把你的用户 TEMP/TMP 指向该磁盘的 `Temp` 文件夹；会修改环境变量的预设会从原来使用它的磁盘上取消。 |
+| `preset list` | 列出 `create --preset` 可用的预设：id、名称、容量以及各自设置的环境变量。支持 `--json`。 |
 | `clone <源盘符> <目标盘符>` | 用源磁盘的当前内容替换目标磁盘的内容。目标磁盘必须已挂载且可写，容量须不小于源磁盘已用字节数。若宿主机可用内存不足以容纳复制的数据，克隆会失败，目标磁盘保持不变。 |
 | `edit <盘符> [选项]` | 对已挂载磁盘应用非破坏性更改。可选项：`--capacity-mb`、`--label`、`--auto-save-minutes`、`--disable-auto-save`（与 `--auto-save-minutes` 互斥）。至少须指定一项。盘符或只读标志的更改需要完整重挂，本命令不支持。 |
 | `mount <镜像路径> <盘符> [选项]` | 将已有的 `.mdr` 镜像挂载。`盘符`可以是一个盘符（`R:`），也可以是一个已存在的空目录路径。可选项：`--read-only`、`--auto-mount`、`--auto-save-minutes`、`--compression <None\|Fastest\|Optimal\|SmallestSize>`、`--max-snapshot-count`、`--max-snapshot-size-mb`、`--high-usage-warn-percent`、`--password`、`--password-file`（二者互斥；仅当镜像已加密时需要——推荐使用 `--password-file`（读取文件首行作为密码）而非 `--password`，以避免密码出现在 shell 历史或进程列表中）。未指定的选项沿用该镜像已保存的配置值（或其默认值）。 |
@@ -408,7 +408,7 @@ WinFsp 把盘符挂载在**当前登录会话（logon session）**的设备命�
   ```
   之后可用 `sc stop ManagedDriveHelper` 再 `sc delete ManagedDriveHelper` 移除。完全是可选的——不做这一步 ManagedDrive 照常挂载和使用，只是失败模式 1 得不到解决。
 
-**MSI 安装的解决办法：** 安装 MSI 类软件前，先用工具栏按钮把 TEMP 恢复为 Windows 默认值再重试；或直接前往官网下载安装包手动安装；也可以用 [`wingetx`](#wingetx-wrapper-zh) 代替 `winget`——它无需重置 TEMP 即可绕开上述两种失败模式。
+**MSI 安装的解决办法：** 安装 MSI 类软件前，先用工具栏按钮恢复 TEMP（或在该磁盘右键菜单的**临时与缓存**里取消勾选**临时目录**）再重试；或直接前往官网下载安装包手动安装；也可以用 [`wingetx`](#wingetx-wrapper-zh) 代替 `winget`——它无需重置 TEMP 即可绕开上述两种失败模式。
 
 ManagedDrive 会在 TEMP 被设为内存盘时提示一次，此后只要 TEMP 仍指向内存盘，每次启动都会再次提示——恢复默认值即可停止。
 
