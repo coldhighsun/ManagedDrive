@@ -128,6 +128,12 @@ public sealed class FileNode
         (FileInfo.FileAttributes & (uint)FileAttributes.Directory) != 0;
 
     /// <summary>
+    /// Gets a value indicating whether this node is an alternate data stream of another node
+    /// (its path is <c>owner:stream</c>) rather than a file or directory in its own right.
+    /// </summary>
+    public bool IsStream => LeafName.Contains(AlternateStreamName.Separator);
+
+    /// <summary>
     /// The name component of <see cref="FilePath"/> (i.e., the path's last segment).
     /// Kept in sync by <see cref="FileNodeMap"/> whenever <see cref="FilePath"/> changes.
     /// </summary>

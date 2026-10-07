@@ -1299,6 +1299,8 @@ public sealed class RamDisk : IDisposable
         // process can traverse a link without being checked against the link's own descriptor.
         host.ReparsePoints = true;
         host.ReparsePointsAccessCheck = false;
+        // Alternate data streams (file:Zone.Identifier, ...), each stored as its own node.
+        host.NamedStreams = true;
         host.FileInfoTimeout = 1000;
         // Only invoke the Cleanup callback when a file was actually modified. Read-only opens (the
         // common read-after-write and random-read path) then skip the user-mode Cleanup round-trip

@@ -124,6 +124,14 @@ public sealed class FileNodeMap : IDisposable
                     return CreateResult.ParentNotDirectory;
             }
 
+            // A stream can only exist next to the file it belongs to; checked here, under the same
+            // lock as the add, so it can't be created for an owner that is being deleted.
+            if (AlternateStreamName.IsStreamKey(filePath) &&
+                !_map.ContainsKey(AlternateStreamName.OwnerOf(filePath)))
+            {
+                return CreateResult.OwnerNotFound;
+            }
+
             if ((ulong)Interlocked.Read(ref _totalAllocated) + node.FileInfo.AllocationSize > maxCapacity())
             {
                 return CreateResult.CapacityExceeded;
@@ -168,6 +176,11 @@ public sealed class FileNodeMap : IDisposable
         /// Adding the node would exceed the volume's capacity.
         /// </summary>
         CapacityExceeded,
+
+        /// <summary>
+        /// The node is an alternate data stream whose file doesn't exist.
+        /// </summary>
+        OwnerNotFound,
     }
 
     /// <summary>
@@ -463,6 +476,21 @@ public sealed class FileNodeMap : IDisposable
                     break;
                 }
 
+                // An alternate data stream is part of its file, not a sibling of it. A node whose
+                // name has a colon without being a stream name (kept from an older build's image)
+                // is hidden from listings too, but still counts as a child when only asking
+                // whether the directory is empty, so the directory can't be deleted out from
+                // under it.
+                if (childSpan.Contains(AlternateStreamName.Separator))
+                {
+                    if (matches == null && !AlternateStreamName.IsWellFormedStreamKey(path))
+                    {
+                        return true;
+                    }
+
+                    continue;
+                }
+
                 if (marker != null &&
                     childSpan.CompareTo(marker, StringComparison.OrdinalIgnoreCase) <= 0)
                 {
@@ -537,6 +565,7 @@ public sealed class FileNodeMap : IDisposable
         try
         {
             RemoveCore(filePath);
+            RemoveStreamsCore(filePath);
         }
         finally
         {
@@ -569,6 +598,39 @@ public sealed class FileNodeMap : IDisposable
             }
 
             if (expected.IsDirectory && ScanImmediateChildren(filePath, marker: null, matches: null))
+            {
+                return false;
+            }
+
+            RemoveCore(filePath);
+            RemoveStreamsCore(filePath);
+            return true;
+        }
+        finally
+        {
+            _syncRoot.ExitWriteLock();
+        }
+    }
+
+    /// <summary>
+    /// Deletes the empty file at <paramref name="filePath"/> only if it is still
+    /// <paramref name="expected"/>, still has no content and has no alternate data streams, all
+    /// checked under the write lock. Used to undo the implicit creation of a stream's file when
+    /// the stream itself could not be created, without taking along a stream or data another
+    /// thread attached to that file in the meantime.
+    /// </summary>
+    /// <param name="filePath">Absolute path of the file.</param>
+    /// <param name="expected">The node the caller created and now wants to take back.</param>
+    /// <returns><c>true</c> if the file was removed.</returns>
+    public bool TryDeleteIfUnused(string filePath, FileNode expected)
+    {
+        _syncRoot.EnterWriteLock();
+        try
+        {
+            if (!_map.TryGetValue(filePath, out var current) ||
+                !ReferenceEquals(current, expected) ||
+                expected.FileInfo.FileSize != 0 ||
+                GetStreamKeysCore(filePath).Count != 0)
             {
                 return false;
             }
@@ -633,6 +695,8 @@ public sealed class FileNodeMap : IDisposable
             removed.IsDetached = true;
         }
 
+        RemoveStreamsCore(dirPath);
+
         var prefix = dirPath + "\\";
         var upperBound = prefix + '￿';
         var keys = new List<string>(_sortedKeys.GetViewBetween(prefix, upperBound));
@@ -645,6 +709,115 @@ public sealed class FileNodeMap : IDisposable
                 Interlocked.Add(ref _totalAllocated, -(long)descendant.FileInfo.AllocationSize);
                 descendant.IsDetached = true;
             }
+        }
+    }
+
+    /// <summary>
+    /// Lists the keys of the alternate data streams of <paramref name="ownerPath"/>, in sorted
+    /// order. Caller must hold the read (or write) lock.
+    /// </summary>
+    /// <param name="ownerPath">Absolute path of the file or directory the streams belong to.</param>
+    private List<string> GetStreamKeysCore(string ownerPath)
+    {
+        var prefix = ownerPath + AlternateStreamName.Separator;
+        return [.. _sortedKeys.GetViewBetween(prefix, prefix + '￿')];
+    }
+
+    /// <summary>
+    /// Removes every alternate data stream of <paramref name="ownerPath"/>, updating
+    /// <see cref="_sortedKeys"/> and <see cref="_totalAllocated"/> to match. Caller must hold the
+    /// write lock.
+    /// </summary>
+    /// <param name="ownerPath">Absolute path of the file or directory being removed.</param>
+    private void RemoveStreamsCore(string ownerPath)
+    {
+        foreach (var key in GetStreamKeysCore(ownerPath))
+        {
+            if (_map.Remove(key, out var stream))
+            {
+                _sortedKeys.Remove(key);
+                Interlocked.Add(ref _totalAllocated, -(long)stream.FileInfo.AllocationSize);
+                stream.IsDetached = true;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Re-keys every alternate data stream of <paramref name="oldPath"/> so it belongs to
+    /// <paramref name="newPath"/> instead. Caller must hold the write lock.
+    /// </summary>
+    /// <param name="oldPath">Current absolute path of the file or directory being renamed.</param>
+    /// <param name="newPath">New absolute path for it.</param>
+    private void RenameStreamsCore(string oldPath, string newPath)
+    {
+        foreach (var key in GetStreamKeysCore(oldPath))
+        {
+            var stream = _map[key];
+            _map.Remove(key);
+            _sortedKeys.Remove(key);
+            var newKey = string.Concat(newPath, key.AsSpan(oldPath.Length));
+            stream.FilePath = newKey;
+            stream.LeafName = ComputeLeafName(newKey);
+            stream.MetadataVersion++;
+            _map[newKey] = stream;
+            _sortedKeys.Add(newKey);
+        }
+    }
+
+    /// <summary>
+    /// Returns the alternate data streams of the file or directory at <paramref name="ownerPath"/>,
+    /// ordered by name.
+    /// </summary>
+    /// <param name="ownerPath">Absolute path of the file or directory.</param>
+    /// <returns>The (path, node) pairs of its streams; empty when it has none.</returns>
+    public IReadOnlyList<KeyValuePair<string, FileNode>> GetStreams(string ownerPath)
+    {
+        _syncRoot.EnterReadLock();
+        try
+        {
+            return [.. GetStreamKeysCore(ownerPath).Select(key => KeyValuePair.Create(key, _map[key]))];
+        }
+        finally
+        {
+            _syncRoot.ExitReadLock();
+        }
+    }
+
+    /// <summary>
+    /// Removes every well-formed stream node (key in the normalized form of
+    /// <see cref="AlternateStreamName.TryNormalize"/>) that <see cref="MemoryFileSystem"/> could not
+    /// have created: one whose file is missing, or that is a directory. Run on every node map
+    /// loaded from an image or snapshot, so a stream can never outlive or precede its file.
+    /// A node whose name merely contains a colon without being a stream name (e.g. imported from
+    /// an archive by an older build) is kept: it can't be reached through Windows, but dropping it
+    /// would silently lose data on the next save.
+    /// </summary>
+    /// <returns>The keys of the nodes that were removed.</returns>
+    internal IReadOnlyList<string> RemoveInvalidStreams()
+    {
+        _syncRoot.EnterWriteLock();
+        try
+        {
+            List<string> removed = [];
+            foreach (var key in _sortedKeys.Where(AlternateStreamName.IsStreamKey).ToList())
+            {
+                if (!AlternateStreamName.IsWellFormedStreamKey(key))
+                {
+                    continue;
+                }
+
+                if (!_map.ContainsKey(AlternateStreamName.OwnerOf(key)) || _map[key].IsDirectory)
+                {
+                    RemoveCore(key);
+                    removed.Add(key);
+                }
+            }
+
+            return removed;
+        }
+        finally
+        {
+            _syncRoot.ExitWriteLock();
         }
     }
 
@@ -817,6 +990,7 @@ public sealed class FileNodeMap : IDisposable
                 RenameDescendantsCore(fileName, newFileName);
             }
 
+            RenameStreamsCore(fileName, newFileName);
             RemoveCore(fileName);
             AddCore(newFileName, node);
 
