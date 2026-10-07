@@ -17,6 +17,69 @@ public sealed class CreateDiskOptionsBuilderTests
     }
 
     [Fact]
+    public void Build_WithPresetFoldersAndRedirects_PassesThemToTheOptions()
+    {
+        var input = ValidCreateInput() with
+        {
+            Folders = ["npm-cache"],
+            EnvRedirects = [new() { Variable = "npm_config_cache", SubPath = "npm-cache" }],
+        };
+
+        var result = CreateDiskOptionsBuilder.Build(input);
+
+        Assert.True(result.Success);
+        Assert.Equal(["npm-cache"], result.Options!.Folders);
+        Assert.Equal("npm_config_cache", Assert.Single(result.Options.EnvRedirects!).Variable);
+    }
+
+    [Fact]
+    public void Build_WithoutPresetEffects_LeavesFoldersAndRedirectsNull()
+    {
+        var result = CreateDiskOptionsBuilder.Build(ValidCreateInput());
+
+        Assert.Null(result.Options!.Folders);
+        Assert.Null(result.Options.EnvRedirects);
+    }
+
+    [Theory]
+    [InlineData(@"..\escape")]
+    [InlineData(@"C:\abs")]
+    [InlineData("")]
+    public void Build_BadPresetFolder_ReturnsBadFolder(string folder)
+    {
+        var result = CreateDiskOptionsBuilder.Build(ValidCreateInput() with { Folders = [folder] });
+
+        Assert.Equal(CreateDiskValidationError.BadFolder, result.Error);
+    }
+
+    [Fact]
+    public void Build_ReservedVariableRedirect_ReturnsBadEnvRedirect()
+    {
+        var input = ValidCreateInput() with { EnvRedirects = [new() { Variable = "PATH", SubPath = "x" }] };
+
+        var result = CreateDiskOptionsBuilder.Build(input);
+
+        Assert.Equal(CreateDiskValidationError.BadEnvRedirect, result.Error);
+    }
+
+    [Fact]
+    public void Build_SameVariableTwice_ReturnsBadEnvRedirect()
+    {
+        var input = ValidCreateInput() with
+        {
+            EnvRedirects =
+            [
+                new() { Variable = "MY_VAR", SubPath = "a" },
+                new() { Variable = "my_var", SubPath = "b" },
+            ],
+        };
+
+        var result = CreateDiskOptionsBuilder.Build(input);
+
+        Assert.Equal(CreateDiskValidationError.BadEnvRedirect, result.Error);
+    }
+
+    [Fact]
     public void Build_NoMountPoint_ReturnsNoDriveLetter()
     {
         var result = CreateDiskOptionsBuilder.Build(ValidCreateInput() with { MountPoint = null });

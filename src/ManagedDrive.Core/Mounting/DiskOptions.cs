@@ -181,4 +181,23 @@ public sealed record DiskOptions
     /// <c>null</c>. Independent of periodic auto-save (<see cref="AutoSaveIntervalMinutes"/>).
     /// </summary>
     public bool SaveImageOnExit { get; init; } = true;
+
+    /// <summary>
+    /// Folders, relative to the disk's root, created after every mount. A disk without an image
+    /// starts empty each time, so these are recreated rather than stored in the disk. <c>null</c>
+    /// or empty creates none.
+    /// </summary>
+    public IReadOnlyList<string>? Folders
+    {
+        get; init;
+    }
+
+    /// <summary>
+    /// Per-user environment variables pointed into this disk while it is mounted and restored when
+    /// it is unmounted. <c>null</c> or empty redirects none.
+    /// </summary>
+    public IReadOnlyList<EnvRedirect>? EnvRedirects
+    {
+        get; init;
+    }
 }

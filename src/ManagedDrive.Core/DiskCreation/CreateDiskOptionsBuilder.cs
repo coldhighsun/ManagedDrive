@@ -90,6 +90,12 @@ public enum CreateDiskValidationError
 
     /// <summary>The password was longer than the maximum length.</summary>
     PasswordTooLong,
+
+    /// <summary>A preset folder was empty, rooted or outside the disk.</summary>
+    BadFolder,
+
+    /// <summary>An environment-variable redirection was invalid or two redirections used the same variable.</summary>
+    BadEnvRedirect,
 }
 
 /// <summary>
@@ -209,6 +215,12 @@ public sealed record CreateDiskInput
 
     /// <summary>Whether to save the image on exit.</summary>
     public bool SaveImageOnExit { get; init; }
+
+    /// <summary>Folders to create on every mount, relative to the disk's root.</summary>
+    public IReadOnlyList<string> Folders { get; init; } = [];
+
+    /// <summary>Environment variables to point into the disk while it is mounted.</summary>
+    public IReadOnlyList<EnvRedirect> EnvRedirects { get; init; } = [];
 
     /// <summary>Whether the encrypt-image checkbox is checked.</summary>
     public bool EncryptChecked { get; init; }
@@ -409,6 +421,11 @@ public static class CreateDiskOptionsBuilder
             return passwordResult;
         }
 
+        if (ValidatePresetEffects(input) is { } presetError)
+        {
+            return Fail(presetError);
+        }
+
         var options = new DiskOptions
         {
             MountPoint = mountPoint,
@@ -424,6 +441,8 @@ public static class CreateDiskOptionsBuilder
             MaxSnapshotSizeBytes = maxSnapshotSizeBytes,
             HighUsageWarnPercent = highUsageWarnPercent,
             SaveImageOnExit = input.SaveImageOnExit,
+            Folders = input.Folders.Count == 0 ? null : input.Folders,
+            EnvRedirects = input.EnvRedirects.Count == 0 ? null : input.EnvRedirects,
         };
 
         return new()
@@ -550,6 +569,27 @@ public static class CreateDiskOptionsBuilder
         {
             return false;
         }
+    }
+
+    /// <summary>
+    /// Checks the folders and environment-variable redirections a preset contributed.
+    /// </summary>
+    /// <param name="input">The dialog's inputs.</param>
+    /// <returns>The first problem found, or <c>null</c> when everything is acceptable.</returns>
+    private static CreateDiskValidationError? ValidatePresetEffects(CreateDiskInput input)
+    {
+        if (input.Folders.Any(folder => !EnvRedirectPolicy.IsValidSubPath(folder)))
+        {
+            return CreateDiskValidationError.BadFolder;
+        }
+
+        if (input.EnvRedirects.Any(redirect => EnvRedirectPolicy.Validate(redirect) != EnvRedirectError.None) ||
+            input.EnvRedirects.GroupBy(redirect => redirect.Variable, StringComparer.OrdinalIgnoreCase).Any(group => group.Count() > 1))
+        {
+            return CreateDiskValidationError.BadEnvRedirect;
+        }
+
+        return null;
     }
 
     private static CreateDiskBuildResult BuildArchiveImportOptions(CreateDiskInput input, string mountPoint)
