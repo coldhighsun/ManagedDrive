@@ -20,7 +20,7 @@
         TextElement.Foreground="{DynamicResource AppForeground}"
         TextElement.FontWeight="Regular"
         TextElement.FontSize="13"
-        TextOptions.TextFormattingMode="Ideal"
+        TextOptions.TextFormattingMode="Display"
         TextOptions.TextRenderingMode="ClearType"
         AllowDrop="True"
         DragEnter="Window_DragEnter"
