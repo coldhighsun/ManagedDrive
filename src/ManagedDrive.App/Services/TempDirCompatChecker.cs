@@ -2,37 +2,16 @@ namespace ManagedDrive.App.Services;
 
 /// <summary>
 /// Checks and repairs the user-level TEMP/TMP directory's compatibility with WinFsp-mounted RAM
-/// disks: the one-time startup check/warning, and the tray "Reset TEMP Dirs" action. Extracted
-/// from <see cref="App"/>.
+/// disks: the one-time startup check/warning. Extracted from <see cref="App"/>.
 /// </summary>
 public sealed class TempDirCompatChecker
 {
-    private readonly Func<Window?> _ownerWindowProvider;
     private readonly SettingsStore _settings;
-    private readonly TrayIconController _trayIconController;
-
-    /// <summary>
-    /// Puts TEMP and TMP back for the tray action: to what they held before they were pointed into a
-    /// RAM disk, so the recorded backups are used up too, or to the Windows defaults when nothing was recorded.
-    /// </summary>
-    private readonly Func<TempRestoreResult> _restoreTemp;
 
     /// <param name="settings">Used to persist <see cref="AppConfiguration.TempDirCompatWarningShown"/>.</param>
-    /// <param name="trayIconController">Used to show the reset-result balloon tip.</param>
-    /// <param name="ownerWindowProvider">Supplies the confirm dialog's owner window, or <c>null</c> if none is loaded.</param>
-    /// <param name="restoreTemp">
-    /// Restores TEMP and TMP for the tray action; <c>null</c> resets them to the Windows defaults.
-    /// </param>
-    public TempDirCompatChecker(
-        SettingsStore settings,
-        TrayIconController trayIconController,
-        Func<Window?> ownerWindowProvider,
-        Func<TempRestoreResult>? restoreTemp = null)
+    public TempDirCompatChecker(SettingsStore settings)
     {
         _settings = settings;
-        _trayIconController = trayIconController;
-        _ownerWindowProvider = ownerWindowProvider;
-        _restoreTemp = restoreTemp ?? (() => TempDirResetService.Reset() ? TempRestoreResult.Restored : TempRestoreResult.Failed);
     }
 
     /// <summary>
@@ -172,37 +151,5 @@ public sealed class TempDirCompatChecker
             "ManagedDrive",
             MessageBoxButton.OK,
             MessageBoxImage.Warning);
-    }
-
-    /// <summary>
-    /// Runs the tray "Reset TEMP Dirs" action: confirms with the user, resets TEMP/TMP to Windows
-    /// defaults, and reports the outcome via a balloon tip.
-    /// </summary>
-    public async Task ResetFromTrayAsync()
-    {
-        var confirm = new ConfirmDialog(
-            Loc.Get("Msg.ResetTempConfirmTitle"),
-            Loc.Get("Msg.ResetTempConfirmBody"));
-
-        if (_ownerWindowProvider() is { } owner)
-        {
-            confirm.Owner = owner;
-        }
-
-        if (confirm.ShowDialog() != true)
-        {
-            return;
-        }
-
-        var result = await Task.Run(_restoreTemp);
-        _trayIconController.ShowBalloonTip(
-            "ManagedDrive",
-            result switch
-            {
-                TempRestoreResult.Restored => Loc.Get("Msg.ResetTempSuccess"),
-                TempRestoreResult.NothingToRestore => Loc.Get("Msg.ResetTempNothing"),
-                _ => Loc.Get("Msg.ResetTempFailed"),
-            },
-            result == TempRestoreResult.Failed ? System.Windows.Forms.ToolTipIcon.Warning : System.Windows.Forms.ToolTipIcon.Info);
     }
 }

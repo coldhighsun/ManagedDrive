@@ -29,11 +29,11 @@ public sealed partial class MainViewModel
     /// themselves is never overwritten.
     /// </summary>
     /// <returns>What was done.</returns>
-    public TempRestoreResult RestoreRecordedTemp()
+    public EnvRestoreResult RestoreRecordedTemp()
     {
         if (_envRedirector.RestoreVariables(TempVariables) > 0)
         {
-            return TempRestoreResult.Restored;
+            return EnvRestoreResult.Restored;
         }
 
         // Disks is bound to the UI, so it is only read on the UI thread; this method runs on a pool thread.
@@ -41,10 +41,10 @@ public sealed partial class MainViewModel
         var onKnownDisk = dispatcher.CheckAccess() ? IsTempOnKnownDisk() : dispatcher.Invoke(IsTempOnKnownDisk);
         if (!onKnownDisk)
         {
-            return TempRestoreResult.NothingToRestore;
+            return EnvRestoreResult.NothingToRestore;
         }
 
-        return TempDirResetService.Reset() ? TempRestoreResult.Restored : TempRestoreResult.Failed;
+        return TempDirResetService.Reset() ? EnvRestoreResult.Restored : EnvRestoreResult.Failed;
     }
 
     /// <summary>
@@ -60,9 +60,10 @@ public sealed partial class MainViewModel
             return true;
         }
 
+        // The profiles kept in memory are the saved ones that are not mounted, so settings.json need not be read.
         var userTemp = Environment.GetEnvironmentVariable("TEMP", EnvironmentVariableTarget.User);
         return !string.IsNullOrEmpty(userTemp) &&
-            TempDirCompatChecker.FindProfileContainingPath(Environment.ExpandEnvironmentVariables(userTemp), _settingsStore.Load().Disks) is not null;
+            TempDirCompatChecker.FindProfileContainingPath(Environment.ExpandEnvironmentVariables(userTemp), _unmountedProfiles) is not null;
     }
 
     /// <summary>
@@ -335,21 +336,10 @@ public sealed partial class MainViewModel
                 continue;
             }
 
-            var trimmed = options with
-            {
-                Folders = release.Folders.Count == 0 ? null : release.Folders,
-                EnvRedirects = release.EnvRedirects.Count == 0 ? null : release.EnvRedirects,
-            };
-            var error = await Task.Run(() =>
-            {
-                if (!other.Disk.TryApplyOptions(trimmed, out var applyError))
-                {
-                    return applyError;
-                }
-
-                _envRedirector.RestoreVariables(release.ReleasedVariables, mountPoint: options.MountPoint);
-                return null;
-            });
+            var error = await ApplyOptionsAsync(
+                other.Disk,
+                WithEffects(options, release.Folders, release.EnvRedirects),
+                () => _envRedirector.RestoreVariables(release.ReleasedVariables, mountPoint: options.MountPoint));
             if (error is not null)
             {
                 _logger.LogWarning("Taking presets away from {MountPoint} failed: {Error}", options.MountPoint, error);
@@ -396,6 +386,40 @@ public sealed partial class MainViewModel
         _logger.LogInformation("{Message}", message);
         return message;
     }
+
+    /// <summary>
+    /// Applies new options to a mounted disk off the UI thread.
+    /// </summary>
+    /// <param name="disk">The mounted disk.</param>
+    /// <param name="options">The options to apply.</param>
+    /// <param name="afterApplied">Run on the same background thread once the options were applied; skipped when they were refused.</param>
+    /// <returns>The reason the options were refused, or <c>null</c> when they were applied.</returns>
+    private static Task<string?> ApplyOptionsAsync(RamDisk disk, DiskOptions options, Action? afterApplied = null) =>
+        Task.Run<string?>(() =>
+        {
+            if (!disk.TryApplyOptions(options, out var error))
+            {
+                return error;
+            }
+
+            afterApplied?.Invoke();
+            return null;
+        });
+
+    /// <summary>
+    /// Copies options with new folders and redirections, storing empty lists as <c>null</c> the way
+    /// the rest of the options do.
+    /// </summary>
+    /// <param name="options">The options to copy.</param>
+    /// <param name="folders">The folders the disk should have.</param>
+    /// <param name="redirects">The redirections the disk should have.</param>
+    /// <returns>The new options.</returns>
+    private static DiskOptions WithEffects(DiskOptions options, IReadOnlyList<string> folders, IReadOnlyList<EnvRedirect> redirects) =>
+        options with
+        {
+            Folders = folders.Count == 0 ? null : folders,
+            EnvRedirects = redirects.Count == 0 ? null : redirects,
+        };
 
     /// <summary>
     /// Says that presets moved from one disk to another.

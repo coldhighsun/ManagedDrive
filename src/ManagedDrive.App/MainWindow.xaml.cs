@@ -52,6 +52,47 @@ public partial class MainWindow
     private void ImportBtn_Click(object sender, RoutedEventArgs e) => OpenAttachedContextMenu(sender);
 
     /// <summary>
+    /// Opens the "restore environment variables" menu, with one item per group that can be restored
+    /// and, when there are several, an item that restores all of them. Rebuilt on every click so it
+    /// lists what is redirected right now.
+    /// </summary>
+    /// <param name="sender">The restore button.</param>
+    /// <param name="e">Unused.</param>
+    private void RestoreEnvBtn_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement { ContextMenu: { } menu } || DataContext is not MainViewModel main)
+        {
+            return;
+        }
+
+        menu.Items.Clear();
+        var readable = main.TryGetEnvRestoreGroups(out var groups);
+        foreach (var entry in EnvRestoreMenuEntry.Build(groups, readFailed: !readable))
+        {
+            switch (entry.Kind)
+            {
+                case EnvRestoreMenuEntryKind.Separator:
+                    menu.Items.Add(new Separator());
+                    break;
+                case EnvRestoreMenuEntryKind.Nothing:
+                case EnvRestoreMenuEntryKind.Unreadable:
+                    menu.Items.Add(new MenuItem { Header = entry.GetText(), IsEnabled = false });
+                    break;
+                default:
+                    menu.Items.Add(new MenuItem
+                    {
+                        Header = entry.GetText(),
+                        Command = main.RestoreEnvCommand,
+                        CommandParameter = entry.Group,
+                    });
+                    break;
+            }
+        }
+
+        OpenAttachedContextMenu(sender);
+    }
+
+    /// <summary>
     /// Shows the "copy" drop cursor only for a single existing file, and only when the view model
     /// isn't already busy with another operation or exiting; anything else (multiple files,
     /// non-file data, a directory, a since-deleted path) is rejected so the drop target doesn't

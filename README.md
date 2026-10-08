@@ -67,6 +67,7 @@ Create, mount and manage in-memory volumes that appear as normal drive letters i
 - Per-disk high-usage warning with a configurable threshold
 - Temp directory redirection to a disk's `Temp` folder (the **Temp** preset): TEMP and TMP get their previous values back on unmount, exit or after a crash, and a startup warning appears if TEMP is left on a RAM disk
 - **Temp & Caches** presets (Temp, Node.js, NuGet, pip, browser cache) that can be combined on one disk: they create their folders on every mount and point the matching per-user environment variables (`TEMP`/`TMP`, `npm_config_cache`, `NUGET_PACKAGES`, `PIP_CACHE_DIR`, ...) into the disk, restoring your previous values on unmount, exit or when you untick them. Tick them when creating a disk (which also fills in size and label), in the edit dialog, or from the **Temp & Caches** submenu of a disk's right-click menu, which stays open so you can toggle several at once; what is ticked follows what your environment variables really point at. A preset that redirects variables can be on one disk only: choosing it on another disk takes it from the first (the browser cache only creates a folder and can be on several)
+- **Restore environment variables** (toolbar button and tray submenu): lists the groups that are redirected right now (Temp, Node.js, NuGet, pip, other variables) and puts one group, or all of them, back to your previous values without unmounting anything. The mounted disks that had those presets turn them off too (their folders and files stay), so they do not redirect the variables again on the next mount; only programs started afterwards see the change
 - Exit confirmation with a saving overlay while pending saves finish
 - Double-click to open a disk in Explorer; right-click for shortcuts, **View Disk Contents...** or **Space Usage...** (a treemap of what fills the disk, colored by file type, with top folder/file/type lists)
 
@@ -203,7 +204,7 @@ WinFsp mounts a drive letter into the **current logon session's** device namespa
   reg add HKLM\SOFTWARE\ManagedDrive\Helper /v AllowNonAdminPublish /t REG_DWORD /d 1 /f
   ```
 
-**Fixing MSI installs:** restore TEMP (toolbar button, or untick **Temp** in the disk's **Temp & Caches** menu) before installing MSI-based software, then retry — or download the installer from the vendor and run it manually. Or use [`wingetx`](#wingetx-winget-wrapper) in place of `winget`, which works around both failure modes without touching TEMP.
+**Fixing MSI installs:** restore TEMP (toolbar **Restore environment variables** button, then **Temp directory**; or untick **Temp** in the disk's **Temp & Caches** menu) before installing MSI-based software, then retry — or download the installer from the vendor and run it manually. Or use [`wingetx`](#wingetx-winget-wrapper) in place of `winget`, which works around both failure modes without touching TEMP.
 
 ManagedDrive warns once when TEMP is set to a RAM disk, and again on every startup while it stays that way.
 
@@ -271,6 +272,7 @@ This project bundles [WinFsp](https://winfsp.dev/) and [SharpCompress](https://g
 - 每磁盘可配置高用量警告阈值
 - 临时目录重定向到某磁盘的 `Temp` 文件夹（**临时目录**预设）：卸载、退出或崩溃后重启时，TEMP 和 TMP 会恢复为原来的值；TEMP 遗留在内存盘上时启动提示
 - **临时与缓存**预设（临时目录、Node.js、NuGet、pip、浏览器缓存），可在同一块盘上叠加：每次挂载时创建对应文件夹，并把相应的用户级环境变量（`TEMP`/`TMP`、`npm_config_cache`、`NUGET_PACKAGES`、`PIP_CACHE_DIR` 等）指向本盘，卸载、退出或取消勾选时还原为你原来的值。可在创建磁盘时勾选（同时自动填入容量和卷标）、在编辑对话框中勾选，或在磁盘右键菜单的**临时与缓存**子菜单里直接勾选（菜单不会关闭，可连续勾选多项）；勾选状态以环境变量的实际指向为准。会修改环境变量的预设只能用于一块磁盘：在另一块盘上选用它，会把它从原来的磁盘上取消（浏览器缓存只创建文件夹，可用于多块盘）
+- **还原环境变量**（工具栏按钮和托盘子菜单）：列出当前被重定向的分组（临时目录、Node.js、NuGet、pip、其他变量），可单独还原某一组或全部还原为你原来的值，无需卸载磁盘。拥有这些预设的已挂载磁盘会同时关闭对应预设（磁盘上的文件夹和文件保留），因此下次挂载不会再次重定向这些变量；只有之后新启动的程序才会看到变化
 - 退出确认并显示保存遮罩直至待处理保存完成
 - 双击在资源管理器中打开磁盘；右键提供快捷方式、**磁盘内容...** 或**空间占用分析...**（以矩形树图显示磁盘空间被什么占用，按文件类型着色，并附带占用最大的文件夹/文件/类型列表）
 
@@ -410,7 +412,7 @@ WinFsp 把盘符挂载在**当前登录会话（logon session）**的设备命�
   ```
   之后可用 `sc stop ManagedDriveHelper` 再 `sc delete ManagedDriveHelper` 移除。完全是可选的——不做这一步 ManagedDrive 照常挂载和使用，只是失败模式 1 得不到解决。
 
-**MSI 安装的解决办法：** 安装 MSI 类软件前，先用工具栏按钮恢复 TEMP（或在该磁盘右键菜单的**临时与缓存**里取消勾选**临时目录**）再重试；或直接前往官网下载安装包手动安装；也可以用 [`wingetx`](#wingetx-wrapper-zh) 代替 `winget`——它无需重置 TEMP 即可绕开上述两种失败模式。
+**MSI 安装的解决办法：** 安装 MSI 类软件前，先点工具栏的**还原环境变量**按钮并选择**临时目录**来恢复 TEMP（或在该磁盘右键菜单的**临时与缓存**里取消勾选**临时目录**）再重试；或直接前往官网下载安装包手动安装；也可以用 [`wingetx`](#wingetx-wrapper-zh) 代替 `winget`——它无需重置 TEMP 即可绕开上述两种失败模式。
 
 ManagedDrive 会在 TEMP 被设为内存盘时提示一次，此后只要 TEMP 仍指向内存盘，每次启动都会再次提示——恢复默认值即可停止。
 

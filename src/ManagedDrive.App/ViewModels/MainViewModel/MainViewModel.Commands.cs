@@ -614,11 +614,119 @@ public sealed partial class MainViewModel
             ? ImportDiskAsync(path)
             : ImportArchiveAsync(path);
 
-    private async void ExecuteResetTempDirs()
+    /// <summary>
+    /// Gets the groups of redirected environment variables the user can restore now.
+    /// </summary>
+    /// <param name="groups">The groups, in menu order; empty when there is nothing to restore or they cannot be read.</param>
+    /// <returns><c>false</c> when the groups could not be read, so the menu can say so instead of claiming there is nothing to restore.</returns>
+    public bool TryGetEnvRestoreGroups(out IReadOnlyList<EnvRestoreGroup> groups)
     {
+        // Both menus call this while they open; a failure here must leave them usable, not break them.
+        try
+        {
+            groups = _envRestore.GetGroups();
+            return true;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException or System.Security.SecurityException)
+        {
+            _logger.LogWarning(ex, "Listing the environment variables that can be restored failed.");
+            groups = [];
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Reports in the status bar and returns <c>true</c> when another operation (such as a mount that
+    /// is still applying its variables) is running, because a restore then could be undone at once.
+    /// </summary>
+    /// <returns><c>true</c> if the caller must not restore now.</returns>
+    public bool RejectEnvRestoreIfBusy() => RejectIfBusy();
+
+    /// <summary>
+    /// Restores a group of redirected environment variables without asking; the caller has
+    /// confirmed already. The mounted disks that had the restored presets lose them, exactly as if
+    /// the presets were unticked in the disk's menu, so the disk, its saved profile and the
+    /// environment agree and the next mount does not redirect the variables again. Folders and files
+    /// on the disk stay. A disk only loses what was really restored, so a partly failed restore
+    /// leaves the rest alone. The busy overlay is held meanwhile so no mount or edit interleaves.
+    /// Call it on the UI thread.
+    /// </summary>
+    /// <param name="group">The group to restore; <c>null</c> restores every group.</param>
+    /// <returns>What was done and which disks changed, or <c>null</c> when nothing was attempted because another operation is running.</returns>
+    public async Task<EnvRestoreReport?> RestoreEnvAsync(EnvRestoreGroup? group)
+    {
+        if (!TryStartBusyOverlay(Loc.Get("Status.RestoringEnv"), indeterminate: true))
+        {
+            return null;
+        }
+
+        try
+        {
+            // The coordinator plans before the restore, while the environment still shows which disks
+            // own the variables, and updates the disks afterwards even if the restore throws.
+            var run = await _diskRestore.RunAsync(
+                Disks.Select(disk => new MountedDiskAdapter(this, disk)).ToList(),
+                () => Task.Run(() => _envRestore.Restore(group)),
+                outcome =>
+                {
+                    if (outcome.ReleasedFrom.Count > 0)
+                    {
+                        SaveSettings();
+                    }
+
+                    if (outcome.NotUpdated.Count > 0)
+                    {
+                        ShowStickyStatus(Loc.Format("Status.RestoreEnvDisksNotUpdated", string.Join(", ", outcome.NotUpdated)));
+                    }
+                });
+            return new(run.Result, run.Outcome.ReleasedFrom);
+        }
+        finally
+        {
+            BusyOverlay.Stop();
+        }
+    }
+
+    /// <summary>
+    /// Lets <see cref="DiskRestoreCoordinator"/> work with a mounted disk's view model.
+    /// </summary>
+    /// <param name="owner">The view model whose disk list says whether the disk is still mounted.</param>
+    /// <param name="vm">The disk.</param>
+    private sealed class MountedDiskAdapter(MainViewModel owner, DiskViewModel vm) : IMountedDisk
+    {
+        /// <inheritdoc />
+        public string MountPoint => vm.Disk.Options.MountPoint;
+
+        /// <inheritdoc />
+        public bool IsMounted => owner.Disks.Contains(vm);
+
+        /// <inheritdoc />
+        public bool IsRemounting => vm.IsRemounting;
+
+        /// <inheritdoc />
+        public DiskOptions Options => vm.Disk.Options;
+
+        /// <inheritdoc />
+        public Task<string?> ApplyOptionsAsync(DiskOptions options) => MainViewModel.ApplyOptionsAsync(vm.Disk, options);
+
+        /// <inheritdoc />
+        public void Refresh() => vm.Refresh();
+    }
+
+    /// <summary>
+    /// Restores a group of redirected environment variables after the user confirms.
+    /// </summary>
+    /// <param name="group">The group to restore; <c>null</c> restores every group.</param>
+    private async void ExecuteRestoreEnv(EnvRestoreGroup? group)
+    {
+        if (RejectIfBusy())
+        {
+            return;
+        }
+
         var confirm = new ConfirmDialog(
-            Loc.Get("Msg.ResetTempConfirmTitle"),
-            Loc.Get("Msg.ResetTempConfirmBody"))
+            Loc.Get("Msg.RestoreEnvConfirmTitle"),
+            Loc.Get("Msg.RestoreEnvConfirmBody"))
         {
             Owner = Application.Current.MainWindow
         };
@@ -628,23 +736,34 @@ public sealed partial class MainViewModel
             return;
         }
 
-        _logger.LogInformation("Restore TEMP dirs confirmed.");
-        var result = await Task.Run(RestoreRecordedTemp);
-
-        switch (result)
+        _logger.LogInformation("Restore environment variables confirmed (group {Group}).", group?.Id ?? "all");
+        EnvRestoreReport? attempted;
+        try
         {
-            case TempRestoreResult.Restored:
-                _logger.LogInformation("Restore TEMP dirs succeeded.");
-                ShowInfo(Loc.Get("Msg.ResetTempSuccess"));
-                break;
-            case TempRestoreResult.NothingToRestore:
-                _logger.LogInformation("Restore TEMP dirs: nothing to restore.");
-                ShowInfo(Loc.Get("Msg.ResetTempNothing"));
-                break;
-            default:
-                _logger.LogWarning("Restore TEMP dirs failed.");
-                ShowError(Loc.Get("Msg.ResetTempFailed"));
-                break;
+            attempted = await RestoreEnvAsync(group);
+        }
+        catch (Exception ex)
+        {
+            // This is an async void command: an exception would otherwise reach the global crash handler.
+            _logger.LogError(ex, "Restoring environment variables failed.");
+            ShowError(Loc.Get("Msg.RestoreEnvFailed"));
+            return;
+        }
+
+        if (attempted is not { } report)
+        {
+            return;
+        }
+
+        _logger.LogInformation("Restore environment variables finished: {Result}.", report.Result);
+        var message = EnvRestoreGroupText.GetResultMessage(report);
+        if (report.Result == EnvRestoreResult.Failed)
+        {
+            ShowError(message);
+        }
+        else
+        {
+            ShowInfo(message);
         }
     }
 
@@ -802,14 +921,10 @@ public sealed partial class MainViewModel
                 return;
             }
 
-            var newOptions = vm.Disk.Options with
-            {
-                Folders = result.Folders.Count == 0 ? null : result.Folders,
-                EnvRedirects = result.EnvRedirects.Count == 0 ? null : result.EnvRedirects,
-            };
+            var newOptions = WithEffects(vm.Disk.Options, result.Folders, result.EnvRedirects);
             _logger.LogInformation("Preset {PresetId} {Action} on {MountPoint}.", presetId, enabled ? "turned on" : "turned off", vm.MountPoint);
 
-            var error = await Task.Run(() => vm.Disk.TryApplyOptions(newOptions, out var applyError) ? null : applyError);
+            var error = await ApplyOptionsAsync(vm.Disk, newOptions);
             if (error is not null)
             {
                 _logger.LogWarning("Changing preset {PresetId} on {MountPoint} failed: {Error}", presetId, vm.MountPoint, error);

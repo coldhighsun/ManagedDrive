@@ -85,10 +85,14 @@
                         </Button.ContextMenu>
                         <TextBlock Style="{StaticResource IconText}" Text="&#xE8B5;"/>
                     </Button>
-                    <Button Style="{StaticResource IconButton}"
-                            Command="{Binding ResetTempDirsCommand}"
-                            ToolTip="{DynamicResource Tip.ResetTempDirs}"
-                            AutomationProperties.Name="{DynamicResource Tip.ResetTempDirs}">
+                    <Button x:Name="RestoreEnvBtn" Style="{StaticResource IconButton}"
+                            Click="RestoreEnvBtn_Click"
+                            ToolTip="{DynamicResource Tip.RestoreEnv}"
+                            AutomationProperties.Name="{DynamicResource Tip.RestoreEnv}">
+                        <Button.ContextMenu>
+                            <!-- Items are created in RestoreEnvBtn_Click, from the variables redirected at that moment. -->
+                            <ContextMenu/>
+                        </Button.ContextMenu>
                         <TextBlock Style="{StaticResource IconText}" Text="&#xE7A7;"/>
                     </Button>
                     <Button Style="{StaticResource IconButton}"

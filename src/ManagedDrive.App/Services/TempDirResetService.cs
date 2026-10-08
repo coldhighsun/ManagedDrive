@@ -159,21 +159,6 @@ public static class TempDirResetService
 }
 
 /// <summary>
-/// What a "restore TEMP" request did.
-/// </summary>
-public enum TempRestoreResult
-{
-    /// <summary>TEMP and TMP do not point into a RAM disk and nothing was recorded, so nothing was changed.</summary>
-    NothingToRestore,
-
-    /// <summary>TEMP and TMP were put back.</summary>
-    Restored,
-
-    /// <summary>TEMP and TMP could not be written.</summary>
-    Failed,
-}
-
-/// <summary>
 /// One stored environment value: its text exactly as in the registry and its value kind.
 /// </summary>
 /// <param name="Text">The stored text, unexpanded.</param>
