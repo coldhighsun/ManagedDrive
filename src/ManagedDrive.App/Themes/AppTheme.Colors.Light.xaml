@@ -19,7 +19,7 @@
     <SolidColorBrush x:Key="AppBarForeground" Color="White"/>
     <SolidColorBrush x:Key="AppChartWrite" Color="#E64A19"/>
 
-    <!-- Space usage treemap: one colour per file category, plus folders and their frames. -->
+    <!-- Space usage treemap: one colour per file category, plus folders and the merged small-items block. -->
     <SolidColorBrush x:Key="AppSpaceImage" Color="#43A047"/>
     <SolidColorBrush x:Key="AppSpaceVideo" Color="#8E24AA"/>
     <SolidColorBrush x:Key="AppSpaceAudio" Color="#00897B"/>
@@ -30,7 +30,6 @@
     <SolidColorBrush x:Key="AppSpaceCache" Color="#757575"/>
     <SolidColorBrush x:Key="AppSpaceOther" Color="#78909C"/>
     <SolidColorBrush x:Key="AppSpaceFolder" Color="#455A64"/>
-    <SolidColorBrush x:Key="AppSpaceContainer" Color="#ECEFF1"/>
-    <SolidColorBrush x:Key="AppSpaceContainerHeader" Color="#CFD8DC"/>
+    <SolidColorBrush x:Key="AppSpaceMerged" Color="#CFD8DC"/>
 
 </ResourceDictionary>

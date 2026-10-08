@@ -36,14 +36,6 @@ public readonly record struct TreemapRect(double X, double Y, double Width, doub
     /// <param name="y">Vertical position.</param>
     /// <returns><c>true</c> if the point is inside.</returns>
     public bool Contains(double x, double y) => x >= X && x < Right && y >= Y && y < Bottom;
-
-    /// <summary>
-    /// Shrinks the rectangle by the same amount on every side, never below zero size.
-    /// </summary>
-    /// <param name="amount">How much to take off each side.</param>
-    /// <returns>The smaller rectangle.</returns>
-    public TreemapRect Inset(double amount) =>
-        new(X + amount, Y + amount, Math.Max(0, Width - (2 * amount)), Math.Max(0, Height - (2 * amount)));
 }
 
 /// <summary>

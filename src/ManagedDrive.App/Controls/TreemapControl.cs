@@ -22,11 +22,6 @@ namespace ManagedDrive.App.Controls;
 public sealed class TreemapControl : FrameworkElement
 {
     /// <summary>
-    /// Tuning shared by layout and drawing, so the header height drawn is the one reserved.
-    /// </summary>
-    private static readonly TreemapOptions Options = new();
-
-    /// <summary>
     /// The root of the whole tree, whose size is the base of the "share of the disk" figures.
     /// </summary>
     private SpaceNode? _root;
@@ -373,7 +368,7 @@ public sealed class TreemapControl : FrameworkElement
         _hover = -1;
         _tip.IsOpen = false;
         _cells = _directory is not null && ActualWidth > 0 && ActualHeight > 0
-            ? TreemapBuilder.Build(_directory, new(0, 0, ActualWidth, ActualHeight), Options)
+            ? TreemapBuilder.Build(_directory, new(0, 0, ActualWidth, ActualHeight))
             : [];
         InvalidateVisual();
     }
@@ -402,7 +397,7 @@ public sealed class TreemapControl : FrameworkElement
     /// <param name="dy">-1 for up, 1 for down, otherwise 0.</param>
     private void MoveSelection(int dx, int dy)
     {
-        var candidates = _cells.Where(cell => cell.Node is not null && !cell.IsContainer).ToList();
+        var candidates = _cells.Where(cell => cell.Node is not null).ToList();
         if (candidates.Count == 0)
         {
             return;
@@ -447,13 +442,13 @@ public sealed class TreemapControl : FrameworkElement
     }
 
     /// <summary>
-    /// Finds the innermost cell containing a point.
+    /// Finds the cell containing a point.
     /// </summary>
     /// <param name="point">A point in the control.</param>
     /// <returns>The index into the cells, or -1.</returns>
     private int HitTest(Point point)
     {
-        for (var i = _cells.Count - 1; i >= 0; i--)
+        for (var i = 0; i < _cells.Count; i++)
         {
             if (_cells[i].Rect.Contains(point.X, point.Y))
             {
@@ -468,7 +463,7 @@ public sealed class TreemapControl : FrameworkElement
     /// Finds the cell drawn for a node.
     /// </summary>
     /// <param name="node">The node.</param>
-    /// <returns>The cell, or <c>null</c> if the node is not drawn (it may be merged or deeper than shown).</returns>
+    /// <returns>The cell, or <c>null</c> if the node is not drawn (it may be part of the merged block).</returns>
     private TreemapCell? FindCell(SpaceNode node) => _cells.FirstOrDefault(cell => ReferenceEquals(cell.Node, node));
 
     /// <summary>
@@ -499,7 +494,7 @@ public sealed class TreemapControl : FrameworkElement
 
         if (cell.Node is null)
         {
-            dc.DrawRectangle(palette.ContainerHeader, palette.SurfacePen, rect);
+            dc.DrawRectangle(palette.Merged, palette.SurfacePen, rect);
             DrawLabel(dc, Loc.Format("SpaceUsage.MergedLabel", cell.MergedCount), rect, palette.Foreground, typeface, dpi, 11);
             if (rect.Height >= 34)
             {
@@ -510,25 +505,6 @@ public sealed class TreemapControl : FrameworkElement
         }
 
         var node = cell.Node;
-        if (cell.IsContainer)
-        {
-            dc.DrawRectangle(palette.Container, palette.DividerPen, rect);
-            if (cell.HasHeader)
-            {
-                var header = new Rect(rect.X + 1, rect.Y + 1, Math.Max(0, rect.Width - 2), Options.HeaderHeight);
-                dc.DrawRectangle(palette.ContainerHeader, null, header);
-                var summary = $"{node.Name}  {ByteFormatter.Format(node.Allocated)}";
-                if (header.Width >= 200)
-                {
-                    summary += $"  ·  {Percent(node.Allocated, total)}";
-                }
-
-                DrawLabel(dc, summary, header, palette.Foreground, typeface, dpi, 11);
-            }
-
-            return;
-        }
-
         var fill = node.IsDirectory ? palette.Folder : palette.ForCategory(FileCategories.Of(node.Name));
         dc.DrawRectangle(fill, palette.SurfacePen, rect);
 
@@ -644,12 +620,10 @@ public sealed class TreemapControl : FrameworkElement
             _owner = owner;
             Surface = Find("AppSurface");
             Foreground = Find("AppForeground");
-            Container = Find("AppSpaceContainer");
-            ContainerHeader = Find("AppSpaceContainerHeader");
-            Folder = Find("AppSpaceFolder");
+            Merged = Find(SpaceBrushKeys.Merged);
+            Folder = Find(SpaceBrushKeys.Folder);
             Hover = new SolidColorBrush(Color.FromArgb(48, 255, 255, 255));
             SurfacePen = new(Surface, 1);
-            DividerPen = new(Find("AppDivider"), 1);
         }
 
         /// <summary>
@@ -663,17 +637,12 @@ public sealed class TreemapControl : FrameworkElement
         public Brush Foreground { get; }
 
         /// <summary>
-        /// Body of a directory that shows its children.
+        /// The block standing for several small items.
         /// </summary>
-        public Brush Container { get; }
+        public Brush Merged { get; }
 
         /// <summary>
-        /// Title bar of such a directory.
-        /// </summary>
-        public Brush ContainerHeader { get; }
-
-        /// <summary>
-        /// A directory too small to open.
+        /// A directory.
         /// </summary>
         public Brush Folder { get; }
 
@@ -688,16 +657,11 @@ public sealed class TreemapControl : FrameworkElement
         public Pen SurfacePen { get; }
 
         /// <summary>
-        /// Thin frame in the divider colour.
-        /// </summary>
-        public Pen DividerPen { get; }
-
-        /// <summary>
         /// The colour of a file category.
         /// </summary>
         /// <param name="category">The category.</param>
         /// <returns>The brush from the theme.</returns>
-        public Brush ForCategory(FileCategory category) => Find($"AppSpace{category}");
+        public Brush ForCategory(FileCategory category) => Find(SpaceBrushKeys.For(category));
 
         /// <summary>
         /// Looks a brush up in the current theme.
