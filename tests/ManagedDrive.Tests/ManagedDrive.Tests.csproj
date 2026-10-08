@@ -31,6 +31,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- The theme palettes, so tests can check that every brush key exists. -->
+    <Content Include="..\..\src\ManagedDrive.App\Themes\AppTheme.Colors.*.xaml" Link="Themes\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
     <Using Include="Xunit" />
     <Using Include="ManagedDrive.App.Controls" />
     <Using Include="ManagedDrive.App.Infrastructure" />

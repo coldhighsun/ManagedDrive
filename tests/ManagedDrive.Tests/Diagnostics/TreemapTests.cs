@@ -92,32 +92,45 @@ public sealed class TreemapTests
     }
 
     [Fact]
-    public void Build_NestedDirectories_AreOpenedWithTheirChildrenInside()
+    public void Build_DefaultOptions_ShowsOnlyDirectChildren()
+    {
+        var root = SpaceUsageAnalyzer.BuildTree(BuildMap().GetAllNodes());
+
+        var cells = TreemapBuilder.Build(root, new(0, 0, 800, 600));
+
+        Assert.Contains(cells, cell => cell.Node?.Path == "\\Folder");
+        Assert.DoesNotContain(cells, cell => cell.Node?.Path == "\\Folder\\a.txt");
+    }
+
+    [Fact]
+    public void Build_Directory_CellAreaFollowsTheTotalSizeOfItsContents()
     {
         var root = SpaceUsageAnalyzer.BuildTree(BuildMap().GetAllNodes());
 
         var cells = TreemapBuilder.Build(root, new(0, 0, 800, 600));
 
         var folder = Assert.Single(cells, cell => cell.Node?.Path == "\\Folder");
-        var inner = Assert.Single(cells, cell => cell.Node?.Path == "\\Folder\\a.txt");
-        Assert.True(folder.IsContainer);
-        Assert.True(folder.HasHeader);
-        Assert.Equal(0, folder.Depth);
-        Assert.Equal(1, inner.Depth);
-        Assert.True(inner.Rect.X >= folder.Rect.X && inner.Rect.Right <= folder.Rect.Right);
-        Assert.True(inner.Rect.Y >= folder.Rect.Y + 16 && inner.Rect.Bottom <= folder.Rect.Bottom);
-        Assert.True(cells.ToList().IndexOf(folder) < cells.ToList().IndexOf(inner));
+        var file = Assert.Single(cells, cell => cell.Node?.Path == "\\other.bin");
+        Assert.Equal(file.Rect.Area, folder.Rect.Area, file.Rect.Area * 0.05);
     }
 
     [Fact]
-    public void Build_MaxDepthZero_DoesNotOpenDirectories()
+    public void Build_DeepTree_ShowsOnlyTheShownDirectorysDirectChildren()
     {
-        var root = SpaceUsageAnalyzer.BuildTree(BuildMap().GetAllNodes());
+        var map = new FileNodeMap();
+        map.Add("\\", MakeDir());
+        map.Add("\\A", MakeDir());
+        map.Add("\\A\\B", MakeDir());
+        map.Add("\\A\\B\\deep.bin", MakeFile(400_000));
+        map.Add("\\A\\mid.bin", MakeFile(300_000));
+        map.Add("\\top.bin", MakeFile(200_000));
+        var root = SpaceUsageAnalyzer.BuildTree(map.GetAllNodes());
 
-        var cells = TreemapBuilder.Build(root, new(0, 0, 800, 600), new(MaxDepth: 0));
+        var atRoot = TreemapBuilder.Build(root, new(0, 0, 800, 600));
+        var inA = TreemapBuilder.Build(root.Children.Single(child => child.Path == "\\A"), new(0, 0, 800, 600));
 
-        Assert.All(cells, cell => Assert.False(cell.IsContainer));
-        Assert.DoesNotContain(cells, cell => cell.Node?.Path == "\\Folder\\a.txt");
+        Assert.Equal(["\\A", "\\top.bin"], atRoot.Select(cell => cell.Node!.Path).Order());
+        Assert.Equal(["\\A\\B", "\\A\\mid.bin"], inA.Select(cell => cell.Node!.Path).Order());
     }
 
     [Fact]
@@ -133,14 +146,14 @@ public sealed class TreemapTests
 
         var cells = TreemapBuilder.Build(SpaceUsageAnalyzer.BuildTree(map.GetAllNodes()), new(0, 0, 200, 200));
 
-        var merged = Assert.Single(cells, cell => cell.IsMerged);
+        var merged = Assert.Single(cells, cell => cell.Node is null);
         Assert.Equal(20, merged.MergedCount);
         Assert.Equal(20UL * 512, merged.MergedBytes);
         Assert.Equal(2, cells.Count);
     }
 
     [Fact]
-    public void Build_MaxItemsPerLevel_CapsTheCells()
+    public void Build_MaxItems_CapsTheCells()
     {
         var map = new FileNodeMap();
         map.Add("\\", MakeDir());
@@ -149,10 +162,10 @@ public sealed class TreemapTests
             map.Add($"\\f{i}.bin", MakeFile(100_000));
         }
 
-        var cells = TreemapBuilder.Build(SpaceUsageAnalyzer.BuildTree(map.GetAllNodes()), new(0, 0, 4000, 3000), new(MaxItemsPerLevel: 10));
+        var cells = TreemapBuilder.Build(SpaceUsageAnalyzer.BuildTree(map.GetAllNodes()), new(0, 0, 4000, 3000), new(MaxItems: 10));
 
         Assert.Equal(11, cells.Count);
-        Assert.Equal(40, Assert.Single(cells, cell => cell.IsMerged).MergedCount);
+        Assert.Equal(40, Assert.Single(cells, cell => cell.Node is null).MergedCount);
     }
 
     [Fact]
@@ -172,11 +185,79 @@ public sealed class TreemapTests
     [InlineData("Program.cs", FileCategory.Code)]
     [InlineData("app.EXE", FileCategory.Executable)]
     [InlineData("debug.log", FileCategory.Cache)]
+    [InlineData("photo.AVIF", FileCategory.Image)]
+    [InlineData("clip.3gp", FileCategory.Video)]
+    [InlineData("tune.midi", FileCategory.Audio)]
+    [InlineData("disk.vmdk", FileCategory.Archive)]
+    [InlineData("backup.tgz", FileCategory.Archive)]
+    [InlineData("macro.xlsm", FileCategory.Document)]
+    [InlineData("font.woff2", FileCategory.Document)]
+    [InlineData("notes.ipynb", FileCategory.Document)]
+    [InlineData("Page.razor", FileCategory.Code)]
+    [InlineData("Directory.Build.props", FileCategory.Code)]
+    [InlineData("query.sql", FileCategory.Code)]
+    [InlineData("App.vue", FileCategory.Code)]
+    [InlineData("addon.node", FileCategory.Executable)]
+    [InlineData("module.wasm", FileCategory.Executable)]
+    [InlineData("data.sqlite3", FileCategory.Cache)]
+    [InlineData("Main.class", FileCategory.Executable)]
+    [InlineData("yarn.lock", FileCategory.Other)]
+    [InlineData("graph.dot", FileCategory.Other)]
+    [InlineData("google.com", FileCategory.Other)]
     [InlineData("README", FileCategory.Other)]
     [InlineData("weird.zzz", FileCategory.Other)]
     public void FileCategories_Of_MapsExtensions(string name, FileCategory expected)
     {
         Assert.Equal(expected, FileCategories.Of(name));
+    }
+
+    [Theory]
+    [InlineData("a.png", "AppSpaceImage")]
+    [InlineData(".zip", "AppSpaceArchive")]
+    [InlineData("(none)", "AppSpaceOther")]
+    [InlineData("weird.zzz", "AppSpaceOther")]
+    public void SpaceBrushKeys_For_NamesTheThemeBrush(string name, string expected)
+    {
+        Assert.Equal(expected, SpaceBrushKeys.For(name));
+    }
+
+    [Theory]
+    [InlineData("AppTheme.Colors.Light.xaml")]
+    [InlineData("AppTheme.Colors.Dark.xaml")]
+    public void SpaceBrushKeys_EveryKeyHasABrushInTheTheme(string themeFile)
+    {
+        var xaml = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Themes", themeFile));
+        var keys = Enum.GetValues<FileCategory>().Select(SpaceBrushKeys.For).Append(SpaceBrushKeys.Merged).Append(SpaceBrushKeys.Folder);
+
+        foreach (var key in keys)
+        {
+            Assert.Contains($"x:Key=\"{key}\"", xaml);
+        }
+    }
+
+    [Theory]
+    [InlineData(null, "AppSpaceOther")]
+    [InlineData("", "AppSpaceOther")]
+    [InlineData("AppSpaceImage", "AppSpaceImage")]
+    public void SpaceSwatchConverter_KeyOf_UsesTheOtherKeyWhenThereIsNone(string? key, string expected)
+    {
+        Assert.Equal(expected, SpaceSwatchConverter.KeyOf([key]));
+    }
+
+    [Fact]
+    public void SpaceSwatchConverter_KeyOf_NoValues_UsesTheOtherKey()
+    {
+        Assert.Equal("AppSpaceOther", SpaceSwatchConverter.KeyOf([]));
+    }
+
+    [Fact]
+    public void SpaceSwatchConverter_Convert_WithoutAnApplication_FallsBackToGrey()
+    {
+        var converter = new SpaceSwatchConverter();
+
+        var result = converter.Convert(["AppSpaceImage"], typeof(System.Windows.Media.Brush), null, System.Globalization.CultureInfo.InvariantCulture);
+
+        Assert.Same(System.Windows.Media.Brushes.Gray, result);
     }
 
     private static FileNodeMap BuildMap()

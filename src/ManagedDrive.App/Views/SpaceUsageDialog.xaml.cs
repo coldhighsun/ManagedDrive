@@ -14,7 +14,8 @@ namespace ManagedDrive.App.Views;
 /// <param name="Share">Its share of the disk's used memory, formatted.</param>
 /// <param name="Files">The number of files, formatted.</param>
 /// <param name="Path">The path to open on double click, or <c>null</c> when there is none (extensions).</param>
-public sealed record SpaceRow(string Name, string Size, string Share, string Files, string? Path);
+/// <param name="SwatchKey">The theme resource key of the legend colour of the row's file type (see <see cref="SpaceBrushKeys"/>), or <c>null</c> when the row has none (folders, files).</param>
+public sealed record SpaceRow(string Name, string Size, string Share, string Files, string? Path, string? SwatchKey = null);
 
 /// <summary>
 /// Interaction logic for <see cref="SpaceUsageDialog"/>. Shows what uses a mounted disk's memory
@@ -166,7 +167,8 @@ public partial class SpaceUsageDialog
                 ByteFormatter.Format(extension.Allocated),
                 Percent(extension.Allocated),
                 extension.FileCount.ToString("N0"),
-                null)).ToList();
+                null,
+                SpaceBrushKeys.For(extension.Extension))).ToList();
             FillLegend(categories);
             EmptyText.Visibility = report.FileCount == 0 ? Visibility.Visible : Visibility.Collapsed;
         }
@@ -234,7 +236,7 @@ public partial class SpaceUsageDialog
         foreach (var (category, bytes) in totals.OrderByDescending(pair => pair.Value))
         {
             var swatch = new Border { Width = 10, Height = 10, Margin = new(0, 0, 4, 0), VerticalAlignment = VerticalAlignment.Center };
-            swatch.SetResourceReference(Border.BackgroundProperty, $"AppSpace{category}");
+            swatch.SetResourceReference(Border.BackgroundProperty, SpaceBrushKeys.For(category));
 
             var label = new TextBlock
             {

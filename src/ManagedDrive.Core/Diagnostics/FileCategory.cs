@@ -26,22 +26,22 @@ public enum FileCategory
     Audio,
 
     /// <summary>
-    /// Archives and disk images.
+    /// Archives, disk images and packages such as JAR, APK, wheel and VSIX.
     /// </summary>
     Archive,
 
     /// <summary>
-    /// Office documents, PDFs and plain text.
+    /// Office documents, PDFs, plain text, notebooks and fonts.
     /// </summary>
     Document,
 
     /// <summary>
-    /// Source code and data formats such as JSON.
+    /// Source code, project and configuration files, and data formats such as JSON.
     /// </summary>
     Code,
 
     /// <summary>
-    /// Programs and libraries.
+    /// Programs, libraries and compiled code such as object files, Java classes and WebAssembly.
     /// </summary>
     Executable,
 
@@ -86,18 +86,21 @@ public static class FileCategories
         {
             foreach (var extension in extensions.Split(' ', StringSplitOptions.RemoveEmptyEntries))
             {
-                map[extension] = category;
+                if (!map.TryAdd(extension, category))
+                {
+                    throw new InvalidOperationException($"Extension '{extension}' is listed for both {map[extension]} and {category}.");
+                }
             }
         }
 
-        Add(FileCategory.Image, ".png .jpg .jpeg .gif .bmp .webp .tif .tiff .ico .svg .heic .raw .psd");
-        Add(FileCategory.Video, ".mp4 .mkv .avi .mov .wmv .flv .webm .m4v .mpg .mpeg");
-        Add(FileCategory.Audio, ".mp3 .wav .flac .aac .ogg .m4a .wma .opus");
-        Add(FileCategory.Archive, ".zip .7z .rar .tar .gz .bz2 .xz .zst .iso .vhd .vhdx .mdr .cab .nupkg");
-        Add(FileCategory.Document, ".pdf .doc .docx .xls .xlsx .ppt .pptx .txt .md .rtf .csv .odt .epub");
-        Add(FileCategory.Code, ".cs .csproj .sln .js .jsx .ts .tsx .py .java .cpp .c .h .hpp .go .rs .json .xml .xaml .yml .yaml .html .css .ps1 .sh .bat .cmd .ini .toml");
-        Add(FileCategory.Executable, ".exe .dll .sys .msi .lib .obj .pdb .so .dylib");
-        Add(FileCategory.Cache, ".log .tmp .temp .cache .bak .db .sqlite .etl .dmp .pyc .map");
+        Add(FileCategory.Image, ".png .jpg .jpeg .gif .bmp .webp .tif .tiff .ico .svg .heic .heif .avif .raw .psd .cr2 .nef .arw .dng");
+        Add(FileCategory.Video, ".mp4 .mkv .avi .mov .wmv .flv .webm .m4v .mpg .mpeg .3gp .vob");
+        Add(FileCategory.Audio, ".mp3 .wav .flac .aac .ogg .m4a .wma .opus .mid .midi .aiff .ape");
+        Add(FileCategory.Archive, ".zip .7z .rar .tar .gz .tgz .bz2 .xz .zst .lz4 .lzma .iso .img .dmg .vhd .vhdx .vmdk .mdr .cab .nupkg .jar .war .apk .whl .vsix");
+        Add(FileCategory.Document, ".pdf .doc .docx .docm .dotx .xls .xlsx .xlsm .xlsb .ppt .pptx .pptm .txt .md .rtf .csv .tsv .odt .ods .odp .epub .ipynb .ttf .otf .woff .woff2");
+        Add(FileCategory.Code, ".cs .csx .csproj .vbproj .fsproj .props .targets .sln .slnx .vb .fs .js .jsx .mjs .cjs .ts .tsx .vue .svelte .py .java .kt .kts .swift .rb .php .lua .dart .scala .cpp .cc .cxx .c .h .hpp .go .rs .json .jsonc .xml .xaml .axaml .razor .cshtml .yml .yaml .html .htm .css .scss .sass .less .sql .ps1 .psm1 .sh .bat .cmd .ini .toml .config .editorconfig .gradle .proto");
+        Add(FileCategory.Executable, ".exe .dll .sys .msi .msix .lib .obj .o .a .pdb .so .dylib .node .class .scr .ocx .drv .wasm");
+        Add(FileCategory.Cache, ".log .tmp .temp .cache .bak .old .swp .db .sqlite .sqlite3 .mdb .ldb .etl .dmp .mdmp .pyc .pyo .map");
 
         return map;
     }

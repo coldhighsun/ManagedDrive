@@ -3,6 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:views="clr-namespace:ManagedDrive.App.Views"
         xmlns:controls="clr-namespace:ManagedDrive.App.Controls"
+        xmlns:infra="clr-namespace:ManagedDrive.App.Infrastructure"
         Style="{StaticResource DialogWindowStyle}"
         Title="{DynamicResource SpaceUsage.Title}"
         Width="980" Height="640"
@@ -109,6 +110,20 @@
         <DataTemplate x:Key="ExtensionCell" DataType="{x:Type views:SpaceRow}">
             <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis"
                        Foreground="{DynamicResource AppForeground}"/>
+        </DataTemplate>
+        <infra:SpaceSwatchConverter x:Key="SpaceSwatchConverter"/>
+        <DataTemplate x:Key="SwatchCell" DataType="{x:Type views:SpaceRow}">
+            <!-- Tag is only a theme-dependent input: when the theme changes it changes, the converter runs again and
+                 looks the colour up in the new theme, so the list itself is not touched. -->
+            <Border Width="12" Height="12" CornerRadius="2" HorizontalAlignment="Center"
+                    Tag="{DynamicResource AppSpaceOther}">
+                <Border.Background>
+                    <MultiBinding Converter="{StaticResource SpaceSwatchConverter}">
+                        <Binding Path="SwatchKey"/>
+                        <Binding Path="Tag" RelativeSource="{RelativeSource Self}"/>
+                    </MultiBinding>
+                </Border.Background>
+            </Border>
         </DataTemplate>
         <DataTemplate x:Key="NameCell" DataType="{x:Type views:SpaceRow}">
             <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis"
@@ -239,7 +254,8 @@
                               ItemContainerStyle="{StaticResource FlatListViewItem}">
                         <ListView.View>
                             <GridView ColumnHeaderContainerStyle="{StaticResource FlatGridViewColumnHeader}">
-                                <GridViewColumn Header="{DynamicResource SpaceUsage.ColumnName}" Width="90" CellTemplate="{StaticResource ExtensionCell}"/>
+                                <GridViewColumn Width="24" CellTemplate="{StaticResource SwatchCell}"/>
+                                <GridViewColumn Header="{DynamicResource SpaceUsage.ColumnName}" Width="66" CellTemplate="{StaticResource ExtensionCell}"/>
                                 <GridViewColumn Header="{DynamicResource SpaceUsage.ColumnSize}" Width="85" CellTemplate="{StaticResource SizeCell}"/>
                                 <GridViewColumn Header="{DynamicResource SpaceUsage.ColumnShare}" Width="65" CellTemplate="{StaticResource ShareCell}"/>
                                 <GridViewColumn Header="{DynamicResource SpaceUsage.ColumnFiles}" Width="60" CellTemplate="{StaticResource FilesCell}"/>
