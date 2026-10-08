@@ -52,6 +52,16 @@ public sealed class TreemapControl : FrameworkElement
     private SpaceNode? _selected;
 
     /// <summary>
+    /// The tooltip of the hovered cell. It is opened by hand because the control's own
+    /// <c>ToolTip</c> property is only armed on mouse enter, which is too early to know the cell.
+    /// </summary>
+    private readonly System.Windows.Controls.ToolTip _tip = new()
+    {
+        Placement = System.Windows.Controls.Primitives.PlacementMode.Relative,
+        IsHitTestVisible = false,
+    };
+
+    /// <summary>
     /// Creates the control.
     /// </summary>
     public TreemapControl()
@@ -60,7 +70,6 @@ public sealed class TreemapControl : FrameworkElement
         FocusVisualStyle = null;
         ClipToBounds = true;
         RenderOptions.SetEdgeMode(this, EdgeMode.Aliased);
-        ToolTipService.SetInitialShowDelay(this, 250);
 
         Loaded += (_, _) => ThemeManager.Instance.ThemeChanged += OnThemeChanged;
         Unloaded += (_, _) => ThemeManager.Instance.ThemeChanged -= OnThemeChanged;
@@ -75,6 +84,24 @@ public sealed class TreemapControl : FrameworkElement
     /// Raised after the selection changed.
     /// </summary>
     public event EventHandler? SelectionChanged;
+
+    /// <summary>
+    /// Raised when the user asks, from the context menu, to show a node in Windows Explorer. The
+    /// control does not know where the disk is mounted, so the host does the opening.
+    /// </summary>
+    public event EventHandler<SpaceNode>? OpenInExplorerRequested;
+
+    /// <summary>
+    /// Raised when the user asks, from the context menu, to delete a node. The host confirms and
+    /// does the deleting.
+    /// </summary>
+    public event EventHandler<SpaceNode>? DeleteRequested;
+
+    /// <summary>
+    /// Whether the context menu offers deleting; <c>false</c> (for example on a read-only disk)
+    /// shows the entry disabled.
+    /// </summary>
+    public bool CanDelete { get; set; } = true;
 
     /// <summary>
     /// The directory shown. Setting it re-lays the map out and clears the selection.
@@ -186,7 +213,7 @@ public sealed class TreemapControl : FrameworkElement
 
         for (var i = 0; i < _cells.Count; i++)
         {
-            DrawCell(drawingContext, _cells[i], palette, typeface, dpi);
+            DrawCell(drawingContext, _cells[i], palette, typeface, dpi, _root?.Allocated ?? 0);
         }
 
         if (_hover >= 0 && _hover < _cells.Count)
@@ -207,14 +234,28 @@ public sealed class TreemapControl : FrameworkElement
     {
         base.OnMouseMove(e);
 
-        var index = HitTest(e.GetPosition(this));
+        var position = e.GetPosition(this);
+        _tip.HorizontalOffset = position.X + 14;
+        _tip.VerticalOffset = position.Y + 18;
+
+        var index = HitTest(position);
         if (index == _hover)
         {
             return;
         }
 
         _hover = index;
-        ToolTip = index >= 0 ? TipFor(_cells[index]) : null;
+        if (index >= 0)
+        {
+            _tip.Content = TipFor(_cells[index]);
+            _tip.PlacementTarget = this;
+            _tip.IsOpen = true;
+        }
+        else
+        {
+            _tip.IsOpen = false;
+        }
+
         InvalidateVisual();
     }
 
@@ -223,7 +264,7 @@ public sealed class TreemapControl : FrameworkElement
     {
         base.OnMouseLeave(e);
         _hover = -1;
-        ToolTip = null;
+        _tip.IsOpen = false;
         InvalidateVisual();
     }
 
@@ -253,15 +294,20 @@ public sealed class TreemapControl : FrameworkElement
         SetSelection(node);
 
         var menu = new ContextMenu { PlacementTarget = this };
-        if (node is { IsDirectory: true })
-        {
-            var open = new MenuItem { Header = Loc.Get("SpaceUsage.OpenFolder") };
-            open.Click += (_, _) => Directory = node;
-            menu.Items.Add(open);
-        }
-
         if (node is not null)
         {
+            var open = new MenuItem { Header = Loc.Get(node.IsDirectory ? "SpaceUsage.OpenFolder" : "SpaceUsage.OpenContainingFolder") };
+            open.Click += (_, _) => OpenInExplorerRequested?.Invoke(this, node);
+            menu.Items.Add(open);
+
+            var delete = new MenuItem
+            {
+                Header = Loc.Get(node.IsDirectory ? "SpaceUsage.DeleteFolder" : "SpaceUsage.DeleteFile"),
+                IsEnabled = CanDelete,
+            };
+            delete.Click += (_, _) => DeleteRequested?.Invoke(this, node);
+            menu.Items.Add(delete);
+
             var copy = new MenuItem { Header = Loc.Get("SpaceUsage.CopyPath") };
             copy.Click += (_, _) => TryCopy(node.Path);
             menu.Items.Add(copy);
@@ -325,7 +371,7 @@ public sealed class TreemapControl : FrameworkElement
     private void Relayout()
     {
         _hover = -1;
-        ToolTip = null;
+        _tip.IsOpen = false;
         _cells = _directory is not null && ActualWidth > 0 && ActualHeight > 0
             ? TreemapBuilder.Build(_directory, new(0, 0, ActualWidth, ActualHeight), Options)
             : [];
@@ -442,7 +488,8 @@ public sealed class TreemapControl : FrameworkElement
     /// <param name="palette">The theme colours.</param>
     /// <param name="typeface">The text face.</param>
     /// <param name="dpi">Pixels per device independent pixel, for text.</param>
-    private static void DrawCell(DrawingContext dc, TreemapCell cell, Palette palette, Typeface typeface, double dpi)
+    /// <param name="total">Memory of the whole tree, the base of the share figures.</param>
+    private static void DrawCell(DrawingContext dc, TreemapCell cell, Palette palette, Typeface typeface, double dpi, ulong total)
     {
         var rect = ToRect(cell.Rect);
         if (rect.Width < 1 || rect.Height < 1)
@@ -454,6 +501,11 @@ public sealed class TreemapControl : FrameworkElement
         {
             dc.DrawRectangle(palette.ContainerHeader, palette.SurfacePen, rect);
             DrawLabel(dc, Loc.Format("SpaceUsage.MergedLabel", cell.MergedCount), rect, palette.Foreground, typeface, dpi, 11);
+            if (rect.Height >= 34)
+            {
+                DrawLabel(dc, ByteFormatter.Format(cell.MergedBytes), new(rect.X, rect.Y + 15, rect.Width, rect.Height - 15), palette.Foreground, typeface, dpi, 10, 0.8);
+            }
+
             return;
         }
 
@@ -465,7 +517,13 @@ public sealed class TreemapControl : FrameworkElement
             {
                 var header = new Rect(rect.X + 1, rect.Y + 1, Math.Max(0, rect.Width - 2), Options.HeaderHeight);
                 dc.DrawRectangle(palette.ContainerHeader, null, header);
-                DrawLabel(dc, $"{node.Name}  {ByteFormatter.Format(node.Allocated)}", header, palette.Foreground, typeface, dpi, 11);
+                var summary = $"{node.Name}  {ByteFormatter.Format(node.Allocated)}";
+                if (header.Width >= 200)
+                {
+                    summary += $"  ·  {Percent(node.Allocated, total)}";
+                }
+
+                DrawLabel(dc, summary, header, palette.Foreground, typeface, dpi, 11);
             }
 
             return;
@@ -479,7 +537,14 @@ public sealed class TreemapControl : FrameworkElement
         DrawLabel(dc, node.Name, inner, Brushes.White, typeface, dpi, 11);
         if (inner.Height >= 34)
         {
-            DrawLabel(dc, ByteFormatter.Format(node.Allocated), new(inner.X, inner.Y + 15, inner.Width, inner.Height - 15), Brushes.White, typeface, dpi, 10, 0.8);
+            var size = ByteFormatter.Format(node.Allocated);
+            var detail = inner.Width >= 110 ? $"{size}  ·  {Percent(node.Allocated, total)}" : size;
+            DrawLabel(dc, detail, new(inner.X, inner.Y + 15, inner.Width, inner.Height - 15), Brushes.White, typeface, dpi, 10, 0.85);
+        }
+
+        if (node.IsDirectory && inner.Height >= 50)
+        {
+            DrawLabel(dc, Loc.Format("SpaceUsage.CellFiles", node.FileCount), new(inner.X, inner.Y + 29, inner.Width, inner.Height - 29), Brushes.White, typeface, dpi, 10, 0.7);
         }
     }
 
@@ -505,7 +570,6 @@ public sealed class TreemapControl : FrameworkElement
         var formatted = new FormattedText(text, CultureInfo.CurrentUICulture, FlowDirection.LeftToRight, typeface, size, brush, dpi)
         {
             MaxTextWidth = rect.Width - 6,
-            MaxTextHeight = size + 3,
             MaxLineCount = 1,
             Trimming = TextTrimming.CharacterEllipsis,
         };

@@ -249,6 +249,8 @@
     <sys:String x:Key="SpaceUsage.Empty">此磁盘还没有文件。</sys:String>
     <sys:String x:Key="SpaceUsage.Failed">无法分析磁盘：{0}</sys:String>
     <sys:String x:Key="SpaceUsage.Refresh">刷新</sys:String>
+    <sys:String x:Key="SpaceUsage.ListSize">列表项数</sys:String>
+    <sys:String x:Key="SpaceUsage.ListSizeTip">文件夹和文件列表各显示最大的多少项（100 到 1000），按回车生效。</sys:String>
     <sys:String x:Key="SpaceUsage.Up">上一级</sys:String>
     <sys:String x:Key="SpaceUsage.Hint">双击文件夹可进入，右键查看更多操作。</sys:String>
     <sys:String x:Key="SpaceUsage.Selected">{0} — {1}（占磁盘 {2}）</sys:String>
@@ -256,8 +258,12 @@
     <sys:String x:Key="SpaceUsage.TipFolder">{0}&#x0a;{1} · 占磁盘 {2} · {3} 个文件</sys:String>
     <sys:String x:Key="SpaceUsage.TipMerged">{0} 个较小的项&#x0a;{1} · 占磁盘 {2}</sys:String>
     <sys:String x:Key="SpaceUsage.MergedLabel">{0} 项</sys:String>
+    <sys:String x:Key="SpaceUsage.CellFiles">{0} 个文件</sys:String>
+    <sys:String x:Key="SpaceUsage.OpenContainingFolder">打开所在文件夹</sys:String>
+    <sys:String x:Key="SpaceUsage.DeleteFolder">删除文件夹</sys:String>
+    <sys:String x:Key="SpaceUsage.DeleteFile">删除文件</sys:String>
     <sys:String x:Key="SpaceUsage.CopyPath">复制路径</sys:String>
-    <sys:String x:Key="SpaceUsage.OpenFolder">进入文件夹</sys:String>
+    <sys:String x:Key="SpaceUsage.OpenFolder">打开文件夹</sys:String>
     <sys:String x:Key="SpaceUsage.TabFolders">文件夹</sys:String>
     <sys:String x:Key="SpaceUsage.TabFiles">文件</sys:String>
     <sys:String x:Key="SpaceUsage.TabExtensions">类型</sys:String>

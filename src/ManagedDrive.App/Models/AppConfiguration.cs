@@ -117,4 +117,10 @@ public sealed record AppConfiguration
     {
         get; init;
     }
+
+    /// <summary>
+    /// Gets or sets how many of the largest folders and files the space-usage dialog lists; read it
+    /// through <see cref="SpaceUsageAnalyzer.ClampListSize"/> since an edited file may hold any number.
+    /// </summary>
+    public int SpaceUsageListSize { get; init; } = SpaceUsageAnalyzer.DefaultListSize;
 }
