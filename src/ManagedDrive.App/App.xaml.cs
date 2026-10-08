@@ -75,6 +75,7 @@ public partial class App
         _logger.LogInformation("App_Exit invoked.");
 
         TeardownBeforeMountManagerDispose();
+        RunTeardownStep(() => TempDirResetService.WaitForPendingBroadcasts(TimeSpan.FromSeconds(3)));
 
         // Safety net: if ShutdownAsync already disposed the mount manager, this is a no-op.
         // Bounded so a stuck final save can't hang process exit indefinitely.
@@ -621,7 +622,8 @@ public partial class App
             ShowMainWindow();
 
             // Before the disks go away: the variables must not be left pointing at them.
-            _mainViewModel.RestoreAllEnvRedirects();
+            // Isolated: a failure here must not skip the exit save of the disks below.
+            RunTeardownStep(() => _mainViewModel.RestoreAllEnvRedirects());
         }
 
         // The view models unsubscribe from each disk's SaveFailed while being disposed in the
@@ -699,6 +701,8 @@ public partial class App
                 _mountManager.ActivityDetected -= _trayIconController.OnActivityDetected;
             }
         });
+        // Safety net for exits that bypass ShutdownAsync; a no-op once it has restored everything.
+        RunTeardownStep(() => _mainViewModel?.RestoreAllEnvRedirects());
         RunTeardownStep(() => _cliPipeServer?.Dispose());
         RunTeardownStep(() => _mainViewModel?.SaveSettings());
         RunTeardownStep(() => _trayIconController?.Dispose());

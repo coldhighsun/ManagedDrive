@@ -379,6 +379,22 @@ public sealed class UserEnvironmentRedirectorTests : IDisposable
     }
 
     [Fact]
+    public void RestoreAll_CalledTwice_SecondCallIsANoOp()
+    {
+        _env.Values["ONE_CACHE"] = new("old", RegistryValueKind.String);
+        var redirector = CreateRedirector();
+        redirector.ApplyDiskEffects(DiskAt(Path.Combine(_root, "one"), "ONE_CACHE", "c"));
+        redirector.RestoreAll();
+        var broadcastsBefore = _env.Broadcasts;
+
+        var restored = redirector.RestoreAll();
+
+        Assert.Equal(0, restored);
+        Assert.Equal("old", _env.Values["ONE_CACHE"].Text);
+        Assert.Equal(broadcastsBefore, _env.Broadcasts);
+    }
+
+    [Fact]
     public void RestoreDangling_RestoresOnlyDisksThatAreNotMounted()
     {
         var redirector = CreateRedirector();
