@@ -249,7 +249,7 @@
                             <Setter Property="Foreground" Value="{DynamicResource AppBackground}"/>
                         </Trigger>
                         <Trigger Property="IsPressed" Value="True">
-                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource AppForegroundLight}"/>
+                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource AppForegroundMuted}"/>
                         </Trigger>
                         <Trigger Property="IsEnabled" Value="False">
                             <Setter Property="Opacity" Value="0.4"/>
@@ -528,7 +528,7 @@
                                 </Grid.ColumnDefinitions>
                                 <Border x:Name="CheckBox" Grid.Column="0" Width="16" Height="16" Margin="0,0,8,0"
                                         CornerRadius="3" BorderThickness="1" VerticalAlignment="Center"
-                                        BorderBrush="{DynamicResource AppForegroundLight}" Background="Transparent"
+                                        BorderBrush="{DynamicResource AppForegroundMuted}" Background="Transparent"
                                         Visibility="Collapsed">
                                     <TextBlock x:Name="CheckMark" Text="&#xE73E;" Style="{StaticResource IconText}"
                                                FontSize="11" Foreground="{DynamicResource AppPrimaryForeground}"
@@ -620,7 +620,7 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="Thumb">
-                    <Border x:Name="ThumbBorder" CornerRadius="4" Background="{DynamicResource AppForegroundLight}"/>
+                    <Border x:Name="ThumbBorder" CornerRadius="4" Background="{DynamicResource AppForegroundMuted}"/>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="True">
                             <Setter TargetName="ThumbBorder" Property="Background" Value="{DynamicResource AppPrimary}"/>

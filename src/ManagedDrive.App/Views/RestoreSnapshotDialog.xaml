@@ -18,7 +18,7 @@
 
         <TextBlock Grid.Row="0"
                    x:Name="SourceDescriptionText"
-                   Foreground="{DynamicResource AppForegroundLight}"
+                   Foreground="{DynamicResource AppForeground}"
                    TextWrapping="Wrap"/>
 
         <Border Grid.Row="2" Style="{StaticResource SectionBorder}">
@@ -30,7 +30,7 @@
                            Visibility="Collapsed"/>
 
                 <TextBlock x:Name="SnapshotCountText"
-                           Foreground="{DynamicResource AppForegroundLight}"
+                           Foreground="{DynamicResource AppForeground}"
                            FontSize="11" Margin="0,0,0,4"/>
 
                 <ListBox x:Name="SnapshotListBox" MaxHeight="260"

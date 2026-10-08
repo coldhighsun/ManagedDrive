@@ -20,12 +20,12 @@
 
         <TextBlock Grid.Row="0"
                    x:Name="SourceDescriptionText"
-                   Foreground="{DynamicResource AppForegroundLight}"
+                   Foreground="{DynamicResource AppForeground}"
                    TextWrapping="Wrap"/>
 
         <TextBlock Grid.Row="2"
                    x:Name="SummaryText"
-                   Foreground="{DynamicResource AppForegroundLight}"
+                   Foreground="{DynamicResource AppForeground}"
                    FontSize="11"
                    TextWrapping="Wrap"/>
 
@@ -33,7 +33,7 @@
             <StackPanel>
                 <TextBlock x:Name="NoChangesText"
                            Text="{DynamicResource SnapshotDiff.NoChanges}"
-                           Foreground="{DynamicResource AppForegroundLight}"
+                           Foreground="{DynamicResource AppForeground}"
                            TextWrapping="Wrap"
                            Visibility="Collapsed"/>
 
@@ -49,7 +49,7 @@
                         </HierarchicalDataTemplate>
                         <HierarchicalDataTemplate DataType="{x:Type views:DiffNode}" ItemsSource="{Binding Children}">
                             <TextBlock Text="{Binding Name}"
-                                       Foreground="{DynamicResource AppForegroundLight}"/>
+                                       Foreground="{DynamicResource AppForeground}"/>
                         </HierarchicalDataTemplate>
                     </TreeView.Resources>
                     <TreeView.ItemContainerStyle>
