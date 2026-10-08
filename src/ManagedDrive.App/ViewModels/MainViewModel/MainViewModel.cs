@@ -176,6 +176,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged, IDisposable
         RefreshAvailableMemory();
         OnPropertyChanged(nameof(NoDisksMountedText));
         OnPropertyChanged(nameof(LoadingDisksText));
+        OnPropertyChanged(nameof(AutoMountStatusText));
     }
 
     /// <summary>
@@ -210,6 +211,83 @@ public sealed partial class MainViewModel : INotifyPropertyChanged, IDisposable
     /// <c>DynamicResource</c>.
     /// </summary>
     public string LoadingDisksText => Loc.Get("Tray.LoadingDisks");
+
+    /// <summary>
+    /// Number of saved disks the startup auto-mount has to process; <c>0</c> when it is not running.
+    /// </summary>
+    private int _autoMountTotal;
+
+    /// <summary>
+    /// Number of disks the startup auto-mount has finished with (mounted, failed or cancelled).
+    /// </summary>
+    private int _autoMountCompleted;
+
+    /// <summary>
+    /// Gets a value indicating whether the startup auto-mount is still working through the saved
+    /// disks. Unlike <see cref="BusyOverlayViewModel.IsBusy"/> it is not raised by saves or
+    /// snapshots, and it stays <c>true</c> after the first disk has appeared in <see cref="Disks"/>.
+    /// </summary>
+    public bool IsAutoMounting => _autoMountTotal > 0;
+
+    /// <summary>
+    /// Gets the localized tray tooltip line shown while <see cref="IsAutoMounting"/>, with the
+    /// number of disks finished so far. A plain getter for the same reason as
+    /// <see cref="NoDisksMountedText"/>.
+    /// </summary>
+    public string AutoMountStatusText => IsAutoMounting
+        ? Loc.Format("Tray.LoadingDisksProgress", _autoMountCompleted, _autoMountTotal)
+        : LoadingDisksText;
+
+    /// <summary>
+    /// Marks the start of the startup auto-mount of <paramref name="total"/> saved disks.
+    /// </summary>
+    /// <param name="total">How many disks will be processed; values below 1 are ignored.</param>
+    internal void BeginAutoMount(int total)
+    {
+        if (total < 1)
+        {
+            return;
+        }
+
+        _autoMountTotal = total;
+        _autoMountCompleted = 0;
+        NotifyAutoMountChanged();
+    }
+
+    /// <summary>
+    /// Records that the startup auto-mount has finished with one more disk, whatever the outcome.
+    /// </summary>
+    /// <returns>How many disks the auto-mount has finished with so far; <c>0</c> if it isn't running.</returns>
+    internal int ReportAutoMountDiskDone()
+    {
+        if (!IsAutoMounting)
+        {
+            return 0;
+        }
+
+        _autoMountCompleted = Math.Min(_autoMountCompleted + 1, _autoMountTotal);
+        NotifyAutoMountChanged();
+        return _autoMountCompleted;
+    }
+
+    /// <summary>
+    /// Marks the startup auto-mount as over, so the tray tooltip stops showing it as loading.
+    /// </summary>
+    internal void EndAutoMount()
+    {
+        _autoMountTotal = 0;
+        _autoMountCompleted = 0;
+        NotifyAutoMountChanged();
+    }
+
+    /// <summary>
+    /// Raises <see cref="PropertyChanged"/> for everything derived from the auto-mount counters.
+    /// </summary>
+    private void NotifyAutoMountChanged()
+    {
+        OnPropertyChanged(nameof(IsAutoMounting));
+        OnPropertyChanged(nameof(AutoMountStatusText));
+    }
 
     /// <summary>
     /// Gets a localized, human-readable description of the currently available physical
