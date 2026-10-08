@@ -18,112 +18,111 @@
         </Border.Effect>
 
         <StackPanel>
-            <Grid>
-                <ItemsControl x:Name="DiskList"
-                              ItemsSource="{Binding Disks}">
-                    <ItemsControl.Style>
-                        <Style TargetType="ItemsControl">
-                            <Setter Property="Visibility" Value="Visible" />
-                            <Style.Triggers>
-                                <Trigger Property="HasItems" Value="False">
-                                    <Setter Property="Visibility" Value="Collapsed" />
-                                </Trigger>
-                            </Style.Triggers>
-                        </Style>
-                    </ItemsControl.Style>
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate>
-                            <Grid Margin="0,3">
-                                <Border Height="22"
-                                        CornerRadius="4"
-                                        Background="{DynamicResource AppProgressTrack}"
-                                        BorderBrush="{DynamicResource AppDivider}"
-                                        BorderThickness="1"
-                                        ClipToBounds="True">
-                                    <Grid>
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="{Binding UsedPercent, Converter={StaticResource PercentToGridLengthConverter}, ConverterParameter=Fill}" />
-                                            <ColumnDefinition Width="{Binding UsedPercent, Converter={StaticResource PercentToGridLengthConverter}, ConverterParameter=Remainder}" />
-                                        </Grid.ColumnDefinitions>
-                                        <Border Grid.Column="0" Opacity="0.7" CornerRadius="4">
-                                            <Border.Style>
-                                                <Style TargetType="Border">
-                                                    <Setter Property="Background" Value="{DynamicResource AppPrimary}" />
-                                                    <Style.Triggers>
-                                                        <DataTrigger Binding="{Binding IsHighUsage}" Value="True">
-                                                            <Setter Property="Background" Value="{DynamicResource AppWarning}" />
-                                                        </DataTrigger>
-                                                    </Style.Triggers>
-                                                </Style>
-                                            </Border.Style>
-                                        </Border>
-                                    </Grid>
-                                </Border>
-
-                                <Grid Margin="8,0"
-                                      VerticalAlignment="Center">
+            <ItemsControl x:Name="DiskList"
+                          ItemsSource="{Binding Disks}">
+                <ItemsControl.Style>
+                    <Style TargetType="ItemsControl">
+                        <Setter Property="Visibility" Value="Visible" />
+                        <Style.Triggers>
+                            <Trigger Property="HasItems" Value="False">
+                                <Setter Property="Visibility" Value="Collapsed" />
+                            </Trigger>
+                        </Style.Triggers>
+                    </Style>
+                </ItemsControl.Style>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <Grid Margin="0,3">
+                            <Border Height="22"
+                                    CornerRadius="4"
+                                    Background="{DynamicResource AppProgressTrack}"
+                                    BorderBrush="{DynamicResource AppDivider}"
+                                    BorderThickness="1"
+                                    ClipToBounds="True">
+                                <Grid>
                                     <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="Auto" />
-                                        <ColumnDefinition Width="100" />
-                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="{Binding UsedPercent, Converter={StaticResource PercentToGridLengthConverter}, ConverterParameter=Fill}" />
+                                        <ColumnDefinition Width="{Binding UsedPercent, Converter={StaticResource PercentToGridLengthConverter}, ConverterParameter=Remainder}" />
                                     </Grid.ColumnDefinitions>
-                                    <TextBlock Grid.Column="0"
-                                               FontSize="13"
-                                               FontWeight="Bold"
-                                               Foreground="{DynamicResource AppForeground}"
-                                               Text="{Binding MountPoint}"
-                                               Margin="0,0,8,0" />
-                                    <TextBlock Grid.Column="1"
-                                               FontSize="13"
-                                               Foreground="{DynamicResource AppForeground}"
-                                               Text="{Binding VolumeLabel}"
-                                               TextTrimming="CharacterEllipsis" />
-                                    <TextBlock Grid.Column="2"
-                                               FontSize="13"
-                                               Foreground="{DynamicResource AppForegroundLight}"
-                                               Text="{Binding UsedPercent, StringFormat={}{0:F0}%}"
-                                               TextAlignment="Right"
-                                               MinWidth="36" />
+                                    <Border Grid.Column="0" Opacity="0.7" CornerRadius="4">
+                                        <Border.Style>
+                                            <Style TargetType="Border">
+                                                <Setter Property="Background" Value="{DynamicResource AppPrimary}" />
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsHighUsage}" Value="True">
+                                                        <Setter Property="Background" Value="{DynamicResource AppWarning}" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Border.Style>
+                                    </Border>
                                 </Grid>
+                            </Border>
+
+                            <Grid Margin="8,0"
+                                  VerticalAlignment="Center">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="100" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0"
+                                           FontSize="13"
+                                           FontWeight="Bold"
+                                           Foreground="{DynamicResource AppForeground}"
+                                           Text="{Binding MountPoint}"
+                                           Margin="0,0,8,0" />
+                                <TextBlock Grid.Column="1"
+                                           FontSize="13"
+                                           Foreground="{DynamicResource AppForeground}"
+                                           Text="{Binding VolumeLabel}"
+                                           TextTrimming="CharacterEllipsis" />
+                                <TextBlock Grid.Column="2"
+                                           FontSize="13"
+                                           Foreground="{DynamicResource AppForegroundLight}"
+                                           Text="{Binding UsedPercent, StringFormat={}{0:F0}%}"
+                                           TextAlignment="Right"
+                                           MinWidth="36" />
                             </Grid>
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
+                        </Grid>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
 
-                <TextBlock FontSize="13"
-                           Foreground="{DynamicResource AppForegroundLight}"
-                           Text="{Binding AutoMountStatusText}">
-                    <TextBlock.Style>
-                        <Style TargetType="TextBlock">
-                            <Setter Property="Visibility" Value="Collapsed" />
-                            <Style.Triggers>
-                                <DataTrigger Binding="{Binding IsAutoMounting}" Value="True">
-                                    <Setter Property="Visibility" Value="Visible" />
-                                </DataTrigger>
-                            </Style.Triggers>
-                        </Style>
-                    </TextBlock.Style>
-                </TextBlock>
+            <TextBlock FontSize="13"
+                       Margin="0,3,0,0"
+                       Foreground="{DynamicResource AppForegroundLight}"
+                       Text="{Binding AutoMountStatusText}">
+                <TextBlock.Style>
+                    <Style TargetType="TextBlock">
+                        <Setter Property="Visibility" Value="Collapsed" />
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding IsAutoMounting}" Value="True">
+                                <Setter Property="Visibility" Value="Visible" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </TextBlock.Style>
+            </TextBlock>
 
-                <TextBlock FontSize="13"
-                           Foreground="{DynamicResource AppForegroundLight}"
-                           Text="{Binding NoDisksMountedText}">
-                    <TextBlock.Style>
-                        <Style TargetType="TextBlock">
-                            <Setter Property="Visibility" Value="Collapsed" />
-                            <Style.Triggers>
-                                <MultiDataTrigger>
-                                    <MultiDataTrigger.Conditions>
-                                        <Condition Binding="{Binding ElementName=DiskList, Path=HasItems}" Value="False" />
-                                        <Condition Binding="{Binding IsAutoMounting}" Value="False" />
-                                    </MultiDataTrigger.Conditions>
-                                    <Setter Property="Visibility" Value="Visible" />
-                                </MultiDataTrigger>
-                            </Style.Triggers>
-                        </Style>
-                    </TextBlock.Style>
-                </TextBlock>
-            </Grid>
+            <TextBlock FontSize="13"
+                       Foreground="{DynamicResource AppForegroundLight}"
+                       Text="{Binding NoDisksMountedText}">
+                <TextBlock.Style>
+                    <Style TargetType="TextBlock">
+                        <Setter Property="Visibility" Value="Collapsed" />
+                        <Style.Triggers>
+                            <MultiDataTrigger>
+                                <MultiDataTrigger.Conditions>
+                                    <Condition Binding="{Binding ElementName=DiskList, Path=HasItems}" Value="False" />
+                                    <Condition Binding="{Binding IsAutoMounting}" Value="False" />
+                                </MultiDataTrigger.Conditions>
+                                <Setter Property="Visibility" Value="Visible" />
+                            </MultiDataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </TextBlock.Style>
+            </TextBlock>
 
             <Border BorderBrush="{DynamicResource AppDivider}"
                     BorderThickness="0,1,0,0"
