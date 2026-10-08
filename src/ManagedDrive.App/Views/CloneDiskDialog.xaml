@@ -19,7 +19,7 @@
 
         <TextBlock Grid.Row="0"
                    x:Name="SourceDescriptionText"
-                   Foreground="{DynamicResource AppForegroundLight}"
+                   Foreground="{DynamicResource AppForeground}"
                    TextWrapping="Wrap"/>
 
         <!-- Clone to another mounted disk -->

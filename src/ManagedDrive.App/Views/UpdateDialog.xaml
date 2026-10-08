@@ -23,13 +23,13 @@
         <StackPanel Grid.Row="0">
             <TextBlock x:Name="HeaderText" FontSize="16" FontWeight="Medium" TextWrapping="Wrap"/>
             <TextBlock x:Name="CurrentVersionText" FontSize="12" Margin="0,2,0,0"
-                       Foreground="{DynamicResource AppForegroundLight}"/>
+                       Foreground="{DynamicResource AppForeground}"/>
         </StackPanel>
 
         <!-- Release notes -->
         <StackPanel x:Name="NotesPanel" Grid.Row="1" Margin="0,14,0,0" Visibility="Collapsed">
             <TextBlock Text="{DynamicResource Update.WhatsNew}" FontSize="12"
-                       Foreground="{DynamicResource AppForegroundLight}" Margin="0,0,0,4"/>
+                       Foreground="{DynamicResource AppForeground}" Margin="0,0,0,4"/>
             <Border BorderBrush="{DynamicResource AppDivider}" BorderThickness="1" CornerRadius="4">
                 <ScrollViewer MaxHeight="150" VerticalScrollBarVisibility="Auto">
                     <TextBlock x:Name="NotesText" TextWrapping="Wrap" Margin="8,6" FontSize="12" LineHeight="18"/>
@@ -40,14 +40,14 @@
         <!-- What updating does -->
         <TextBlock x:Name="InfoText" Grid.Row="2" Margin="0,14,0,0"
                    TextWrapping="Wrap" LineHeight="20"
-                   Foreground="{DynamicResource AppForegroundLight}"/>
+                   Foreground="{DynamicResource AppForeground}"/>
 
         <!-- Download progress -->
         <StackPanel x:Name="ProgressPanel" Grid.Row="3" Margin="0,14,0,0" Visibility="Collapsed">
             <ProgressBar x:Name="DownloadProgressBar" Style="{StaticResource SlimProgressBar}"
                          Minimum="0" Maximum="1" IsIndeterminate="True"/>
             <TextBlock x:Name="ProgressText" FontSize="12" Margin="0,6,0,0"
-                       Foreground="{DynamicResource AppForegroundLight}"/>
+                       Foreground="{DynamicResource AppForeground}"/>
         </StackPanel>
 
         <!-- Failure / cancellation message -->

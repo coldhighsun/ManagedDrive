@@ -45,7 +45,7 @@
                        Grid.Row="2"
                        TextWrapping="Wrap"
                        LineHeight="20"
-                       Foreground="{DynamicResource AppForegroundLight}"/>
+                       Foreground="{DynamicResource AppForeground}"/>
 
             <!-- Optional checkbox -->
             <CheckBox x:Name="OptionCheckBox"
