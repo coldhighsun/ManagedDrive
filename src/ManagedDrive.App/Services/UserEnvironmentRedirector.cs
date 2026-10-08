@@ -239,6 +239,19 @@ public sealed class UserEnvironmentRedirector(
     }
 
     /// <summary>
+    /// Gets the names of the variables that are redirected into a RAM disk right now, that is, the
+    /// ones with a stored backup.
+    /// </summary>
+    /// <returns>The variable names, in the order they were redirected.</returns>
+    public IReadOnlyList<string> GetRedirectedVariables()
+    {
+        lock (_gate)
+        {
+            return [.. readBackups().Select(backup => backup.Variable)];
+        }
+    }
+
+    /// <summary>
     /// Puts back every variable that points into the disk at <paramref name="mountPoint"/>.
     /// </summary>
     /// <param name="mountPoint">The disk's mount point.</param>

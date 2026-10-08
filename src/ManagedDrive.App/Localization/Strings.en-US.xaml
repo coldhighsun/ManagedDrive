@@ -22,7 +22,7 @@
     <sys:String x:Key="Btn.RestoreSnapshot">Restore Snapshot...</sys:String>
     <sys:String x:Key="Btn.ViewDiskContents">Disk Contents...</sys:String>
     <sys:String x:Key="Btn.Settings">Settings</sys:String>
-    <sys:String x:Key="Tip.ResetTempDirs">Restore the Windows temp directory setting</sys:String>
+    <sys:String x:Key="Tip.RestoreEnv">Restore redirected environment variables</sys:String>
     <sys:String x:Key="Tip.NewDisk">Create and mount a new RAM disk</sys:String>
     <sys:String x:Key="Tip.ImportDisk">Mount an existing .mdr image file</sys:String>
     <sys:String x:Key="Tip.ImportArchive">Mount the contents of an archive file (zip, 7z, rar, tar, ...) as a read-only disk</sys:String>
@@ -82,6 +82,8 @@
     <sys:String x:Key="Status.PresetDisabled">Disk {0}: {1} turned off.</sys:String>
     <sys:String x:Key="Status.PresetMoved">{0} moved from {1} to {2}.</sys:String>
     <sys:String x:Key="Status.PresetEffectsIncomplete">Disk {0}: could not set up {1} (already used by another disk, or a folder could not be created).</sys:String>
+    <sys:String x:Key="Status.RestoringEnv">Restoring environment variables…</sys:String>
+    <sys:String x:Key="Status.RestoreEnvDisksNotUpdated">Disk {0}: the variables were restored, but the disk could not drop its presets. Edit the disk to turn them off.</sys:String>
     <sys:String x:Key="Preset.temp.Name">Temp directory</sys:String>
     <sys:String x:Key="Preset.temp.Desc">Creates a Temp folder and points the user's TEMP and TMP at it. They are restored when this is turned off or the disk is unmounted.</sys:String>
     <sys:String x:Key="Preset.node.Name">Node.js caches</sys:String>
@@ -323,7 +325,11 @@
     <!-- Tray menu -->
     <sys:String x:Key="Tray.Show">Show</sys:String>
     <sys:String x:Key="Tray.NewDisk">New Disk...</sys:String>
-    <sys:String x:Key="Tray.ResetTempDirs">Restore Temp Directory Setting</sys:String>
+    <sys:String x:Key="Tray.RestoreEnv">Restore Environment Variables</sys:String>
+    <sys:String x:Key="Menu.RestoreEnvAll">Restore All</sys:String>
+    <sys:String x:Key="Menu.RestoreEnvOther">Other variables</sys:String>
+    <sys:String x:Key="Menu.RestoreEnvNone">Nothing to restore</sys:String>
+    <sys:String x:Key="Menu.RestoreEnvUnreadable">Could not read the redirected variables</sys:String>
     <sys:String x:Key="Tray.Settings">Settings…</sys:String>
     <sys:String x:Key="Tray.About">About</sys:String>
     <sys:String x:Key="Tray.Exit">Exit</sys:String>
@@ -415,11 +421,12 @@
     <sys:String x:Key="Msg.ExitTempDirWillBeReset">Your Windows Temp directory is currently set to a RAM disk. It will be automatically restored to its previous setting before exiting.</sys:String>
     <sys:String x:Key="Msg.TrayExitTempResetTitle">Temp Directory on RAM Disk</sys:String>
     <sys:String x:Key="Msg.TrayExitTempResetBody">Your Windows Temp directory is set to a RAM disk. It will become inaccessible after the disk is unmounted.&#x0a;&#x0a;Restore Temp to its previous setting and exit?</sys:String>
-    <sys:String x:Key="Msg.ResetTempConfirmTitle">Restore Temp Directory Setting</sys:String>
-    <sys:String x:Key="Msg.ResetTempConfirmBody">This will restore TEMP and TMP to the values they held before they were pointed at a RAM disk (the Windows defaults if none was recorded).&#x0a;&#x0a;Continue?</sys:String>
-    <sys:String x:Key="Msg.ResetTempSuccess">TEMP and TMP have been restored.</sys:String>
-    <sys:String x:Key="Msg.ResetTempNothing">TEMP and TMP do not point at a RAM disk, so there is nothing to restore.</sys:String>
-    <sys:String x:Key="Msg.ResetTempFailed">Failed to restore temp directories.</sys:String>
+    <sys:String x:Key="Msg.RestoreEnvConfirmTitle">Restore Environment Variables</sys:String>
+    <sys:String x:Key="Msg.RestoreEnvConfirmBody">This will put the selected environment variables back to the values they held before they were pointed at a RAM disk (TEMP and TMP fall back to the Windows defaults if none was recorded). Only programs started afterwards are affected; no files are moved or deleted. The disks that had these presets lose them (their folders and files stay), so they do not redirect the variables again on the next mount.&#x0a;&#x0a;Continue?</sys:String>
+    <sys:String x:Key="Msg.RestoreEnvSuccess">The environment variables have been restored.</sys:String>
+    <sys:String x:Key="Msg.RestoreEnvNothing">None of the selected variables point at a RAM disk, so there is nothing to restore.</sys:String>
+    <sys:String x:Key="Msg.RestoreEnvFailed">Failed to restore the environment variables.</sys:String>
+    <sys:String x:Key="Msg.RestoreEnvDisksChanged">Turned off on: {0}.</sys:String>
     <sys:String x:Key="Msg.StartedMinimized">ManagedDrive is running in the system tray.</sys:String>
     <sys:String x:Key="Msg.SetTempDirWarningTitle">RAM Disk as Temp — Compatibility Warning</sys:String>
     <sys:String x:Key="Msg.SetTempDirWarningBody">Setting TEMP to a RAM disk may cause certain installers to fail when they try to run from this path. Known examples include WeChatWin_*.exe and other packages that are extracted to TEMP and launched by a system-level service.&#x0a;&#x0a;This happens because WinFsp drives are only visible within the current user session. If an installer is executed by a system-level process (such as the Windows Package Manager service), it cannot access user-session drive letters.&#x0a;&#x0a;Not all winget packages are affected — many install without issue.&#x0a;&#x0a;Do you want to continue?</sys:String>

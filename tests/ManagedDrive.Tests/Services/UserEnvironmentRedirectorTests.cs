@@ -297,6 +297,21 @@ public sealed class UserEnvironmentRedirectorTests : IDisposable
     }
 
     [Fact]
+    public void GetRedirectedVariables_ReflectsAppliedAndRestoredRedirects()
+    {
+        var redirector = CreateRedirector();
+        var mount = Path.Combine(_root, "disk");
+
+        Assert.Empty(redirector.GetRedirectedVariables());
+
+        redirector.ApplyDiskEffects(DiskAt(mount, "MY_CACHE", "c"));
+        Assert.Equal(["MY_CACHE"], redirector.GetRedirectedVariables());
+
+        redirector.Restore(mount);
+        Assert.Empty(redirector.GetRedirectedVariables());
+    }
+
+    [Fact]
     public void PointsInto_VariableSetToTheDisksFolder_IsTrueWhoeverSetIt()
     {
         var mount = Path.Combine(_root, "d");
@@ -423,29 +438,5 @@ public sealed class UserEnvironmentRedirectorTests : IDisposable
         afterRestart.Restore(mount);
 
         Assert.Equal("original", _env.Values["MY_CACHE"].Text);
-    }
-
-    /// <summary>
-    /// In-memory stand-in for the registry.
-    /// </summary>
-    private sealed class FakeUserEnvironment : IUserEnvironment
-    {
-        /// <summary>Gets the variables currently set.</summary>
-        public Dictionary<string, UserTempValue> Values { get; } = new(StringComparer.OrdinalIgnoreCase);
-
-        /// <summary>Gets the number of broadcasts sent.</summary>
-        public int Broadcasts { get; private set; }
-
-        /// <inheritdoc />
-        public UserTempValue? Read(string name) => Values.GetValueOrDefault(name);
-
-        /// <inheritdoc />
-        public void Write(string name, string value, RegistryValueKind kind) => Values[name] = new(value, kind);
-
-        /// <inheritdoc />
-        public void Delete(string name) => Values.Remove(name);
-
-        /// <inheritdoc />
-        public void Broadcast() => Broadcasts++;
     }
 }

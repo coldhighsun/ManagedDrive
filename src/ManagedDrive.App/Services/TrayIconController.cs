@@ -55,11 +55,16 @@ public sealed class TrayIconController : IDisposable
     private readonly BalloonOnlyIconTracker _balloonOnlyIcon = new();
     private readonly System.Windows.Forms.ToolStripMenuItem _menuShow;
     private readonly System.Windows.Forms.ToolStripMenuItem _menuNewDisk;
-    private readonly System.Windows.Forms.ToolStripMenuItem _menuResetTempDirs;
+    private readonly System.Windows.Forms.ToolStripMenuItem _menuRestoreEnv;
     private readonly System.Windows.Forms.ToolStripMenuItem _menuSettings;
     private readonly System.Windows.Forms.ToolStripMenuItem _menuAbout;
     private readonly System.Windows.Forms.ToolStripMenuItem _menuExit;
     private readonly List<System.Windows.Forms.ToolStripItem> _diskMenuItems = [];
+
+    /// <summary>
+    /// Restores a group of redirected environment variables; <c>null</c> restores all groups.
+    /// </summary>
+    private readonly Func<EnvRestoreGroup?, Task> _onRestoreEnvAsync;
     private readonly System.Windows.Forms.NotifyIcon _trayIcon;
     private readonly Icon _trayIconNormal;
     private bool _blinkOn;
@@ -77,7 +82,10 @@ public sealed class TrayIconController : IDisposable
     /// </param>
     /// <param name="onShow">Invoked from the "Show" menu item and double-click.</param>
     /// <param name="onNewDisk">Invoked from the "New Disk" menu item.</param>
-    /// <param name="onResetTempDirsAsync">Invoked from the "Reset TEMP Dirs" menu item.</param>
+    /// <param name="onRestoreEnvAsync">
+    /// Invoked from an item of the "Restore environment variables" submenu with the group to restore,
+    /// or <c>null</c> for the item that restores all groups.
+    /// </param>
     /// <param name="onSettings">Invoked from the "Settings" menu item.</param>
     /// <param name="onAbout">Invoked from the "About" menu item.</param>
     /// <param name="onExit">Invoked from the "Exit" menu item.</param>
@@ -87,7 +95,7 @@ public sealed class TrayIconController : IDisposable
         MainViewModel mainViewModel,
         Action onShow,
         Action onNewDisk,
-        Func<Task> onResetTempDirsAsync,
+        Func<EnvRestoreGroup?, Task> onRestoreEnvAsync,
         Action onSettings,
         Action onAbout,
         Action onExit)
@@ -98,7 +106,9 @@ public sealed class TrayIconController : IDisposable
         var menu = new System.Windows.Forms.ContextMenuStrip();
         _menuShow = new(Loc.Get("Tray.Show"), null, (_, _) => dispatcher.Invoke(onShow));
         _menuNewDisk = new(Loc.Get("Tray.NewDisk"), null, (_, _) => dispatcher.Invoke(onNewDisk));
-        _menuResetTempDirs = new(Loc.Get("Tray.ResetTempDirs"), null, async (_, _) => await dispatcher.InvokeAsync(onResetTempDirsAsync).Task.Unwrap());
+        _menuRestoreEnv = new(Loc.Get("Tray.RestoreEnv"));
+        _onRestoreEnvAsync = onRestoreEnvAsync;
+        _menuRestoreEnv.DropDown.HandleCreated += (_, _) => ApplyPopupDarkMode(_menuRestoreEnv.DropDown);
         _menuSettings = new(Loc.Get("Tray.Settings"), null, (_, _) => dispatcher.Invoke(onSettings));
         _menuAbout = new(Loc.Get("Tray.About"), null, (_, _) => dispatcher.Invoke(onAbout));
         _menuExit = new(Loc.Get("Tray.Exit"), null, (_, _) => dispatcher.Invoke(onExit));
@@ -106,7 +116,7 @@ public sealed class TrayIconController : IDisposable
         menu.Items.Add(_menuShow);
         menu.Items.Add(_menuNewDisk);
         menu.Items.Add(new System.Windows.Forms.ToolStripSeparator());
-        menu.Items.Add(_menuResetTempDirs);
+        menu.Items.Add(_menuRestoreEnv);
         menu.Items.Add(_menuSettings);
         menu.Items.Add(_menuAbout);
         menu.Items.Add(new System.Windows.Forms.ToolStripSeparator());
@@ -114,6 +124,7 @@ public sealed class TrayIconController : IDisposable
         menu.HandleCreated += (_, _) => ApplyPopupDarkMode(menu);
         menu.Opening += (_, _) => dispatcher.Invoke(() =>
         {
+            RebuildRestoreEnvItems();
             RebuildDiskMenuItems();
             ContextMenuOpening?.Invoke();
         });
@@ -491,10 +502,60 @@ public sealed class TrayIconController : IDisposable
     {
         _menuShow.Text = Loc.Get("Tray.Show");
         _menuNewDisk.Text = Loc.Get("Tray.NewDisk");
-        _menuResetTempDirs.Text = Loc.Get("Tray.ResetTempDirs");
+        _menuRestoreEnv.Text = Loc.Get("Tray.RestoreEnv");
         _menuSettings.Text = Loc.Get("Tray.Settings");
         _menuAbout.Text = Loc.Get("Tray.About");
         _menuExit.Text = Loc.Get("Tray.Exit");
+    }
+
+    /// <summary>
+    /// Rebuilds the "Restore environment variables" submenu right before the context menu is shown:
+    /// one item per group that can be restored and, when there are several, an item for all of them.
+    /// </summary>
+    private void RebuildRestoreEnvItems()
+    {
+        // Disposing an item removes it from the collection, so take a copy to walk.
+        foreach (var item in _menuRestoreEnv.DropDownItems.Cast<System.Windows.Forms.ToolStripItem>().ToList())
+        {
+            item.Dispose();
+        }
+
+        var readable = _mainViewModel.TryGetEnvRestoreGroups(out var groups);
+        foreach (var entry in EnvRestoreMenuEntry.Build(groups, readFailed: !readable))
+        {
+            switch (entry.Kind)
+            {
+                case EnvRestoreMenuEntryKind.Separator:
+                    _menuRestoreEnv.DropDownItems.Add(new System.Windows.Forms.ToolStripSeparator());
+                    break;
+                case EnvRestoreMenuEntryKind.Nothing:
+                case EnvRestoreMenuEntryKind.Unreadable:
+                    _menuRestoreEnv.DropDownItems.Add(new System.Windows.Forms.ToolStripMenuItem(entry.GetText()) { Enabled = false });
+                    break;
+                default:
+                    var group = entry.Group;
+                    _menuRestoreEnv.DropDownItems.Add(entry.GetText(), null, (_, _) => RunRestoreEnv(group));
+                    break;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Runs a restore chosen from the submenu on the UI thread.
+    /// </summary>
+    /// <param name="group">The group to restore; <c>null</c> restores all groups.</param>
+    private async void RunRestoreEnv(EnvRestoreGroup? group)
+    {
+        try
+        {
+            await _dispatcher.InvokeAsync(() => _onRestoreEnvAsync(group)).Task.Unwrap();
+        }
+        catch (Exception ex)
+        {
+            // An async void handler would hand this to the global crash handler; the user gets the failure message instead.
+            AppLog.CreateLogger<TrayIconController>().LogError(ex, "Restoring environment variables from the tray failed.");
+            ShowBalloonTip("ManagedDrive", Loc.Get("Msg.RestoreEnvFailed"), System.Windows.Forms.ToolTipIcon.Warning);
+        }
     }
 
     /// <summary>

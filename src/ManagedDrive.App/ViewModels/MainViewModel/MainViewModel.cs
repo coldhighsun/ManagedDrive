@@ -24,6 +24,16 @@ public sealed partial class MainViewModel : INotifyPropertyChanged, IDisposable
     private readonly UserEnvironmentRedirector _envRedirector;
 
     /// <summary>
+    /// Restores redirected environment variables on the user's request, per preset group.
+    /// </summary>
+    private readonly EnvRestoreService _envRestore;
+
+    /// <summary>
+    /// Takes restored presets away from the mounted disks that had them.
+    /// </summary>
+    private readonly DiskRestoreCoordinator _diskRestore;
+
+    /// <summary>
     /// The disks whose preset effects may still be applied: added when a disk is added to
     /// <see cref="Disks"/>, removed before its variables are restored. Lets a queued apply notice
     /// that its disk is already gone. Used from the UI thread and the thread pool.
@@ -69,6 +79,8 @@ public sealed partial class MainViewModel : INotifyPropertyChanged, IDisposable
         _logger = logger;
         var backupStore = new EnvRedirectBackupStore(Path.Combine(settingsStore.DirectoryPath, "env-redirects.json"));
         _envRedirector = new(new RegistryUserEnvironment(), backupStore.Read, backupStore.Write);
+        _envRestore = new(_envRedirector, RestoreRecordedTemp, IsTempOnKnownDisk);
+        _diskRestore = new(_envRedirector, id => Loc.Get($"Preset.{id}.Name"), logger);
 
         // Before anything can call SaveSettings (startup dialogs, tray commands, the auto-mount
         // loop): none of these profiles is mounted yet.
@@ -125,7 +137,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged, IDisposable
             p => ExecuteAnalyzeSpace(ResolveTarget(p)),
             p => ResolveTarget(p) != null);
         RefreshCommand = new(_ => RefreshAll());
-        ResetTempDirsCommand = new(_ => ExecuteResetTempDirs());
+        RestoreEnvCommand = new(p => ExecuteRestoreEnv(p as EnvRestoreGroup));
         SettingsCommand = new(_ => ExecuteSettings());
         AboutCommand = new(_ => ExecuteAbout());
 
@@ -450,10 +462,11 @@ public sealed partial class MainViewModel : INotifyPropertyChanged, IDisposable
     }
 
     /// <summary>
-    /// Gets the command that puts Windows TEMP and TMP back to what they held before they were
-    /// pointed into a RAM disk.
+    /// Gets the command that puts redirected environment variables back to what they held before
+    /// they were pointed into a RAM disk. Its parameter is the <see cref="EnvRestoreGroup"/> to
+    /// restore; without one, every group is restored.
     /// </summary>
-    public RelayCommand ResetTempDirsCommand
+    public RelayCommand RestoreEnvCommand
     {
         get;
     }

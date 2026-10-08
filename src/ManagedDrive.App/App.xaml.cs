@@ -66,6 +66,7 @@ public partial class App
     private SettingsStore? _settings;
     private Mutex? _singleInstanceMutex;
     private TempDirCompatChecker? _tempDirCompatChecker;
+    private EnvRestoreTrayAction? _envRestoreTrayAction;
     private TrayIconController? _trayIconController;
     private TrayTooltipController? _trayTooltipController;
     private UpdateCheckService? _updateCheckService;
@@ -246,12 +247,13 @@ public partial class App
 
         var iconStream = GetResourceStream(new("pack://application:,,,/ManagedDrive.ico"))!.Stream;
         _trayIconController = new(
-            Dispatcher, iconStream, _mainViewModel, ShowMainWindow, ShowMainWindowAndCreate, ResetTempDirsFromTrayAsync,
+            Dispatcher, iconStream, _mainViewModel, ShowMainWindow, ShowMainWindowAndCreate, RestoreEnvFromTrayAsync,
             ShowMainWindowAndSettings, ShowAboutDialog, ExitApplication);
         _trayTooltipController = new(_mainViewModel, _trayIconController);
-        _tempDirCompatChecker = new(
-            settings, _trayIconController, () => _mainWindow is { IsVisible: true, WindowState: not WindowState.Minimized } ? _mainWindow : null,
-            () => _mainViewModel!.RestoreRecordedTemp());
+        _tempDirCompatChecker = new(settings);
+        _envRestoreTrayAction = new(
+            _trayIconController, () => _mainWindow is { IsVisible: true, WindowState: not WindowState.Minimized } ? _mainWindow : null,
+            group => _mainViewModel!.RestoreEnvAsync(group));
         _mountManager.ActivityDetected += _trayIconController.OnActivityDetected;
         _diskNotificationService = new(
             _mainViewModel, _trayIconController, () => WindowVisibility.IsShownToUser(_mainWindow),
@@ -579,7 +581,8 @@ public partial class App
         TaskScheduler.UnobservedTaskException += OnUnobservedTaskException;
     }
 
-    private Task ResetTempDirsFromTrayAsync() => _tempDirCompatChecker!.ResetFromTrayAsync();
+    private Task RestoreEnvFromTrayAsync(EnvRestoreGroup? group) =>
+        _mainViewModel!.RejectEnvRestoreIfBusy() ? Task.CompletedTask : _envRestoreTrayAction!.RunAsync(group);
 
     /// <summary>
     /// Runs the startup update check and, when a newer release exists, asks the user whether to install it.
