@@ -726,7 +726,7 @@ public sealed partial class MainViewModel
 
         var confirm = new ConfirmDialog(
             Loc.Get("Msg.RestoreEnvConfirmTitle"),
-            Loc.Get("Msg.RestoreEnvConfirmBody"))
+            EnvRestoreGroupText.GetConfirmBody(group))
         {
             Owner = Application.Current.MainWindow
         };

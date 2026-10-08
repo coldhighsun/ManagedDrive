@@ -422,7 +422,10 @@
     <sys:String x:Key="Msg.TrayExitTempResetTitle">Temp Directory on RAM Disk</sys:String>
     <sys:String x:Key="Msg.TrayExitTempResetBody">Your Windows Temp directory is set to a RAM disk. It will become inaccessible after the disk is unmounted.&#x0a;&#x0a;Restore Temp to its previous setting and exit?</sys:String>
     <sys:String x:Key="Msg.RestoreEnvConfirmTitle">Restore Environment Variables</sys:String>
-    <sys:String x:Key="Msg.RestoreEnvConfirmBody">This will put the selected environment variables back to the values they held before they were pointed at a RAM disk (TEMP and TMP fall back to the Windows defaults if none was recorded). Only programs started afterwards are affected; no files are moved or deleted. The disks that had these presets lose them (their folders and files stay), so they do not redirect the variables again on the next mount.&#x0a;&#x0a;Continue?</sys:String>
+    <sys:String x:Key="Msg.RestoreEnvConfirmBody">This will restore {0} to the values they held before they were pointed at a RAM disk. Only programs started afterwards are affected; no files are moved or deleted. The disks that redirected these variables stop doing so (their folders and files stay), so they do not redirect them again on the next mount.</sys:String>
+    <sys:String x:Key="Msg.RestoreEnvScopeAll">all redirected environment variables</sys:String>
+    <sys:String x:Key="Msg.RestoreEnvConfirmTempNote">If TEMP and TMP still point into a RAM disk and no original value was recorded, they are set to the Windows defaults.</sys:String>
+    <sys:String x:Key="Msg.RestoreEnvConfirmQuestion">Continue?</sys:String>
     <sys:String x:Key="Msg.RestoreEnvSuccess">The environment variables have been restored.</sys:String>
     <sys:String x:Key="Msg.RestoreEnvNothing">None of the selected variables point at a RAM disk, so there is nothing to restore.</sys:String>
     <sys:String x:Key="Msg.RestoreEnvFailed">Failed to restore the environment variables.</sys:String>

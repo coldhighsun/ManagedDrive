@@ -422,7 +422,10 @@
     <sys:String x:Key="Msg.TrayExitTempResetTitle">用户临时文件夹在内存盘</sys:String>
     <sys:String x:Key="Msg.TrayExitTempResetBody">您的 Windows 临时文件夹设置在内存盘上，内存盘卸载后将无法访问。&#x0a;&#x0a;是否恢复临时文件夹原来的设置并退出？</sys:String>
     <sys:String x:Key="Msg.RestoreEnvConfirmTitle">还原环境变量</sys:String>
-    <sys:String x:Key="Msg.RestoreEnvConfirmBody">此操作将把所选环境变量恢复为指向内存盘之前的值（TEMP 和 TMP 在没有记录时恢复为 Windows 默认值）。只影响之后新启动的程序，不会移动或删除任何文件。拥有这些预设的磁盘会同时去掉对应预设（磁盘上的文件夹和文件保留），因此下次挂载不会再次重定向这些变量。&#x0a;&#x0a;是否继续？</sys:String>
+    <sys:String x:Key="Msg.RestoreEnvConfirmBody">此操作将把 {0} 恢复为指向内存盘之前的值。只影响之后新启动的程序，不会移动或删除任何文件。重定向这些变量的磁盘会同时取消对应的重定向（磁盘上的文件夹和文件保留），因此下次挂载不会再次重定向它们。</sys:String>
+    <sys:String x:Key="Msg.RestoreEnvScopeAll">所有已被重定向的环境变量</sys:String>
+    <sys:String x:Key="Msg.RestoreEnvConfirmTempNote">如果 TEMP 和 TMP 仍指向内存盘且没有记录原值，它们会恢复为 Windows 默认值。</sys:String>
+    <sys:String x:Key="Msg.RestoreEnvConfirmQuestion">是否继续？</sys:String>
     <sys:String x:Key="Msg.RestoreEnvSuccess">环境变量已成功还原。</sys:String>
     <sys:String x:Key="Msg.RestoreEnvNothing">所选变量当前没有指向内存盘，无需还原。</sys:String>
     <sys:String x:Key="Msg.RestoreEnvFailed">还原环境变量失败。</sys:String>

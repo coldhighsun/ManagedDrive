@@ -24,7 +24,7 @@ public sealed class EnvRestoreTrayAction(
     {
         var confirm = new ConfirmDialog(
             Loc.Get("Msg.RestoreEnvConfirmTitle"),
-            Loc.Get("Msg.RestoreEnvConfirmBody"));
+            EnvRestoreGroupText.GetConfirmBody(group));
 
         if (ownerWindowProvider() is { } owner)
         {
