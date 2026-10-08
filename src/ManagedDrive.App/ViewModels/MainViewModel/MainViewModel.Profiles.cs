@@ -216,6 +216,7 @@ public sealed partial class MainViewModel
             SkippedVersion = current.SkippedVersion,
             DefaultCompressionLevel = current.DefaultCompressionLevel,
             DefaultImageDirectory = current.DefaultImageDirectory,
+            SpaceUsageListSize = current.SpaceUsageListSize,
         });
     }
 

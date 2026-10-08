@@ -170,6 +170,28 @@ public sealed class SpaceUsageAnalyzerTests
     /// </summary>
     private static readonly byte[] SymlinkBuffer = [0x0C, 0x00, 0x00, 0xA0, 0x00, 0x00, 0x00, 0x00];
 
+    [Theory]
+    [InlineData(-5, 100)]
+    [InlineData(0, 100)]
+    [InlineData(99, 100)]
+    [InlineData(100, 100)]
+    [InlineData(500, 500)]
+    [InlineData(1000, 1000)]
+    [InlineData(1001, 1000)]
+    [InlineData(int.MaxValue, 1000)]
+    public void ClampListSize_AnyValue_StaysWithinAllowedRange(int requested, int expected)
+    {
+        var result = SpaceUsageAnalyzer.ClampListSize(requested);
+
+        Assert.Equal(expected, result);
+    }
+
+    [Fact]
+    public void DefaultListSize_IsInsideAllowedRange()
+    {
+        Assert.Equal(SpaceUsageAnalyzer.DefaultListSize, SpaceUsageAnalyzer.ClampListSize(SpaceUsageAnalyzer.DefaultListSize));
+    }
+
     private static FileNodeMap BuildMap()
     {
         var map = new FileNodeMap();

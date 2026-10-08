@@ -1,4 +1,5 @@
 using ManagedDrive.Cli.Core;
+using System.Globalization;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Shell;
@@ -22,9 +23,9 @@ public sealed record SpaceRow(string Name, string Size, string Share, string Fil
 public partial class SpaceUsageDialog
 {
     /// <summary>
-    /// How many entries each list keeps.
+    /// Called with the new list size when the user changes it, so it can be remembered.
     /// </summary>
-    private const int TopCount = 200;
+    private readonly Action<int> _listSizeChanged;
 
     /// <summary>
     /// The disk being analysed.
@@ -52,13 +53,39 @@ public partial class SpaceUsageDialog
     private bool _analyzing;
 
     /// <summary>
+    /// How many entries the folder and file lists keep.
+    /// </summary>
+    private int _listSize;
+
+    /// <summary>
+    /// Whether a delete is running, so no second delete or analysis starts meanwhile.
+    /// </summary>
+    private bool _deleting;
+
+    /// <summary>
+    /// Whether another analysis was asked for while one was running, to be done when it finishes.
+    /// </summary>
+    private bool _rerunRequested;
+
+    /// <summary>
+    /// Whether the dialog is closing, after which nothing may start.
+    /// </summary>
+    private bool _closed;
+
+    /// <summary>
     /// Opens the dialog for <paramref name="target"/> and starts the analysis.
     /// </summary>
     /// <param name="target">The disk to analyse.</param>
-    public SpaceUsageDialog(DiskViewModel target)
+    /// <param name="listSize">How many entries the folder and file lists keep, as last chosen.</param>
+    /// <param name="listSizeChanged">Called when the user picks another list size.</param>
+    public SpaceUsageDialog(DiskViewModel target, int listSize, Action<int> listSizeChanged)
     {
         InitializeComponent();
         _target = target;
+        _listSizeChanged = listSizeChanged;
+        _listSize = SpaceUsageAnalyzer.ClampListSize(listSize);
+        TopCountBox.Text = _listSize.ToString(CultureInfo.InvariantCulture);
+        Treemap.CanDelete = !target.IsReadOnly;
 
         // Same as the disk-content dialog: the one other dialog that can be resized and maximized.
         WindowChrome.SetWindowChrome(this, new()
@@ -71,7 +98,11 @@ public partial class SpaceUsageDialog
         WindowMaximizeHelper.HookMaximizeBehavior(this);
 
         CloseOnDisposing(target);
-        Closing += (_, _) => _closing.Cancel();
+        Closing += (_, _) =>
+        {
+            _closed = true;
+            _closing.Cancel();
+        };
         Closed += (_, _) => _closing.Dispose();
         Loaded += async (_, _) => await AnalyzeAsync();
         StatusText.Text = Loc.Get("SpaceUsage.Hint");
@@ -84,23 +115,32 @@ public partial class SpaceUsageDialog
     /// <returns>A task completing when the view is updated.</returns>
     private async Task AnalyzeAsync()
     {
-        if (_analyzing)
+        if (_closed)
         {
             return;
         }
 
+        if (_analyzing || _deleting)
+        {
+            _rerunRequested = true;
+            return;
+        }
+
+        _rerunRequested = false;
         _analyzing = true;
+        BusyText.Text = Loc.Get("SpaceUsage.Analyzing");
         BusyOverlay.Visibility = Visibility.Visible;
         RefreshButton.IsEnabled = false;
         var reopen = Treemap.Directory?.Path;
         var disk = _target.Disk;
+        var size = _listSize;
         var token = _closing.Token;
 
         try
         {
             var (report, root, categories) = await Task.Run(() =>
             {
-                var report = SpaceUsageAnalyzer.Analyze(disk.GetAllNodes(), TopCount, out var root);
+                var report = SpaceUsageAnalyzer.Analyze(disk.GetAllNodes(), size, out var root);
                 return (report, root, SumCategories(root));
             }, token);
 
@@ -147,6 +187,11 @@ public partial class SpaceUsageDialog
             _analyzing = false;
             BusyOverlay.Visibility = Visibility.Collapsed;
             RefreshButton.IsEnabled = true;
+        }
+
+        if (_rerunRequested)
+        {
+            await AnalyzeAsync();
         }
     }
 
@@ -243,6 +288,56 @@ public partial class SpaceUsageDialog
     }
 
     /// <summary>
+    /// Lets only digits into the list-size box.
+    /// </summary>
+    /// <param name="sender">The box.</param>
+    /// <param name="e">The typed text.</param>
+    private void TopCountBox_PreviewTextInput(object sender, TextCompositionEventArgs e) =>
+        e.Handled = !e.Text.All(char.IsAsciiDigit);
+
+    /// <summary>
+    /// Applies the list size when Enter is pressed.
+    /// </summary>
+    /// <param name="sender">The box.</param>
+    /// <param name="e">The key.</param>
+    private async void TopCountBox_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Enter)
+        {
+            e.Handled = true;
+            await ApplyListSizeAsync();
+        }
+    }
+
+    /// <summary>
+    /// Applies the list size when the box loses focus.
+    /// </summary>
+    /// <param name="sender">The box.</param>
+    /// <param name="e">Unused.</param>
+    private async void TopCountBox_LostFocus(object sender, RoutedEventArgs e) => await ApplyListSizeAsync();
+
+    /// <summary>
+    /// Reads the list-size box, limits it to the allowed range, shows the result and, if it differs
+    /// from the current size, remembers it and analyses again.
+    /// </summary>
+    /// <returns>A task completing when the view is updated.</returns>
+    private async Task ApplyListSizeAsync()
+    {
+        var size = int.TryParse(TopCountBox.Text, NumberStyles.None, CultureInfo.InvariantCulture, out var typed)
+            ? SpaceUsageAnalyzer.ClampListSize(typed)
+            : _listSize;
+        TopCountBox.Text = size.ToString(CultureInfo.InvariantCulture);
+        if (size == _listSize)
+        {
+            return;
+        }
+
+        _listSize = size;
+        _listSizeChanged(size);
+        await AnalyzeAsync();
+    }
+
+    /// <summary>
     /// Runs the analysis again.
     /// </summary>
     /// <param name="sender">The refresh button.</param>
@@ -266,6 +361,20 @@ public partial class SpaceUsageDialog
         PathText.Text = Treemap.Directory?.Path ?? string.Empty;
         UpButton.IsEnabled = Treemap.CanGoUp;
     }
+
+    /// <summary>
+    /// Shows the node chosen in the map's context menu in Windows Explorer.
+    /// </summary>
+    /// <param name="sender">The map.</param>
+    /// <param name="node">The folder or file.</param>
+    private void Treemap_OpenInExplorerRequested(object? sender, SpaceNode node) => OpenInExplorer(node);
+
+    /// <summary>
+    /// Deletes the node chosen in the map's context menu.
+    /// </summary>
+    /// <param name="sender">The map.</param>
+    /// <param name="node">The folder or file.</param>
+    private async void Treemap_DeleteRequested(object? sender, SpaceNode node) => await DeleteNodeAsync(node);
 
     /// <summary>
     /// Shows the selected item in the status line.
@@ -296,6 +405,15 @@ public partial class SpaceUsageDialog
             return;
         }
 
+        ShowInMap(node);
+    }
+
+    /// <summary>
+    /// Shows a node in the map: a folder is opened, a file is shown selected inside its folder.
+    /// </summary>
+    /// <param name="node">The folder or file.</param>
+    private void ShowInMap(SpaceNode node)
+    {
         if (node.IsDirectory)
         {
             Treemap.Open(node);
@@ -305,5 +423,140 @@ public partial class SpaceUsageDialog
             Treemap.Open(parent);
             Treemap.Select(node);
         }
+    }
+
+    /// <summary>
+    /// Converts a node's disk path into the real path under the disk's mount point.
+    /// </summary>
+    /// <param name="node">The folder or file.</param>
+    /// <returns>The path as Explorer and the file system see it.</returns>
+    private string ToRealPath(SpaceNode node) =>
+        Path.Combine(_target.Disk.MountPoint.TrimEnd('\\') + '\\', node.Path.TrimStart('\\').Replace('\\', Path.DirectorySeparatorChar));
+
+    /// <summary>
+    /// Shows a folder in Windows Explorer, or the folder holding a file with the file selected.
+    /// </summary>
+    /// <param name="node">The folder or file.</param>
+    private void OpenInExplorer(SpaceNode node)
+    {
+        var path = ToRealPath(node);
+        var info = new System.Diagnostics.ProcessStartInfo("explorer.exe")
+        {
+            Arguments = node.IsDirectory ? $"\"{path}\"" : $"/select,\"{path}\"",
+            UseShellExecute = true,
+        };
+
+        try
+        {
+            using var process = System.Diagnostics.Process.Start(info);
+        }
+        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException)
+        {
+            SummaryText.Text = Loc.Format("SpaceUsage.Failed", ex.Message);
+        }
+    }
+
+    /// <summary>
+    /// Selects the row under the mouse and offers to show or delete its folder or file.
+    /// </summary>
+    /// <param name="sender">The folder or file list.</param>
+    /// <param name="e">The mouse event.</param>
+    private void List_PreviewMouseRightButtonUp(object sender, MouseButtonEventArgs e)
+    {
+        var list = (ListView)sender;
+        if (e.OriginalSource is not DependencyObject source
+            || ItemsControl.ContainerFromElement(list, source) is not ListViewItem item
+            || item.Content is not SpaceRow { Path: { } path }
+            || _root is null
+            || FindNode(_root, path) is not { } node)
+        {
+            return;
+        }
+
+        item.IsSelected = true;
+
+        var open = new MenuItem { Header = Loc.Get(node.IsDirectory ? "SpaceUsage.OpenFolder" : "SpaceUsage.OpenContainingFolder") };
+        open.Click += (_, _) => OpenInExplorer(node);
+
+        var delete = new MenuItem
+        {
+            Header = Loc.Get(node.IsDirectory ? "SpaceUsage.DeleteFolder" : "SpaceUsage.DeleteFile"),
+            IsEnabled = !_target.IsReadOnly && node.Parent is not null,
+        };
+        delete.Click += async (_, _) => await DeleteNodeAsync(node);
+
+        var menu = new ContextMenu { PlacementTarget = list };
+        menu.Items.Add(open);
+        menu.Items.Add(delete);
+        menu.IsOpen = true;
+        e.Handled = true;
+    }
+
+    /// <summary>
+    /// Deletes a folder (with everything in it) or a file from the mounted disk after a
+    /// confirmation, going through the real file system so the driver does the accounting, then
+    /// analyses the disk again.
+    /// </summary>
+    /// <param name="node">The folder or file to delete.</param>
+    /// <returns>A task completing when the view is updated.</returns>
+    private async Task DeleteNodeAsync(SpaceNode node)
+    {
+        if (_closed || _analyzing || _deleting || _target.IsReadOnly || node.Parent is null)
+        {
+            return;
+        }
+
+        var body = Loc.Format(node.IsDirectory ? "Msg.DeleteNodeConfirmBodyFolder" : "Msg.DeleteNodeConfirmBodyFile", node.Name);
+        if (new ConfirmDialog(Loc.Get("Msg.DeleteNodeConfirmTitle"), body) { Owner = this }.ShowDialog() != true)
+        {
+            return;
+        }
+
+        var realPath = ToRealPath(node);
+        var isDirectory = node.IsDirectory;
+        string? failure = null;
+
+        _deleting = true;
+        RefreshButton.IsEnabled = false;
+        BusyText.Text = Loc.Get("DiskContent.Deleting");
+        BusyOverlay.Visibility = Visibility.Visible;
+        try
+        {
+            await Task.Run(() =>
+            {
+                try
+                {
+                    if (isDirectory)
+                    {
+                        Directory.Delete(realPath, recursive: true);
+                    }
+                    else
+                    {
+                        File.Delete(realPath);
+                    }
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    failure = ex.Message;
+                }
+            });
+        }
+        finally
+        {
+            _deleting = false;
+            BusyOverlay.Visibility = Visibility.Collapsed;
+        }
+
+        if (_closed)
+        {
+            return;
+        }
+
+        if (failure is not null)
+        {
+            new ConfirmDialog(Loc.Get("Msg.DeleteNodeConfirmTitle"), Loc.Format("Msg.DeleteNodeFailed", node.Name, failure)) { Owner = this }.ShowDialog();
+        }
+
+        await AnalyzeAsync();
     }
 }

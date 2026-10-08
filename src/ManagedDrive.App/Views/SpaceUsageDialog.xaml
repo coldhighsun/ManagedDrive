@@ -6,7 +6,7 @@
         Style="{StaticResource DialogWindowStyle}"
         Title="{DynamicResource SpaceUsage.Title}"
         Width="980" Height="640"
-        MinWidth="700" MinHeight="460"
+        MinWidth="760" MinHeight="460"
         ResizeMode="CanResize"
         WindowStartupLocation="CenterOwner">
 
@@ -41,6 +41,32 @@
             </Setter>
         </Style>
 
+        <!-- The toolbar icon button is made for the coloured app bar (white text, white hover); this is its
+             counterpart on the dialog surface. -->
+        <Style x:Key="SurfaceIconButton" TargetType="Button" BasedOn="{StaticResource IconButton}">
+            <Setter Property="Foreground" Value="{DynamicResource AppForeground}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd" Background="{TemplateBinding Background}" CornerRadius="16">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource AppDivider}"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource AppDivider}"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.4"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
         <Style x:Key="FlatListViewItem" TargetType="ListViewItem">
             <Setter Property="Background" Value="Transparent"/>
             <Setter Property="Foreground" Value="{DynamicResource AppForeground}"/>
@@ -69,23 +95,23 @@
 
         <!-- Right-aligned text cell; padding keeps the last character off the clip edge. -->
         <DataTemplate x:Key="SizeCell" DataType="{x:Type views:SpaceRow}">
-            <TextBlock Text="{Binding Size}" TextAlignment="Right" Width="64"
+            <TextBlock Text="{Binding Size}" TextAlignment="Right" Width="69"
                        Foreground="{DynamicResource AppForegroundLight}"/>
         </DataTemplate>
         <DataTemplate x:Key="ShareCell" DataType="{x:Type views:SpaceRow}">
-            <TextBlock Text="{Binding Share}" TextAlignment="Right" Width="44"
+            <TextBlock Text="{Binding Share}" TextAlignment="Right" Width="49"
                        Foreground="{DynamicResource AppForegroundLight}"/>
         </DataTemplate>
         <DataTemplate x:Key="FilesCell" DataType="{x:Type views:SpaceRow}">
-            <TextBlock Text="{Binding Files}" TextAlignment="Right" Width="48"
+            <TextBlock Text="{Binding Files}" TextAlignment="Right" Width="44"
                        Foreground="{DynamicResource AppForegroundLight}"/>
         </DataTemplate>
         <DataTemplate x:Key="ExtensionCell" DataType="{x:Type views:SpaceRow}">
-            <TextBlock Text="{Binding Name}" Width="80" TextTrimming="CharacterEllipsis"
+            <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis"
                        Foreground="{DynamicResource AppForeground}"/>
         </DataTemplate>
         <DataTemplate x:Key="NameCell" DataType="{x:Type views:SpaceRow}">
-            <TextBlock Text="{Binding Name}" Width="150" TextTrimming="CharacterEllipsis"
+            <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis"
                        Foreground="{DynamicResource AppForeground}"/>
         </DataTemplate>
     </views:DialogWindowBase.Resources>
@@ -110,9 +136,25 @@
             </Grid.ColumnDefinitions>
             <TextBlock x:Name="SummaryText" Foreground="{DynamicResource AppForegroundLight}"
                        TextWrapping="Wrap" VerticalAlignment="Center"/>
-            <Button Grid.Column="1" x:Name="RefreshButton" Content="{DynamicResource SpaceUsage.Refresh}"
-                    Style="{StaticResource RaisedButton}" Padding="12,0" Margin="12,0,0,0"
-                    Click="RefreshButton_Click"/>
+            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                <TextBlock Text="{DynamicResource SpaceUsage.ListSize}" VerticalAlignment="Center"
+                           Foreground="{DynamicResource AppForeground}"/>
+                <TextBox x:Name="TopCountBox" Width="56" Margin="6,0,0,0" VerticalAlignment="Center"
+                         Style="{StaticResource OutlinedTextBox}" Padding="6,4"
+                         MaxLength="4" TextAlignment="Right"
+                         ToolTip="{DynamicResource SpaceUsage.ListSizeTip}"
+                         AutomationProperties.Name="{DynamicResource SpaceUsage.ListSize}"
+                         PreviewTextInput="TopCountBox_PreviewTextInput"
+                         KeyDown="TopCountBox_KeyDown"
+                         LostFocus="TopCountBox_LostFocus"/>
+                <Button x:Name="RefreshButton"
+                        Style="{StaticResource SurfaceIconButton}" Width="32" Height="32" Margin="8,0,0,0"
+                        ToolTip="{DynamicResource SpaceUsage.Refresh}"
+                        AutomationProperties.Name="{DynamicResource SpaceUsage.Refresh}"
+                        Click="RefreshButton_Click">
+                    <TextBlock Style="{StaticResource IconText}" Text="&#xE72C;"/>
+                </Button>
+            </StackPanel>
         </Grid>
 
         <StackPanel Grid.Row="2" Orientation="Horizontal">
@@ -125,10 +167,14 @@
 
         <Grid Grid.Row="4">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="*" MinWidth="240"/>
                 <ColumnDefinition Width="10"/>
-                <ColumnDefinition Width="340"/>
+                <ColumnDefinition Width="410" MinWidth="240"/>
             </Grid.ColumnDefinitions>
+
+            <GridSplitter Grid.Column="1" HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
+                          Background="Transparent" Cursor="SizeWE" ShowsPreview="False"
+                          ResizeBehavior="PreviousAndNext" ResizeDirection="Columns"/>
 
             <Grid Grid.Column="0">
                 <Grid.RowDefinitions>
@@ -141,13 +187,15 @@
                     <Grid>
                         <controls:TreemapControl x:Name="Treemap"
                                                  DirectoryChanged="Treemap_DirectoryChanged"
-                                                 SelectionChanged="Treemap_SelectionChanged"/>
+                                                 SelectionChanged="Treemap_SelectionChanged"
+                                                 OpenInExplorerRequested="Treemap_OpenInExplorerRequested"
+                                                 DeleteRequested="Treemap_DeleteRequested"/>
                         <TextBlock x:Name="EmptyText" Text="{DynamicResource SpaceUsage.Empty}"
-                                   Foreground="{DynamicResource AppForegroundLight}"
+                                   Foreground="{DynamicResource AppForeground}"
                                    HorizontalAlignment="Center" VerticalAlignment="Center"
                                    Visibility="Collapsed"/>
                         <Border x:Name="BusyOverlay" Background="{DynamicResource AppSurface}" Opacity="0.85">
-                            <TextBlock Text="{DynamicResource SpaceUsage.Analyzing}"
+                            <TextBlock x:Name="BusyText" Text="{DynamicResource SpaceUsage.Analyzing}"
                                        Foreground="{DynamicResource AppForeground}"
                                        HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Border>
@@ -161,12 +209,13 @@
                 <TabItem Header="{DynamicResource SpaceUsage.TabFolders}">
                     <ListView x:Name="FolderList" BorderThickness="0" Background="Transparent"
                               ItemContainerStyle="{StaticResource FlatListViewItem}"
-                              MouseDoubleClick="List_MouseDoubleClick">
+                              MouseDoubleClick="List_MouseDoubleClick"
+                              PreviewMouseRightButtonUp="List_PreviewMouseRightButtonUp">
                         <ListView.View>
                             <GridView ColumnHeaderContainerStyle="{StaticResource FlatGridViewColumnHeader}">
-                                <GridViewColumn Header="{DynamicResource SpaceUsage.ColumnName}" Width="150" CellTemplate="{StaticResource NameCell}"/>
-                                <GridViewColumn Header="{DynamicResource SpaceUsage.ColumnSize}" Width="72" CellTemplate="{StaticResource SizeCell}"/>
-                                <GridViewColumn Header="{DynamicResource SpaceUsage.ColumnShare}" Width="52" CellTemplate="{StaticResource ShareCell}"/>
+                                <GridViewColumn Header="{DynamicResource SpaceUsage.ColumnName}" Width="210" CellTemplate="{StaticResource NameCell}"/>
+                                <GridViewColumn Header="{DynamicResource SpaceUsage.ColumnSize}" Width="85" CellTemplate="{StaticResource SizeCell}"/>
+                                <GridViewColumn Header="{DynamicResource SpaceUsage.ColumnShare}" Width="65" CellTemplate="{StaticResource ShareCell}"/>
                             </GridView>
                         </ListView.View>
                     </ListView>
@@ -174,12 +223,13 @@
                 <TabItem Header="{DynamicResource SpaceUsage.TabFiles}">
                     <ListView x:Name="FileList" BorderThickness="0" Background="Transparent"
                               ItemContainerStyle="{StaticResource FlatListViewItem}"
-                              MouseDoubleClick="List_MouseDoubleClick">
+                              MouseDoubleClick="List_MouseDoubleClick"
+                              PreviewMouseRightButtonUp="List_PreviewMouseRightButtonUp">
                         <ListView.View>
                             <GridView ColumnHeaderContainerStyle="{StaticResource FlatGridViewColumnHeader}">
-                                <GridViewColumn Header="{DynamicResource SpaceUsage.ColumnName}" Width="150" CellTemplate="{StaticResource NameCell}"/>
-                                <GridViewColumn Header="{DynamicResource SpaceUsage.ColumnSize}" Width="72" CellTemplate="{StaticResource SizeCell}"/>
-                                <GridViewColumn Header="{DynamicResource SpaceUsage.ColumnShare}" Width="52" CellTemplate="{StaticResource ShareCell}"/>
+                                <GridViewColumn Header="{DynamicResource SpaceUsage.ColumnName}" Width="210" CellTemplate="{StaticResource NameCell}"/>
+                                <GridViewColumn Header="{DynamicResource SpaceUsage.ColumnSize}" Width="85" CellTemplate="{StaticResource SizeCell}"/>
+                                <GridViewColumn Header="{DynamicResource SpaceUsage.ColumnShare}" Width="65" CellTemplate="{StaticResource ShareCell}"/>
                             </GridView>
                         </ListView.View>
                     </ListView>
@@ -190,8 +240,8 @@
                         <ListView.View>
                             <GridView ColumnHeaderContainerStyle="{StaticResource FlatGridViewColumnHeader}">
                                 <GridViewColumn Header="{DynamicResource SpaceUsage.ColumnName}" Width="90" CellTemplate="{StaticResource ExtensionCell}"/>
-                                <GridViewColumn Header="{DynamicResource SpaceUsage.ColumnSize}" Width="72" CellTemplate="{StaticResource SizeCell}"/>
-                                <GridViewColumn Header="{DynamicResource SpaceUsage.ColumnShare}" Width="52" CellTemplate="{StaticResource ShareCell}"/>
+                                <GridViewColumn Header="{DynamicResource SpaceUsage.ColumnSize}" Width="85" CellTemplate="{StaticResource SizeCell}"/>
+                                <GridViewColumn Header="{DynamicResource SpaceUsage.ColumnShare}" Width="65" CellTemplate="{StaticResource ShareCell}"/>
                                 <GridViewColumn Header="{DynamicResource SpaceUsage.ColumnFiles}" Width="60" CellTemplate="{StaticResource FilesCell}"/>
                             </GridView>
                         </ListView.View>

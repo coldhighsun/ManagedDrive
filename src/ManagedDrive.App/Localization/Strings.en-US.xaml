@@ -249,6 +249,8 @@
     <sys:String x:Key="SpaceUsage.Empty">This disk has no files yet.</sys:String>
     <sys:String x:Key="SpaceUsage.Failed">Could not analyze the disk: {0}</sys:String>
     <sys:String x:Key="SpaceUsage.Refresh">Refresh</sys:String>
+    <sys:String x:Key="SpaceUsage.ListSize">List size</sys:String>
+    <sys:String x:Key="SpaceUsage.ListSizeTip">How many of the largest folders and files the lists show (100 to 1000). Press Enter to apply.</sys:String>
     <sys:String x:Key="SpaceUsage.Up">Up</sys:String>
     <sys:String x:Key="SpaceUsage.Hint">Double-click a folder to open it. Right-click for more.</sys:String>
     <sys:String x:Key="SpaceUsage.Selected">{0} — {1} ({2} of the disk)</sys:String>
@@ -256,6 +258,10 @@
     <sys:String x:Key="SpaceUsage.TipFolder">{0}&#x0a;{1} · {2} of the disk · {3} files</sys:String>
     <sys:String x:Key="SpaceUsage.TipMerged">{0} smaller items&#x0a;{1} · {2} of the disk</sys:String>
     <sys:String x:Key="SpaceUsage.MergedLabel">{0} items</sys:String>
+    <sys:String x:Key="SpaceUsage.CellFiles">{0} files</sys:String>
+    <sys:String x:Key="SpaceUsage.OpenContainingFolder">Open containing folder</sys:String>
+    <sys:String x:Key="SpaceUsage.DeleteFolder">Delete folder</sys:String>
+    <sys:String x:Key="SpaceUsage.DeleteFile">Delete file</sys:String>
     <sys:String x:Key="SpaceUsage.CopyPath">Copy path</sys:String>
     <sys:String x:Key="SpaceUsage.OpenFolder">Open folder</sys:String>
     <sys:String x:Key="SpaceUsage.TabFolders">Folders</sys:String>

@@ -58,6 +58,23 @@ public static class SpaceUsageAnalyzer
     public const int MaxTop = 1000;
 
     /// <summary>
+    /// Fewest entries a user may ask each list to hold.
+    /// </summary>
+    public const int MinListSize = 100;
+
+    /// <summary>
+    /// How many entries each list holds unless the user chose otherwise.
+    /// </summary>
+    public const int DefaultListSize = 200;
+
+    /// <summary>
+    /// Forces a user-chosen list size into the range the UI offers.
+    /// </summary>
+    /// <param name="size">The requested number of entries.</param>
+    /// <returns><paramref name="size"/> limited to <see cref="MinListSize"/> through <see cref="MaxTop"/>.</returns>
+    public static int ClampListSize(int size) => Math.Clamp(size, MinListSize, MaxTop);
+
+    /// <summary>
     /// Builds the directory tree with every node's sizes filled in and every child list sorted.
     /// </summary>
     /// <param name="nodes">The disk's nodes keyed by path, e.g. from <c>RamDisk.GetAllNodes()</c>.</param>

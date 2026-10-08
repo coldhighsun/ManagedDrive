@@ -896,7 +896,10 @@ public sealed partial class MainViewModel
             return;
         }
 
-        var dialog = new SpaceUsageDialog(vm)
+        var dialog = new SpaceUsageDialog(
+            vm,
+            SpaceUsageAnalyzer.ClampListSize(_settingsStore.Load().SpaceUsageListSize),
+            size => _settingsStore.Update(latest => latest with { SpaceUsageListSize = size }))
         {
             Owner = Application.Current.MainWindow
         };
