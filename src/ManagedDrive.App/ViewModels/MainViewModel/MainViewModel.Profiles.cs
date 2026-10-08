@@ -122,29 +122,59 @@ public sealed partial class MainViewModel
     };
 
     /// <summary>
-    /// Mounts a disk from a saved <see cref="DiskProfile"/> and adds it to the list.
-    /// Errors are surfaced via <see cref="StatusText"/>.
+    /// First half of mounting a saved profile: loads and mounts the disk of
+    /// <paramref name="profile"/> on the thread pool without showing anything, so several
+    /// profiles can be loaded at the same time. Call <see cref="CompleteMountFromProfileAsync"/>
+    /// with the result on the UI thread to add the disk, ask for a password or report a failure.
     /// </summary>
     /// <param name="profile">The profile to mount.</param>
     /// <param name="progress">An optional progress reporter.</param>
     /// <returns>
-    /// <c>true</c> if the disk was mounted successfully; <c>false</c> if mounting failed
-    /// (the failure reason is surfaced via <see cref="StatusText"/>).
+    /// The mounted disk, the fact that it needs a password, or the error that stopped it;
+    /// never throws.
     /// </returns>
-    public async Task<bool> MountFromProfileAsync(DiskProfile profile, IProgress<double>? progress = null)
+    internal async Task<MountAttempt> TryMountFromProfileAsync(DiskProfile profile, IProgress<double>? progress = null)
     {
         _logger.LogInformation("Auto-mounting saved profile {MountPoint}.", profile.MountPoint);
-        var options = ProfileToOptions(profile);
 
         try
         {
-            var disk = await MountWithPasswordRetryAsync(options, progress: progress);
+            return await TryMountOnceAsync(ProfileToOptions(profile), null, progress, CancellationToken.None);
+        }
+        catch (Exception ex)
+        {
+            return new(null, null, ex);
+        }
+    }
+
+    /// <summary>
+    /// Second half of mounting a saved profile, see <see cref="TryMountFromProfileAsync"/>; must run on the UI thread. Prompts for
+    /// the password if the image needs one, then adds the disk to the list, or reports the failure.
+    /// </summary>
+    /// <param name="profile">The profile that was mounted.</param>
+    /// <param name="attempt">The result of <see cref="TryMountFromProfileAsync"/> for it.</param>
+    /// <param name="progress">An optional progress reporter used if the mount is retried.</param>
+    /// <returns>
+    /// <c>true</c> if the disk was mounted successfully; <c>false</c> if mounting failed
+    /// (the failure reason is surfaced via <see cref="StatusText"/>).
+    /// </returns>
+    internal async Task<bool> CompleteMountFromProfileAsync(DiskProfile profile, MountAttempt attempt, IProgress<double>? progress = null)
+    {
+        try
+        {
+            if (attempt.Error is { } error)
+            {
+                _logger.LogError(error, "Auto-mount failed for {MountPoint}.", profile.MountPoint);
+                FailAutoMount(profile, error.Message);
+                return false;
+            }
+
+            var disk = attempt.Disk ??
+                await PromptForPasswordAndMountAsync(ProfileToOptions(profile), attempt.PasswordError, progress, CancellationToken.None);
             if (disk is null)
             {
                 _logger.LogWarning("Auto-mount failed for {MountPoint}.", profile.MountPoint);
-                ShowStickyStatus(Loc.Format("Status.AutoMountFailed", profile.MountPoint, Loc.Get("Status.MountFailed")));
-                ResetTempIfPointingAt(profile.MountPoint);
-                RetainSavedProfiles([profile]);
+                FailAutoMount(profile, Loc.Get("Status.MountFailed"));
                 return false;
             }
 
@@ -158,11 +188,22 @@ public sealed partial class MainViewModel
         catch (Exception ex)
         {
             _logger.LogError(ex, "Auto-mount failed for {MountPoint}.", profile.MountPoint);
-            ShowStickyStatus(Loc.Format("Status.AutoMountFailed", profile.MountPoint, ex.Message));
-            ResetTempIfPointingAt(profile.MountPoint);
-            RetainSavedProfiles([profile]);
+            FailAutoMount(profile, ex.Message);
             return false;
         }
+    }
+
+    /// <summary>
+    /// Reports that the auto-mount of <paramref name="profile"/> failed and keeps the profile so
+    /// the next save doesn't lose it.
+    /// </summary>
+    /// <param name="profile">The profile that could not be mounted.</param>
+    /// <param name="reason">The reason shown in the status line.</param>
+    internal void FailAutoMount(DiskProfile profile, string reason)
+    {
+        ShowStickyStatus(Loc.Format("Status.AutoMountFailed", profile.MountPoint, reason));
+        ResetTempIfPointingAt(profile.MountPoint);
+        RetainSavedProfiles([profile]);
     }
 
     /// <summary>

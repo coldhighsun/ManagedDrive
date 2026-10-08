@@ -64,7 +64,7 @@ public sealed class MainViewModelSettingsTests : IDisposable
     /// mounted) stays saved, once, however many times the mount is retried.
     /// </summary>
     [Fact]
-    public async Task MountFromProfileAsync_FailsRepeatedly_ProfileIsSavedOnce()
+    public async Task CompleteMountFromProfileAsync_FailsRepeatedly_ProfileIsSavedOnce()
     {
         Directory.CreateDirectory(_dir);
         var imagePath = Path.Combine(_dir, "corrupt.mdr");
@@ -84,8 +84,8 @@ public sealed class MainViewModelSettingsTests : IDisposable
         using var mountManager = new MountManager();
         using var viewModel = new MainViewModel(mountManager, store, NullLogger<MainViewModel>.Instance, store.Load().Disks);
 
-        var first = await viewModel.MountFromProfileAsync(profile);
-        var second = await viewModel.MountFromProfileAsync(profile);
+        var first = await viewModel.CompleteMountFromProfileAsync(profile, await viewModel.TryMountFromProfileAsync(profile));
+        var second = await viewModel.CompleteMountFromProfileAsync(profile, await viewModel.TryMountFromProfileAsync(profile));
         viewModel.SaveSettings();
 
         Assert.False(first);

@@ -219,6 +219,13 @@ public sealed class BusyOverlayViewModel : INotifyPropertyChanged
     }
 
     /// <summary>
+    /// Replaces the status text of the operation being shown without touching its progress, for
+    /// an operation whose text changes as it goes (e.g. "2 of 5 disks loaded").
+    /// </summary>
+    /// <param name="statusText">The new status text.</param>
+    public void UpdateStatusText(string statusText) => StatusText = statusText;
+
+    /// <summary>
     /// Shows the overlay for a new operation like <see cref="Start"/>, unless another operation is
     /// already showing it — the overlay tracks a single operation, so a second one would take over
     /// its progress and Cancel button and hide the overlay when it finished first.

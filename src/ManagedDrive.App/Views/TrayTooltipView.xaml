@@ -92,18 +92,14 @@
 
                 <TextBlock FontSize="13"
                            Foreground="{DynamicResource AppForegroundLight}"
-                           Text="{Binding LoadingDisksText}">
+                           Text="{Binding AutoMountStatusText}">
                     <TextBlock.Style>
                         <Style TargetType="TextBlock">
                             <Setter Property="Visibility" Value="Collapsed" />
                             <Style.Triggers>
-                                <MultiDataTrigger>
-                                    <MultiDataTrigger.Conditions>
-                                        <Condition Binding="{Binding ElementName=DiskList, Path=HasItems}" Value="False" />
-                                        <Condition Binding="{Binding BusyOverlay.IsBusy}" Value="True" />
-                                    </MultiDataTrigger.Conditions>
+                                <DataTrigger Binding="{Binding IsAutoMounting}" Value="True">
                                     <Setter Property="Visibility" Value="Visible" />
-                                </MultiDataTrigger>
+                                </DataTrigger>
                             </Style.Triggers>
                         </Style>
                     </TextBlock.Style>
@@ -119,7 +115,7 @@
                                 <MultiDataTrigger>
                                     <MultiDataTrigger.Conditions>
                                         <Condition Binding="{Binding ElementName=DiskList, Path=HasItems}" Value="False" />
-                                        <Condition Binding="{Binding BusyOverlay.IsBusy}" Value="False" />
+                                        <Condition Binding="{Binding IsAutoMounting}" Value="False" />
                                     </MultiDataTrigger.Conditions>
                                     <Setter Property="Visibility" Value="Visible" />
                                 </MultiDataTrigger>

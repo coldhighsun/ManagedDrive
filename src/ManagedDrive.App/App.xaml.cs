@@ -302,33 +302,87 @@ public partial class App
             return;
         }
 
-        // Mounted one at a time (not Task.WhenAll) so that password prompts for encrypted disks
-        // appear sequentially rather than all at once.
+        var viewModel = _mainViewModel;
+        var overlay = viewModel.BusyOverlay;
+
+        // A disk loaded from a saved image has that image's size; a disk without one (empty, or
+        // its image is missing) loads at once and counts as 0 bytes. Only a source archive has
+        // no size known up front: it is unknown (null) and takes an average share of the bar.
+        // Read off the UI thread: the images may sit on a network share or a sleeping disk.
+        var sizes = await Task.Run(() => profiles
+            .Select(p => p.SourceArchivePath is null ? FileSizeProbe.TryGetSize(p.PersistImagePath) ?? 0UL : (ulong?)null)
+            .ToList());
+
+        // The byte detail under the bar is shown unless an archive disk makes the total unknown
+        // (its average share in the bar's fraction wouldn't match any byte count).
+        var knownBytes = sizes.Aggregate(0UL, (sum, size) => sum + (size ?? 0UL));
+        ulong? totalBytes = sizes.All(s => s.HasValue) && knownBytes > 0 ? knownBytes : null;
+
+        // Created on the UI thread, so the callbacks of the loads running on the thread pool are
+        // marshalled back to it before they touch the overlay. A 0-byte disk gets a token weight
+        // (a weight of 0 would mean "unknown" and give it an average share).
+        IProgress<double> overlayProgress = new Progress<double>(overlay.Report);
+        var aggregate = new AggregateProgress(
+            sizes.Select(s => s is { } size ? Math.Max(size, 1UL) : 0.0).ToList(),
+            overlayProgress.Report);
+
+        viewModel.BeginAutoMount(profiles.Count);
+        overlay.Start(Loc.Format("Busy.LoadingDisks", 1, profiles.Count), totalBytes: totalBytes);
+
         try
         {
-            for (var i = 0; i < profiles.Count; i++)
+            // Loading (reading, decrypting, decompressing, mounting) runs for up to
+            // AutoMountConcurrency disks at once; everything that touches the UI — password
+            // prompts, adding the disk, status text — is finished one disk at a time on this
+            // thread, in profile order except that disks needing a password come last, so
+            // prompts appear sequentially and don't hold back the disks already mounted.
+            await AutoMountScheduler.RunAsync(
+                profiles.Count,
+                AutoMountConcurrency,
+                index => viewModel.TryMountFromProfileAsync(profiles[index], aggregate.ForOperation(index)),
+                attempt => attempt.NeedsPassword,
+                async (index, attempt) =>
+                {
+                    try
+                    {
+                        await viewModel.CompleteMountFromProfileAsync(profiles[index], attempt, aggregate.ForOperation(index));
+                    }
+                    finally
+                    {
+                        // Counted even when finishing failed, so the bar and the tray line don't
+                        // stay short of the total.
+                        CountDiskDone(index);
+                    }
+                },
+                (index, ex) => _logger.LogError(ex, "Finishing the auto-mount of {MountPoint} failed.", profiles[index].MountPoint),
+                (index, ex) =>
+                {
+                    _logger.LogError(ex, "Loading {MountPoint} failed.", profiles[index].MountPoint);
+                    viewModel.FailAutoMount(profiles[index], ex.Message);
+                    CountDiskDone(index);
+                });
+
+            void CountDiskDone(int index)
             {
-                var profile = profiles[i];
-
-                // Only a saved image path (not a source archive) has a byte size known up front;
-                // archive-imported profiles fall back to the indeterminate/no-detail-text case.
-                var totalBytes = profile.PersistImagePath != null && File.Exists(profile.PersistImagePath)
-                    ? (ulong)new FileInfo(profile.PersistImagePath).Length
-                    : (ulong?)null;
-
-                // StatusText's setter is private, so re-call Start() each iteration to update the
-                // text; that also resets Progress/DetailText, which the progress callback below
-                // then re-populates as this disk's own load proceeds.
-                _mainViewModel.BusyOverlay.Start(Loc.Format("Busy.LoadingDisks", i + 1, profiles.Count), totalBytes: totalBytes);
-                var progress = new Progress<double>(_mainViewModel.BusyOverlay.Report);
-                await _mainViewModel.MountFromProfileAsync(profile, progress);
+                aggregate.Complete(index);
+                var finished = viewModel.ReportAutoMountDiskDone();
+                overlay.UpdateStatusText(Loc.Format("Busy.LoadingDisks", Math.Min(finished + 1, profiles.Count), profiles.Count));
             }
         }
         finally
         {
-            _mainViewModel.BusyOverlay.Stop();
+            overlay.Stop();
+            viewModel.EndAutoMount();
         }
     }
+
+    /// <summary>
+    /// How many saved disks are loaded at the same time at startup. Two overlaps one disk's file
+    /// reading and decryption with another's decompression and drive-letter wait without making
+    /// two large images fight for a mechanical drive; a single disk's Zstd decoding is already
+    /// multi-threaded, so more would add little.
+    /// </summary>
+    private const int AutoMountConcurrency = 2;
 
     /// <summary>
     /// Verifies WinFsp is installed; if not, tells the user and offers to open its download page.

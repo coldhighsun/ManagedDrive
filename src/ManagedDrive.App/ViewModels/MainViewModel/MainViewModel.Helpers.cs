@@ -666,22 +666,72 @@ public sealed partial class MainViewModel
     /// <exception cref="Exception">Any mount failure other than a password issue propagates to the caller.</exception>
     private async Task<RamDisk?> MountWithPasswordRetryAsync(DiskOptions options, string? password = null, IProgress<double>? progress = null, CancellationToken cancellationToken = default)
     {
+        var attempt = await TryMountOnceAsync(options, password, progress, cancellationToken);
+        return attempt.Disk ?? await PromptForPasswordAndMountAsync(options, attempt.PasswordError, progress, cancellationToken);
+    }
+
+    /// <summary>
+    /// Mounts <paramref name="options"/> once on the thread pool without ever prompting, so
+    /// several disks can be loaded at the same time and any password prompts held back until the
+    /// loading is done. A missing or wrong password is reported in the result instead of thrown.
+    /// </summary>
+    /// <param name="options">The disk to mount.</param>
+    /// <param name="password">The image password, if one is known.</param>
+    /// <param name="progress">An optional progress reporter.</param>
+    /// <param name="cancellationToken">Token to cancel a slow load.</param>
+    /// <returns>The mounted disk, or the reason it needs a password.</returns>
+    /// <exception cref="Exception">Any mount failure other than a password issue propagates.</exception>
+    private async Task<MountAttempt> TryMountOnceAsync(DiskOptions options, string? password, IProgress<double>? progress, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var disk = await Task.Run(() => _mountManager.Mount(options, password, progress, cancellationToken));
+            return new(disk, null);
+        }
+        catch (ImagePasswordRequiredException)
+        {
+            return new(null, null);
+        }
+        catch (ImagePasswordIncorrectException)
+        {
+            return new(null, Loc.Get("Val.PasswordIncorrect"));
+        }
+    }
+
+    /// <summary>
+    /// Outcome of <see cref="TryMountOnceAsync"/>.
+    /// </summary>
+    /// <param name="Disk">The mounted disk, or <c>null</c> if the image needs a password.</param>
+    /// <param name="PasswordError">
+    /// The message to show in the password prompt when a password was tried and rejected, or
+    /// <c>null</c> when none was given yet.
+    /// </param>
+    /// <param name="Error">
+    /// The failure that stopped the mount, set only by callers that catch it instead of letting
+    /// it propagate (see <see cref="TryMountFromProfileAsync"/>).
+    /// </param>
+    internal sealed record MountAttempt(RamDisk? Disk, string? PasswordError, Exception? Error = null)
+    {
+        /// <summary>
+        /// Gets a value indicating whether the mount stopped only because the image needs a
+        /// (correct) password: neither mounted nor failed.
+        /// </summary>
+        public bool NeedsPassword => Disk is null && Error is null;
+    }
+
+    /// <summary>
+    /// Asks for the image password with <see cref="PasswordPromptDialog"/> and retries the mount
+    /// until it succeeds, a non-password error occurs, or the user cancels.
+    /// </summary>
+    /// <param name="options">The disk to mount.</param>
+    /// <param name="errorMessage">Shown in the first prompt; <c>null</c> for none.</param>
+    /// <param name="progress">An optional progress reporter.</param>
+    /// <param name="cancellationToken">Token to cancel a slow load.</param>
+    /// <returns>The mounted disk, or <c>null</c> if the user cancelled the password prompt.</returns>
+    private async Task<RamDisk?> PromptForPasswordAndMountAsync(DiskOptions options, string? errorMessage, IProgress<double>? progress, CancellationToken cancellationToken)
+    {
         while (true)
         {
-            string? errorMessage;
-            try
-            {
-                return await Task.Run(() => _mountManager.Mount(options, password, progress, cancellationToken));
-            }
-            catch (ImagePasswordRequiredException)
-            {
-                errorMessage = null;
-            }
-            catch (ImagePasswordIncorrectException)
-            {
-                errorMessage = Loc.Get("Val.PasswordIncorrect");
-            }
-
             var prompt = new PasswordPromptDialog(Loc.Get("PasswordPrompt.Title"), errorMessage, options);
             if (Application.Current.MainWindow is { IsVisible: true, WindowState: not WindowState.Minimized } mainWindow)
             {
@@ -695,7 +745,13 @@ public sealed partial class MainViewModel
                 return null;
             }
 
-            password = prompt.Password;
+            var attempt = await TryMountOnceAsync(options, prompt.Password, progress, cancellationToken);
+            if (attempt.Disk is not null)
+            {
+                return attempt.Disk;
+            }
+
+            errorMessage = attempt.PasswordError;
         }
     }
 }

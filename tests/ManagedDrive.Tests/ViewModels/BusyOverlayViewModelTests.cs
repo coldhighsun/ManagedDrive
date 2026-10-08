@@ -64,6 +64,23 @@ public sealed class BusyOverlayViewModelTests
         Assert.False(overlay.IsCancellationRequested);
     }
 
+    /// <summary>
+    /// Changing the status text of a running operation leaves its progress and busy state alone.
+    /// </summary>
+    [Fact]
+    public void UpdateStatusText_WhileRunning_ChangesTextAndKeepsProgress()
+    {
+        var overlay = new BusyOverlayViewModel();
+        overlay.Start("Loading disk 1 of 2...");
+        overlay.Report(0.5);
+
+        overlay.UpdateStatusText("Loading disk 2 of 2...");
+
+        Assert.Equal("Loading disk 2 of 2...", overlay.StatusText);
+        Assert.Equal(0.5, overlay.Progress);
+        Assert.True(overlay.IsBusy);
+    }
+
     [Fact]
     public void Stop_ResetsCanCancelForNextOperation()
     {
