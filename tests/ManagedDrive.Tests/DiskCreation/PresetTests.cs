@@ -94,6 +94,21 @@ public sealed class PresetComposerTests
         Assert.Empty(result.Conflicts);
     }
 
+    /// <summary>
+    /// Ticking Go and C/C++ together sums their capacities and unites folders and variables without conflicts.
+    /// </summary>
+    [Fact]
+    public void Merge_GoAndCpp_SumsCapacityAndUnitesFoldersAndVariables()
+    {
+        var result = PresetComposer.Merge([BuiltInPresets.Go, BuiltInPresets.Cpp]);
+
+        Assert.Equal(BuiltInPresets.Go.CapacityBytes + BuiltInPresets.Cpp.CapacityBytes, result.CapacityBytes);
+        Assert.Equal("Go Cache", result.VolumeLabel);
+        Assert.Equal(["go-build", "go-mod", "ccache", "sccache"], result.Folders);
+        Assert.Equal(["GOCACHE", "GOMODCACHE", "CCACHE_DIR", "SCCACHE_DIR"], result.EnvRedirects.Select(r => r.Variable));
+        Assert.Empty(result.Conflicts);
+    }
+
     [Fact]
     public void Merge_SumsCapacityAndUnitesFoldersAndVariables()
     {
@@ -196,6 +211,19 @@ public sealed class BuiltInPresetsTests
         {
             Assert.All(preset.EnvRedirects, redirect => Assert.Contains(redirect.SubPath, preset.Folders));
         }
+    }
+
+    /// <summary>
+    /// Each toolchain preset redirects exactly its documented variables into its documented folders.
+    /// </summary>
+    [Theory]
+    [InlineData("go", "GOCACHE=go-build", "GOMODCACHE=go-mod")]
+    [InlineData("cpp", "CCACHE_DIR=ccache", "SCCACHE_DIR=sccache")]
+    public void EnvRedirects_ToolchainPreset_RedirectsTheExpectedVariables(string id, params string[] expected)
+    {
+        var preset = BuiltInPresets.All.Single(p => p.Id == id);
+
+        Assert.Equal(expected, preset.EnvRedirects.Select(r => $"{r.Variable}={r.SubPath}"));
     }
 
     [Fact]
