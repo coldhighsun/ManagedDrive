@@ -73,9 +73,13 @@
     <sys:String x:Key="Val.BadEnvRedirect">环境变量重定向无效，或同一个变量出现了多次。</sys:String>
     <sys:String x:Key="CreateDisk.Section.Presets">临时与缓存</sys:String>
     <sys:String x:Key="CreateDisk.Presets.Hint">勾选一个或多个项目：自动填入容量和卷标，每次挂载时创建对应文件夹，并把相应环境变量指向本盘。只有之后启动的程序才能看到新的环境变量。会修改环境变量的项目只能用于一块磁盘：在这里勾选，会把它从原来使用它的磁盘上取消。</sys:String>
+    <sys:String x:Key="CreateDisk.Presets.ReadOnlyNote">只读磁盘无法使用预设：它不能存放文件夹，也不能作为临时/缓存目录。取消勾选“只读”后即可使用。</sys:String>
+    <sys:String x:Key="CreateDisk.Presets.ReadOnlyRemovedNote">本盘现有的文件夹、变量和容量警告（预设或手工配置）会在保存时被移除。</sys:String>
     <sys:String x:Key="CreateDisk.Presets.HintEdit">勾选或取消勾选项目，会为本盘增加或移除对应的文件夹和环境变量；容量、卷标和压缩级别保持不变。取消勾选时会还原环境变量，但保留文件夹及其中的内容。只有之后启动的程序才能看到变化后的环境变量。会修改环境变量的项目只能用于一块磁盘：在这里勾选，会把它从原来使用它的磁盘上取消。</sys:String>
     <sys:String x:Key="CreateDisk.Presets.Other">其他（手工配置）</sys:String>
     <sys:String x:Key="CreateDisk.Presets.Summary">本盘将设置：</sys:String>
+    <sys:String x:Key="Msg.ReadOnlyHasPresets">本盘仍设有预设（文件夹或 TEMP/缓存重定向），无法设为只读。请先在“临时与缓存”页取消勾选这些预设。</sys:String>
+    <sys:String x:Key="Msg.ReadOnlyHasTempRedirect">TEMP/TMP 仍被重定向到本盘，无法设为只读。请先取消本对话框，用工具栏的“{0}”（或托盘菜单“{1}”）还原后，再重新编辑本盘。</sys:String>
     <sys:String x:Key="Msg.PresetConflict">这些项目把同一个变量指向了不同的文件夹，无法同时使用：{0}</sys:String>
     <sys:String x:Key="Status.PresetEnabled">磁盘 {0}：已启用 {1}。</sys:String>
     <sys:String x:Key="Status.PresetDisabled">磁盘 {0}：已取消 {1}。</sys:String>
