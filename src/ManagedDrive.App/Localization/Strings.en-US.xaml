@@ -95,6 +95,10 @@
     <sys:String x:Key="Preset.nuget.Desc">NUGET_PACKAGES points into the disk.</sys:String>
     <sys:String x:Key="Preset.python.Name">Python pip cache</sys:String>
     <sys:String x:Key="Preset.python.Desc">PIP_CACHE_DIR points into the disk.</sys:String>
+    <sys:String x:Key="Preset.go.Name">Go caches</sys:String>
+    <sys:String x:Key="Preset.go.Desc">GOCACHE (build cache) and GOMODCACHE (module cache) point into the disk.</sys:String>
+    <sys:String x:Key="Preset.cpp.Name">C/C++ compiler caches</sys:String>
+    <sys:String x:Key="Preset.cpp.Desc">CCACHE_DIR (ccache) and SCCACHE_DIR (sccache) point into the disk.</sys:String>
     <sys:String x:Key="Preset.browser.Name">Browser cache</sys:String>
     <sys:String x:Key="Preset.browser.Desc">Creates a BrowserCache folder. Browsers have no environment variable for this: start the browser with --disk-cache-dir pointing at it.</sys:String>
     <sys:String x:Key="CreateDisk.SaveOnExit">Save image on exit</sys:String>

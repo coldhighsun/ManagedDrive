@@ -95,6 +95,10 @@
     <sys:String x:Key="Preset.nuget.Desc">NUGET_PACKAGES 指向本盘。</sys:String>
     <sys:String x:Key="Preset.python.Name">Python pip 缓存</sys:String>
     <sys:String x:Key="Preset.python.Desc">PIP_CACHE_DIR 指向本盘。</sys:String>
+    <sys:String x:Key="Preset.go.Name">Go 缓存</sys:String>
+    <sys:String x:Key="Preset.go.Desc">GOCACHE（构建缓存）和 GOMODCACHE（模块缓存）指向本盘。</sys:String>
+    <sys:String x:Key="Preset.cpp.Name">C/C++ 编译缓存</sys:String>
+    <sys:String x:Key="Preset.cpp.Desc">CCACHE_DIR（ccache）和 SCCACHE_DIR（sccache）指向本盘。</sys:String>
     <sys:String x:Key="Preset.browser.Name">浏览器缓存</sys:String>
     <sys:String x:Key="Preset.browser.Desc">创建 BrowserCache 文件夹。浏览器没有对应的环境变量，需要用 --disk-cache-dir 参数启动浏览器并指向该文件夹。</sys:String>
     <sys:String x:Key="CreateDisk.SaveOnExit">退出时保存镜像</sys:String>

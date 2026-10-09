@@ -68,6 +68,38 @@ public static class BuiltInPresets
     };
 
     /// <summary>
+    /// Gets a disk for the Go build and module caches.
+    /// </summary>
+    public static DiskPreset Go { get; } = new()
+    {
+        Id = "go",
+        CapacityBytes = 2 * Gib,
+        VolumeLabel = "Go Cache",
+        Folders = ["go-build", "go-mod"],
+        EnvRedirects =
+        [
+            new() { Variable = "GOCACHE", SubPath = "go-build" },
+            new() { Variable = "GOMODCACHE", SubPath = "go-mod" },
+        ],
+    };
+
+    /// <summary>
+    /// Gets a disk for the ccache and sccache compiler caches.
+    /// </summary>
+    public static DiskPreset Cpp { get; } = new()
+    {
+        Id = "cpp",
+        CapacityBytes = 2 * Gib,
+        VolumeLabel = "Compiler Cache",
+        Folders = ["ccache", "sccache"],
+        EnvRedirects =
+        [
+            new() { Variable = "CCACHE_DIR", SubPath = "ccache" },
+            new() { Variable = "SCCACHE_DIR", SubPath = "sccache" },
+        ],
+    };
+
+    /// <summary>
     /// Gets a disk for a browser cache. Browsers have no environment variable for this: the
     /// folder is created, and the browser is started with <c>--disk-cache-dir</c>.
     /// </summary>
@@ -82,5 +114,5 @@ public static class BuiltInPresets
     /// <summary>
     /// Gets every built-in preset, in display order.
     /// </summary>
-    public static IReadOnlyList<DiskPreset> All { get; } = [Temp, Node, NuGet, Python, Browser];
+    public static IReadOnlyList<DiskPreset> All { get; } = [Temp, Node, NuGet, Python, Go, Cpp, Browser];
 }
