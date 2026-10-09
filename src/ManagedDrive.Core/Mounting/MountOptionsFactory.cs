@@ -81,6 +81,9 @@ public static class MountOptionsFactory
                 PersistImagePath = imagePath,
             };
 
+        // Not passed through DiskOptions.WithoutReadOnlyExtras: a one-time `--read-only` override must not
+        // strip the saved profile's presets and usage warning, which are written back with the disk.
+        // ApplyDiskEffects and the usage warning ignore them while the disk is read-only.
         return baseOptions with
         {
             ReadOnly = overrides.ReadOnly ?? baseOptions.ReadOnly,
@@ -134,7 +137,7 @@ public static class MountOptionsFactory
                 SourceArchivePath = archivePath,
             };
 
-        return baseOptions with
+        return (baseOptions with
         {
             ReadOnly = true,
             SourceArchivePath = archivePath,
@@ -144,6 +147,6 @@ public static class MountOptionsFactory
             // saved profile never having one.
             PersistImagePath = null,
             AutoMount = autoMountOverride ?? baseOptions.AutoMount,
-        };
+        }).WithoutReadOnlyExtras();
     }
 }

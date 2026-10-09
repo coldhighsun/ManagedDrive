@@ -200,4 +200,34 @@ public sealed record DiskOptions
     {
         get; init;
     }
+
+    /// <summary>
+    /// Returns whether the disk's folders and environment variable redirections are applied. A
+    /// read-only disk cannot hold the folders, and a variable pointing at it would break writes, so
+    /// its presets (kept in the options by a one-time CLI override or a read-only profile) are
+    /// ignored. A method rather than a property so it stays out of the record's printed members and
+    /// of any property-based serializer; <c>DiskProfile.AppliesPresets()</c> is its profile twin.
+    /// </summary>
+    /// <returns><c>true</c> if the presets are applied.</returns>
+    public bool AppliesPresets() => !ReadOnly;
+
+    /// <summary>
+    /// Returns the high-usage warning threshold that is in effect: <see cref="HighUsageWarnPercent"/>,
+    /// except that a read-only disk never warns since its usage never grows.
+    /// </summary>
+    /// <returns>The threshold percentage, or <c>null</c> when no warning applies.</returns>
+    public double? GetEffectiveHighUsageWarnPercent() => ReadOnly ? null : HighUsageWarnPercent;
+
+    /// <summary>
+    /// Returns these options without what a read-only disk cannot use (see
+    /// <see cref="AppliesPresets"/> and <see cref="GetEffectiveHighUsageWarnPercent"/>): the folders
+    /// and redirections of presets and the high-usage warning. Options of a writable disk are
+    /// returned unchanged. Applied where a disk is made read-only on purpose (the create/edit
+    /// dialog, archive mounts). Deliberately not applied when options are read back from a saved
+    /// profile or when the CLI image mount overrides <see cref="ReadOnly"/> once: the profile keeps
+    /// its presets and warning, and the consumers that matter go through the two methods above.
+    /// </summary>
+    /// <returns>The options with the read-only exclusions applied.</returns>
+    public DiskOptions WithoutReadOnlyExtras() =>
+        ReadOnly ? this with { Folders = null, EnvRedirects = null, HighUsageWarnPercent = null } : this;
 }
