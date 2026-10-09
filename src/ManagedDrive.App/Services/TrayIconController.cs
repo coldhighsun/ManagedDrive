@@ -185,6 +185,12 @@ public sealed class TrayIconController : IDisposable, ITrayHoverSource
     public event Action? ContextMenuOpening;
 
     /// <summary>
+    /// Gets a value indicating whether the tray context menu is currently showing. Read by
+    /// <see cref="TrayTooltipController"/> so the hover popup stays away while it is.
+    /// </summary>
+    public bool IsContextMenuVisible => _trayIcon.ContextMenuStrip?.Visible ?? false;
+
+    /// <summary>
     /// Gets or sets whether the tray icon is visible.
     /// </summary>
     public bool Visible
@@ -359,6 +365,7 @@ public sealed class TrayIconController : IDisposable, ITrayHoverSource
     /// <see cref="System.Windows.Forms.Control.HandleCreated"/> event and again whenever the theme
     /// changes while the handle is already live.
     /// </summary>
+    /// <param name="popup">The popup whose native window is updated.</param>
     private static void ApplyPopupDarkMode(System.Windows.Forms.ToolStrip popup)
     {
         if (!popup.IsHandleCreated)

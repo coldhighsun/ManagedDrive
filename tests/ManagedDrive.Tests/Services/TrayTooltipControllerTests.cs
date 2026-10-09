@@ -141,7 +141,7 @@ public class TrayTooltipControllerTests
         var origin = TrayTooltipController.ComputePopupOrigin(workArea, new(3150, 1050), new(300, 100));
 
         Assert.Equal(workArea.Right - 300 - 4, origin.X);
-        Assert.Equal(workArea.Bottom - 100 - 8, origin.Y);
+        Assert.Equal(workArea.Bottom - 100 - 16, origin.Y);
     }
 
     /// <summary>
@@ -155,7 +155,7 @@ public class TrayTooltipControllerTests
         var origin = TrayTooltipController.ComputePopupOrigin(workArea, new(960, 10), new(300, 100));
 
         Assert.Equal(810, origin.X);
-        Assert.Equal(workArea.Top + 8, origin.Y);
+        Assert.Equal(workArea.Top + 16, origin.Y);
     }
 
     /// <summary>
@@ -253,6 +253,27 @@ public class TrayTooltipControllerTests
     }
 
     /// <summary>
+    /// Verifies that hovering does not schedule a show while the context menu is open.
+    /// </summary>
+    [Fact]
+    public void MouseMoved_ContextMenuOpen_DoesNotScheduleAShow()
+    {
+        RunSta(() =>
+        {
+            // Arrange
+            var source = new FakeHoverSource();
+            using var controller = new TrayTooltipController(new object(), () => { }, source);
+            source.IsContextMenuVisible = true;
+
+            // Act
+            source.RaiseMouseMoved(new(100, 100));
+
+            // Assert
+            Assert.False(controller.IsShowPending);
+        });
+    }
+
+    /// <summary>
     /// Verifies that a disposed controller closes the tooltip and ignores further hover and
     /// context-menu notifications.
     /// </summary>
@@ -314,6 +335,9 @@ public class TrayTooltipControllerTests
         /// Raises <see cref="ContextMenuOpening"/>.
         /// </summary>
         public void RaiseContextMenuOpening() => ContextMenuOpening?.Invoke();
+
+        /// <inheritdoc />
+        public bool IsContextMenuVisible { get; set; }
     }
 
     /// <summary>
