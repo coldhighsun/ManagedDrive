@@ -52,6 +52,57 @@ public sealed class MountOptionsFactoryTests
         Assert.Equal(75, options.HighUsageWarnPercent);
     }
 
+    /// <summary>
+    /// A one-time read-only override keeps the saved profile's presets and usage warning in the
+    /// options, so saving the settings afterwards does not strip them from the profile.
+    /// </summary>
+    [Fact]
+    public void BuildImageOptions_ReadOnlyOverrideOnWritableProfile_KeepsPresetsAndWarning()
+    {
+        var profile = new DiskOptions
+        {
+            MountPoint = "OLD:",
+            CapacityBytes = 1,
+            PersistImagePath = Image,
+            HighUsageWarnPercent = 80,
+            Folders = ["npm-cache"],
+            EnvRedirects = [new() { Variable = "npm_config_cache", SubPath = "npm-cache" }],
+        };
+
+        var options = MountOptionsFactory.BuildImageOptions(
+            profile, mountPoint: "R:", imagePath: Image,
+            capacityBytes: 8UL * 1024 * 1024, volumeLabel: "Vol", overrides: new() { ReadOnly = true });
+
+        Assert.True(options.ReadOnly);
+        Assert.Equal(80, options.HighUsageWarnPercent);
+        Assert.Equal(["npm-cache"], options.Folders);
+        Assert.Single(options.EnvRedirects!);
+    }
+
+    /// <summary>
+    /// An archive disk is always read-only, so a saved profile's presets and usage warning are dropped.
+    /// </summary>
+    [Fact]
+    public void BuildArchiveOptions_ProfileWithPresets_DropsPresetsAndWarning()
+    {
+        var profile = new DiskOptions
+        {
+            MountPoint = "OLD:",
+            CapacityBytes = 1,
+            HighUsageWarnPercent = 80,
+            Folders = ["npm-cache"],
+            EnvRedirects = [new() { Variable = "npm_config_cache", SubPath = "npm-cache" }],
+        };
+
+        var options = MountOptionsFactory.BuildArchiveOptions(
+            profile, mountPoint: "R:", archivePath: Archive,
+            capacityBytes: 8UL * 1024 * 1024, volumeLabel: "Vol", autoMountOverride: null);
+
+        Assert.Null(options.Folders);
+        Assert.Null(options.EnvRedirects);
+        Assert.Null(options.HighUsageWarnPercent);
+    }
+
     [Fact]
     public void BuildImageOptions_ProfileWithSourceArchivePath_ClearsSourceArchivePath()
     {

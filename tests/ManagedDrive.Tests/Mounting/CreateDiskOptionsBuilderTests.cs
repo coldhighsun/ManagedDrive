@@ -32,6 +32,126 @@ public sealed class CreateDiskOptionsBuilderTests
         Assert.Equal("npm_config_cache", Assert.Single(result.Options.EnvRedirects!).Variable);
     }
 
+    /// <summary>
+    /// A read-only disk keeps no preset folders or environment variable redirections.
+    /// </summary>
+    [Fact]
+    public void Build_ReadOnlyWithPresetEffects_DropsFoldersAndRedirects()
+    {
+        var dir = Directory.CreateTempSubdirectory();
+        try
+        {
+            var imagePath = Path.Combine(dir.FullName, "disk.mdr");
+            File.WriteAllBytes(imagePath, [0]);
+            var input = ValidCreateInput() with
+            {
+                ImagePathText = imagePath,
+                IsReadOnly = true,
+                Folders = ["npm-cache"],
+                EnvRedirects = [new() { Variable = "npm_config_cache", SubPath = "npm-cache" }],
+            };
+
+            var result = CreateDiskOptionsBuilder.Build(input);
+
+            Assert.True(result.Success);
+            Assert.Null(result.Options!.Folders);
+            Assert.Null(result.Options.EnvRedirects);
+        }
+        finally
+        {
+            dir.Delete(recursive: true);
+        }
+    }
+
+    /// <summary>
+    /// Invalid preset entries of a read-only disk are discarded, so they do not block saving.
+    /// </summary>
+    [Fact]
+    public void Build_ReadOnlyWithInvalidPresetEntry_StillSucceeds()
+    {
+        var dir = Directory.CreateTempSubdirectory();
+        try
+        {
+            var imagePath = Path.Combine(dir.FullName, "disk.mdr");
+            File.WriteAllBytes(imagePath, [0]);
+            var input = ValidCreateInput() with
+            {
+                ImagePathText = imagePath,
+                IsReadOnly = true,
+                EnvRedirects = [new() { Variable = "PATH", SubPath = "x" }],
+            };
+
+            var result = CreateDiskOptionsBuilder.Build(input);
+
+            Assert.True(result.Success);
+            Assert.Null(result.Options!.EnvRedirects);
+        }
+        finally
+        {
+            dir.Delete(recursive: true);
+        }
+    }
+
+    /// <summary>
+    /// An out-of-range usage warning of a read-only disk is discarded, so it does not block saving.
+    /// </summary>
+    [Fact]
+    public void Build_ReadOnlyWithInvalidHighUsageWarn_StillSucceeds()
+    {
+        var dir = Directory.CreateTempSubdirectory();
+        try
+        {
+            var imagePath = Path.Combine(dir.FullName, "disk.mdr");
+            File.WriteAllBytes(imagePath, [0]);
+            var input = ValidCreateInput() with
+            {
+                ImagePathText = imagePath,
+                IsReadOnly = true,
+                HighUsageWarnEnabled = true,
+                HighUsageWarnPercentValue = 0,
+            };
+
+            var result = CreateDiskOptionsBuilder.Build(input);
+
+            Assert.True(result.Success);
+            Assert.Null(result.Options!.HighUsageWarnPercent);
+        }
+        finally
+        {
+            dir.Delete(recursive: true);
+        }
+    }
+
+    /// <summary>
+    /// A read-only disk keeps no high-usage warning threshold.
+    /// </summary>
+    [Fact]
+    public void Build_ReadOnlyWithHighUsageWarn_DropsTheWarning()
+    {
+        var dir = Directory.CreateTempSubdirectory();
+        try
+        {
+            var imagePath = Path.Combine(dir.FullName, "disk.mdr");
+            File.WriteAllBytes(imagePath, [0]);
+            var input = ValidCreateInput() with
+            {
+                ImagePathText = imagePath,
+                IsReadOnly = true,
+                HighUsageWarnEnabled = true,
+                HighUsageWarnPercentValue = 80,
+            };
+
+            var result = CreateDiskOptionsBuilder.Build(input);
+
+            Assert.True(result.Success);
+            Assert.Null(result.Options!.HighUsageWarnPercent);
+        }
+        finally
+        {
+            dir.Delete(recursive: true);
+        }
+    }
+
     [Fact]
     public void Build_WithoutPresetEffects_LeavesFoldersAndRedirectsNull()
     {

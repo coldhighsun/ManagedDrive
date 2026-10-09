@@ -188,17 +188,24 @@ public sealed record CreateDiskInput
     /// <summary>Whether <see cref="SnapshotSizeValue"/> is in GB (<c>true</c>) or MB (<c>false</c>).</summary>
     public bool SnapshotSizeIsGb { get; init; }
 
-    /// <summary>Whether the high-usage warning is enabled.</summary>
+    /// <summary>
+    /// Whether the high-usage warning is enabled. Ignored for archive imports (always read-only) and
+    /// dropped for read-only disks.
+    /// </summary>
     public bool HighUsageWarnEnabled { get; init; }
 
-    /// <summary>The high-usage warning percentage.</summary>
+    /// <summary>
+    /// The high-usage warning percentage. Ignored for archive imports and for read-only disks, like
+    /// <see cref="HighUsageWarnEnabled"/>.
+    /// </summary>
     public int HighUsageWarnPercentValue { get; init; }
 
     /// <summary>
     /// The edited disk's high-usage warning percentage when the dialog opened (edit mode), or
     /// <c>null</c> otherwise. Kept exactly while <see cref="HighUsageWarnPercentValue"/> is still
     /// its <see cref="CreateDiskOptionsBuilder.ToHighUsageWarnPercentValue"/> slider position, so
-    /// a fractional value or 100 set through the CLI survives an unrelated edit; an invalid value
+    /// a fractional value or 100 set through the CLI survives an unrelated edit (not used for archive
+    /// imports or read-only disks, which keep no warning); an invalid value
     /// (see <see cref="CreateDiskOptionsBuilder.CanKeepHighUsageWarnPercent"/>) is replaced by
     /// the slider position instead.
     /// </summary>
@@ -399,7 +406,9 @@ public static class CreateDiskOptionsBuilder
             }
         }
 
-        if (!TryResolveHighUsagePercent(input, out var highUsageWarnPercent))
+        // A read-only disk drops its usage warning below, so, like its preset entries, it is not validated.
+        double? highUsageWarnPercent = null;
+        if (!isReadOnly && !TryResolveHighUsagePercent(input, out highUsageWarnPercent))
         {
             return Fail(CreateDiskValidationError.BadHighUsagePercent);
         }
@@ -421,7 +430,8 @@ public static class CreateDiskOptionsBuilder
             return passwordResult;
         }
 
-        if (ValidatePresetEffects(input) is { } presetError)
+        // A read-only disk drops its preset entries below, and the user cannot fix them there.
+        if (!isReadOnly && ValidatePresetEffects(input) is { } presetError)
         {
             return Fail(presetError);
         }
@@ -443,7 +453,7 @@ public static class CreateDiskOptionsBuilder
             SaveImageOnExit = input.SaveImageOnExit,
             Folders = input.Folders.Count == 0 ? null : input.Folders,
             EnvRedirects = input.EnvRedirects.Count == 0 ? null : input.EnvRedirects,
-        };
+        }.WithoutReadOnlyExtras();
 
         return new()
         {
@@ -594,11 +604,7 @@ public static class CreateDiskOptionsBuilder
 
     private static CreateDiskBuildResult BuildArchiveImportOptions(CreateDiskInput input, string mountPoint)
     {
-        if (!TryResolveHighUsagePercent(input, out var highUsageWarnPercent))
-        {
-            return Fail(CreateDiskValidationError.BadHighUsagePercent);
-        }
-
+        // An archive disk is read-only, so it has no high-usage warning to resolve or validate.
         var options = new DiskOptions
         {
             MountPoint = mountPoint,
@@ -607,7 +613,6 @@ public static class CreateDiskOptionsBuilder
             ReadOnly = true,
             AutoMount = input.AutoMount,
             SourceArchivePath = input.ImportArchivePath,
-            HighUsageWarnPercent = highUsageWarnPercent,
         };
 
         return new() { Options = options };
