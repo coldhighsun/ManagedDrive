@@ -42,6 +42,11 @@ public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
     private int _activityDrainScheduled;
     private ulong _freeBytes;
     private bool _isCurrentTempDir;
+
+    /// <summary>
+    /// Works out what the user's environment redirects into this disk, for the card's redirect badge.
+    /// </summary>
+    private readonly RedirectBadgeTracker _redirectBadge = new(UserEnvVarCache.Shared);
     private int _pendingRead;
     private int _pendingWrite;
     private double _readBytesPerSecond;
@@ -65,6 +70,8 @@ public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
         _usedBytes = disk.UsedBytes;
         _freeBytes = disk.FreeBytes;
         _isCurrentTempDir = CheckIsCurrentTempDir();
+        UpdateActiveRedirects();
+        LanguageManager.Instance.LanguageChanged += OnLanguageChanged;
 
         OpenInExplorerCommand = new(_ => Process.Start("explorer.exe", MountPoint));
         OpenImageDirectoryCommand = new(
@@ -206,6 +213,22 @@ public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
             OnPropertyChanged(nameof(IsCurrentTempDir));
         }
     }
+
+    /// <summary>
+    /// Gets whether the user's environment currently redirects anything into this disk: a preset
+    /// such as Temp or NuGet, or a custom variable.
+    /// </summary>
+    public bool HasActiveRedirects => !_redirectBadge.Active.IsEmpty;
+
+    /// <summary>
+    /// Gets the tooltip of the redirect badge, listing what is redirected into this disk. Built on
+    /// demand so it follows the current UI language.
+    /// </summary>
+    public string ActiveRedirectsTooltip => RedirectBadgeText.Build(
+        _redirectBadge.Active,
+        Loc.Get("Card.RedirectsHeader"),
+        id => Loc.Get($"Preset.{id}.Name"),
+        variable => Loc.Format("Card.RedirectsCustom", variable));
 
     /// <summary>
     /// Gets whether disk usage is at or above the high-usage warning threshold.
@@ -398,6 +421,7 @@ public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
         Disk.SaveFailed -= OnDiskSaveFailed;
         Disk.ImageSaved -= OnDiskImageSaved;
         Disk.WriteRejected -= OnDiskWriteRejected;
+        LanguageManager.Instance.LanguageChanged -= OnLanguageChanged;
         _readThroughput.Reset();
         _writeThroughput.Reset();
     }
@@ -450,6 +474,7 @@ public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
         // and the global drive-letter coordinator all trust this flag, and would otherwise act on
         // a stale value (e.g. skip resetting TEMP when unmounting from the tray).
         IsCurrentTempDir = CheckIsCurrentTempDir();
+        UpdateActiveRedirects();
 
         // Bound by the tray tooltip, which can be visible even while the main window is hidden.
         OnPropertyChanged(nameof(UsedPercent));
@@ -529,12 +554,33 @@ public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
     private bool CheckIsCurrentTempDir()
     {
         // Read through a short-lived shared cache: this runs for every disk on every refresh tick,
-        // including while the window is hidden. TempDirResetService invalidates it when the app
-        // itself changes TEMP.
-        var userTemp = UserTempCache.Shared.Get();
-        var diskTemp = EnvRedirectPolicy.Resolve(MountPoint, "Temp");
-        return string.Equals(userTemp, diskTemp, StringComparison.OrdinalIgnoreCase);
+        // including while the window is hidden. Whoever writes the user environment through the app
+        // (TempDirResetService, RegistryUserEnvironment) invalidates it.
+        var mountPoint = MountPoint;
+        return PresetSelection.TempPointsIntoDisk(redirect => UserEnvVarCache.Shared.PointsInto(mountPoint, redirect));
     }
+
+    /// <summary>
+    /// Recomputes what the user's environment redirects into this disk, raising change
+    /// notifications only when the result differs.
+    /// </summary>
+    private void UpdateActiveRedirects()
+    {
+        if (!_redirectBadge.Update(MountPoint, Disk.Options.EnvRedirects))
+        {
+            return;
+        }
+
+        OnPropertyChanged(nameof(HasActiveRedirects));
+        OnPropertyChanged(nameof(ActiveRedirectsTooltip));
+    }
+
+    /// <summary>
+    /// Refreshes the redirect badge's tooltip when the UI language changes.
+    /// </summary>
+    /// <param name="sender">The language manager.</param>
+    /// <param name="e">The event data.</param>
+    private void OnLanguageChanged(object? sender, EventArgs e) => OnPropertyChanged(nameof(ActiveRedirectsTooltip));
 
     /// <summary>
     /// Runs on the UI thread, either dispatched by the first access of a burst or from each

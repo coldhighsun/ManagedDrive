@@ -63,7 +63,7 @@ public sealed class RegistryUserEnvironment : IUserEnvironment
         using var key = Registry.CurrentUser.OpenSubKey(KeyPath, writable: true)
             ?? throw new InvalidOperationException("The user environment key is not available.");
         key.SetValue(name, value, kind);
-        UserTempCache.Shared.Invalidate();
+        UserEnvVarCache.Shared.Invalidate();
     }
 
     /// <inheritdoc />
@@ -71,7 +71,7 @@ public sealed class RegistryUserEnvironment : IUserEnvironment
     {
         using var key = Registry.CurrentUser.OpenSubKey(KeyPath, writable: true);
         key?.DeleteValue(name, throwOnMissingValue: false);
-        UserTempCache.Shared.Invalidate();
+        UserEnvVarCache.Shared.Invalidate();
     }
 
     /// <inheritdoc />
@@ -220,17 +220,7 @@ public sealed class UserEnvironmentRedirector(
     {
         try
         {
-            if (environment.Read(redirect.Variable) is not { } current ||
-                !EnvRedirectPolicy.IsValidSubPath(redirect.SubPath))
-            {
-                return false;
-            }
-
-            var target = EnvRedirectPolicy.Resolve(mountPoint, redirect.SubPath);
-            return string.Equals(
-                Environment.ExpandEnvironmentVariables(current.Text).TrimEnd('\\', '/'),
-                target.TrimEnd('\\', '/'),
-                StringComparison.OrdinalIgnoreCase);
+            return EnvRedirectPolicy.IsRedirectedInto(environment.Read(redirect.Variable)?.Text, mountPoint, redirect);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException or System.Security.SecurityException)
         {
