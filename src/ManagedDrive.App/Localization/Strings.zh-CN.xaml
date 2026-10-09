@@ -16,7 +16,6 @@
     <sys:String x:Key="Btn.SaveImage">保存镜像</sys:String>
     <sys:String x:Key="Btn.CreateSnapshotNow">立即创建快照</sys:String>
     <sys:String x:Key="Btn.Presets">临时与缓存</sys:String>
-    <sys:String x:Key="Btn.RestoreDefaultTemp">恢复默认临时文件夹</sys:String>
     <sys:String x:Key="Btn.FormatDisk">格式化…</sys:String>
     <sys:String x:Key="Btn.CloneDisk">克隆/导出磁盘...</sys:String>
     <sys:String x:Key="Btn.RestoreSnapshot">恢复快照...</sys:String>
@@ -141,6 +140,8 @@
     <sys:String x:Key="Card.ReadOnly">只读</sys:String>
     <sys:String x:Key="Card.ReadOnlyNoImage">只读 · 无镜像</sys:String>
     <sys:String x:Key="Card.Encrypted">已加密</sys:String>
+    <sys:String x:Key="Card.RedirectsHeader">已重定向到此磁盘：</sys:String>
+    <sys:String x:Key="Card.RedirectsCustom">变量 {0}</sys:String>
     <sys:String x:Key="Card.HighUsage">剩余空间不足</sys:String>
     <sys:String x:Key="Empty.Title">尚未挂载磁盘</sys:String>
     <sys:String x:Key="Empty.Subtitle">新建一个 RAM 磁盘,或导入已有的镜像/压缩包即可开始。</sys:String>

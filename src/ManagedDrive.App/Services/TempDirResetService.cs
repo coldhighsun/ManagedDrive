@@ -63,7 +63,7 @@ public static class TempDirResetService
 
             WriteValue(key, "TEMP", snapshot.Temp);
             WriteValue(key, "TMP", snapshot.Tmp);
-            UserTempCache.Shared.Invalidate();
+            UserEnvVarCache.Shared.Invalidate();
 
             BroadcastEnvironmentChange();
 
@@ -119,7 +119,7 @@ public static class TempDirResetService
 
             key.SetValue("TEMP", DefaultUserTemp, RegistryValueKind.ExpandString);
             key.SetValue("TMP", DefaultUserTemp, RegistryValueKind.ExpandString);
-            UserTempCache.Shared.Invalidate();
+            UserEnvVarCache.Shared.Invalidate();
 
             if (broadcast)
             {

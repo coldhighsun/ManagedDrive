@@ -314,8 +314,8 @@
                                 </Grid>
                             </Border>
 
-                            <!-- Drive letter badge; status icons sit in a row below it rather than
-                                 overlapping the letter -->
+                            <!-- Drive letter badge; the status icons sit next to the label (see below) so they
+                                 never make the card taller -->
                             <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
                                 <Border Width="48" Height="48" CornerRadius="8"
                                         Background="{DynamicResource AppPrimary}">
@@ -325,47 +325,6 @@
                                                HorizontalAlignment="Center"
                                                VerticalAlignment="Center"/>
                                 </Border>
-                                <StackPanel Orientation="Horizontal"
-                                            HorizontalAlignment="Center"
-                                            Height="16"
-                                            Margin="0,4,0,0">
-                                    <Border Width="16" Height="16" CornerRadius="8"
-                                            Background="{DynamicResource AppSurface}"
-                                            BorderBrush="{DynamicResource AppDivider}" BorderThickness="1"
-                                            ToolTip="{DynamicResource Card.ReadOnly}"
-                                            AutomationProperties.Name="{DynamicResource Card.ReadOnly}"
-                                            Visibility="{Binding IsReadOnly, Converter={StaticResource BoolToVis}}">
-                                        <TextBlock Text="&#xE72E;" Style="{StaticResource IconText}" FontSize="9"
-                                                   Foreground="{DynamicResource AppForegroundLight}"/>
-                                    </Border>
-                                    <Border Width="16" Height="16" CornerRadius="8" Margin="2,0,0,0"
-                                            Background="{DynamicResource AppSurface}"
-                                            BorderBrush="{DynamicResource AppDivider}" BorderThickness="1"
-                                            ToolTip="{DynamicResource Btn.RestoreDefaultTemp}"
-                                            AutomationProperties.Name="{DynamicResource Btn.RestoreDefaultTemp}"
-                                            Visibility="{Binding IsCurrentTempDir, Converter={StaticResource BoolToVis}}">
-                                        <TextBlock Text="&#xE8B7;" Style="{StaticResource IconText}" FontSize="9"
-                                                   Foreground="{DynamicResource AppForeground}"/>
-                                    </Border>
-                                    <Border Width="16" Height="16" CornerRadius="8" Margin="2,0,0,0"
-                                            Background="{DynamicResource AppSurface}"
-                                            BorderBrush="{DynamicResource AppDivider}" BorderThickness="1"
-                                            ToolTip="{Binding SourcePath}"
-                                            AutomationProperties.Name="{Binding SourcePath}"
-                                            Visibility="{Binding HasImagePath, Converter={StaticResource BoolToVis}}">
-                                        <TextBlock Text="&#xE74E;" Style="{StaticResource IconText}" FontSize="9"
-                                                   Foreground="{DynamicResource AppForegroundLight}"/>
-                                    </Border>
-                                    <Border Width="16" Height="16" CornerRadius="8" Margin="2,0,0,0"
-                                            Background="{DynamicResource AppSurface}"
-                                            BorderBrush="{DynamicResource AppDivider}" BorderThickness="1"
-                                            ToolTip="{DynamicResource Card.Encrypted}"
-                                            AutomationProperties.Name="{DynamicResource Card.Encrypted}"
-                                            Visibility="{Binding IsPasswordProtected, Converter={StaticResource BoolToVis}}">
-                                        <TextBlock Text="&#xE192;" Style="{StaticResource IconText}" FontSize="9"
-                                                   Foreground="{DynamicResource AppForegroundLight}"/>
-                                    </Border>
-                                </StackPanel>
                             </StackPanel>
 
                             <!-- Label (+ used/capacity/percent on the same row), or read-only summary -->
@@ -375,10 +334,51 @@
                                         <ColumnDefinition Width="*"/>
                                         <ColumnDefinition Width="Auto"/>
                                     </Grid.ColumnDefinitions>
-                                    <TextBlock Grid.Column="0" Text="{Binding VolumeLabel}"
-                                               FontSize="14" FontWeight="Medium"
-                                               Foreground="{DynamicResource AppForeground}"
-                                               TextTrimming="CharacterEllipsis"/>
+                                    <!-- The label ellipsizes first; the badges stay next to the usage text -->
+                                    <DockPanel>
+                                        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                                            <Border Width="20" Height="20" CornerRadius="10" Margin="4,0,0,0"
+                                                    Background="{DynamicResource AppSurface}"
+                                                    BorderBrush="{DynamicResource AppDivider}" BorderThickness="1"
+                                                    ToolTip="{DynamicResource Card.ReadOnly}"
+                                                    AutomationProperties.Name="{DynamicResource Card.ReadOnly}"
+                                                    Visibility="{Binding IsReadOnly, Converter={StaticResource BoolToVis}}">
+                                                <TextBlock Text="&#xE72E;" Style="{StaticResource IconText}" FontSize="12"
+                                                           Foreground="{DynamicResource AppForegroundLight}"/>
+                                            </Border>
+                                            <Border Width="20" Height="20" CornerRadius="10" Margin="4,0,0,0"
+                                                    Background="{DynamicResource AppSurface}"
+                                                    BorderBrush="{DynamicResource AppDivider}" BorderThickness="1"
+                                                    ToolTip="{Binding ActiveRedirectsTooltip}"
+                                                    AutomationProperties.Name="{Binding ActiveRedirectsTooltip}"
+                                                    Visibility="{Binding HasActiveRedirects, Converter={StaticResource BoolToVis}}">
+                                                <TextBlock Text="&#xE8B7;" Style="{StaticResource IconText}" FontSize="12"
+                                                           Foreground="{DynamicResource AppForeground}"/>
+                                            </Border>
+                                            <Border Width="20" Height="20" CornerRadius="10" Margin="4,0,0,0"
+                                                    Background="{DynamicResource AppSurface}"
+                                                    BorderBrush="{DynamicResource AppDivider}" BorderThickness="1"
+                                                    ToolTip="{Binding SourcePath}"
+                                                    AutomationProperties.Name="{Binding SourcePath}"
+                                                    Visibility="{Binding HasImagePath, Converter={StaticResource BoolToVis}}">
+                                                <TextBlock Text="&#xE74E;" Style="{StaticResource IconText}" FontSize="12"
+                                                           Foreground="{DynamicResource AppForegroundLight}"/>
+                                            </Border>
+                                            <Border Width="20" Height="20" CornerRadius="10" Margin="4,0,0,0"
+                                                    Background="{DynamicResource AppSurface}"
+                                                    BorderBrush="{DynamicResource AppDivider}" BorderThickness="1"
+                                                    ToolTip="{DynamicResource Card.Encrypted}"
+                                                    AutomationProperties.Name="{DynamicResource Card.Encrypted}"
+                                                    Visibility="{Binding IsPasswordProtected, Converter={StaticResource BoolToVis}}">
+                                                <TextBlock Text="&#xE192;" Style="{StaticResource IconText}" FontSize="12"
+                                                           Foreground="{DynamicResource AppForegroundLight}"/>
+                                            </Border>
+                                        </StackPanel>
+                                        <TextBlock Text="{Binding VolumeLabel}"
+                                                   FontSize="14" FontWeight="Medium"
+                                                   Foreground="{DynamicResource AppForeground}"
+                                                   TextTrimming="CharacterEllipsis"/>
+                                    </DockPanel>
                                     <StackPanel Grid.Column="1" Orientation="Horizontal"
                                                 HorizontalAlignment="Right" Margin="8,0,0,0"
                                                 Visibility="{Binding IsNotReadOnly, Converter={StaticResource BoolToVis}}">
@@ -400,83 +400,94 @@
                                     </StackPanel>
                                 </Grid>
 
-                                <StackPanel Visibility="{Binding IsReadOnly, Converter={StaticResource BoolToVis}}">
-                                    <TextBlock FontSize="12"
-                                               Foreground="{DynamicResource AppForegroundLight}"
-                                               TextTrimming="CharacterEllipsis">
-                                        <Run Text="{DynamicResource Card.ReadOnly}"/>
-                                        <Run Text=" · "/>
-                                        <Run Text="{Binding SourcePath, Mode=OneWay}"/>
-                                    </TextBlock>
-                                </StackPanel>
+                                <!-- Read-only and normal disks must have the same card height: the normal rows stay in the layout
+                                     (Hidden, not Collapsed) under the read-only summary. -->
+                                <Grid>
+                                    <StackPanel>
+                                        <StackPanel.Style>
+                                            <Style TargetType="StackPanel">
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsReadOnly}" Value="True">
+                                                        <Setter Property="Visibility" Value="Hidden"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </StackPanel.Style>
+                                        <Border Height="1" Margin="0,6,0,4"
+                                                Background="{DynamicResource AppDivider}"/>
 
-                                <Border Height="1" Margin="0,6,0,4"
-                                        Background="{DynamicResource AppDivider}"
-                                        Visibility="{Binding IsNotReadOnly, Converter={StaticResource BoolToVis}}"/>
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Text="&#xE823;" FontFamily="Segoe Fluent Icons" FontSize="10"
+                                                       Foreground="{DynamicResource AppForegroundLight}"
+                                                       VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                            <TextBlock Text="{Binding LastContentWriteFormatted}"
+                                                       FontSize="11"
+                                                       Foreground="{DynamicResource AppForegroundLight}"/>
+                                            <TextBlock Text="&#xE74E;" FontFamily="Segoe Fluent Icons" FontSize="10"
+                                                       Foreground="{DynamicResource AppForegroundLight}"
+                                                       VerticalAlignment="Center" Margin="12,0,4,0"
+                                                       Visibility="{Binding ShowLastAutoSave, Converter={StaticResource BoolToVis}}"/>
+                                            <TextBlock Text="{Binding LastAutoSaveFormatted}"
+                                                       FontSize="11"
+                                                       Foreground="{DynamicResource AppForegroundLight}"
+                                                       Visibility="{Binding ShowLastAutoSave, Converter={StaticResource BoolToVis}}"/>
+                                        </StackPanel>
 
-                                <StackPanel Orientation="Horizontal"
-                                            Visibility="{Binding IsNotReadOnly, Converter={StaticResource BoolToVis}}">
-                                    <TextBlock Text="&#xE823;" FontFamily="Segoe Fluent Icons" FontSize="10"
-                                               Foreground="{DynamicResource AppForegroundLight}"
-                                               VerticalAlignment="Center" Margin="0,0,4,0"/>
-                                    <TextBlock Text="{Binding LastContentWriteFormatted}"
-                                               FontSize="11"
-                                               Foreground="{DynamicResource AppForegroundLight}"/>
-                                    <TextBlock Text="&#xE74E;" FontFamily="Segoe Fluent Icons" FontSize="10"
-                                               Foreground="{DynamicResource AppForegroundLight}"
-                                               VerticalAlignment="Center" Margin="12,0,4,0"
-                                               Visibility="{Binding ShowLastAutoSave, Converter={StaticResource BoolToVis}}"/>
-                                    <TextBlock Text="{Binding LastAutoSaveFormatted}"
-                                               FontSize="11"
-                                               Foreground="{DynamicResource AppForegroundLight}"
-                                               Visibility="{Binding ShowLastAutoSave, Converter={StaticResource BoolToVis}}"/>
-                                </StackPanel>
-
-                                <!-- Read/write throughput; hovering opens a history-chart popup (see below).
-                                     The Border enlarges the hover hit-test area beyond the tight text/icon bounds. -->
-                                <Border x:Name="SpeedHoverArea" Background="Transparent" Padding="0,4,0,4" Margin="0,-2,0,-4"
-                                        Tag="{Binding ElementName=SpeedPopup}"
-                                        Visibility="{Binding IsNotReadOnly, Converter={StaticResource BoolToVis}}"
-                                        MouseEnter="SpeedRow_MouseEnter" MouseLeave="SpeedRow_MouseLeave">
-                                    <StackPanel x:Name="SpeedRow" Orientation="Horizontal">
-                                        <TextBlock Text="&#xE898;" FontFamily="Segoe Fluent Icons" FontSize="10"
-                                                   Foreground="{DynamicResource AppForegroundLight}"
-                                                   VerticalAlignment="Center" Margin="0,0,4,0"
-                                                   ToolTip="{DynamicResource Card.ReadSpeed}"
-                                                   AutomationProperties.Name="{DynamicResource Card.ReadSpeed}"/>
-                                        <TextBlock Text="{Binding ReadSpeedFormatted}" FontSize="11" Width="62"
-                                                   TextAlignment="Left"
-                                                   Foreground="{DynamicResource AppForegroundLight}"/>
-                                        <TextBlock Text="&#xE896;" FontFamily="Segoe Fluent Icons" FontSize="10"
-                                                   Foreground="{DynamicResource AppForegroundLight}"
-                                                   VerticalAlignment="Center" Margin="10,0,4,0"
-                                                   ToolTip="{DynamicResource Card.WriteSpeed}"
-                                                   AutomationProperties.Name="{DynamicResource Card.WriteSpeed}"/>
-                                        <TextBlock Text="{Binding WriteSpeedFormatted}" FontSize="11" Width="62"
-                                                   TextAlignment="Left"
-                                                   Foreground="{DynamicResource AppForegroundLight}"/>
-                                        <Popup x:Name="SpeedPopup" PlacementTarget="{Binding ElementName=SpeedHoverArea}" Placement="Bottom"
-                                               StaysOpen="True" AllowsTransparency="True">
-                                            <Border Background="{DynamicResource AppSurface}"
-                                                    BorderBrush="{DynamicResource AppDivider}"
-                                                    BorderThickness="1" CornerRadius="4" Padding="8"
-                                                    Tag="{Binding ElementName=SpeedPopup}"
-                                                    MouseEnter="SpeedRow_MouseEnter" MouseLeave="SpeedRow_MouseLeave">
-                                                <StackPanel>
-                                                    <controls:SpeedHistoryChart ReadHistory="{Binding ReadSpeedHistory}"
-                                                                                 WriteHistory="{Binding WriteSpeedHistory}"/>
-                                                    <TextBlock FontSize="11" Margin="0,6,0,0"
-                                                               Foreground="{DynamicResource AppForegroundLight}">
-                                                        <Run Text="{DynamicResource Card.TotalReadWritten}"/>
-                                                        <Run Text="{Binding TotalReadFormatted, Mode=OneWay}"/>
-                                                        <Run Text="/"/>
-                                                        <Run Text="{Binding TotalWrittenFormatted, Mode=OneWay}"/>
-                                                    </TextBlock>
-                                                </StackPanel>
-                                            </Border>
-                                        </Popup>
+                                        <!-- Read/write throughput; hovering opens a history-chart popup (see below).
+                                             The Border enlarges the hover hit-test area beyond the tight text/icon bounds. -->
+                                        <Border x:Name="SpeedHoverArea" Background="Transparent" Padding="0,4,0,4" Margin="0,-2,0,-4"
+                                                Tag="{Binding ElementName=SpeedPopup}"
+                                                MouseEnter="SpeedRow_MouseEnter" MouseLeave="SpeedRow_MouseLeave">
+                                            <StackPanel x:Name="SpeedRow" Orientation="Horizontal">
+                                                <TextBlock Text="&#xE898;" FontFamily="Segoe Fluent Icons" FontSize="10"
+                                                           Foreground="{DynamicResource AppForegroundLight}"
+                                                           VerticalAlignment="Center" Margin="0,0,4,0"
+                                                           ToolTip="{DynamicResource Card.ReadSpeed}"
+                                                           AutomationProperties.Name="{DynamicResource Card.ReadSpeed}"/>
+                                                <TextBlock Text="{Binding ReadSpeedFormatted}" FontSize="11" Width="62"
+                                                           TextAlignment="Left"
+                                                           Foreground="{DynamicResource AppForegroundLight}"/>
+                                                <TextBlock Text="&#xE896;" FontFamily="Segoe Fluent Icons" FontSize="10"
+                                                           Foreground="{DynamicResource AppForegroundLight}"
+                                                           VerticalAlignment="Center" Margin="10,0,4,0"
+                                                           ToolTip="{DynamicResource Card.WriteSpeed}"
+                                                           AutomationProperties.Name="{DynamicResource Card.WriteSpeed}"/>
+                                                <TextBlock Text="{Binding WriteSpeedFormatted}" FontSize="11" Width="62"
+                                                           TextAlignment="Left"
+                                                           Foreground="{DynamicResource AppForegroundLight}"/>
+                                                <Popup x:Name="SpeedPopup" PlacementTarget="{Binding ElementName=SpeedHoverArea}" Placement="Bottom"
+                                                       StaysOpen="True" AllowsTransparency="True">
+                                                    <Border Background="{DynamicResource AppSurface}"
+                                                            BorderBrush="{DynamicResource AppDivider}"
+                                                            BorderThickness="1" CornerRadius="4" Padding="8"
+                                                            Tag="{Binding ElementName=SpeedPopup}"
+                                                            MouseEnter="SpeedRow_MouseEnter" MouseLeave="SpeedRow_MouseLeave">
+                                                        <StackPanel>
+                                                            <controls:SpeedHistoryChart ReadHistory="{Binding ReadSpeedHistory}"
+                                                                                         WriteHistory="{Binding WriteSpeedHistory}"/>
+                                                            <TextBlock FontSize="11" Margin="0,6,0,0"
+                                                                       Foreground="{DynamicResource AppForegroundLight}">
+                                                                <Run Text="{DynamicResource Card.TotalReadWritten}"/>
+                                                                <Run Text="{Binding TotalReadFormatted, Mode=OneWay}"/>
+                                                                <Run Text="/"/>
+                                                                <Run Text="{Binding TotalWrittenFormatted, Mode=OneWay}"/>
+                                                            </TextBlock>
+                                                        </StackPanel>
+                                                    </Border>
+                                                </Popup>
+                                            </StackPanel>
+                                        </Border>
                                     </StackPanel>
-                                </Border>
+                                    <StackPanel VerticalAlignment="Top" Visibility="{Binding IsReadOnly, Converter={StaticResource BoolToVis}}">
+                                        <TextBlock FontSize="12"
+                                                   Foreground="{DynamicResource AppForegroundLight}"
+                                                   TextTrimming="CharacterEllipsis">
+                                            <Run Text="{DynamicResource Card.ReadOnly}"/>
+                                            <Run Text=" · "/>
+                                            <Run Text="{Binding SourcePath, Mode=OneWay}"/>
+                                        </TextBlock>
+                                    </StackPanel>
+                                </Grid>
                             </StackPanel>
 
                             <!-- Free space -->
@@ -501,11 +512,11 @@
                                            HorizontalAlignment="Right"/>
                             </StackPanel>
 
-                            <!-- Saving overlay -->
-                            <Border Grid.ColumnSpan="3"
+                            <!-- Saving overlay; negative margin cancels the card Padding so it covers the whole card -->
+                            <Border Grid.ColumnSpan="3" Margin="-16"
                                     Background="{DynamicResource AppSurface}"
                                     Opacity="0.85"
-                                    CornerRadius="8"
+                                    CornerRadius="4"
                                     Visibility="{Binding IsSaving, Converter={StaticResource BoolToVis}}">
                                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
                                     <TextBlock x:Name="SavingSpinner"
@@ -522,10 +533,10 @@
                             </Border>
 
                             <!-- Remounting overlay -->
-                            <Border Grid.ColumnSpan="3"
+                            <Border Grid.ColumnSpan="3" Margin="-16"
                                     Background="{DynamicResource AppSurface}"
                                     Opacity="0.85"
-                                    CornerRadius="8"
+                                    CornerRadius="4"
                                     Visibility="{Binding IsRemounting, Converter={StaticResource BoolToVis}}">
                                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
                                     <TextBlock x:Name="RemountingSpinner"
