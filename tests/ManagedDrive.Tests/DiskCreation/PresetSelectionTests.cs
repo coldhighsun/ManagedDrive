@@ -2,6 +2,88 @@ namespace ManagedDrive.Tests;
 
 public sealed class PresetSelectionTests
 {
+    /// <summary>
+    /// A disk holding a toolchain preset's folders and variables is detected as having that preset.
+    /// </summary>
+    [Theory]
+    [InlineData("go")]
+    [InlineData("cpp")]
+    public void Detect_ToolchainPresetFoldersAndVariables_FindsThePreset(string id)
+    {
+        var preset = BuiltInPresets.All.Single(p => p.Id == id);
+
+        var detected = PresetSelection.Detect(BuiltInPresets.All, preset.Folders, preset.EnvRedirects);
+
+        Assert.Equal([id], detected);
+    }
+
+    /// <summary>
+    /// Go is not detected when one of its two variables is missing.
+    /// </summary>
+    [Fact]
+    public void Detect_GoWithOneVariableMissing_IsNotFound()
+    {
+        var detected = PresetSelection.Detect(
+            BuiltInPresets.All, BuiltInPresets.Go.Folders, [BuiltInPresets.Go.EnvRedirects[0]]);
+
+        Assert.Empty(detected);
+    }
+
+    /// <summary>
+    /// C/C++ is active once both of its variables point into the disk.
+    /// </summary>
+    [Fact]
+    public void DetectActive_CppAllVariablesPointIntoDisk_IsActive()
+    {
+        var cppVariables = BuiltInPresets.Cpp.EnvRedirects.Select(r => r.Variable).ToList();
+
+        var active = PresetSelection.DetectActive(
+            BuiltInPresets.All, BuiltInPresets.Cpp.EnvRedirects, redirect => cppVariables.Contains(redirect.Variable));
+
+        Assert.Equal(["cpp"], active.PresetIds);
+    }
+
+    /// <summary>
+    /// C/C++ is not active while only one of its two variables points into the disk.
+    /// </summary>
+    [Fact]
+    public void DetectActive_CppOnlyOneVariablePointsIntoDisk_IsNotActive()
+    {
+        var active = PresetSelection.DetectActive(
+            BuiltInPresets.All, BuiltInPresets.Cpp.EnvRedirects, redirect => redirect.Variable == "CCACHE_DIR");
+
+        Assert.DoesNotContain("cpp", active.PresetIds);
+    }
+
+    /// <summary>
+    /// Go is active once all of its variables point into the disk.
+    /// </summary>
+    [Fact]
+    public void DetectActive_GoAllVariablesPointIntoDisk_IsActive()
+    {
+        var goVariables = BuiltInPresets.Go.EnvRedirects.Select(r => r.Variable).ToList();
+
+        var active = PresetSelection.DetectActive(
+            BuiltInPresets.All, BuiltInPresets.Go.EnvRedirects, redirect => goVariables.Contains(redirect.Variable));
+
+        Assert.Equal(["go"], active.PresetIds);
+        Assert.Empty(active.CustomVariables);
+    }
+
+    /// <summary>
+    /// Releasing Go drops its variables and its folder entries from the disk's configuration.
+    /// </summary>
+    [Fact]
+    public void Release_GoClaimedByAnotherDisk_DropsItsVariablesAndFolders()
+    {
+        var result = PresetSelection.Release(
+            BuiltInPresets.All, BuiltInPresets.Go.Folders, BuiltInPresets.Go.EnvRedirects, [BuiltInPresets.Go]);
+
+        Assert.Empty(result.EnvRedirects);
+        Assert.Equal(["GOCACHE", "GOMODCACHE"], result.ReleasedVariables);
+        Assert.Empty(result.Folders);
+    }
+
     [Fact]
     public void Detect_DiskWithAPresetsFoldersAndVariables_FindsThePreset()
     {

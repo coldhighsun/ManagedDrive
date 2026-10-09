@@ -20,6 +20,19 @@ public sealed class EnvRestoreGroupsTests
         Assert.Equal(["npm_config_cache"], groups[1].Variables);
     }
 
+    /// <summary>
+    /// The Go and C/C++ variables are grouped under their presets, in display order.
+    /// </summary>
+    [Fact]
+    public void Build_ToolchainCacheVariables_AreGroupedUnderTheirPresets()
+    {
+        var groups = EnvRestoreGroups.Build(["SCCACHE_DIR", "CCACHE_DIR", "GOCACHE", "GOMODCACHE"]);
+
+        Assert.Equal(["go", "cpp"], groups.Select(g => g.Id));
+        Assert.Equal(["GOCACHE", "GOMODCACHE"], groups[0].Variables);
+        Assert.Equal(["CCACHE_DIR", "SCCACHE_DIR"], groups[1].Variables);
+    }
+
     [Fact]
     public void Build_ListsOnlyTheVariablesThatAreRedirected()
     {
