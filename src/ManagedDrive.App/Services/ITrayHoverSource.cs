@@ -15,4 +15,9 @@ internal interface ITrayHoverSource
     /// Raised right before the tray context menu is shown.
     /// </summary>
     event Action? ContextMenuOpening;
+
+    /// <summary>
+    /// Gets a value indicating whether the tray context menu is currently showing.
+    /// </summary>
+    bool IsContextMenuVisible { get; }
 }

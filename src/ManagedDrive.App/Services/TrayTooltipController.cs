@@ -31,6 +31,16 @@ public sealed class TrayTooltipController : IDisposable
     /// </summary>
     private System.Windows.DpiScale _dpi = new(1, 1);
 
+    /// <summary>
+    /// The vertical gap, in device-independent units, between the tooltip and the work-area edge
+    /// (or the icon) it is placed next to.
+    /// </summary>
+    private const double EdgeGap = 16;
+
+    /// <summary>
+    /// Whether new shows are suppressed for a short time after a hide, so the tooltip does not
+    /// flicker straight back.
+    /// </summary>
     private bool _tooltipCooldown;
 
     /// <summary>
@@ -81,7 +91,16 @@ public sealed class TrayTooltipController : IDisposable
         hoverSource.MouseMoved += OnMouseMoved;
         hoverSource.ContextMenuOpening += HideTooltip;
 
-        _timerShowTrayInfoPopup.Tick += (_, _) => ShowTooltip();
+        _timerShowTrayInfoPopup.Tick += (_, _) =>
+        {
+            if (!CanShowTooltip)
+            {
+                _timerShowTrayInfoPopup.Stop();
+                return;
+            }
+
+            ShowTooltip();
+        };
 
         _timerPollCursor.Tick += (_, _) =>
         {
@@ -121,7 +140,41 @@ public sealed class TrayTooltipController : IDisposable
         _timerShowTrayInfoPopup.Stop();
         _timerPollCursor.Stop();
         _timerTooltipCooldown.Stop();
+        CloseTooltipPopup();
+    }
+
+    /// <summary>
+    /// Detaches the size handler from the current content, then closes the tooltip popup.
+    /// </summary>
+    private void CloseTooltipPopup()
+    {
+        DetachSizeHandler();
         ClosePopup(_trayInfoPopup);
+    }
+
+    /// <summary>
+    /// Stops listening for size changes of the current content, if any.
+    /// </summary>
+    private void DetachSizeHandler()
+    {
+        if (_trayInfoPopup.Child is FrameworkElement content)
+        {
+            content.SizeChanged -= OnTooltipSizeChanged;
+        }
+    }
+
+    /// <summary>
+    /// Re-places the open tooltip when its content changes size, since the popup is anchored by
+    /// its top-left corner.
+    /// </summary>
+    /// <param name="sender">The tooltip content.</param>
+    /// <param name="e">Unused event data.</param>
+    private void OnTooltipSizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        if (_trayInfoPopup.IsOpen)
+        {
+            PositionTrayPopup();
+        }
     }
 
     /// <summary>
@@ -135,6 +188,13 @@ public sealed class TrayTooltipController : IDisposable
     internal UIElement? Content => _trayInfoPopup.Child;
 
     /// <summary>
+    /// Gets a value indicating whether a hover may show the tooltip now: it is not already open,
+    /// not cooling down after a hide, and the tray context menu is not showing.
+    /// </summary>
+    private bool CanShowTooltip =>
+        !_trayInfoPopup.IsOpen && !_tooltipCooldown && !_hoverSource.IsContextMenuVisible;
+
+    /// <summary>
     /// Gets a value indicating whether a show is scheduled after the hover delay.
     /// </summary>
     internal bool IsShowPending => _timerShowTrayInfoPopup.IsEnabled;
@@ -146,9 +206,17 @@ public sealed class TrayTooltipController : IDisposable
     {
         _timerShowTrayInfoPopup.Stop();
         _refresh();
+        DetachSizeHandler();
         ReplaceContent(_trayInfoPopup, () => new TrayTooltipView { DataContext = _dataContext });
         _dpi = ResolveDpi(_trayInfoPopup.Child);
         PositionTrayPopup();
+        if (_trayInfoPopup.Child is FrameworkElement shown)
+        {
+            // The content can grow after the first measure (disk rows are laid out late), and the
+            // popup is anchored by its top-left corner, so re-place it whenever its size changes.
+            shown.SizeChanged += OnTooltipSizeChanged;
+        }
+
         _trayInfoPopup.IsOpen = true;
         _timerPollCursor.Start();
     }
@@ -161,7 +229,7 @@ public sealed class TrayTooltipController : IDisposable
     {
         _timerShowTrayInfoPopup.Stop();
         _timerPollCursor.Stop();
-        ClosePopup(_trayInfoPopup);
+        CloseTooltipPopup();
         _tooltipCooldown = true;
         _timerTooltipCooldown.Start();
     }
@@ -243,15 +311,15 @@ public sealed class TrayTooltipController : IDisposable
         double top;
         if (icon.Y > workArea.Bottom - 60)
         {
-            top = workArea.Bottom - popup.Height - 8;
+            top = workArea.Bottom - popup.Height - EdgeGap;
         }
         else if (icon.Y < workArea.Top + 60)
         {
-            top = workArea.Top + 8;
+            top = workArea.Top + EdgeGap;
         }
         else
         {
-            top = icon.Y - popup.Height - 16;
+            top = icon.Y - popup.Height - EdgeGap;
         }
 
         return new(left, top);
@@ -265,7 +333,7 @@ public sealed class TrayTooltipController : IDisposable
     private void OnMouseMoved(System.Drawing.Point point)
     {
         _iconScreenPoint = point;
-        if (!_trayInfoPopup.IsOpen && !_tooltipCooldown)
+        if (CanShowTooltip)
         {
             _timerShowTrayInfoPopup.Start();
         }
@@ -331,7 +399,7 @@ public sealed class TrayTooltipController : IDisposable
             return;
         }
 
-        var popupSize = child.DesiredSize;
+        var popupSize = GetContentSize(child);
         var icon = new System.Windows.Point(_iconScreenPoint.X / _dpi.DpiScaleX, _iconScreenPoint.Y / _dpi.DpiScaleY);
 
         var origin = ComputePopupOrigin(SystemParameters.WorkArea, icon, popupSize);
