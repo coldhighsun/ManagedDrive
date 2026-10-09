@@ -23,6 +23,22 @@ public sealed class AggregateProgressTests
     }
 
     /// <summary>
+    /// <see cref="AggregateProgress.Combined"/> starts at zero and follows what was reported, so a
+    /// display taking over midway can continue from there.
+    /// </summary>
+    [Fact]
+    public void Combined_AfterReports_ReturnsLastReportedFraction()
+    {
+        var aggregate = new AggregateProgress([1, 1], _ => { });
+        Assert.Equal(0.0, aggregate.Combined);
+
+        aggregate.ForOperation(0).Report(1.0);
+        aggregate.ForOperation(1).Report(0.5);
+
+        Assert.Equal(0.75, aggregate.Combined, precision: 6);
+    }
+
+    /// <summary>
     /// A report that would make the bar move backwards is not passed on.
     /// </summary>
     [Fact]

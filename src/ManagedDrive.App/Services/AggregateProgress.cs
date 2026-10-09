@@ -70,6 +70,22 @@ public sealed class AggregateProgress
     public int Count => _weights.Length;
 
     /// <summary>
+    /// Gets the combined fraction in [0, 1] last passed to the report callback, or <c>0</c> if
+    /// nothing has been reported yet. Lets a progress display that takes over midway start where
+    /// the previous one stopped.
+    /// </summary>
+    public double Combined
+    {
+        get
+        {
+            lock (_lock)
+            {
+                return _last;
+            }
+        }
+    }
+
+    /// <summary>
     /// Creates the reporter an operation uses for its own progress.
     /// </summary>
     /// <param name="index">The operation's number, from <c>0</c> to <see cref="Count"/> - 1.</param>

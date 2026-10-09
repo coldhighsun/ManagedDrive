@@ -235,6 +235,12 @@ public sealed partial class MainViewModel : INotifyPropertyChanged, IDisposable
     private int _autoMountCompleted;
 
     /// <summary>
+    /// Gets how many disks the startup auto-mount has finished with so far; <c>0</c> when it is
+    /// not running.
+    /// </summary>
+    internal int AutoMountCompleted => _autoMountCompleted;
+
+    /// <summary>
     /// Gets a value indicating whether the startup auto-mount is still working through the saved
     /// disks. Unlike <see cref="BusyOverlayViewModel.IsBusy"/> it is not raised by saves or
     /// snapshots, and it stays <c>true</c> after the first disk has appeared in <see cref="Disks"/>.
