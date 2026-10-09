@@ -9,7 +9,7 @@ namespace ManagedDrive.App.Services;
 /// tray-icon concerns live in one place, separate from tooltip popup handling
 /// (<see cref="TrayTooltipController"/>) and application lifecycle.
 /// </summary>
-public sealed class TrayIconController : IDisposable
+public sealed class TrayIconController : IDisposable, ITrayHoverSource
 {
     /// <summary>
     /// How long the tray icon shows its read/write indicator after <see cref="OnActivityDetected"/>

@@ -762,6 +762,7 @@ public partial class App
         RunTeardownStep(() => _mainViewModel?.RestoreAllEnvRedirects());
         RunTeardownStep(() => _cliPipeServer?.Dispose());
         RunTeardownStep(() => _mainViewModel?.SaveSettings());
+        RunTeardownStep(() => _trayTooltipController?.Dispose());
         RunTeardownStep(() => _trayIconController?.Dispose());
         RunTeardownStep(() => _mainViewModel?.Dispose());
     }
