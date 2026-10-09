@@ -2,6 +2,7 @@ using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Shapes;
 using System.Windows.Input;
+using System.Windows.Interop;
 using System.Windows.Media.Animation;
 
 namespace ManagedDrive.App.Views;
@@ -27,6 +28,7 @@ public partial class SplashWindow
     {
         InitializeComponent();
         ShowInTaskbar = showInTaskbar;
+        SourceInitialized += (_, _) => ((HwndSource)PresentationSource.FromVisual(this)!).AddHook(WndProc);
 
         VersionText.Text = UpdateCheckService.GetRunningVersion();
         StatusText.Text = Loc.Get("Splash.Starting");
@@ -46,6 +48,39 @@ public partial class SplashWindow
 
             StartFeatureList(animate);
         };
+    }
+
+    /// <summary>
+    /// The <c>WM_MOUSEACTIVATE</c> window message, sent when the mouse is pressed on an inactive window.
+    /// </summary>
+    internal const int WmMouseActivate = 0x0021;
+
+    /// <summary>
+    /// The <c>MA_NOACTIVATE</c> result: handle the click, but do not activate the window.
+    /// </summary>
+    internal const int MaNoActivate = 3;
+
+    /// <summary>
+    /// Keeps a click on the splash from activating it. The splash is shown without activation, and
+    /// the first activation of a window costs about 200 ms, which froze the splash right when the
+    /// user pressed the mouse to drag it. Dragging works without activation, and the taskbar button
+    /// still brings the splash to the front.
+    /// </summary>
+    /// <param name="hwnd">The window handle.</param>
+    /// <param name="msg">The window message.</param>
+    /// <param name="wParam">The message's first parameter.</param>
+    /// <param name="lParam">The message's second parameter.</param>
+    /// <param name="handled">Whether the message was handled.</param>
+    /// <returns><c>MA_NOACTIVATE</c> for a mouse activation request, otherwise zero.</returns>
+    internal static nint WndProc(nint hwnd, int msg, nint wParam, nint lParam, ref bool handled)
+    {
+        if (msg != WmMouseActivate)
+        {
+            return 0;
+        }
+
+        handled = true;
+        return MaNoActivate;
     }
 
     /// <summary>
