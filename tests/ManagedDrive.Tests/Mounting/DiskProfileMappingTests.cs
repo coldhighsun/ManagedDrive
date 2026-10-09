@@ -32,6 +32,48 @@ public sealed class DiskProfileMappingTests
         Assert.Equal(options, roundTripped);
     }
 
+    /// <summary>
+    /// A one-time read-only CLI override keeps the saved presets and usage warning through saving
+    /// and reading the profile back, also on the next start.
+    /// </summary>
+    [Fact]
+    public void ReadOnlyCliOverride_ThenToProfile_ThenProfileToOptions_KeepsPresetsAndWarning()
+    {
+        var saved = new DiskOptions
+        {
+            MountPoint = "R:",
+            CapacityBytes = 1_048_576UL,
+            PersistImagePath = @"C:\images\disk.mdr",
+            HighUsageWarnPercent = 85,
+            Folders = ["npm-cache"],
+            EnvRedirects = [new() { Variable = "npm_config_cache", SubPath = "npm-cache" }],
+        };
+
+        var mounted = MountOptionsFactory.BuildImageOptions(
+            MainViewModel.ProfileToOptions(MainViewModel.ToProfile(saved)),
+            "R:", @"C:\images\disk.mdr", 1_048_576UL, "Vol", new() { ReadOnly = true });
+        var reloaded = MainViewModel.ProfileToOptions(MainViewModel.ToProfile(mounted));
+
+        Assert.True(reloaded.ReadOnly);
+        Assert.Equal(85, reloaded.HighUsageWarnPercent);
+        Assert.Equal(["npm-cache"], reloaded.Folders);
+        Assert.Single(reloaded.EnvRedirects!);
+    }
+
+    /// <summary>
+    /// The profile's and the options' "applies presets" rules agree for read-only and writable disks.
+    /// </summary>
+    /// <param name="readOnly">Whether the profile is read-only.</param>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void AppliesPresets_ProfileAndConvertedOptions_Agree(bool readOnly)
+    {
+        var profile = new DiskProfile { MountPoint = "R:", CapacityBytes = 1024, ReadOnly = readOnly };
+
+        Assert.Equal(profile.AppliesPresets(), MainViewModel.ProfileToOptions(profile).AppliesPresets());
+    }
+
     [Fact]
     public void ToProfile_ThenProfileToOptions_RoundTripsFoldersAndEnvRedirects()
     {

@@ -136,4 +136,12 @@ public sealed record DiskProfile
     {
         get; init;
     }
+
+    /// <summary>
+    /// Returns whether the disk's folders and environment variable redirections are applied when it
+    /// is mounted. A method (not a property) so it is not written to the settings file. Mirrors
+    /// <see cref="Core.Mounting.DiskOptions.AppliesPresets"/>: a read-only disk applies no presets.
+    /// </summary>
+    /// <returns><c>true</c> if the profile's presets are applied.</returns>
+    public bool AppliesPresets() => !ReadOnly;
 }

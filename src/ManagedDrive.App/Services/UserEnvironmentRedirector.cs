@@ -107,6 +107,11 @@ public sealed class UserEnvironmentRedirector(
     Func<List<EnvRedirectBackup>, bool> writeBackups)
 {
     /// <summary>
+    /// Logger for the redirector.
+    /// </summary>
+    private static readonly ILogger Logger = AppLog.CreateLogger<UserEnvironmentRedirector>();
+
+    /// <summary>
     /// Serializes changes, since mounts and unmounts run on different threads.
     /// </summary>
     private readonly Lock _gate = new();
@@ -123,6 +128,19 @@ public sealed class UserEnvironmentRedirector(
     /// <returns>What was done; <see cref="RedirectResult.IsComplete"/> is <c>true</c> when nothing is left over.</returns>
     public RedirectResult ApplyDiskEffects(DiskOptions options, Func<bool>? isCurrent = null)
     {
+        // Read-only disks reach here routinely: a saved profile or a one-time CLI `--read-only`
+        // override keeps the presets in the options so they are not written back stripped.
+        if (!options.AppliesPresets())
+        {
+            if (options.Folders is { Count: > 0 } || options.EnvRedirects is { Count: > 0 })
+            {
+                Logger.LogDebug(
+                    "Skipping the folders and variable redirections of read-only disk {MountPoint}.", options.MountPoint);
+            }
+
+            return new([], [], []);
+        }
+
         var applied = new List<string>();
         var rejected = new List<string>();
         var failed = new List<string>();

@@ -204,7 +204,7 @@ public partial class MainWindow
         foreach (var item in presetsItem.Items.OfType<MenuItem>())
         {
             item.IsChecked = item.Tag is string id && active.Contains(id);
-            item.IsEnabled = !disk.Disk.Options.ReadOnly;
+            item.IsEnabled = disk.Disk.Options.AppliesPresets();
         }
     }
 

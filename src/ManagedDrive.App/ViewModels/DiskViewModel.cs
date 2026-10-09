@@ -485,7 +485,7 @@ public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
         }
 
         var used = UsedPercent;
-        if (Disk.Options.HighUsageWarnPercent is not { } threshold)
+        if (Disk.Options.GetEffectiveHighUsageWarnPercent() is not { } threshold)
         {
             if (IsHighUsage)
             {

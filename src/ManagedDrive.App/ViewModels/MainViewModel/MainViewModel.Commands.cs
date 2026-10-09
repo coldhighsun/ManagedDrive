@@ -284,6 +284,12 @@ public sealed partial class MainViewModel
                 // AddDiskSorted applies this disk's variables.
                 movedPresets = await ReleaseClaimedPresetsAsync(newOptions, effectiveOptions, vm);
                 vm.Dispose();
+
+                // Removing the old disk makes OnDisksChangedRestoreEnvRedirects put back every variable
+                // recorded for its mount point, whatever the new options list (see the Restore tests in
+                // UserEnvironmentRedirectorTests). That is what makes turning a disk that redirected
+                // TEMP or caches into a read-only one safe: the dialog only makes the user untick the
+                // presets, it does not restore the variables itself.
                 Disks.Remove(vm);
                 AddDiskSorted(new(disk));
                 SaveSettings();
@@ -857,6 +863,12 @@ public sealed partial class MainViewModel
     /// <returns>The preset ids.</returns>
     public IReadOnlyList<string> GetActivePresetIds(DiskViewModel vm)
     {
+        // A read-only disk gets no presets applied, even when its options still list them.
+        if (!vm.Disk.Options.AppliesPresets())
+        {
+            return [];
+        }
+
         var effective = WithEnvironmentPresets(vm.Disk.Options);
         return PresetSelection.Detect(BuiltInPresets.All, effective.Folders ?? [], effective.EnvRedirects ?? []);
     }
@@ -873,7 +885,7 @@ public sealed partial class MainViewModel
     public async Task SetPresetAsync(DiskViewModel? vm, string presetId, bool enabled)
     {
         var preset = BuiltInPresets.All.FirstOrDefault(p => p.Id == presetId);
-        if (vm is null || preset is null || RejectIfBusy() || !IsStillMounted(vm) || vm.Disk.Options.ReadOnly)
+        if (vm is null || preset is null || RejectIfBusy() || !IsStillMounted(vm) || !vm.Disk.Options.AppliesPresets())
         {
             return;
         }
