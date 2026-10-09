@@ -37,6 +37,40 @@ public static class PresetSelection
     }
 
     /// <summary>
+    /// Finds what the user's environment currently redirects into a disk: the variable-redirecting
+    /// presets that are in effect (see <see cref="Reconcile"/>), and the remaining redirections of the disk that
+    /// belong to no preset and do point into it. Folder-only presets never show up, since the
+    /// environment cannot tell whether they are in use.
+    /// </summary>
+    /// <param name="all">Every preset the app offers.</param>
+    /// <param name="redirects">The disk's own redirections; the ones no preset owns are reported as custom.</param>
+    /// <param name="pointsIntoDisk">Whether the user's environment currently points a redirection into this disk.</param>
+    /// <returns>The active presets and custom variables.</returns>
+    public static ActiveRedirects DetectActive(
+        IReadOnlyList<DiskPreset> all, IReadOnlyList<EnvRedirect> redirects, Func<EnvRedirect, bool> pointsIntoDisk)
+    {
+        var exclusive = all.Where(IsExclusive).ToList();
+        var presetIds = ActiveExclusive(exclusive, pointsIntoDisk).Select(preset => preset.Id).ToList();
+        var custom = redirects
+            .Where(own => !RedirectsVariable(exclusive, own.Variable))
+            .Where(pointsIntoDisk)
+            .Select(own => own.Variable)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        return new() { PresetIds = presetIds, CustomVariables = custom };
+    }
+
+    /// <summary>
+    /// Whether the user's TEMP points into a disk, whatever TMP says. This is what makes a disk "the
+    /// temp disk" for the card badge and for resetting TEMP when the disk goes away.
+    /// </summary>
+    /// <param name="pointsIntoDisk">Whether the user's environment currently points a redirection into the disk.</param>
+    /// <returns><c>true</c> when TEMP points into the disk.</returns>
+    public static bool TempPointsIntoDisk(Func<EnvRedirect, bool> pointsIntoDisk) =>
+        BuiltInPresets.Temp.EnvRedirects.Any(redirect =>
+            string.Equals(redirect.Variable, "TEMP", StringComparison.OrdinalIgnoreCase) && pointsIntoDisk(redirect));
+
+    /// <summary>
     /// Whether a preset can be on only one disk at a time: one that points environment variables
     /// into the disk, since a variable can point at one place only. A preset that only creates
     /// folders (the browser cache) can be on any number of disks.
@@ -112,8 +146,9 @@ public static class PresetSelection
     /// <summary>
     /// Makes a disk's folders and redirections agree with the environment for the presets that
     /// redirect variables: such a preset is on the disk exactly when all its variables really point
-    /// into it. One the disk's settings list but the environment does not back is dropped; one the
-    /// environment backs but the settings lack (set through the "use as temp" action, say) is added.
+    /// into it (for Temp, TEMP alone is enough). One the disk's settings list but the environment
+    /// does not back is dropped; one the environment backs but the settings lack (set through the
+    /// "use as temp" action, say) is added.
     /// Everything else, including folder-only presets and things no preset owns, is left alone.
     /// </summary>
     /// <param name="all">Every preset the app offers.</param>
@@ -129,14 +164,14 @@ public static class PresetSelection
     {
         var exclusive = all.Where(IsExclusive).ToList();
         var shared = all.Where(preset => !IsExclusive(preset)).ToList();
-        var active = exclusive.Where(preset => preset.EnvRedirects.All(pointsIntoDisk)).ToList();
+        var active = ActiveExclusive(exclusive, pointsIntoDisk);
 
         var keptFolders = folders
             .Where(folder => !exclusive.Any(preset => ContainsFolder(preset.Folders, folder)) ||
                 shared.Any(preset => ContainsFolder(preset.Folders, folder)))
             .ToList();
         var keptRedirects = redirects
-            .Where(own => !exclusive.Any(preset => preset.EnvRedirects.Any(r => string.Equals(r.Variable, own.Variable, StringComparison.OrdinalIgnoreCase))))
+            .Where(own => !RedirectsVariable(exclusive, own.Variable))
             .ToList();
 
         foreach (var preset in active)
@@ -252,6 +287,28 @@ public static class PresetSelection
     }
 
     /// <summary>
+    /// Picks the presets, among those that redirect variables, that are in effect: all their
+    /// variables point into the disk, or, for the Temp preset, TEMP does (see <see cref="TempPointsIntoDisk"/>).
+    /// </summary>
+    /// <param name="exclusive">The variable-redirecting presets.</param>
+    /// <param name="pointsIntoDisk">Whether the user's environment currently points a redirection into the disk.</param>
+    /// <returns>The presets that are in effect.</returns>
+    private static List<DiskPreset> ActiveExclusive(IEnumerable<DiskPreset> exclusive, Func<EnvRedirect, bool> pointsIntoDisk) =>
+        exclusive
+            .Where(preset => preset.EnvRedirects.All(pointsIntoDisk) ||
+                (preset.Id == BuiltInPresets.Temp.Id && TempPointsIntoDisk(pointsIntoDisk)))
+            .ToList();
+
+    /// <summary>
+    /// Whether one of the presets redirects a variable.
+    /// </summary>
+    /// <param name="presets">The presets to search.</param>
+    /// <param name="variable">The variable name.</param>
+    /// <returns><c>true</c> when a preset redirects it, ignoring case.</returns>
+    private static bool RedirectsVariable(IEnumerable<DiskPreset> presets, string variable) =>
+        presets.Any(preset => preset.EnvRedirects.Any(r => string.Equals(r.Variable, variable, StringComparison.OrdinalIgnoreCase)));
+
+    /// <summary>
     /// Whether <paramref name="folders"/> contains <paramref name="folder"/>.
     /// </summary>
     /// <param name="folders">The folders to search.</param>
@@ -279,6 +336,27 @@ public static class PresetSelection
     /// <returns><c>true</c> when they are the same folder.</returns>
     private static bool SamePath(string a, string b) =>
         string.Equals(a.Trim('\\', '/'), b.Trim('\\', '/'), StringComparison.OrdinalIgnoreCase);
+}
+
+/// <summary>
+/// What the environment currently redirects into a disk: see <see cref="PresetSelection.DetectActive"/>.
+/// </summary>
+public sealed record ActiveRedirects
+{
+    /// <summary>
+    /// Gets the ids of the variable-redirecting presets whose variables all point into the disk.
+    /// </summary>
+    public IReadOnlyList<string> PresetIds { get; init; } = [];
+
+    /// <summary>
+    /// Gets the variables, owned by no preset, that point into the disk.
+    /// </summary>
+    public IReadOnlyList<string> CustomVariables { get; init; } = [];
+
+    /// <summary>
+    /// Gets a value indicating whether nothing is redirected into the disk.
+    /// </summary>
+    public bool IsEmpty => PresetIds.Count == 0 && CustomVariables.Count == 0;
 }
 
 /// <summary>

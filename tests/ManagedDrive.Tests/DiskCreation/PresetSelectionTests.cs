@@ -35,6 +35,149 @@ public sealed class PresetSelectionTests
         Assert.Empty(PresetSelection.Detect(BuiltInPresets.All, [], []));
     }
 
+    /// <summary>
+    /// Only the Temp preset is reported when just its variables point into the disk.
+    /// </summary>
+    [Fact]
+    public void DetectActive_OnlyTempPointsIntoDisk_ReportsTemp()
+    {
+        var active = PresetSelection.DetectActive(
+            BuiltInPresets.All, [], redirect => BuiltInPresets.Temp.EnvRedirects.Contains(redirect));
+
+        Assert.Equal(["temp"], active.PresetIds);
+        Assert.Empty(active.CustomVariables);
+        Assert.False(active.IsEmpty);
+    }
+
+    /// <summary>
+    /// Every preset whose variables all point into the disk is reported.
+    /// </summary>
+    [Fact]
+    public void DetectActive_TempAndNuGetPointIntoDisk_ReportsBoth()
+    {
+        var active = PresetSelection.DetectActive(
+            BuiltInPresets.All,
+            [],
+            redirect => BuiltInPresets.Temp.EnvRedirects.Concat(BuiltInPresets.NuGet.EnvRedirects).Contains(redirect));
+
+        Assert.Equal(["temp", "nuget"], active.PresetIds);
+    }
+
+    /// <summary>
+    /// A preset with only some of its variables pointing into the disk is not reported.
+    /// </summary>
+    [Fact]
+    public void DetectActive_PresetOnlyPartlyRedirected_IsNotReported()
+    {
+        var active = PresetSelection.DetectActive(
+            BuiltInPresets.All, [], redirect => redirect == BuiltInPresets.Node.EnvRedirects[0]);
+
+        Assert.True(active.IsEmpty);
+    }
+
+    /// <summary>
+    /// A folder-only preset is never reported, since the environment cannot tell whether it is in use.
+    /// </summary>
+    [Fact]
+    public void DetectActive_FolderOnlyBrowserPreset_IsNeverReported()
+    {
+        var active = PresetSelection.DetectActive(BuiltInPresets.All, [], _ => true);
+
+        Assert.DoesNotContain("browser", active.PresetIds);
+    }
+
+    /// <summary>
+    /// A variable no preset owns is reported as custom when it points into the disk.
+    /// </summary>
+    [Fact]
+    public void DetectActive_CustomVariablePointingIntoDisk_IsReportedAsCustom()
+    {
+        var custom = new EnvRedirect { Variable = "GOPATH", SubPath = "go" };
+        var other = new EnvRedirect { Variable = "CARGO_HOME", SubPath = "cargo" };
+
+        var active = PresetSelection.DetectActive(
+            BuiltInPresets.All, [custom, other, BuiltInPresets.NuGet.EnvRedirects[0]], redirect => redirect == custom);
+
+        Assert.Empty(active.PresetIds);
+        Assert.Equal(["GOPATH"], active.CustomVariables);
+    }
+
+    /// <summary>
+    /// The Temp preset is reported when only TEMP points into the disk, as the card has always flagged it.
+    /// </summary>
+    [Fact]
+    public void DetectActive_OnlyTempVariablePointsIntoDisk_ReportsTemp()
+    {
+        var active = PresetSelection.DetectActive(
+            BuiltInPresets.All, [], redirect => redirect.Variable == "TEMP");
+
+        Assert.Equal(["temp"], active.PresetIds);
+    }
+
+    /// <summary>
+    /// Reconcile treats a disk whose TEMP alone points into it as having the Temp preset, like the badge does.
+    /// </summary>
+    [Fact]
+    public void Reconcile_OnlyTempVariablePointsIntoDisk_AddsTheTempPreset()
+    {
+        var result = PresetSelection.Reconcile(
+            BuiltInPresets.All, [], [], redirect => redirect.Variable == "TEMP");
+
+        Assert.Equal(BuiltInPresets.Temp.Folders, result.Folders);
+        Assert.Equal(BuiltInPresets.Temp.EnvRedirects, result.EnvRedirects);
+    }
+
+    /// <summary>
+    /// A disk whose TEMP alone points into it is stored as the whole Temp preset, so TEMP and TMP end up in sync.
+    /// </summary>
+    [Fact]
+    public void Split_AfterReconcileOfTempOnlyDisk_StoresTheTempPresetId()
+    {
+        var reconciled = PresetSelection.Reconcile(
+            BuiltInPresets.All, [], [], redirect => redirect.Variable == "TEMP");
+
+        var stored = PresetSelection.Split(BuiltInPresets.All, reconciled.Folders, reconciled.EnvRedirects);
+
+        Assert.Equal(["temp"], stored.PresetIds);
+        Assert.Empty(stored.EnvRedirects);
+    }
+
+    /// <summary>
+    /// Taking the Temp preset away from a TEMP-only disk releases TEMP and TMP together.
+    /// </summary>
+    [Fact]
+    public void Release_TempPresetOfTempOnlyDisk_ReleasesBothVariables()
+    {
+        var reconciled = PresetSelection.Reconcile(
+            BuiltInPresets.All, [], [], redirect => redirect.Variable == "TEMP");
+
+        var released = PresetSelection.Release(
+            BuiltInPresets.All, reconciled.Folders, reconciled.EnvRedirects, [BuiltInPresets.Temp]);
+
+        Assert.Equal(["temp"], released.ReleasedPresetIds);
+        Assert.Equal(["TEMP", "TMP"], released.ReleasedVariables.Order().ToList());
+        Assert.Empty(released.EnvRedirects);
+    }
+
+    /// <summary>
+    /// A disk the user's TMP alone points into is not the temp disk.
+    /// </summary>
+    [Fact]
+    public void TempPointsIntoDisk_OnlyTmpPointsIntoDisk_ReturnsFalse()
+    {
+        Assert.False(PresetSelection.TempPointsIntoDisk(redirect => redirect.Variable == "TMP"));
+        Assert.True(PresetSelection.TempPointsIntoDisk(redirect => redirect.Variable == "TEMP"));
+    }
+
+    /// <summary>
+    /// Nothing is reported when no variable points into the disk.
+    /// </summary>
+    [Fact]
+    public void DetectActive_NothingPointsIntoDisk_IsEmpty()
+    {
+        Assert.True(PresetSelection.DetectActive(BuiltInPresets.All, [], _ => false).IsEmpty);
+    }
+
     [Fact]
     public void Apply_NewDisk_EqualsTheMergedPresets()
     {

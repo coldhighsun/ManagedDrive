@@ -102,4 +102,25 @@ public static partial class EnvRedirectPolicy
     /// <returns>The absolute path, for example <c>R:\npm-cache</c>.</returns>
     public static string Resolve(string mountPoint, string subPath) =>
         Path.Combine(mountPoint.TrimEnd('\\', '/') + "\\", subPath.Replace('/', '\\').Trim('\\'));
+
+    /// <summary>
+    /// Whether a variable's value is the folder a redirection names on a disk. The one place that
+    /// decides this, shared by the preset reconciliation and the disk card badge.
+    /// </summary>
+    /// <param name="value">The variable's value as stored (environment references are expanded), or <c>null</c> when it is not set.</param>
+    /// <param name="mountPoint">The disk's mount point.</param>
+    /// <param name="redirect">The redirection to look for.</param>
+    /// <returns><c>true</c> when the value is that folder, ignoring case and a trailing slash.</returns>
+    public static bool IsRedirectedInto(string? value, string mountPoint, EnvRedirect redirect)
+    {
+        if (value is null || !IsValidSubPath(redirect.SubPath))
+        {
+            return false;
+        }
+
+        return string.Equals(
+            Environment.ExpandEnvironmentVariables(value).TrimEnd('\\', '/'),
+            Resolve(mountPoint, redirect.SubPath).TrimEnd('\\', '/'),
+            StringComparison.OrdinalIgnoreCase);
+    }
 }
