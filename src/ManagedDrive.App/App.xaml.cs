@@ -445,7 +445,12 @@ public partial class App
         // (a weight of 0 would mean "unknown" and give it an average share).
         // While the startup splash is up it shows the progress; once it is gone (a password prompt
         // needs the main window) the busy overlay takes over.
-        IProgress<double> overlayProgress = new Progress<double>(fraction =>
+        // Coalesced and delivered below input priority: Progress<T> posts every report at Normal
+        // priority, which outranks mouse input, so a burst of reports delayed clicks on the splash.
+        // Completed in the finally below: that shows the final value and drops any delivery still
+        // queued, so it cannot set the progress of an overlay operation started after it.
+        Action<Action> postBackground = action => Dispatcher.BeginInvoke(DispatcherPriority.Background, action);
+        var overlayProgress = new CoalescingProgress(fraction =>
         {
             if (_splashWindow is { } splash)
             {
@@ -455,7 +460,7 @@ public partial class App
             {
                 overlay.Report(fraction);
             }
-        });
+        }, postBackground);
         var aggregate = new AggregateProgress(
             sizes.Select(s => s is { } size ? Math.Max(size, 1UL) : 0.0).ToList(),
             overlayProgress.Report);
@@ -534,8 +539,16 @@ public partial class App
         }
         finally
         {
-            overlay.Stop();
-            viewModel.EndAutoMount();
+            // The progress callback runs inside Complete(); the cleanup must happen even if it throws.
+            try
+            {
+                overlayProgress.Complete();
+            }
+            finally
+            {
+                overlay.Stop();
+                viewModel.EndAutoMount();
+            }
         }
     }
 
