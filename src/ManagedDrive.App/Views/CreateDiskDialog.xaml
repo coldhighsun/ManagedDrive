@@ -140,8 +140,13 @@
                         <RowDefinition Height="8"/>
                         <RowDefinition Height="Auto"/>
                     </Grid.RowDefinitions>
-                    <TextBlock Grid.Row="0" x:Name="PresetHintText" Text="{DynamicResource CreateDisk.Presets.Hint}" TextWrapping="Wrap"
-                               Foreground="{DynamicResource AppForegroundLight}"/>
+                    <StackPanel Grid.Row="0">
+                        <TextBlock x:Name="PresetHintText" Text="{DynamicResource CreateDisk.Presets.Hint}" TextWrapping="Wrap"
+                                   Foreground="{DynamicResource AppForegroundLight}"/>
+                        <TextBlock x:Name="PresetReadOnlyNote" Text="{DynamicResource CreateDisk.Presets.ReadOnlyNote}" TextWrapping="Wrap"
+                                   Margin="0,8,0,0" Visibility="Collapsed"
+                                   Foreground="{DynamicResource AppForegroundLight}"/>
+                    </StackPanel>
                     <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto">
                         <StackPanel x:Name="PresetPanel"/>
                     </ScrollViewer>

@@ -52,4 +52,47 @@ public sealed class CreateDiskDialogTests
 
         Assert.Equal(expected, snapped);
     }
+
+    /// <summary>
+    /// Ticking read-only is refused only for a user action after loading while a preset is ticked
+    /// or TEMP/TMP is redirected (also by a redirect no preset owns).
+    /// </summary>
+    /// <param name="isChecked">Whether the box is now checked.</param>
+    /// <param name="isLoaded">Whether the dialog has loaded.</param>
+    /// <param name="anyPresetTicked">Whether a preset is ticked.</param>
+    /// <param name="redirectsTemp">Whether TEMP/TMP is redirected.</param>
+    /// <param name="expected">Whether the tick is refused.</param>
+    [Theory]
+    [InlineData(true, true, true, false, true)]
+    [InlineData(true, true, false, true, true)]
+    [InlineData(true, true, false, false, false)]
+    [InlineData(true, false, true, true, false)]
+    [InlineData(false, true, true, true, false)]
+    public void ShouldRefuseReadOnly_Combinations_RefusesOnlyUserTickWithPresetsOrTemp(
+        bool isChecked, bool isLoaded, bool anyPresetTicked, bool redirectsTemp, bool expected)
+    {
+        Assert.Equal(expected, CreateDiskDialog.ShouldRefuseReadOnly(isChecked, isLoaded, anyPresetTicked, redirectsTemp));
+    }
+
+    /// <summary>
+    /// Saving as read-only drops whatever folders or redirections the disk has, preset-owned or hand-set.
+    /// </summary>
+    [Fact]
+    public void RemovesEntriesOnSave_FoldersOrRedirects_ReturnsTrue()
+    {
+        var redirects = new List<EnvRedirect> { new() { Variable = "npm_config_cache", SubPath = "x" } };
+
+        Assert.True(CreateDiskDialog.RemovesEntriesOnSave(["cache"], [], false));
+        Assert.True(CreateDiskDialog.RemovesEntriesOnSave([], redirects, false));
+        Assert.True(CreateDiskDialog.RemovesEntriesOnSave([], [], true));
+    }
+
+    /// <summary>
+    /// A disk with nothing to drop needs no warning.
+    /// </summary>
+    [Fact]
+    public void RemovesEntriesOnSave_Nothing_ReturnsFalse()
+    {
+        Assert.False(CreateDiskDialog.RemovesEntriesOnSave([], [], false));
+    }
 }

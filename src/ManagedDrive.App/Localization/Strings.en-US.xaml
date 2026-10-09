@@ -73,9 +73,13 @@
     <sys:String x:Key="Val.BadEnvRedirect">An environment variable redirection is not valid, or a variable is listed twice.</sys:String>
     <sys:String x:Key="CreateDisk.Section.Presets">Temp &amp; Caches</sys:String>
     <sys:String x:Key="CreateDisk.Presets.Hint">Tick one or more items to fill in size and label, create their folders on every mount and point their environment variables at the disk. Only programs started afterwards see the new variables. An item that redirects environment variables can be on one disk only: ticking it here takes it away from the disk that has it.</sys:String>
+    <sys:String x:Key="CreateDisk.Presets.ReadOnlyNote">Presets are unavailable for a read-only disk: it cannot hold folders or temp/cache redirects. Untick "Read Only" to use them.</sys:String>
+    <sys:String x:Key="CreateDisk.Presets.ReadOnlyRemovedNote">The folders, variables and usage warning this disk has (presets or set by hand) are removed when you save.</sys:String>
     <sys:String x:Key="CreateDisk.Presets.HintEdit">Tick or untick items to add or remove their folders and environment variables for this disk. Size, label and compression stay as they are. Unticking puts the variables back but keeps the folders and their contents. Only programs started afterwards see the changed variables. An item that redirects environment variables can be on one disk only: ticking it here takes it away from the disk that has it.</sys:String>
     <sys:String x:Key="CreateDisk.Presets.Other">Other (set by hand)</sys:String>
     <sys:String x:Key="CreateDisk.Presets.Summary">This disk will get:</sys:String>
+    <sys:String x:Key="Msg.ReadOnlyHasPresets">This disk still has presets (folders or TEMP/cache redirects), so it cannot be made read-only. Untick them on the "Temp &amp; Caches" tab first.</sys:String>
+    <sys:String x:Key="Msg.ReadOnlyHasTempRedirect">TEMP/TMP is still redirected into this disk, so it cannot be made read-only. Cancel this dialog, restore them with the toolbar item "{0}" (or the tray menu "{1}"), then edit the disk again.</sys:String>
     <sys:String x:Key="Msg.PresetConflict">These items point the same variable at different folders and cannot be combined: {0}</sys:String>
     <sys:String x:Key="Status.PresetEnabled">Disk {0}: {1} turned on.</sys:String>
     <sys:String x:Key="Status.PresetDisabled">Disk {0}: {1} turned off.</sys:String>

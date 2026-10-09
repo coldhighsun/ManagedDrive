@@ -108,6 +108,13 @@ public partial class CreateDiskDialog
     private string? _presetLabel;
 
     /// <summary>
+    /// Whether the edited disk has a high-usage warning stored (the box alone is ticked by default),
+    /// so the read-only note only warns about losing a setting that exists. It also needs the box
+    /// to still be ticked, since a warning the user switched off is nothing more to lose.
+    /// </summary>
+    private bool _hadHighUsageWarning;
+
+    /// <summary>
     /// The folders the disk has before any preset is ticked: nothing for a new disk, the edited
     /// disk's own otherwise. What belongs to no preset is kept when presets are ticked or unticked.
     /// </summary>
@@ -223,6 +230,7 @@ public partial class CreateDiskDialog
         // capacity, label and compression the disk has stay as they are.
         _folders = _baseFolders = existing.Folders ?? [];
         _envRedirects = _baseRedirects = existing.EnvRedirects ?? [];
+        _hadHighUsageWarning = existing.HighUsageWarnPercent is not null;
         _presetsFillBasics = false;
         PresetHintText.SetResourceReference(TextBlock.TextProperty, "CreateDisk.Presets.HintEdit");
         TickDetectedPresets();
@@ -623,7 +631,7 @@ public partial class CreateDiskDialog
             MaxCapacityValue = GetMaxCapacityValue(),
             VolumeLabel = VolumeLabelBox.Text,
             ImagePathText = ImagePathBox.Text,
-            IsReadOnly = ReadOnlyBox.IsChecked == true,
+            IsReadOnly = IsReadOnlySelected,
             AutoMount = AutoMountBox.IsChecked == true,
             AutoSaveEnabled = AutoSaveBox.IsChecked == true,
             IntervalValue = _intervalValue,
@@ -989,7 +997,12 @@ public partial class CreateDiskDialog
     /// </summary>
     private void TickDetectedPresets()
     {
-        var detected = PresetSelection.Detect(BuiltInPresets.All, _folders, _envRedirects);
+        var readOnly = IsReadOnlySelected;
+        // A read-only disk gets no presets, so show none ticked (see UpdatePresetEnabledState).
+        var detected = PresetSelection.Detect(
+            BuiltInPresets.All,
+            readOnly ? [] : _folders,
+            readOnly ? [] : _envRedirects);
         _presetsUpdating = true;
         foreach (var box in PresetPanel.Children.OfType<CheckBox>())
         {
@@ -1006,6 +1019,12 @@ public partial class CreateDiskDialog
     /// </summary>
     private void ShowPresetSummary()
     {
+        if (IsReadOnlySelected)
+        {
+            PresetSummaryText.Text = string.Empty;
+            return;
+        }
+
         var ticked = PresetPanel.Children.OfType<CheckBox>()
             .Where(box => box.IsChecked == true)
             .Select(box => BuiltInPresets.All.First(p => p.Id == (string)box.Tag))
@@ -1087,8 +1106,62 @@ public partial class CreateDiskDialog
         UpdatePasswordStrengthHint();
     }
 
+    /// <summary>
+    /// Gets a value indicating whether the "Read Only" box is ticked. <c>false</c> while the box does
+    /// not exist yet (events raised during initialization).
+    /// </summary>
+    private bool IsReadOnlySelected => ReadOnlyBox?.IsChecked == true;
+
+    /// <summary>
+    /// Whether saving the disk as read-only drops folders, variable redirections or a high-usage
+    /// warning it has now (preset-owned or hand-set).
+    /// </summary>
+    /// <param name="folders">The folders the disk has.</param>
+    /// <param name="redirects">The environment variable redirections the disk has.</param>
+    /// <param name="hasHighUsageWarning">Whether the disk has a high-usage warning.</param>
+    /// <returns><c>true</c> if there is at least one folder, redirection or a warning.</returns>
+    internal static bool RemovesEntriesOnSave(
+        IReadOnlyList<string> folders, IReadOnlyList<EnvRedirect> redirects, bool hasHighUsageWarning) =>
+        folders.Count > 0 || redirects.Count > 0 || hasHighUsageWarning;
+
+    /// <summary>
+    /// Whether ticking "Read Only" must be refused: only a user action after the dialog has loaded
+    /// (loading an existing disk sets the box too), and only while a preset the user can see and
+    /// untick is ticked, or while TEMP/TMP is still redirected (a redirect no preset owns included,
+    /// since dropping it silently would leave the user's temp folder on a vanished mapping). Other
+    /// entries no preset owns are dropped on save instead, since the user cannot remove them here.
+    /// </summary>
+    /// <param name="isReadOnlyChecked">Whether the box is now checked.</param>
+    /// <param name="isLoaded">Whether the dialog has finished loading.</param>
+    /// <param name="anyPresetTicked">Whether any preset check box is ticked.</param>
+    /// <param name="redirectsTemp">Whether <c>TEMP</c> or <c>TMP</c> is redirected into the disk.</param>
+    /// <returns><c>true</c> if the tick has to be reverted.</returns>
+    internal static bool ShouldRefuseReadOnly(bool isReadOnlyChecked, bool isLoaded, bool anyPresetTicked, bool redirectsTemp) =>
+        isReadOnlyChecked && isLoaded && (anyPresetTicked || redirectsTemp);
+
+    /// <summary>
+    /// Handles the read-only box changing. A tick is refused, before anything else is updated so
+    /// auto-save and encryption keep their state, while a preset is ticked: a read-only disk cannot
+    /// hold the folders, and a temp/cache directory on it breaks every program that writes there.
+    /// </summary>
+    /// <param name="sender">The read-only check box.</param>
+    /// <param name="e">Unused.</param>
     private void ReadOnlyBox_CheckedChanged(object sender, RoutedEventArgs e)
     {
+        var anyPresetTicked = PresetPanel.Children.OfType<CheckBox>().Any(box => box.IsChecked == true);
+        var redirectsTemp = _envRedirects.Any(IsTempVariable);
+        if (ShouldRefuseReadOnly(IsReadOnlySelected, IsLoaded, anyPresetTicked, redirectsTemp))
+        {
+            ReadOnlyBox.IsChecked = false;
+            var message = anyPresetTicked
+                ? Loc.Get("Msg.ReadOnlyHasPresets")
+                : Loc.Format("Msg.ReadOnlyHasTempRedirect", Loc.Get("Tip.RestoreEnv"), Loc.Get("Tray.RestoreEnv"));
+            MessageBox.Show(message, Loc.Get("Val.Title"), MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
+        UpdatePresetEnabledState();
+        UpdateHighUsageWarnPercentState();
         UpdateAutoSaveEnabledState();
         UpdateCompressionLevelState();
     }
@@ -1145,10 +1218,31 @@ public partial class CreateDiskDialog
         return true;
     }
 
+    /// <summary>
+    /// Disables the preset check boxes, unticks them and shows an explanation while the disk is
+    /// read-only, since a read-only disk cannot hold preset folders or temp/cache redirects. The
+    /// folders and redirects collected so far are kept, so unticking read-only brings the ticks back.
+    /// </summary>
+    private void UpdatePresetEnabledState()
+    {
+        var readOnly = IsReadOnlySelected;
+        PresetPanel.IsEnabled = !readOnly;
+        PresetReadOnlyNote.Visibility = readOnly ? Visibility.Visible : Visibility.Collapsed;
+        if (readOnly)
+        {
+            // Mention the removal only when the disk has folders or variables that saving drops.
+            PresetReadOnlyNote.Text = RemovesEntriesOnSave(_folders, _envRedirects, _hadHighUsageWarning && HighUsageWarnBox.IsChecked == true)
+                ? $"{Loc.Get("CreateDisk.Presets.ReadOnlyNote")} {Loc.Get("CreateDisk.Presets.ReadOnlyRemovedNote")}"
+                : Loc.Get("CreateDisk.Presets.ReadOnlyNote");
+        }
+
+        TickDetectedPresets();
+    }
+
     private void UpdateAutoSaveEnabledState()
     {
         var hasImagePath = !string.IsNullOrEmpty(ImagePathBox.Text);
-        AutoSaveBox.IsEnabled = hasImagePath && ReadOnlyBox.IsChecked != true;
+        AutoSaveBox.IsEnabled = hasImagePath && !IsReadOnlySelected;
         if (!AutoSaveBox.IsEnabled)
         {
             AutoSaveBox.IsChecked = false;
@@ -1156,9 +1250,9 @@ public partial class CreateDiskDialog
 
         // Save-on-exit only matters for a writable, persisted disk. Leave its checked state
         // untouched when disabled so the default (on) survives toggling read-only / image path.
-        SaveOnExitBox.IsEnabled = hasImagePath && ReadOnlyBox.IsChecked != true;
+        SaveOnExitBox.IsEnabled = hasImagePath && !IsReadOnlySelected;
 
-        EncryptImageBox.IsEnabled = hasImagePath && ReadOnlyBox.IsChecked != true && !_isImportMode;
+        EncryptImageBox.IsEnabled = hasImagePath && !IsReadOnlySelected && !_isImportMode;
         if (!EncryptImageBox.IsEnabled)
         {
             // Read-only alone leaves the image's encryption untouched (see
@@ -1175,7 +1269,7 @@ public partial class CreateDiskDialog
 
     private void UpdateAutoSaveIntervalPanelState()
     {
-        AutoSaveIntervalPanel.IsEnabled = AutoSaveBox.IsChecked == true && ReadOnlyBox.IsChecked != true;
+        AutoSaveIntervalPanel.IsEnabled = AutoSaveBox.IsChecked == true && !IsReadOnlySelected;
     }
 
     private void UpdateCapacityDisplay()
@@ -1194,7 +1288,7 @@ public partial class CreateDiskDialog
     {
         // Toggle the whole row (label + combo) so the label greys out with the control when a
         // read-only disk has nothing to compress.
-        CompressionLevelRow.IsEnabled = !string.IsNullOrEmpty(ImagePathBox.Text) && ReadOnlyBox.IsChecked != true;
+        CompressionLevelRow.IsEnabled = !string.IsNullOrEmpty(ImagePathBox.Text) && !IsReadOnlySelected;
         UpdateCustomZstdLevelRowState();
     }
 
@@ -1220,9 +1314,20 @@ public partial class CreateDiskDialog
         CompressionLevelBox.IsEnabled = CompressionLevelRow.IsEnabled && !customEnabled;
     }
 
+    /// <summary>
+    /// The high-usage warning is pointless for a read-only disk (its usage never grows), so its
+    /// check box is disabled then; its checked state is left alone so it survives toggling
+    /// read-only. Archive imports keep it forced off.
+    /// </summary>
     private void UpdateHighUsageWarnPercentState()
     {
-        HighUsageWarnPercentPanel?.IsEnabled = HighUsageWarnBox.IsChecked == true;
+        var readOnly = IsReadOnlySelected;
+        if (HighUsageWarnBox is not null && !_isArchiveImportMode)
+        {
+            HighUsageWarnBox.IsEnabled = !readOnly;
+        }
+
+        HighUsageWarnPercentPanel?.IsEnabled = HighUsageWarnBox?.IsChecked == true && !readOnly;
     }
 
     private void UpdatePasswordStrengthHint()
