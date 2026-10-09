@@ -123,6 +123,16 @@
     <sys:String x:Key="Busy.SavingImage">正在保存磁盘映像…</sys:String>
     <sys:String x:Key="Busy.CreatingSnapshot">正在创建快照…</sys:String>
     <sys:String x:Key="Busy.LoadingDisks">正在加载磁盘 {0}/{1}…</sys:String>
+    <sys:String x:Key="Splash.Starting">正在启动…</sys:String>
+    <sys:String x:Key="Splash.Feature1">同时挂载多块内存盘，各自独立的盘符与容量</sys:String>
+    <sys:String x:Key="Splash.Feature2">NTFS 兼容，可用于 WinGet、Windows Update 暂存和 BITS</sys:String>
+    <sys:String x:Key="Splash.Feature3">容量只是上限，写入多少才占用多少内存</sys:String>
+    <sys:String x:Key="Splash.Feature4">保存为压缩的 .mdr 镜像，可用 AES-256 密码保护</sys:String>
+    <sys:String x:Key="Splash.Feature5">快照版本历史，内容去重，随时还原</sys:String>
+    <sys:String x:Key="Splash.Feature6">把 zip、7z、rar、tar 导入为只读磁盘</sys:String>
+    <sys:String x:Key="Splash.Feature7">把 TEMP、Node.js、NuGet、pip 缓存放进内存盘，退出自动还原</sys:String>
+    <sys:String x:Key="Splash.Feature8">空间占用树图、托盘通知、浅色与深色主题</sys:String>
+    <sys:String x:Key="Splash.Feature9">mdrive 命令行，方便脚本化操作</sys:String>
     <sys:String x:Key="Busy.ImportingArchive">正在导入归档…</sys:String>
     <sys:String x:Key="Busy.ExportingImage">正在导出磁盘映像…</sys:String>
     <sys:String x:Key="Busy.CloningDisk">正在克隆磁盘…</sys:String>

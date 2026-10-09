@@ -123,6 +123,16 @@
     <sys:String x:Key="Busy.SavingImage">Saving disk image...</sys:String>
     <sys:String x:Key="Busy.CreatingSnapshot">Creating snapshot...</sys:String>
     <sys:String x:Key="Busy.LoadingDisks">Loading disk {0} of {1}...</sys:String>
+    <sys:String x:Key="Splash.Starting">Starting…</sys:String>
+    <sys:String x:Key="Splash.Feature1">Mount several RAM disks at once, each with its own drive letter and capacity</sys:String>
+    <sys:String x:Key="Splash.Feature2">NTFS-compatible: works with WinGet, Windows Update staging and BITS</sys:String>
+    <sys:String x:Key="Splash.Feature3">Capacity is only a ceiling: memory is used as you write</sys:String>
+    <sys:String x:Key="Splash.Feature4">Save to compressed .mdr images, optionally protected with AES-256</sys:String>
+    <sys:String x:Key="Splash.Feature5">Snapshot version history with content deduplication</sys:String>
+    <sys:String x:Key="Splash.Feature6">Import zip, 7z, rar and tar archives as read-only disks</sys:String>
+    <sys:String x:Key="Splash.Feature7">Point TEMP, Node.js, NuGet and pip caches at a RAM disk, restored on exit</sys:String>
+    <sys:String x:Key="Splash.Feature8">Space usage treemap, tray notifications, light and dark themes</sys:String>
+    <sys:String x:Key="Splash.Feature9">The mdrive command line for scripting everything</sys:String>
     <sys:String x:Key="Busy.ImportingArchive">Importing archive...</sys:String>
     <sys:String x:Key="Busy.ExportingImage">Exporting disk image...</sys:String>
     <sys:String x:Key="Busy.CloningDisk">Cloning disk...</sys:String>

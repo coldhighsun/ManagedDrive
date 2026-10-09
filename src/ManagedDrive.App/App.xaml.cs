@@ -65,6 +65,24 @@ public partial class App
     private SessionEndingSaveHandler? _sessionEndingSaveHandler;
     private SettingsStore? _settings;
     private Mutex? _singleInstanceMutex;
+
+    /// <summary>
+    /// Sequences the end of the startup splash (minimum display time, close, main window), and
+    /// tells waiters when that is done. Created at startup once the settings are known.
+    /// </summary>
+    private SplashLifecycle? _splashLifecycle;
+
+    /// <summary>
+    /// Measures how long the splash has been up, to honour <see cref="SplashPolicy.MinimumDisplay"/>.
+    /// </summary>
+    private readonly Stopwatch _splashStopwatch = new();
+
+    /// <summary>
+    /// The startup splash, or <see langword="null"/> when none was shown or it is already closed.
+    /// While it is set the main window stays hidden and the loading progress goes to the splash.
+    /// </summary>
+    private SplashWindow? _splashWindow;
+
     private TempDirCompatChecker? _tempDirCompatChecker;
     private EnvRestoreTrayAction? _envRestoreTrayAction;
     private TrayIconController? _trayIconController;
@@ -124,13 +142,26 @@ public partial class App
                 return;
             }
 
-            if (!StartUi(_settings, config))
+            // Before the splash, so its warning box is not covered by it. Shutdown() only queues the
+            // exit; return so nothing below runs — in particular no MainViewModel gets created, so
+            // App_Exit has no (empty) disk list to save over the user's settings.
+            if (!CheckWinFspPrerequisite())
             {
+                Shutdown();
                 return;
             }
+
+            _splashLifecycle = new(
+                config.StartMinimized, () => _splashStopwatch.Elapsed, Task.Delay, ShowMainWindowAtStartup);
+            await ShowSplashAsync(config.StartMinimized);
+
+            await StartUiAsync(_settings, config);
         }
         catch (Exception ex)
         {
+            _splashWindow?.Dismiss();
+            _splashWindow = null;
+
             // Nothing is on screen yet, so the dispatcher handler's "log and keep running" would
             // leave a windowless process behind — one still holding the single-instance mutex, so
             // every later launch would just report "already running".
@@ -156,7 +187,10 @@ public partial class App
         }
         finally
         {
-            autoMountDone.SetResult();
+            // Queued CLI commands do not depend on the splash or the main window, so they are
+            // released first; the splash is then closed even when auto-mount threw, so that it
+            // never outlives the loading.
+            await StartupCompletion.ReleaseThenCloseSplashAsync(autoMountDone, CloseSplashAndShowMainWindowAsync);
         }
 
         _tempDirCompatChecker!.CheckAfterAutoMount(config, _mainViewModel!.Disks);
@@ -173,6 +207,76 @@ public partial class App
                 MessageBox.Show(result.Message, "ManagedDrive", MessageBoxButton.OK, MessageBoxImage.Warning);
             }
         }
+    }
+
+    /// <summary>
+    /// Shows the startup splash and lets it render. Shown also when the app starts minimized; only
+    /// the main window stays hidden then, and the splash gets no taskbar button.
+    /// </summary>
+    /// <param name="startMinimized">Whether the app starts minimized to the tray.</param>
+    private async Task ShowSplashAsync(bool startMinimized)
+    {
+        // The splash is the only window until the main window is shown (never, when starting
+        // minimized); closing it must not count as the last window closing and end the app.
+        // CloseSplashAndShowMainWindowAsync restores the default once it is gone.
+        ShutdownMode = ShutdownMode.OnExplicitShutdown;
+        var splash = new SplashWindow(showInTaskbar: !startMinimized);
+        _splashWindow = splash;
+        splash.Show();
+        _splashStopwatch.Restart();
+        _splashLifecycle!.Show(() =>
+        {
+            try
+            {
+                splash.Dismiss();
+            }
+            finally
+            {
+                // Always restored: left on OnExplicitShutdown, closing the last window would no
+                // longer end the app and a windowless instance would keep the single-instance mutex.
+                ShutdownMode = ShutdownMode.OnLastWindowClose;
+            }
+        });
+
+        // StartUiAsync keeps the UI thread busy for a while, in chunks. The splash starts its
+        // animations in its Loaded handler, which runs at a lower priority than Render, so yielding
+        // only to Render let the startup work run first and the animations began after it. Waiting
+        // for ContextIdle lets the splash lay out, start its animations and render a first frame;
+        // WPF then keeps running those (transform animations) on the render thread meanwhile.
+        await Dispatcher.Yield(DispatcherPriority.ContextIdle);
+    }
+
+    /// <summary>
+    /// Closes the startup splash, if still up, after it has been shown for its minimum time, and
+    /// shows the main window in its place unless the app starts minimized. Without a splash it only
+    /// completes <see cref="SplashLifecycle.Closed"/>, which the startup update prompt waits for, so
+    /// it must run on every startup path.
+    /// </summary>
+    private async Task CloseSplashAndShowMainWindowAsync()
+    {
+        // Cleared first so the loading progress switches to the busy overlay at once, even while
+        // the lifecycle is still waiting out the minimum display time.
+        _splashWindow = null;
+        await _splashLifecycle!.CloseAsync();
+    }
+
+    /// <summary>
+    /// Brings the main window to the front for the first time after startup.
+    /// </summary>
+    private void ShowMainWindowAtStartup()
+    {
+        // Not once the app is exiting: a command such as `mdrive exit` can be released before the
+        // splash has finished its minimum display time, and showing a window then is at best noise
+        // and can throw while the application shuts down.
+        if (_mainWindow == null || _isExiting)
+        {
+            return;
+        }
+
+        _mainWindow.Topmost = true;
+        _mainWindow.Show();
+        _mainWindow.Activate();
+        _mainWindow.Topmost = false;
     }
 
     /// <summary>
@@ -207,36 +311,32 @@ public partial class App
     }
 
     /// <summary>
-    /// Runs the synchronous part of the first instance's startup: builds the view model, window
-    /// and tray services, and shows the window or tray icon.
+    /// Lets the dispatcher process everything queued at higher priorities (rendering, animation
+    /// frames, input) before startup carries on.
+    /// </summary>
+    /// <returns>A task that completes once the dispatcher is free again.</returns>
+    private async Task YieldToUiAsync() => await Dispatcher.Yield(DispatcherPriority.Background);
+
+    /// <summary>
+    /// Runs the first instance's UI startup: builds the view model, window and tray services, and
+    /// shows the window or tray icon. Done in chunks with a yield to the dispatcher in between, so
+    /// that the startup splash keeps rendering instead of freezing for the whole of it.
     /// </summary>
     /// <param name="settings">The app's settings store.</param>
     /// <param name="config">The settings loaded at startup.</param>
-    /// <returns>
-    /// <see langword="true"/> once the UI is up; <see langword="false"/> if startup stopped early,
-    /// in which case the exit has already been requested.
-    /// </returns>
-    private bool StartUi(SettingsStore settings, AppConfiguration config)
+    /// <returns>A task that completes once the UI is up.</returns>
+    private async Task StartUiAsync(SettingsStore settings, AppConfiguration config)
     {
-        if (!CheckWinFspPrerequisite())
-        {
-            // Shutdown() only queues the exit; return so nothing below runs — in particular no
-            // MainViewModel gets created, so App_Exit has no (empty) disk list to save over the
-            // user's settings.
-            Shutdown();
-            return false;
-        }
-
         _mountManager = new();
-        _sessionEndingSaveHandler = new(
-            _mountManager,
-            () => _mainWindowHandle,
-            _serviceProvider!.GetRequiredService<ILogger<SessionEndingSaveHandler>>(),
-            ResetEnvironmentForSessionEnding);
-        SystemEvents.SessionEnding += _sessionEndingSaveHandler.OnSessionEnding;
         _mainViewModel = new(_mountManager, settings, _serviceProvider!.GetRequiredService<ILogger<MainViewModel>>(), config.Disks);
         _mainViewModel.ExitRequested += async (_, _) => await ShutdownAsync();
+        await YieldToUiAsync();
+
         _mainWindow = new(_mainViewModel);
+
+        // The splash, created first, would otherwise stay Application.MainWindow, which password
+        // prompts and dialogs use as their owner.
+        MainWindow = _mainWindow;
         _mainWindow.Closing += MainWindow_Closing;
         _mainWindow.IsVisibleChanged += OnMainWindowVisibleChanged;
         _mainWindow.StateChanged += (_, _) => UpdateForMainWindowShownState();
@@ -244,6 +344,17 @@ public partial class App
         // Force the HWND to exist now (on the UI thread) so SessionEndingSaveHandler can reference
         // it from the SystemEvents thread even when the window stays hidden in the tray.
         _mainWindowHandle = new WindowInteropHelper(_mainWindow).EnsureHandle();
+
+        // Subscribed only now, with the handle in place and no yield in between: the handler needs
+        // it to register a shutdown block reason, and a session end during an earlier yield would
+        // find none.
+        _sessionEndingSaveHandler = new(
+            _mountManager,
+            () => _mainWindowHandle,
+            _serviceProvider!.GetRequiredService<ILogger<SessionEndingSaveHandler>>(),
+            ResetEnvironmentForSessionEnding);
+        SystemEvents.SessionEnding += _sessionEndingSaveHandler.OnSessionEnding;
+        await YieldToUiAsync();
 
         var iconStream = GetResourceStream(new("pack://application:,,,/ManagedDrive.ico"))!.Stream;
         _trayIconController = new(
@@ -258,6 +369,7 @@ public partial class App
         _diskNotificationService = new(
             _mainViewModel, _trayIconController, () => WindowVisibility.IsShownToUser(_mainWindow),
             _serviceProvider!.GetRequiredService<ILogger<DiskNotificationService>>());
+        await YieldToUiAsync();
 
         // Constructed before AutoMountDisksAsync so that an auto-mounted disk which is already the
         // TEMP target gets its global symlink published at startup. Rooted as a field only to keep
@@ -270,25 +382,33 @@ public partial class App
         // Before the TEMP check, which resets what is left to the Windows defaults.
         _mainViewModel.RestoreDanglingEnvRedirects();
 
-        _tempDirCompatChecker.CheckOnStartup(config);
+        // The check may show message boxes. The splash is Topmost and would cover them, so it steps
+        // back for the duration; boxes opened meanwhile land above it.
+        var coveringSplash = _splashWindow;
+        coveringSplash?.PauseTopmost(true);
+
+        try
+        {
+            _tempDirCompatChecker.CheckOnStartup(config);
+        }
+        finally
+        {
+            coveringSplash?.PauseTopmost(false);
+        }
+
+        await YieldToUiAsync();
 
         _updateCheckService = new(settings, _trayIconController, () => _mainViewModel.Disks);
         _mainViewModel.UpdateCheckService = _updateCheckService;
         _ = PromptForUpdateOnStartupAsync(config);
 
+        // The main window is not shown here: the splash is always up at this point, and
+        // SplashLifecycle shows the main window once the loading has finished (never, when
+        // starting minimized, where only the tray icon appears).
         if (config.StartMinimized)
         {
             _trayIconController.Visible = true;
         }
-        else
-        {
-            _mainWindow.Topmost = true;
-            _mainWindow.Show();
-            _mainWindow.Activate();
-            _mainWindow.Topmost = false;
-        }
-
-        return true;
     }
 
     private async Task AutoMountDisksAsync()
@@ -323,13 +443,33 @@ public partial class App
         // Created on the UI thread, so the callbacks of the loads running on the thread pool are
         // marshalled back to it before they touch the overlay. A 0-byte disk gets a token weight
         // (a weight of 0 would mean "unknown" and give it an average share).
-        IProgress<double> overlayProgress = new Progress<double>(overlay.Report);
+        // While the startup splash is up it shows the progress; once it is gone (a password prompt
+        // needs the main window) the busy overlay takes over.
+        IProgress<double> overlayProgress = new Progress<double>(fraction =>
+        {
+            if (_splashWindow is { } splash)
+            {
+                splash.Report(fraction);
+            }
+            else
+            {
+                overlay.Report(fraction);
+            }
+        });
         var aggregate = new AggregateProgress(
             sizes.Select(s => s is { } size ? Math.Max(size, 1UL) : 0.0).ToList(),
             overlayProgress.Report);
 
         viewModel.BeginAutoMount(profiles.Count);
-        overlay.Start(Loc.Format("Busy.LoadingDisks", 1, profiles.Count), totalBytes: totalBytes);
+        var firstStatus = Loc.Format("Busy.LoadingDisks", 1, profiles.Count);
+        if (_splashWindow is { } startupSplash)
+        {
+            startupSplash.SetStatus(firstStatus);
+        }
+        else
+        {
+            overlay.Start(firstStatus, totalBytes: totalBytes);
+        }
 
         try
         {
@@ -347,6 +487,19 @@ public partial class App
                 {
                     try
                     {
+                        if (attempt.NeedsPassword && _splashWindow != null)
+                        {
+                            // The password prompt must not sit behind (or under) the splash: hand
+                            // over to the main window and its busy overlay first.
+                            await CloseSplashAndShowMainWindowAsync();
+                            overlay.Start(
+                                Loc.Format("Busy.LoadingDisks", Math.Min(viewModel.AutoMountCompleted + 1, profiles.Count), profiles.Count),
+                                totalBytes: totalBytes);
+
+                            // Start() resets the bar; carry over what the splash had reached.
+                            overlay.Report(aggregate.Combined);
+                        }
+
                         await viewModel.CompleteMountFromProfileAsync(profiles[index], attempt, aggregate.ForOperation(index));
                     }
                     finally
@@ -368,7 +521,15 @@ public partial class App
             {
                 aggregate.Complete(index);
                 var finished = viewModel.ReportAutoMountDiskDone();
-                overlay.UpdateStatusText(Loc.Format("Busy.LoadingDisks", Math.Min(finished + 1, profiles.Count), profiles.Count));
+                var status = Loc.Format("Busy.LoadingDisks", Math.Min(finished + 1, profiles.Count), profiles.Count);
+                if (_splashWindow is { } splash)
+                {
+                    splash.SetStatus(status);
+                }
+                else
+                {
+                    overlay.UpdateStatusText(status);
+                }
             }
         }
         finally
@@ -598,6 +759,14 @@ public partial class App
             return;
         }
 
+        // The main window is hidden while the splash is up; decide dialog versus balloon only once
+        // it is known whether the main window is shown.
+        await _splashLifecycle!.Closed;
+        if (_isExiting)
+        {
+            return;
+        }
+
         if (WindowVisibility.IsShownToUser(_mainWindow))
         {
             UpdateDialog.ShowFor(service, info, _mainWindow);
@@ -621,6 +790,8 @@ public partial class App
 
     private void ShowMainWindow()
     {
+        // The window, and the dialogs opened from it, must not end up under the splash.
+        _splashWindow?.ReleaseTopmost();
         _mainWindow?.Show();
         _mainWindow?.Activate();
         _trayIconController?.Visible = false;
