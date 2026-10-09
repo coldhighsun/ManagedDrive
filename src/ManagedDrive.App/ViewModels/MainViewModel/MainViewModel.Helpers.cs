@@ -304,6 +304,27 @@ public sealed partial class MainViewModel
     }
 
     /// <summary>
+    /// Whether a mounted disk can have exclusive presets taken away: it must really apply presets
+    /// (a read-only disk does not, even when its options still list them) and not be the disk that
+    /// is being created or edited.
+    /// </summary>
+    /// <param name="other">The other disk's options.</param>
+    /// <param name="newMountPoint">The mount point of the disk being created or edited.</param>
+    /// <returns><c>true</c> if the disk may lose presets.</returns>
+    internal static bool CanLosePresets(DiskOptions other, string newMountPoint) =>
+        other.AppliesPresets() && !string.Equals(other.MountPoint, newMountPoint, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Whether a saved, not mounted profile can have exclusive presets taken away; see
+    /// <see cref="CanLosePresets(DiskOptions, string)"/>.
+    /// </summary>
+    /// <param name="profile">The saved profile.</param>
+    /// <param name="newMountPoint">The mount point of the disk being created or edited.</param>
+    /// <returns><c>true</c> if the profile may lose presets.</returns>
+    internal static bool CanLosePresets(DiskProfile profile, string newMountPoint) =>
+        profile.AppliesPresets() && !string.Equals(profile.MountPoint, newMountPoint, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
     /// Does the work of <see cref="ReleaseClaimedPresetsAsync"/>; may throw.
     /// </summary>
     /// <param name="newOptions">The options of the disk being created or edited.</param>
@@ -326,8 +347,9 @@ public sealed partial class MainViewModel
         }
 
         var notes = new List<string>();
+        // Read-only disks and profiles never applied their presets, so they do not own any variable.
         foreach (var other in Disks.Where(d => !ReferenceEquals(d, excluding) &&
-            !string.Equals(d.MountPoint, newOptions.MountPoint, StringComparison.OrdinalIgnoreCase)).ToList())
+            CanLosePresets(d.Disk.Options, newOptions.MountPoint)).ToList())
         {
             var options = other.Disk.Options;
             var release = PresetSelection.Release(all, options.Folders ?? [], options.EnvRedirects ?? [], claimed);
@@ -353,7 +375,7 @@ public sealed partial class MainViewModel
         for (var i = 0; i < _unmountedProfiles.Count; i++)
         {
             var profile = _unmountedProfiles[i];
-            if (string.Equals(profile.MountPoint, newOptions.MountPoint, StringComparison.OrdinalIgnoreCase))
+            if (!CanLosePresets(profile, newOptions.MountPoint))
             {
                 continue;
             }

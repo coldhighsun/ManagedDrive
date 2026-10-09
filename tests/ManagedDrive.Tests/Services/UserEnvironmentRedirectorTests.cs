@@ -60,6 +60,26 @@ public sealed class UserEnvironmentRedirectorTests : IDisposable
         Assert.Equal(1, _env.Broadcasts);
     }
 
+    /// <summary>
+    /// A read-only disk gets no folders, variables, backups or broadcasts, and that is not a failure.
+    /// </summary>
+    [Fact]
+    public void ApplyDiskEffects_ReadOnlyDisk_AppliesNothingAndReportsNoFailure()
+    {
+        var mount = Path.Combine(_root, "disk");
+        Directory.CreateDirectory(mount);
+        var options = DiskAt(mount, "MY_CACHE", "cache") with { Folders = ["a"], ReadOnly = true };
+
+        var result = CreateRedirector().ApplyDiskEffects(options);
+
+        Assert.True(result.IsComplete);
+        Assert.Empty(result.Applied);
+        Assert.False(Directory.Exists(Path.Combine(mount, "a")));
+        Assert.False(_env.Values.ContainsKey("MY_CACHE"));
+        Assert.Empty(_backups);
+        Assert.Equal(0, _env.Broadcasts);
+    }
+
     [Fact]
     public void ApplyDiskEffects_RecordsTheOriginalValueAndKind()
     {
