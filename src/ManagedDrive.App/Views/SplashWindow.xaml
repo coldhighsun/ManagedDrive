@@ -7,6 +7,9 @@
         WindowStyle="None" AllowsTransparency="True" Background="Transparent"
         ResizeMode="NoResize" ShowInTaskbar="False" Topmost="True" ShowActivated="False"
         MouseLeftButtonDown="Window_MouseLeftButtonDown"
+        MouseMove="Window_MouseMove"
+        MouseLeftButtonUp="Window_MouseLeftButtonUp"
+        LostMouseCapture="Window_LostMouseCapture"
         WindowStartupLocation="CenterScreen"
         Icon="pack://application:,,,/ManagedDrive.ico">
 

@@ -28,7 +28,12 @@ public partial class SplashWindow
     {
         InitializeComponent();
         ShowInTaskbar = showInTaskbar;
-        SourceInitialized += (_, _) => ((HwndSource)PresentationSource.FromVisual(this)!).AddHook(WndProc);
+        SourceInitialized += (_, _) =>
+        {
+            var source = (HwndSource)PresentationSource.FromVisual(this)!;
+            _handle = source.Handle;
+            source.AddHook(WndProc);
+        };
 
         VersionText.Text = UpdateCheckService.GetRunningVersion();
         StatusText.Text = Loc.Get("Splash.Starting");
@@ -303,26 +308,140 @@ public partial class SplashWindow
     }
 
     /// <summary>
-    /// Lets the borderless splash be dragged by any point of its surface.
+    /// The window handle, kept once the window has a source so that dragging does not look it up on
+    /// every mouse move.
+    /// </summary>
+    private nint _handle;
+
+    /// <summary>
+    /// Works out where the splash goes while it is dragged.
+    /// </summary>
+    private readonly SplashDragTracker _drag = new();
+
+    /// <summary>
+    /// Starts dragging the borderless splash by any point of its surface. The window is moved by hand
+    /// with the mouse captured rather than with <c>DragMove</c>: its modal move loop made the splash
+    /// hitch when the button was released.
     /// </summary>
     /// <param name="sender">The window.</param>
     /// <param name="e">The mouse event data.</param>
     private void Window_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
         // e.ButtonState is a snapshot from when the event was raised. On a busy UI thread the
-        // button can be released before this runs, and DragMove then throws.
-        if (e.ButtonState != MouseButtonState.Pressed || Mouse.LeftButton != MouseButtonState.Pressed)
+        // button can be released before this runs: then there is nothing to drag.
+        if (e.ButtonState != MouseButtonState.Pressed || Mouse.LeftButton != MouseButtonState.Pressed
+            || !WindowNativeMethods.GetCursorPos(out var cursor))
         {
             return;
         }
 
-        try
+        // Without the capture the button-up outside the window would never arrive, so no drag.
+        if (!CaptureMouse())
         {
-            DragMove();
+            return;
         }
-        catch (InvalidOperationException)
+
+        if (!BeginDrag(cursor))
         {
-            // The button went up between the check and the call: nothing to drag.
+            ReleaseMouseCapture();
+        }
+    }
+
+    /// <summary>
+    /// Starts the drag from the cursor's position and the window's actual bounds, both read in
+    /// device pixels.
+    /// </summary>
+    /// <param name="cursor">The cursor's screen position.</param>
+    /// <returns>Whether the window's bounds could be read and the drag started.</returns>
+    private bool BeginDrag(WindowNativeMethods.Point cursor)
+    {
+        if (!WindowNativeMethods.GetWindowRect(_handle, out var bounds))
+        {
+            return false;
+        }
+
+        _drag.Begin(cursor.X, cursor.Y, bounds.Left, bounds.Top);
+        return true;
+    }
+
+    /// <summary>
+    /// Re-anchors a drag in progress when the window lands on a monitor with another DPI: the
+    /// window is moved and resized by the DPI change, so the origin the tracker was started with no
+    /// longer applies. The origin is read from the window's real bounds rather than <c>Left</c> and
+    /// <c>Top</c>, which may still hold the old values while the change is being applied.
+    /// </summary>
+    /// <param name="oldDpi">The previous DPI.</param>
+    /// <param name="newDpi">The new DPI.</param>
+    protected override void OnDpiChanged(DpiScale oldDpi, DpiScale newDpi)
+    {
+        base.OnDpiChanged(oldDpi, newDpi);
+
+        if (_drag.IsDragging && WindowNativeMethods.GetCursorPos(out var cursor))
+        {
+            BeginDrag(cursor);
+        }
+    }
+
+    /// <summary>
+    /// Moves the splash with the cursor while a drag is in progress.
+    /// </summary>
+    /// <param name="sender">The window.</param>
+    /// <param name="e">The mouse event data.</param>
+    private void Window_MouseMove(object sender, MouseEventArgs e)
+    {
+        if (!_drag.IsDragging)
+        {
+            return;
+        }
+
+        if (e.LeftButton != MouseButtonState.Pressed || !WindowNativeMethods.GetCursorPos(out var cursor))
+        {
+            EndDrag();
+            return;
+        }
+
+        // Both coordinates in one native call: setting Left and Top separately moves the layered
+        // window twice per mouse event.
+        if (_drag.Move(cursor.X, cursor.Y) is var (left, top))
+        {
+            WindowNativeMethods.SetWindowPos(_handle, 0, left, top, 0, 0, WindowNativeMethods.SwpMoveOnly);
+        }
+    }
+
+    /// <summary>
+    /// Ends the drag when the mouse button is released.
+    /// </summary>
+    /// <param name="sender">The window.</param>
+    /// <param name="e">The mouse event data.</param>
+    private void Window_MouseLeftButtonUp(object sender, MouseButtonEventArgs e) => EndDrag();
+
+    /// <summary>
+    /// Ends the drag when the window loses the mouse capture by other means.
+    /// </summary>
+    /// <param name="sender">The window.</param>
+    /// <param name="e">The mouse event data.</param>
+    private void Window_LostMouseCapture(object sender, MouseEventArgs e)
+    {
+        // The event bubbles: only the window's own capture is the drag's.
+        if (ReferenceEquals(e.OriginalSource, this))
+        {
+            _drag.End();
+        }
+    }
+
+    /// <summary>
+    /// Ends the drag and gives the mouse capture back; releasing the capture ends the drag through
+    /// <see cref="Window_LostMouseCapture"/>, so it is only ended directly when nothing was captured.
+    /// </summary>
+    private void EndDrag()
+    {
+        if (IsMouseCaptured)
+        {
+            ReleaseMouseCapture();
+        }
+        else
+        {
+            _drag.End();
         }
     }
 
