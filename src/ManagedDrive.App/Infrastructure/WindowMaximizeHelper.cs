@@ -121,37 +121,21 @@ internal static class WindowMaximizeHelper
     private static extern bool MoveWindow(IntPtr hWnd, int x, int y, int nWidth, int nHeight, bool bRepaint);
 
     [StructLayout(LayoutKind.Sequential)]
-    private struct POINT
-    {
-        public int X;
-        public int Y;
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct RECT
-    {
-        public int Left;
-        public int Top;
-        public int Right;
-        public int Bottom;
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
     private struct MINMAXINFO
     {
-        public POINT ptReserved;
-        public POINT ptMaxSize;
-        public POINT ptMaxPosition;
-        public POINT ptMinTrackSize;
-        public POINT ptMaxTrackSize;
+        public WindowNativeMethods.Point ptReserved;
+        public WindowNativeMethods.Point ptMaxSize;
+        public WindowNativeMethods.Point ptMaxPosition;
+        public WindowNativeMethods.Point ptMinTrackSize;
+        public WindowNativeMethods.Point ptMaxTrackSize;
     }
 
     [StructLayout(LayoutKind.Sequential)]
     private struct MONITORINFO
     {
         public int cbSize;
-        public RECT rcMonitor;
-        public RECT rcWork;
+        public WindowNativeMethods.Rect rcMonitor;
+        public WindowNativeMethods.Rect rcWork;
         public uint dwFlags;
     }
 }
