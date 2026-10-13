@@ -138,29 +138,47 @@ jobs:
           echo "is_prerelease=$($isPrerelease.ToString().ToLower())" >> $env:GITHUB_OUTPUT
         shell: pwsh
 
+      - name: Download WinFsp MSI
+        # Single source of the bundled WinFsp release for the steps below; bump alongside
+        # WinFspPrerequisite.cs, installer/ManagedDrive.iss and Directory.Packages.props.
+        env:
+          WINFSP_TAG: v2.2B5
+          WINFSP_MSI: winfsp-2.2.26286.msi
+          WINFSP_SHA256: 293FFB9BCC0B625C85079FE85FA77F8FE98170ABA51A02AC9C83D58F6C3B0E2F
+        run: |
+          "WINFSP_MSI=$env:WINFSP_MSI" >> $env:GITHUB_ENV
+          "WINFSP_SHA256=$env:WINFSP_SHA256" >> $env:GITHUB_ENV
+          Invoke-WebRequest `
+            -Uri "https://github.com/winfsp/winfsp/releases/download/$env:WINFSP_TAG/$env:WINFSP_MSI" `
+            -OutFile $env:WINFSP_MSI
+        shell: pwsh
+
+      - name: Verify WinFsp MSI checksum
+        # Pins the download to the exact bytes we've tested against; bump WINFSP_SHA256
+        # deliberately (alongside WINFSP_TAG/WINFSP_MSI above) when upgrading the bundled WinFsp version.
+        run: |
+          $expectedHash = $env:WINFSP_SHA256
+          $actualHash = (Get-FileHash $env:WINFSP_MSI -Algorithm SHA256).Hash
+          if ($actualHash -ne $expectedHash) {
+            throw "WinFsp MSI checksum mismatch: expected $expectedHash, got $actualHash"
+          }
+        shell: pwsh
+
       - name: Build portable package
+        # The portable ZIP carries the WinFsp MSI in prerequisites\ so the app can install it offline;
+        # it is removed again afterwards because the Inno Setup installer bundles its own copy.
         run: |
           $tag = "${{ steps.version.outputs.tag }}"
+          New-Item -ItemType Directory -Path publish-fx\prerequisites | Out-Null
+          Copy-Item $env:WINFSP_MSI publish-fx\prerequisites\
           Compress-Archive -Path publish-fx\* -DestinationPath "ManagedDrive-$tag-win-x64-portable.zip"
+          Remove-Item publish-fx\prerequisites -Recurse -Force
         shell: pwsh
 
       - name: Prepare installer inputs
         run: |
           Copy-Item -Path publish-fx -Destination installer\publish-fx -Recurse
-          Invoke-WebRequest `
-            -Uri "https://github.com/winfsp/winfsp/releases/download/v2.2B4/winfsp-2.2.26215.msi" `
-            -OutFile "installer\winfsp-2.2.26215.msi"
-        shell: pwsh
-
-      - name: Verify WinFsp MSI checksum
-        # Pins the download to the exact bytes we've tested against; bump this hash
-        # deliberately (alongside the URL above) when upgrading the bundled WinFsp version.
-        run: |
-          $expectedHash = "2ECB5C89405488A95BBD8A01875E02C48534FD37BBDFD84488F7590464D65944"
-          $actualHash = (Get-FileHash "installer\winfsp-2.2.26215.msi" -Algorithm SHA256).Hash
-          if ($actualHash -ne $expectedHash) {
-            throw "WinFsp MSI checksum mismatch: expected $expectedHash, got $actualHash"
-          }
+          Copy-Item $env:WINFSP_MSI installer\
         shell: pwsh
 
       - name: Install Inno Setup

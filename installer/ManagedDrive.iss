@@ -16,7 +16,9 @@
   #define AppVersionTag "v" + AppVersion
 #endif
 
-#define WinFspMsiName "winfsp-2.2.26215.msi"
+#define WinFspBuild "26286"
+#define WinFspVersion "2.2." + WinFspBuild
+#define WinFspMsiName "winfsp-" + WinFspVersion + ".msi"
 #define HelperServiceName "ManagedDriveHelper"
 #define HelperServiceExeName "ManagedDriveHelper.exe"
 ; Must match App.xaml.cs::SingleInstanceMutexName exactly - this is how Setup detects a running
@@ -93,13 +95,14 @@ var
   // LaunchAppAsUser()'s explorer.exe workaround below exists to avoid.
   LaunchAppCheckBox: TNewCheckBox;
 
-// Mirrors ManagedDrive.App's App.xaml.cs::CheckWinFspPrerequisite() detection:
-// HKLM InstallDir -> <InstallDir>\bin\winfsp-msil.dll must exist with a 2.2.x file version.
+// Mirrors ManagedDrive.App's WinFspPrerequisite.Check() detection: HKLM InstallDir ->
+// <InstallDir>\bin\winfsp-msil.dll must exist with at least the bundled version ({#WinFspVersion}).
+// An older version is replaced by the bundled MSI; a newer one is kept (MSI refuses downgrades).
 function IsWinFspInstalled(): Boolean;
 var
   InstallDir, DllPath: string;
   VersionMS, VersionLS: Cardinal;
-  Major, Minor: Integer;
+  Major, Minor, Build: Cardinal;
 begin
   Result := False;
 
@@ -118,7 +121,8 @@ begin
 
   Major := VersionMS shr 16;
   Minor := VersionMS and $FFFF;
-  Result := (Major = 2) and (Minor = 2);
+  Build := VersionLS shr 16;
+  Result := (Major > 2) or ((Major = 2) and ((Minor > 2) or ((Minor = 2) and (Build >= {#WinFspBuild}))));
 end;
 
 // Mirrors the check dotnet's own bootstrapper uses to detect an installed
@@ -427,7 +431,7 @@ begin
     if not IsWinFspInstalled() then
       InstallWinFspSilently()
     else
-      Log('WinFsp 2.2.x already installed; skipping.');
+      Log('WinFsp {#WinFspVersion} already installed; skipping.');
 
     // Reinstall/upgrade: stop the running service *before* [Files] copies the new
     // ManagedDriveHelper.exe over it. CloseApplicationsFilter/Restart Manager only cover

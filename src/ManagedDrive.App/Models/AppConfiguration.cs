@@ -92,6 +92,16 @@ public sealed record AppConfiguration
     }
 
     /// <summary>
+    /// Gets or sets the installed/required WinFsp version pair (<c>WinFspPrerequisite.SkipKey</c>) for which the
+    /// user declined the "update WinFsp" prompt, so it is not repeated on every start; it is asked again when
+    /// either version changes.
+    /// </summary>
+    public string? SkippedWinFspVersion
+    {
+        get; init;
+    }
+
+    /// <summary>
     /// Gets or sets a value indicating whether closing the main window (title bar X) minimizes
     /// to the system tray instead of exiting the application. Defaults to <c>true</c>, matching
     /// the app's historical hardcoded behavior; <c>false</c> makes closing the window equivalent
