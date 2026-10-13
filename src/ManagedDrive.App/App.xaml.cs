@@ -876,7 +876,11 @@ public partial class App
         foreach (var disk in observedDisks)
         {
             var mountPoint = disk.Options.MountPoint;
-            disk.SaveFailed += (_, ex) => saveFailures.Enqueue(Loc.Format("Status.SaveFailed", mountPoint, ex.Message));
+            disk.SaveFailed += (_, ex) =>
+            {
+                saveFailures.Enqueue(Loc.Format("Status.SaveFailed", mountPoint, ex.Message));
+                _mainViewModel?.MarkExitSaveFailed(mountPoint);
+            };
         }
 
         TeardownBeforeMountManagerDispose();
@@ -888,11 +892,26 @@ public partial class App
             await _mainViewModel.WaitForPendingUnmountsAsync();
         }
 
+        // Isolated: only the progress display depends on it, so a failure must not skip the save.
+        RunTeardownStep(() => _mainViewModel?.BeginExitSave(CollectExitSaveSizes()));
+
+        // The disks report from their save threads, many times a second. The reports only update the
+        // view model's state; the screen is refreshed through a coalescing, below-input-priority
+        // delivery (like the startup splash) so they cannot flood the dispatcher or delay input.
+        var exitSaveRefresh = new CoalescingSignal(
+            () => _mainViewModel?.ShowExitSaveProgress(),
+            action => Dispatcher.BeginInvoke(DispatcherPriority.Background, action));
+        var disposed = false;
         try
         {
-            await Task.Run(() => _mountManager?.Dispose((disk, diskFraction, overallFraction, totalBytes) =>
-                Current.Dispatcher.BeginInvoke(() =>
-                    _mainViewModel?.ReportExitSaveProgress(disk.Options.MountPoint, overallFraction, diskFraction, totalBytes))));
+            await Task.Run(() => _mountManager?.Dispose((disk, diskFraction) =>
+            {
+                if (_mainViewModel?.ReportExitSaveProgress(disk.Options.MountPoint, diskFraction) == true)
+                {
+                    exitSaveRefresh.Notify();
+                }
+            }));
+            disposed = true;
         }
         catch (Exception ex)
         {
@@ -900,6 +919,10 @@ public partial class App
             // The window is locked in the exiting state, so the process must still terminate.
             _logger.LogError(ex, "Disposing the mounted disks failed during shutdown.");
         }
+
+        // Shows the last value and drops deliveries still queued, then the final state.
+        exitSaveRefresh.Complete();
+        RunTeardownStep(() => _mainViewModel?.CompleteExitSave(markAllFinished: disposed));
 
         if (!saveFailures.IsEmpty)
         {
@@ -916,6 +939,32 @@ public partial class App
 
         _logger.LogInformation("ShutdownAsync completed; shutting down application.");
         Shutdown();
+    }
+
+    /// <summary>
+    /// Sizes of the mounted disks whose final save will write an image, keyed by mount point, for
+    /// the exit progress. A disk that cannot be read (e.g. disposed by a concurrent unmount) is
+    /// left out and a repeated mount point is ignored, so this never throws.
+    /// </summary>
+    private Dictionary<string, ulong> CollectExitSaveSizes()
+    {
+        var sizes = new Dictionary<string, ulong>(StringComparer.OrdinalIgnoreCase);
+        foreach (var disk in _mountManager?.GetAll() ?? [])
+        {
+            try
+            {
+                if (disk.WillSaveOnDispose)
+                {
+                    sizes.TryAdd(disk.Options.MountPoint, disk.UsedBytes);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Could not read a disk's size for the exit progress.");
+            }
+        }
+
+        return sizes;
     }
 
     /// <summary>

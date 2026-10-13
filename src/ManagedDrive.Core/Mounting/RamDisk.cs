@@ -650,7 +650,7 @@ public sealed class RamDisk : IDisposable
     /// <param name="progress">Optional progress reporter, updated with a fraction in [0, 1].</param>
     private void SaveOnDispose(IProgress<double>? progress)
     {
-        if (Options.PersistImagePath == null || _skipFinalSave)
+        if (!RamDiskSaveDecisions.HasFinalSaveTarget(Options.PersistImagePath, _skipFinalSave))
         {
             return;
         }
@@ -1471,6 +1471,14 @@ public sealed class RamDisk : IDisposable
     /// <see cref="RamDiskSaveDecisions.NeedsExitSave"/> for the decision logic.
     /// </summary>
     private bool NeedsExitSave() => RamDiskSaveDecisions.NeedsExitSave(Options.SaveImageOnExit, NeedsSave());
+
+    /// <summary>
+    /// Gets whether disposing this disk right now would write its image (see
+    /// <see cref="RamDiskSaveDecisions.WillSaveOnDispose"/>). A snapshot for progress display; the
+    /// answer can change if the disk is modified later.
+    /// </summary>
+    public bool WillSaveOnDispose =>
+        RamDiskSaveDecisions.WillSaveOnDispose(Options.PersistImagePath, _skipFinalSave, Options.SaveImageOnExit, NeedsSave());
 
     /// <summary>
     /// Whether a save would actually write anything. Shared by <see cref="SaveToImageSafe"/> and

@@ -25,13 +25,13 @@ public sealed class MountManager : IDisposable
     /// <summary>
     /// One task per <see cref="Unmount"/> call whose disk has already left <see cref="_disks"/> but
     /// is still being disposed (and so possibly still saving). Guarded by <see cref="_syncRoot"/>.
-    /// <see cref="Dispose(Action{RamDisk, double, double, ulong}?)"/> waits for these, since it can
+    /// <see cref="Dispose(Action{RamDisk, double}?)"/> waits for these, since it can
     /// no longer see those disks and would otherwise let the process exit mid-save.
     /// </summary>
     private readonly List<Task> _unmountsInFlight = [];
 
     /// <summary>
-    /// Set under <see cref="_syncRoot"/> by <see cref="Dispose(Action{RamDisk, double, double, ulong}?)"/>.
+    /// Set under <see cref="_syncRoot"/> by <see cref="Dispose(Action{RamDisk, double}?)"/>.
     /// A <see cref="Mount"/> still in flight when it's set disposes its own disk instead of
     /// registering it, since the disposal has already taken the list of disks to unmount.
     /// </summary>
@@ -96,17 +96,15 @@ public sealed class MountManager : IDisposable
 
     /// <summary>
     /// Unmounts and disposes all active disks, as <see cref="Dispose()"/>, but reports save
-    /// progress via <paramref name="onProgress"/>: the disk currently being saved, that disk's
-    /// own save fraction in [0, 1], the overall fraction across the whole disposal (also [0, 1],
-    /// averaged across all disks' own fractions), and that disk's total used bytes (captured
-    /// before disposal, since <c>disk.UsedBytes</c> can no longer be read afterwards —
-    /// <see cref="RamDisk.Dispose()"/> disposes the underlying node map). Disks are saved
-    /// concurrently (bounded by half the processor count, since each disk's own save already
-    /// parallelizes its Zstd compression internally), so <paramref name="onProgress"/> may be
-    /// invoked from multiple threads at once — it must be thread-safe.
+    /// progress via <paramref name="onProgress"/>: the disk currently being saved and that disk's
+    /// own save fraction in [0, 1]. Disks are saved concurrently (bounded by half the processor
+    /// count, since each disk's own save already parallelizes its Zstd compression internally), so
+    /// <paramref name="onProgress"/> may be invoked from multiple threads at once, and a value
+    /// reported later can be delivered earlier — it must be thread-safe and must not assume order
+    /// (keep the highest fraction seen per disk). It should return quickly.
     /// </summary>
     /// <param name="onProgress">Optional progress callback.</param>
-    public void Dispose(Action<RamDisk, double, double, ulong>? onProgress)
+    public void Dispose(Action<RamDisk, double>? onProgress)
     {
         _activityPollTimer.Dispose();
 
@@ -129,29 +127,12 @@ public sealed class MountManager : IDisposable
             return;
         }
 
-        // Captured once, before Dispose runs, since UsedBytes reads the node map that
-        // Dispose() tears down — reading it from a progress callback fired after disposal
-        // (e.g. the final 1.0 report below, or a delayed UI-thread dispatch of a mid-save
-        // tick) would throw ObjectDisposedException.
-        var totalBytesByDisk = new ulong[count];
-        var aggregator = new DisposeProgressAggregator(count);
-
-        for (var i = 0; i < count; i++)
+        foreach (var disk in all)
         {
-            totalBytesByDisk[i] = all[i].UsedBytes;
-            all[i].ContentAccessed -= OnDiskContentAccessed;
+            disk.ContentAccessed -= OnDiskContentAccessed;
         }
 
-        void ReportOverall(int diskIndex, double diskProgress)
-        {
-            if (onProgress is null)
-            {
-                return;
-            }
-
-            var (reported, overall) = aggregator.Report(diskIndex, diskProgress);
-            onProgress(all[diskIndex], reported, overall, totalBytesByDisk[diskIndex]);
-        }
+        void ReportProgress(int diskIndex, double diskProgress) => onProgress?.Invoke(all[diskIndex], diskProgress);
 
         // Each disk's own save already parallelizes its Zstd compression internally, so disks
         // are only saved a few at a time (not fully unbounded) to avoid oversubscribing the CPU.
@@ -166,7 +147,7 @@ public sealed class MountManager : IDisposable
         {
             try
             {
-                ReportOverall(i, 0.0);
+                ReportProgress(i, 0.0);
             }
             catch (Exception ex)
             {
@@ -177,7 +158,7 @@ public sealed class MountManager : IDisposable
             {
                 // Reported synchronously: Progress<T> would post each report to the thread pool, so a
                 // late mid-save report could land after the final 1.0 below and drag progress back.
-                var perDiskProgress = onProgress is null ? null : new SynchronousProgress(p => ReportOverall(i, p));
+                var perDiskProgress = onProgress is null ? null : new SynchronousProgress(p => ReportProgress(i, p));
                 all[i].Dispose(perDiskProgress);
             }
             catch (Exception ex)
@@ -188,7 +169,7 @@ public sealed class MountManager : IDisposable
 
             try
             {
-                ReportOverall(i, 1.0);
+                ReportProgress(i, 1.0);
             }
             catch (Exception ex)
             {
@@ -206,7 +187,7 @@ public sealed class MountManager : IDisposable
 
     /// <summary>
     /// Blocks until every <see cref="Unmount"/> that was still disposing its disk when
-    /// <see cref="Dispose(Action{RamDisk, double, double, ulong}?)"/> started has finished, so the
+    /// <see cref="Dispose(Action{RamDisk, double}?)"/> started has finished, so the
     /// final saves of those disks are not cut short by process exit. The unmounts report their own
     /// failures to their callers, so only completion is awaited here.
     /// </summary>
@@ -435,43 +416,5 @@ public sealed class MountManager : IDisposable
     {
         /// <inheritdoc />
         public void Report(double value) => onReport(value);
-    }
-}
-
-/// <summary>
-/// Combines the save progress of disks disposed concurrently into an overall fraction. Each
-/// disk's progress only moves forward, so the overall fraction never goes back either, even if
-/// reports arrive out of order.
-/// </summary>
-/// <param name="diskCount">Number of disks being disposed; must be positive.</param>
-internal sealed class DisposeProgressAggregator(int diskCount)
-{
-    /// <summary>
-    /// Furthest progress reported so far for each disk, in [0, 1].
-    /// </summary>
-    private readonly double[] _progressByDisk = new double[diskCount];
-
-    /// <summary>
-    /// Guards <see cref="_progressByDisk"/> against concurrent reports.
-    /// </summary>
-    private readonly Lock _lock = new();
-
-    /// <summary>
-    /// Records a progress report for one disk.
-    /// </summary>
-    /// <param name="diskIndex">Index of the reporting disk.</param>
-    /// <param name="diskProgress">The disk's reported progress.</param>
-    /// <returns>
-    /// The disk's progress to show (never lower than an earlier report) and the average across
-    /// all disks.
-    /// </returns>
-    public (double DiskProgress, double Overall) Report(int diskIndex, double diskProgress)
-    {
-        lock (_lock)
-        {
-            var progress = Math.Max(_progressByDisk[diskIndex], Math.Clamp(diskProgress, 0.0, 1.0));
-            _progressByDisk[diskIndex] = progress;
-            return (progress, _progressByDisk.Sum() / _progressByDisk.Length);
-        }
     }
 }

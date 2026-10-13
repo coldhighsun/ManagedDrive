@@ -23,6 +23,18 @@ public sealed class RamDiskSaveDecisionsTests : IDisposable
         }
     }
 
+    [Theory]
+    [InlineData("a.mdr", false, true, true, true)]
+    [InlineData(null, false, true, true, false)]
+    [InlineData("a.mdr", true, true, true, false)]
+    [InlineData("a.mdr", false, false, true, false)]
+    [InlineData("a.mdr", false, true, false, false)]
+    public void WillSaveOnDispose_RequiresTargetNotSkippedExitSaveAndChanges(
+        string? path, bool skip, bool saveOnExit, bool needsSave, bool expected)
+    {
+        Assert.Equal(expected, RamDiskSaveDecisions.WillSaveOnDispose(path, skip, saveOnExit, needsSave));
+    }
+
     [Fact]
     public void NeedsSave_DirtyFileSystem_ReturnsTrue()
     {
