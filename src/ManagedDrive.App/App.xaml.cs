@@ -145,7 +145,7 @@ public partial class App
             // Before the splash, so its warning box is not covered by it. Shutdown() only queues the
             // exit; return so nothing below runs — in particular no MainViewModel gets created, so
             // App_Exit has no (empty) disk list to save over the user's settings.
-            if (!CheckWinFspPrerequisite())
+            if (!await CheckWinFspPrerequisiteAsync(_settings, config))
             {
                 Shutdown();
                 return;
@@ -561,30 +561,102 @@ public partial class App
     private const int AutoMountConcurrency = 2;
 
     /// <summary>
-    /// Verifies WinFsp is installed; if not, tells the user and offers to open its download page.
+    /// Verifies the required WinFsp version is installed; if not, offers to download and install it.
     /// </summary>
     /// <returns>
     /// <c>true</c> if WinFsp is installed and startup can continue; <c>false</c> if the app must exit.
     /// </returns>
-    private static bool CheckWinFspPrerequisite()
+    private static async Task<bool> CheckWinFspPrerequisiteAsync(SettingsStore settings, AppConfiguration config)
     {
-        if (WinFspPrerequisite.IsInstalled())
+        var check = WinFspPrerequisite.Check();
+        if (!WinFspPrerequisite.ShouldPrompt(check, config.SkippedWinFspVersion))
         {
             return true;
         }
 
-        var result = MessageBox.Show(
-            Loc.Get("Msg.WinFspMissingBody"),
-            Loc.Get("Msg.WinFspMissingTitle"),
-            MessageBoxButton.YesNo,
-            MessageBoxImage.Error);
+        var missing = check.Status == WinFspStatus.Missing;
 
-        if (result == MessageBoxResult.Yes)
+        var question = missing
+            ? Loc.Format("Msg.WinFspMissingBody", WinFspPrerequisite.RequiredVersionText)
+            : Loc.Format("Msg.WinFspMismatchBody", check.InstalledVersion!, WinFspPrerequisite.RequiredVersionText);
+
+        var answer = MessageBox.Show(
+            question,
+            Loc.Get(missing ? "Msg.WinFspMissingTitle" : "Msg.WinFspTitle"),
+            MessageBoxButton.YesNo,
+            missing ? MessageBoxImage.Error : MessageBoxImage.Question);
+
+        // An older build still works; only a missing runtime is fatal. When the user says no, or the update
+        // cannot be done (UAC declined, offline), remember the installed/required pair so it is not asked
+        // about again on every start.
+        void RememberSkip()
         {
-            Process.Start(new ProcessStartInfo("https://github.com/winfsp/winfsp/releases/tag/v2.2B4") { UseShellExecute = true });
+            if (!missing)
+            {
+                var skipKey = WinFspPrerequisite.SkipKey(check.InstalledVersion!);
+                settings.Update(current => current with { SkippedWinFspVersion = skipKey });
+            }
         }
 
-        return false;
+        if (answer != MessageBoxResult.Yes)
+        {
+            RememberSkip();
+            return !missing;
+        }
+
+        var installer = WinFspInstaller.CreateDefault();
+        WinFspInstallResult result;
+        System.Windows.Input.Mouse.OverrideCursor = System.Windows.Input.Cursors.Wait;
+        try
+        {
+            result = await installer.InstallAsync();
+        }
+        finally
+        {
+            System.Windows.Input.Mouse.OverrideCursor = null;
+        }
+
+        switch (result)
+        {
+            case WinFspInstallResult.Success:
+                return true;
+            case WinFspInstallResult.RebootRequired:
+                MessageBox.Show(
+                    Loc.Format("Msg.WinFspRebootRequired", WinFspPrerequisite.RequiredVersionText),
+                    Loc.Get("Msg.WinFspTitle"),
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Information);
+                return false;
+            case WinFspInstallResult.Declined:
+                // Nothing changed; explain why a missing runtime still ends the app instead of closing silently.
+                if (missing)
+                {
+                    OfferManualWinFspDownload(Loc.Format("Msg.WinFspDeclined", WinFspPrerequisite.RequiredVersionText));
+                }
+
+                RememberSkip();
+                return !missing;
+            default:
+                Log.Warning("Automatic WinFsp install failed: {Error}", installer.LastError);
+                OfferManualWinFspDownload(Loc.Format("Msg.WinFspInstallFailed", installer.LastError ?? string.Empty));
+                RememberSkip();
+                return !missing;
+        }
+    }
+
+    /// <summary>
+    /// Shows <paramref name="message"/> and opens the WinFsp release page when the user agrees.
+    /// </summary>
+    private static void OfferManualWinFspDownload(string message)
+    {
+        if (MessageBox.Show(
+                message,
+                Loc.Get("Msg.WinFspTitle"),
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Error) == MessageBoxResult.Yes)
+        {
+            Process.Start(new ProcessStartInfo(WinFspPrerequisite.ReleasePageUrl) { UseShellExecute = true });
+        }
     }
 
     /// <summary>

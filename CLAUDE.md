@@ -23,7 +23,7 @@ dotnet run --project src/ManagedDrive.Cli -- list
 
 The solution file is `ManagedDrive.slnx` (Visual Studio 2022+ format).
 
-**WinFsp prerequisite:** `winfsp-msil.dll` must be present at `C:\Program Files (x86)\WinFsp\bin\`. Install exactly [WinFsp 2.2.26215 (2026 Beta4)](https://github.com/winfsp/winfsp/releases/tag/v2.2B4) before building or running — download the MSI directly; do not use `winget install WinFsp.WinFsp`, as the winget package lags behind this release.
+**WinFsp prerequisite:** `winfsp-msil.dll` must be present at `C:\Program Files (x86)\WinFsp\bin\`. Install exactly [WinFsp 2.2.26286 (2026 Beta5)](https://github.com/winfsp/winfsp/releases/tag/v2.2B5) before building or running — download the MSI directly; do not use `winget install WinFsp.WinFsp`, as the winget package lags behind this release. At startup `WinFspPrerequisite.Check` compares the installed `winfsp-msil.dll` with that version (`RequiredVersion`, the release tag and the MSI SHA256 live there too; bump them together with `winfsp.net`, `installer/ManagedDrive.iss` and the `ci.yml` WinFsp env values); a missing or older version offers `WinFspInstaller` (copies the MSI shipped in the portable ZIP's `prerequisites\`, or downloads it, to `%LOCALAPPDATA%\ManagedDrive\updates`; verifies the SHA256 through a handle that stays open during the run; runs `msiexec` elevated). A newer WinFsp is accepted, a declined update for an older one is remembered per installed/required pair (`AppConfiguration.SkippedWinFspVersion`), and only a missing runtime is fatal.
 
 ## Architecture
 

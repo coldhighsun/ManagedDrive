@@ -409,7 +409,12 @@
     <sys:String x:Key="Msg.StartupTempReset">您的 Windows 临时目录指向了：&#x0a;&#x0a;  {0}&#x0a;&#x0a;该内存盘未配置自动挂载，临时目录将无法访问，已自动重置为系统默认临时目录。</sys:String>
     <sys:String x:Key="Msg.StartupTempResetDangling">您的 Windows 临时目录指向了：&#x0a;&#x0a;  {0}&#x0a;&#x0a;该内存盘当前未挂载（可能自动挂载失败，或对应的磁盘配置已不存在），临时目录无法访问，已自动重置为系统默认临时目录。</sys:String>
     <sys:String x:Key="Msg.WinFspMissingTitle">ManagedDrive – 缺少必要组件</sys:String>
-    <sys:String x:Key="Msg.WinFspMissingBody">此程序需要 WinFsp 2.2.x，但未在系统中检测到。&#x0a;&#x0a;点击「是」跳转下载页面，点击「否」退出。</sys:String>
+    <sys:String x:Key="Msg.WinFspTitle">ManagedDrive – WinFsp</sys:String>
+    <sys:String x:Key="Msg.WinFspMissingBody">此程序需要 WinFsp {0}，但未在系统中检测到。&#x0a;&#x0a;点击「是」立即下载并安装（需要管理员权限），点击「否」退出。</sys:String>
+    <sys:String x:Key="Msg.WinFspMismatchBody">当前安装的 WinFsp 版本为 {0}，而 ManagedDrive 基于 {1} 构建和测试。&#x0a;&#x0a;点击「是」立即下载并安装 {1}（需要管理员权限），点击「否」继续使用当前版本。</sys:String>
+    <sys:String x:Key="Msg.WinFspInstallFailed">无法自动安装 WinFsp：&#x0a;&#x0a;{0}&#x0a;&#x0a;点击「是」打开下载页面手动安装。</sys:String>
+    <sys:String x:Key="Msg.WinFspDeclined">此程序需要 WinFsp {0}，但由于未授予管理员权限，安装未进行。&#x0a;&#x0a;点击「是」打开下载页面手动安装，点击「否」退出。</sys:String>
+    <sys:String x:Key="Msg.WinFspRebootRequired">WinFsp {0} 已安装，但需要重启 Windows 后才能使用。请重启 Windows 后再次启动 ManagedDrive。</sys:String>
     <sys:String x:Key="Msg.ExitConfirmTitle">ManagedDrive</sys:String>
     <sys:String x:Key="Msg.ExitConfirmBody">所有已挂载的 RAM 磁盘将被卸载，其中未挂载镜像的数据将丢失。&#x0a;&#x0a;确认退出？</sys:String>
     <sys:String x:Key="Msg.MountFailed">挂载磁盘失败：&#x0a;{0}</sys:String>

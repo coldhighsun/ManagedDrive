@@ -98,7 +98,7 @@ The ZIP also includes `mdrive.exe`, a companion CLI (see [CLI Usage](#cli-usage)
 | Requirement | Notes |
 |---|---|
 | **Windows 10 / 11 (64-bit)** | ARM64 is not currently tested |
-| **[WinFsp 2.2.26215 (2026 Beta4)](https://github.com/winfsp/winfsp/releases/tag/v2.2B4)** | Must be installed before running ManagedDrive. Download the installer directly: [winfsp-2.2.26215.msi](https://github.com/winfsp/winfsp/releases/download/v2.2B4/winfsp-2.2.26215.msi) — do not use `winget install WinFsp.WinFsp`, as the winget package lags behind the latest release. The managed assembly `winfsp-msil.dll` is installed to `C:\Program Files (x86)\WinFsp\bin\` and is referenced by the project automatically. |
+| **[WinFsp 2.2.26286 (2026 Beta5)](https://github.com/winfsp/winfsp/releases/tag/v2.2B5)** | The installer bundles it, and the app offers to download and install it when it is missing or older (a newer version is accepted); the portable ZIP also carries the installer in `prerequisites\`. To install it manually, download the installer directly: [winfsp-2.2.26286.msi](https://github.com/winfsp/winfsp/releases/download/v2.2B5/winfsp-2.2.26286.msi) — do not use `winget install WinFsp.WinFsp`, as the winget package lags behind the latest release. The managed assembly `winfsp-msil.dll` is installed to `C:\Program Files (x86)\WinFsp\bin\` and is referenced by the project automatically. |
 | **[.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0)** | Required for the `-portable` ZIP (framework-dependent). |
 | **.NET 10 SDK** | Required to build. |
 
@@ -307,7 +307,7 @@ ZIP 中还包含 `mdrive.exe`（配套命令行工具，见下方[命令行用�
 | 要求 | 说明 |
 |---|---|
 | **Windows 10 / 11（64 位）** | 暂未测试 ARM64 |
-| **[WinFsp 2.2.26215（2026 Beta4）](https://github.com/winfsp/winfsp/releases/tag/v2.2B4)** | 必须安装此版本才能运行 ManagedDrive。请直接下载安装包：[winfsp-2.2.26215.msi](https://github.com/winfsp/winfsp/releases/download/v2.2B4/winfsp-2.2.26215.msi)——不要使用 `winget install WinFsp.WinFsp` 安装，因为该 winget 包更新不及时，落后于最新发布版本。托管程序集 `winfsp-msil.dll` 将安装至 `C:\Program Files (x86)\WinFsp\bin\`，项目会自动引用。 |
+| **[WinFsp 2.2.26286（2026 Beta5）](https://github.com/winfsp/winfsp/releases/tag/v2.2B5)** | 安装程序已内置，应用在检测到缺失或版本过旧时也会提示自动下载安装（更新版本可直接使用），便携版压缩包的 `prerequisites\` 目录同样附带安装包。如需手动安装，请直接下载安装包：[winfsp-2.2.26286.msi](https://github.com/winfsp/winfsp/releases/download/v2.2B5/winfsp-2.2.26286.msi)——不要使用 `winget install WinFsp.WinFsp` 安装，因为该 winget 包更新不及时，落后于最新发布版本。托管程序集 `winfsp-msil.dll` 将安装至 `C:\Program Files (x86)\WinFsp\bin\`，项目会自动引用。 |
 | **[.NET 10 桌面运行时](https://dotnet.microsoft.com/download/dotnet/10.0)** | "绿色版"（框架依赖型）ZIP 需要。 |
 | **.NET 10 SDK** | 编译所需。 |
 

@@ -11,8 +11,8 @@ Developer-facing documentation for ManagedDrive — building from source, soluti
 ### Getting Started
 
 ```powershell
-# 1. Download and install WinFsp 2.2.26215 (2026 Beta4)
-# https://github.com/winfsp/winfsp/releases/download/v2.2B4/winfsp-2.2.26215.msi
+# 1. Download and install WinFsp 2.2.26286 (2026 Beta5) - or let ManagedDrive offer to install it on first start
+# https://github.com/winfsp/winfsp/releases/download/v2.2B5/winfsp-2.2.26286.msi
 
 # 2. Clone the repository
 git clone https://github.com/coldhighsun/ManagedDrive
@@ -100,8 +100,8 @@ BenchmarkDotNet will prompt you to pick which benchmark class(es) to run (`Seque
 ### 快速开始
 
 ```powershell
-# 1. 下载并安装 WinFsp 2.2.26215（2026 Beta4）
-# https://github.com/winfsp/winfsp/releases/download/v2.2B4/winfsp-2.2.26215.msi
+# 1. 下载并安装 WinFsp 2.2.26286（2026 Beta5）——也可以首次启动时由 ManagedDrive 提示自动安装
+# https://github.com/winfsp/winfsp/releases/download/v2.2B5/winfsp-2.2.26286.msi
 
 # 2. 克隆仓库
 git clone https://github.com/coldhighsun/ManagedDrive
