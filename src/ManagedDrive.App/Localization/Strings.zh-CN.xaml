@@ -127,6 +127,9 @@
     <sys:String x:Key="Card.ApplyingChanges">正在应用更改...</sys:String>
     <sys:String x:Key="Msg.ExitSaving">正在保存磁盘镜像，请稍候...</sys:String>
     <sys:String x:Key="Msg.ExitSavingDisk">正在保存 "{0}"...</sys:String>
+    <sys:String x:Key="Msg.ExitSavingDisks">正在保存 {0} 个磁盘镜像（已完成 {1}/{0}）...</sys:String>
+    <sys:String x:Key="Msg.ExitSavingFinishing">正在完成...</sys:String>
+    <sys:String x:Key="Msg.ExitSavingFailed">{1} 个磁盘镜像中有 {0} 个保存失败</sys:String>
     <sys:String x:Key="Busy.SavingImage">正在保存磁盘映像…</sys:String>
     <sys:String x:Key="Busy.CreatingSnapshot">正在创建快照…</sys:String>
     <sys:String x:Key="Busy.LoadingDisks">正在加载磁盘 {0}/{1}…</sys:String>

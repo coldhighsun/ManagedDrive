@@ -22,6 +22,20 @@ internal static class RamDiskSaveDecisions
     internal static bool NeedsExitSave(bool saveImageOnExit, bool needsSave) => saveImageOnExit && needsSave;
 
     /// <summary>
+    /// Whether disposing the disk may write an image at all: a persist path is configured and the
+    /// final save was not switched off.
+    /// </summary>
+    internal static bool HasFinalSaveTarget(string? persistImagePath, bool skipFinalSave) =>
+        persistImagePath != null && !skipFinalSave;
+
+    /// <summary>
+    /// Whether disposing the disk now would write its image: <see cref="HasFinalSaveTarget"/> and
+    /// <see cref="NeedsExitSave"/> both hold. This is what <c>RamDisk.SaveOnDispose</c> decides.
+    /// </summary>
+    internal static bool WillSaveOnDispose(string? persistImagePath, bool skipFinalSave, bool saveImageOnExit, bool needsSave) =>
+        HasFinalSaveTarget(persistImagePath, skipFinalSave) && NeedsExitSave(saveImageOnExit, needsSave);
+
+    /// <summary>
     /// Whether <see cref="RamDisk.SetPassword"/> should generate a fresh content-encryption key
     /// rather than reuse <paramref name="currentCek"/> to just re-wrap it under a new password.
     /// <see langword="true"/> only when there is no current CEK (the disk is unencrypted, or a

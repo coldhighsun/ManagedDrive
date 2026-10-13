@@ -50,22 +50,101 @@ public sealed partial class MainViewModel
     }
 
     /// <summary>
-    /// Updates <see cref="ExitSaveProgress"/>, <see cref="ExitSaveStatusText"/>, and
-    /// <see cref="ExitSaveDetailText"/> during the final on-exit save. Called from
-    /// <c>App.ShutdownAsync</c> via
-    /// <see cref="ManagedDrive.Core.Mounting.MountManager.Dispose(Action{ManagedDrive.Core.Mounting.RamDisk, double, double, ulong})"/>.
+    /// The aggregate state of the exit save, written by the disks' save threads and read on the UI
+    /// thread. It is created on the UI thread by <see cref="BeginExitSave"/> before the disks start.
+    /// </summary>
+    private ExitSaveProgressTracker? _exitSaveTracker;
+
+    /// <summary>
+    /// Starts a fresh exit save covering the disks that will be written, so the total and the
+    /// weights are fixed before the first report arrives.
+    /// </summary>
+    /// <param name="totalBytesByMountPoint">Used bytes of every disk about to be written, keyed by mount point.</param>
+    internal void BeginExitSave(IReadOnlyDictionary<string, ulong> totalBytesByMountPoint) =>
+        _exitSaveTracker = new(totalBytesByMountPoint);
+
+    /// <summary>
+    /// Records one disk's save progress during the final on-exit save. Called from the disks' save
+    /// threads via
+    /// <see cref="ManagedDrive.Core.Mounting.MountManager.Dispose(Action{ManagedDrive.Core.Mounting.RamDisk, double})"/>,
+    /// so it only updates the tracker; <see cref="ShowExitSaveProgress"/> puts the result on screen.
     /// </summary>
     /// <param name="mountPoint">The mount point of the disk currently being saved.</param>
-    /// <param name="overallFraction">Overall progress across all disks, in [0, 1].</param>
-    /// <param name="diskFraction">Save progress for the disk currently being saved, in [0, 1].</param>
-    /// <param name="totalBytes">The disk's total used bytes, for <see cref="ExitSaveDetailText"/>.</param>
-    internal void ReportExitSaveProgress(string mountPoint, double overallFraction, double diskFraction, ulong totalBytes)
+    /// <param name="diskFraction">Save progress for that disk, in [0, 1].</param>
+    /// <returns>Whether the report changed what the overlay shows, i.e. a refresh is worthwhile.</returns>
+    internal bool ReportExitSaveProgress(string mountPoint, double diskFraction) =>
+        _exitSaveTracker?.Report(mountPoint, diskFraction) ?? false;
+
+    /// <summary>
+    /// Records that a disk's final save failed, so it is not shown as finished. Thread-safe. It only
+    /// counts once <see cref="BeginExitSave"/> has run and that disk's own final save has begun (it
+    /// has reported), so a periodic auto-save failure does not mark a disk whose final save then
+    /// succeeds.
+    /// </summary>
+    /// <param name="mountPoint">The mount point of the disk whose save failed.</param>
+    internal void MarkExitSaveFailed(string mountPoint) => _exitSaveTracker?.MarkFailed(mountPoint);
+
+    /// <summary>
+    /// Updates <see cref="ExitSaveProgress"/>, <see cref="ExitSaveStatusText"/> and
+    /// <see cref="ExitSaveDetailText"/> from the newest state. Disks are saved in parallel, so the
+    /// overlay shows the aggregate instead of whichever disk reported last (which made the text
+    /// jump). UI thread only.
+    /// </summary>
+    internal void ShowExitSaveProgress()
     {
-        ExitSaveProgress = overallFraction;
-        ExitSaveStatusText = Loc.Format("Msg.ExitSavingDisk", mountPoint);
+        if (_exitSaveTracker is { DiskCount: > 0 } tracker)
+        {
+            ApplyExitSaveSnapshot(tracker.Sample());
+        }
+    }
+
+    /// <summary>
+    /// Shows the exit save as finished, once the disks have all been disposed. UI thread only.
+    /// </summary>
+    /// <param name="markAllFinished">
+    /// <c>false</c> when disposing the disks threw, so disks that did not report are not claimed as
+    /// done.
+    /// </param>
+    internal void CompleteExitSave(bool markAllFinished = true)
+    {
+        if (_exitSaveTracker is null)
+        {
+            return;
+        }
+
+        if (_exitSaveTracker.DiskCount == 0)
+        {
+            // Nothing was written: keep the generic text, just fill the bar.
+            if (markAllFinished)
+            {
+                ExitSaveProgress = 1;
+            }
+
+            return;
+        }
+
+        if (markAllFinished)
+        {
+            _exitSaveTracker.Complete();
+        }
+
+        ApplyExitSaveSnapshot(_exitSaveTracker.Sample());
+    }
+
+    /// <summary>
+    /// Puts a tracker snapshot into the three exit-save properties.
+    /// </summary>
+    /// <param name="s">The snapshot to show.</param>
+    private void ApplyExitSaveSnapshot(ExitSaveProgressTracker.Snapshot s)
+    {
+        ExitSaveProgress = s.Overall;
+        ExitSaveStatusText = s.EndedWithFailures ? Loc.Format("Msg.ExitSavingFailed", s.FailedCount, s.DiskCount)
+            : s.IsFinishing ? Loc.Get("Msg.ExitSavingFinishing")
+            : s.MountPoint is { } single ? Loc.Format("Msg.ExitSavingDisk", single)
+            : Loc.Format("Msg.ExitSavingDisks", s.DiskCount, s.CompletedCount);
         ExitSaveDetailText = Loc.Format("Busy.ByteProgress",
-            ByteFormatter.Format((ulong)(totalBytes * Math.Clamp(diskFraction, 0.0, 1.0))),
-            ByteFormatter.Format(totalBytes));
+            ByteFormatter.Format(s.DoneBytes),
+            ByteFormatter.Format(s.TotalBytes));
     }
 
     /// <summary>
