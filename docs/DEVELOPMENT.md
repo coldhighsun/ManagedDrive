@@ -61,19 +61,19 @@ ManagedDrive uses **WinFsp** (Windows File System Proxy) to present an in-memory
 
 ### Performance
 
-Measured with [BenchmarkDotNet](https://benchmarkdotnet.org/) (Intel Core i9-13980HX, 64 GB RAM, KIOXIA KXG8AZNV1T02 NVMe SSD, Windows 11 Pro, .NET 10.0.12):
+Measured with [BenchmarkDotNet](https://benchmarkdotnet.org/) 0.15.8 (Intel Core i9-13980HX, 64 GB RAM, KIOXIA KXG8AZNV1T02 NVMe SSD, Windows 11 Pro, .NET 10.0.13):
 
 | Scenario | RAM Disk | NVMe SSD | Ratio |
 |---|---:|---:|---:|
-| Sequential write, 4 KB | 1.9 MB/s | 0.9 MB/s | **RAM 2.3× faster** |
-| Sequential write, 1 MB | 391.5 MB/s | 89.9 MB/s | **RAM 4.4× faster** |
-| Sequential read (OS cache), 4 KB | 3.7 MB/s | 4.3 MB/s | NVMe 1.1× faster |
-| Sequential read (OS cache), 1 MB | 592.7 MB/s | 1,267.7 MB/s | NVMe 2.1× faster |
-| Random 4 KB read (uncached), 30 seeks | 1.78 ms | 3.41 ms | **RAM 1.9× faster** |
-| Random 4 KB read (OS cache), 30 seeks | 1.92 ms | 1.08 ms | NVMe 1.8× faster |
-| 30× small-file (4 KB) create+write | 61.0 ms (2.03 ms/file) | 112.9 ms (3.76 ms/file) | **RAM 1.8× faster** |
+| Sequential write, 4 KB | 1.7 MB/s | 0.8 MB/s | **RAM 2.0× faster** |
+| Sequential write, 1 MB | 361.5 MB/s | 90.5 MB/s | **RAM 4.0× faster** |
+| Sequential read (OS cache), 4 KB | 3.1 MB/s | 3.5 MB/s | NVMe 1.1× faster |
+| Sequential read (OS cache), 1 MB | 577.4 MB/s | 875.7 MB/s | NVMe 1.5× faster |
+| Random 4 KB read (uncached), 30 seeks | 2.13 ms | 3.35 ms | **RAM 1.6× faster** |
+| Random 4 KB read (OS cache), 30 seeks | 2.05 ms | 1.30 ms | NVMe 1.6× faster |
+| 30× small-file (4 KB) create+write | 72.4 ms (2.41 ms/file) | 115.5 ms (3.85 ms/file) | **RAM 1.6× faster** |
 
-Writes win big (up to 4.4×) by skipping block allocation, journaling, and the physical write. Uncached random reads benefit from zero seek latency (1.9× faster). Small-file creates are also faster (1.8×) because metadata operations stay in memory. Cached reads, however, favor the NVMe path — NTFS reads from the OS page cache stay entirely in-kernel, while the RAM disk incurs an extra kernel–userspace round trip through WinFsp. Run `dotnet run --project benchmarks/ManagedDrive.Benchmarks -c Release` for current numbers on your own hardware (see [Running Benchmarks](#running-benchmarks) below).
+Throughput is derived from the mean time per operation (1 MB = 1,048,576 bytes). Writes win big (up to 4.0×) by skipping block allocation, journaling, and the physical write. Uncached random reads benefit from zero seek latency (1.6× faster). Small-file creates are also faster (1.6×) because metadata operations stay in memory. Cached reads, however, favor the NVMe path — NTFS reads from the OS page cache stay entirely in-kernel, while the RAM disk incurs an extra kernel–userspace round trip through WinFsp. Run `dotnet run --project benchmarks/ManagedDrive.Benchmarks -c Release` for current numbers on your own hardware (see [Running Benchmarks](#running-benchmarks) below).
 
 ### Running Tests
 
@@ -150,19 +150,19 @@ ManagedDrive 使用 **WinFsp**（Windows 文件系统代理）将内存目录树
 
 ### 性能基准
 
-使用 [BenchmarkDotNet](https://benchmarkdotnet.org/) 测量（Intel Core i9-13980HX、64 GB 内存、KIOXIA KXG8AZNV1T02 NVMe SSD、Windows 11 Pro、.NET 10.0.12）：
+使用 [BenchmarkDotNet](https://benchmarkdotnet.org/) 0.15.8 测量（Intel Core i9-13980HX、64 GB 内存、KIOXIA KXG8AZNV1T02 NVMe SSD、Windows 11 Pro、.NET 10.0.13）：
 
 | 场景 | 内存盘 | NVMe SSD | 倍率 |
 |---|---:|---:|---:|
-| 顺序写入，4 KB | 1.9 MB/s | 0.9 MB/s | **内存盘快 2.3×** |
-| 顺序写入，1 MB | 391.5 MB/s | 89.9 MB/s | **内存盘快 4.4×** |
-| 顺序读取（OS 缓存），4 KB | 3.7 MB/s | 4.3 MB/s | NVMe 快 1.1× |
-| 顺序读取（OS 缓存），1 MB | 592.7 MB/s | 1,267.7 MB/s | NVMe 快 2.1× |
-| 随机 4 KB 读取（未缓存），30 次寻址 | 1.78 ms | 3.41 ms | **内存盘快 1.9×** |
-| 随机 4 KB 读取（OS 缓存），30 次寻址 | 1.92 ms | 1.08 ms | NVMe 快 1.8× |
-| 30 次小文件（4 KB）创建+写入 | 61.0 ms（2.03 ms/文件） | 112.9 ms（3.76 ms/文件） | **内存盘快 1.8×** |
+| 顺序写入，4 KB | 1.7 MB/s | 0.8 MB/s | **内存盘快 2.0×** |
+| 顺序写入，1 MB | 361.5 MB/s | 90.5 MB/s | **内存盘快 4.0×** |
+| 顺序读取（OS 缓存），4 KB | 3.1 MB/s | 3.5 MB/s | NVMe 快 1.1× |
+| 顺序读取（OS 缓存），1 MB | 577.4 MB/s | 875.7 MB/s | NVMe 快 1.5× |
+| 随机 4 KB 读取（未缓存），30 次寻址 | 2.13 ms | 3.35 ms | **内存盘快 1.6×** |
+| 随机 4 KB 读取（OS 缓存），30 次寻址 | 2.05 ms | 1.30 ms | NVMe 快 1.6× |
+| 30 次小文件（4 KB）创建+写入 | 72.4 ms（2.41 ms/文件） | 115.5 ms（3.85 ms/文件） | **内存盘快 1.6×** |
 
-写入优势显著（最高 4.4×），因为跳过了物理块分配、日志记录和实际落盘。未缓存的随机读取受益于零寻址延迟（快 1.9×）。小文件创建也更快（1.8×），因为元数据操作全在内存中完成。但缓存读取方面 NVMe 更优——NTFS 从 OS 页缓存读取时全程在内核态完成，而内存盘需要经过 WinFsp 的内核–用户态往返，增加了额外开销。运行 `dotnet run --project benchmarks/ManagedDrive.Benchmarks -c Release` 可在你自己的硬件上获取当前数据（见下方[运行基准测试](#running-benchmarks-zh)）。
+吞吐量由单次操作的平均耗时换算（1 MB = 1,048,576 字节）。写入优势显著（最高 4.0×），因为跳过了物理块分配、日志记录和实际落盘。未缓存的随机读取受益于零寻址延迟（快 1.6×）。小文件创建也更快（1.6×），因为元数据操作全在内存中完成。但缓存读取方面 NVMe 更优——NTFS 从 OS 页缓存读取时全程在内核态完成，而内存盘需要经过 WinFsp 的内核–用户态往返，增加了额外开销。运行 `dotnet run --project benchmarks/ManagedDrive.Benchmarks -c Release` 可在你自己的硬件上获取当前数据（见下方[运行基准测试](#running-benchmarks-zh)）。
 
 ### 运行测试
 
