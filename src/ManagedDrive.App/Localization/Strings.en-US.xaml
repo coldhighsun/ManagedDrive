@@ -186,6 +186,7 @@
     <sys:String x:Key="Val.PasswordTooLong">Password must be at most {0} characters.</sys:String>
     <sys:String x:Key="Val.PasswordIncorrect">Incorrect password.</sys:String>
     <sys:String x:Key="Val.CliPasswordRequired">This image is password-protected. Supply --password or --password-file.</sys:String>
+    <sys:String x:Key="Val.CliPasswordNotApplicable">This image is not password-protected, so --password and --password-file do not apply. Mount it without a password, then use set-password to encrypt it.</sys:String>
     <sys:String x:Key="Val.CliPasswordIncorrect">The supplied password is incorrect.</sys:String>
     <sys:String x:Key="Val.CliBadCapacity">Capacity must be greater than 0.</sys:String>
     <sys:String x:Key="Val.CliUnknownPreset">Unknown item "{0}". Run 'mdrive preset list' to see the available items.</sys:String>

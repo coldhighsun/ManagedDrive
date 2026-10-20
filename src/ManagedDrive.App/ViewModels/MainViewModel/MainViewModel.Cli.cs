@@ -200,6 +200,13 @@ public sealed partial class MainViewModel
             return (false, Loc.Get("Val.CliPasswordRequired"));
         }
 
+        // RamDisk.Create would otherwise encrypt the unprotected image with the given password and
+        // delete its snapshots, so a stray --password must not be silently honoured.
+        if (!isEncrypted && overrides.Password is not null)
+        {
+            return (false, Loc.Get("Val.CliPasswordNotApplicable"));
+        }
+
         var savedProfile = _settingsStore.Load().Disks
             .FirstOrDefault(p => p.PersistImagePath != null &&
                 string.Equals(p.PersistImagePath, imagePath, StringComparison.OrdinalIgnoreCase));
@@ -268,6 +275,11 @@ public sealed partial class MainViewModel
         PresetComposition? preset = null)
     {
         _logger.LogInformation("CLI create requested: {MountPoint}, capacity {CapacityBytes} bytes.", mountPoint, capacityBytes);
+
+        if (GetNewPasswordError(password) is { } passwordError)
+        {
+            return (false, passwordError);
+        }
 
         if (Disks.Any(d => string.Equals(d.MountPoint, mountPoint, StringComparison.OrdinalIgnoreCase)))
         {
@@ -565,6 +577,11 @@ public sealed partial class MainViewModel
             return (false, string.Empty);
         }
 
+        if (GetNewPasswordError(newPassword) is { } lengthError)
+        {
+            return (false, lengthError);
+        }
+
         if (await Task.Run(() => TrySetPassword(vm.Disk, newPassword)) is { } error)
         {
             return (false, error);
@@ -592,6 +609,22 @@ public sealed partial class MainViewModel
             _logger.LogWarning(ex, "Could not open {Path} in Explorer.", path);
         }
     }
+
+    /// <summary>
+    /// Applies the dialogs' password length rule to a password the CLI is about to encrypt
+    /// something with (a new disk, a changed password or an export), which would otherwise accept
+    /// an empty or oversized one. Not used for unlocking an existing image: its password may
+    /// predate the rule.
+    /// </summary>
+    /// <param name="password">The password, or <see langword="null"/> when none is being set.</param>
+    /// <returns>The localized error message, or <see langword="null"/> when the password is acceptable.</returns>
+    internal static string? GetNewPasswordError(string? password) =>
+        password is null ? null : CreateDiskOptionsBuilder.ValidatePasswordLength(password) switch
+        {
+            CreateDiskValidationError.PasswordTooShort => Loc.Format("Val.PasswordTooShort", CreateDiskOptionsBuilder.MinPasswordLength),
+            CreateDiskValidationError.PasswordTooLong => Loc.Format("Val.PasswordTooLong", CreateDiskOptionsBuilder.MaxPasswordLength),
+            _ => null,
+        };
 
     /// <summary>
     /// Calls <see cref="RamDisk.SetPassword"/>, turning the expected failure (plaintext snapshots
@@ -809,6 +842,12 @@ public sealed partial class MainViewModel
         {
             _logger.LogWarning("CLI export rejected: {MountPoint} -> {OutputPath} ({Reason}).", mountPoint, outputPath, errorKey);
             return (false, Loc.Get(errorKey));
+        }
+
+        // The password is ignored for archive exports, so only an image export has one to check.
+        if (archiveFormat is null && GetNewPasswordError(password) is { } passwordError)
+        {
+            return (false, passwordError);
         }
 
         try

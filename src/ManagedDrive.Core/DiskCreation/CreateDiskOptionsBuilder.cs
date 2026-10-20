@@ -289,6 +289,24 @@ public static class CreateDiskOptionsBuilder
     public const int MaxPasswordLength = 64;
 
     /// <summary>
+    /// Checks that a password to encrypt a disk image with is within
+    /// <see cref="MinPasswordLength"/> and <see cref="MaxPasswordLength"/>. Shared by the dialogs
+    /// and the CLI, so an empty or oversized password cannot get in through either.
+    /// </summary>
+    /// <param name="password">The password to check.</param>
+    /// <returns>
+    /// <see cref="CreateDiskValidationError.None"/> when the length is accepted; otherwise
+    /// <see cref="CreateDiskValidationError.PasswordTooShort"/> or
+    /// <see cref="CreateDiskValidationError.PasswordTooLong"/>.
+    /// </returns>
+    public static CreateDiskValidationError ValidatePasswordLength(string password) => password.Length switch
+    {
+        < MinPasswordLength => CreateDiskValidationError.PasswordTooShort,
+        > MaxPasswordLength => CreateDiskValidationError.PasswordTooLong,
+        _ => CreateDiskValidationError.None,
+    };
+
+    /// <summary>
     /// Validates <paramref name="input"/> and builds the corresponding <see cref="DiskOptions"/>.
     /// </summary>
     /// <param name="input">The dialog input snapshot.</param>
@@ -701,14 +719,10 @@ public static class CreateDiskOptionsBuilder
             return new() { PasswordChanged = false };
         }
 
-        if (password1.Length < MinPasswordLength)
+        var lengthError = ValidatePasswordLength(password1);
+        if (lengthError != CreateDiskValidationError.None)
         {
-            return Fail(CreateDiskValidationError.PasswordTooShort);
-        }
-
-        if (password1.Length > MaxPasswordLength)
-        {
-            return Fail(CreateDiskValidationError.PasswordTooLong);
+            return Fail(lengthError);
         }
 
         return new() { Password = password1, PasswordChanged = true };
