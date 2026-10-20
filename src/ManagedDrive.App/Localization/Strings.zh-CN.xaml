@@ -186,6 +186,7 @@
     <sys:String x:Key="Val.PasswordTooLong">密码长度不能超过 {0} 位。</sys:String>
     <sys:String x:Key="Val.PasswordIncorrect">密码不正确。</sys:String>
     <sys:String x:Key="Val.CliPasswordRequired">该镜像已加密，请提供 --password 或 --password-file。</sys:String>
+    <sys:String x:Key="Val.CliPasswordNotApplicable">该镜像未加密，--password 和 --password-file 不适用。请不带密码挂载，再用 set-password 加密。</sys:String>
     <sys:String x:Key="Val.CliPasswordIncorrect">提供的密码不正确。</sys:String>
     <sys:String x:Key="Val.CliBadCapacity">容量必须大于 0。</sys:String>
     <sys:String x:Key="Val.CliUnknownPreset">未知项目“{0}”。运行 'mdrive preset list' 查看可用项目。</sys:String>

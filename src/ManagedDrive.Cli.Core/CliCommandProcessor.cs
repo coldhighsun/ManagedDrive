@@ -11,6 +11,24 @@ namespace ManagedDrive.Cli.Core;
 public static class CliCommandProcessor
 {
     /// <summary>
+    /// The shortest password the app accepts when encrypting something. Cli.Core cannot see
+    /// <c>CreateDiskOptionsBuilder.MinPasswordLength</c>, so a test keeps the two equal.
+    /// </summary>
+    internal const int MinNewPasswordLength = 8;
+
+    /// <summary>
+    /// The longest password the app accepts when encrypting something; kept equal to
+    /// <c>CreateDiskOptionsBuilder.MaxPasswordLength</c> by a test.
+    /// </summary>
+    internal const int MaxNewPasswordLength = 64;
+
+    /// <summary>
+    /// The phrase added to the help of every option that supplies a password to encrypt with, as
+    /// opposed to one that unlocks an existing image (whose password may predate the limit).
+    /// </summary>
+    private static readonly string NewPasswordLengthNote = $"({MinNewPasswordLength} to {MaxNewPasswordLength} characters)";
+
+    /// <summary>
     /// Determines whether <paramref name="args"/> is exactly the <c>exit</c> command.
     /// </summary>
     /// <param name="args">The command-line arguments.</param>
@@ -281,11 +299,11 @@ public static class CliCommandProcessor
         };
         var setPasswordOption = new Option<string?>("--password")
         {
-            Description = "The new password. Prefer --password-file to avoid it appearing in shell history or the process list.",
+            Description = $"The new password {NewPasswordLengthNote}. Prefer --password-file to avoid it appearing in shell history or the process list.",
         };
         var setPasswordFileOption = new Option<string?>("--password-file")
         {
-            Description = "Path to a file whose first line is the new password. Mutually exclusive with --password.",
+            Description = $"Path to a file whose first line is the new password {NewPasswordLengthNote}. Mutually exclusive with --password.",
         };
         var setPasswordRemoveOption = new Option<bool>("--remove")
         {
@@ -346,11 +364,11 @@ public static class CliCommandProcessor
         };
         var createPasswordOption = new Option<string?>("--password")
         {
-            Description = "Password to encrypt --image with. Requires --image. Prefer --password-file to avoid it appearing in shell history or the process list.",
+            Description = $"Password to encrypt --image with {NewPasswordLengthNote}. Requires --image. Prefer --password-file to avoid it appearing in shell history or the process list.",
         };
         var createPasswordFileOption = new Option<string?>("--password-file")
         {
-            Description = "Path to a file whose first line is the password to encrypt --image with. Mutually exclusive with --password.",
+            Description = $"Path to a file whose first line is the password to encrypt --image with {NewPasswordLengthNote}. Mutually exclusive with --password.",
         };
 
         var createCommand = new Command("create", "Creates a brand-new, empty RAM disk.");
@@ -673,11 +691,11 @@ public static class CliCommandProcessor
         };
         var exportPasswordOption = new Option<string?>("--password")
         {
-            Description = "Encrypt the exported .mdr image with this password. Not valid together with --format.",
+            Description = $"Encrypt the exported .mdr image with this password {NewPasswordLengthNote}. Not valid together with --format.",
         };
         var exportPasswordFileOption = new Option<string?>("--password-file")
         {
-            Description = "Path to a file whose first line is the password to encrypt the exported .mdr image with. Mutually exclusive with --password.",
+            Description = $"Path to a file whose first line is the password to encrypt the exported .mdr image with {NewPasswordLengthNote}. Mutually exclusive with --password.",
         };
 
         var exportForceOption = new Option<bool>("--force", "-f")
