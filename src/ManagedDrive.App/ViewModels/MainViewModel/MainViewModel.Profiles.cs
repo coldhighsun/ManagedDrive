@@ -242,23 +242,34 @@ public sealed partial class MainViewModel
     {
         var profiles = MergeProfiles(GetProfiles().ToList(), _unmountedProfiles);
         _unmountedProfiles.RemoveAll(p => !profiles.Contains(p));
-        _settingsStore.Update(current => new()
+        var runAtStartup = StartupManager.IsEnabled;
+        var language = LanguageManager.Instance.SavedLanguage;
+        var theme = ThemeManager.Instance.SavedTheme;
+        _settingsStore.Update(current => ApplyLiveSettings(current, profiles, runAtStartup, language, theme));
+    }
+
+    /// <summary>
+    /// Returns <paramref name="current"/> with the settings this view model owns replaced by their
+    /// live values. Every other field is carried over by the <c>with</c> expression, so a setting
+    /// written elsewhere (e.g. <see cref="AppConfiguration.SkippedWinFspVersion"/>) is not reset
+    /// each time the disks are saved.
+    /// </summary>
+    /// <param name="current">The settings as currently stored.</param>
+    /// <param name="profiles">The profiles to save.</param>
+    /// <param name="runAtStartup">Whether the app is registered to run at startup.</param>
+    /// <param name="language">The user's saved language choice.</param>
+    /// <param name="theme">The user's saved theme choice.</param>
+    /// <returns>The settings to store.</returns>
+    internal static AppConfiguration ApplyLiveSettings(
+        AppConfiguration current, List<DiskProfile> profiles, bool runAtStartup, string? language, string? theme)
+    {
+        return current with
         {
-            RunAtStartup = StartupManager.IsEnabled,
-            StartMinimized = current.StartMinimized,
-            CloseToTray = current.CloseToTray,
-            Language = LanguageManager.Instance.SavedLanguage,
-            Theme = ThemeManager.Instance.SavedTheme,
+            RunAtStartup = runAtStartup,
+            Language = language,
+            Theme = theme,
             Disks = profiles,
-            TempDirCompatWarningShown = current.TempDirCompatWarningShown,
-            ContextMenuEnabled = current.ContextMenuEnabled,
-            AutoCheckForUpdates = current.AutoCheckForUpdates,
-            LastUpdateCheckUtc = current.LastUpdateCheckUtc,
-            SkippedVersion = current.SkippedVersion,
-            DefaultCompressionLevel = current.DefaultCompressionLevel,
-            DefaultImageDirectory = current.DefaultImageDirectory,
-            SpaceUsageListSize = current.SpaceUsageListSize,
-        });
+        };
     }
 
     internal static DiskOptions ProfileToOptions(DiskProfile p) =>
