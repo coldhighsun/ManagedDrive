@@ -530,7 +530,9 @@ public partial class SpaceUsageDialog
                 {
                     if (isDirectory)
                     {
-                        Directory.Delete(realPath, recursive: true);
+                        // Not Directory.Delete(recursive), which fails on a nested junction after
+                        // having emptied the folder; same walk as the Disk Content dialog's delete.
+                        LinkSafeFileTree.DeleteDirectory(realPath, onFileDeleted: null, CancellationToken.None);
                     }
                     else
                     {
