@@ -16,7 +16,10 @@ public partial class RestoreSnapshotDialog
     /// for <paramref name="target"/>.
     /// </summary>
     /// <param name="target">The disk the chosen snapshot will be restored onto.</param>
-    /// <param name="snapshots">The disk's available snapshots.</param>
+    /// <param name="snapshots">
+    /// The disk's available snapshots, newest first (see
+    /// <see cref="SnapshotManager.ListSnapshotsNewestFirst"/>); the dialog lists them as given.
+    /// </param>
     public RestoreSnapshotDialog(DiskViewModel target, IReadOnlyList<SnapshotManager.SnapshotInfo> snapshots)
     {
         InitializeComponent();
@@ -75,7 +78,7 @@ public partial class RestoreSnapshotDialog
         try
         {
             await Task.Run(() => _target.Disk.DeleteSnapshot(item.Path));
-            RefreshSnapshotList(SnapshotManager.ListSnapshots(_mainImagePath));
+            RefreshSnapshotList(SnapshotManager.ListSnapshotsNewestFirst(_mainImagePath));
         }
         catch (Exception ex)
         {
@@ -115,7 +118,7 @@ public partial class RestoreSnapshotDialog
         var previouslySelectedPath = (SnapshotListBox.SelectedItem as SnapshotItem)?.Path;
 
         SnapshotListBox.Items.Clear();
-        foreach (var snapshot in snapshots.OrderByDescending(s => s.TimestampUtc))
+        foreach (var snapshot in snapshots)
         {
             SnapshotListBox.Items.Add(new SnapshotItem(
                 snapshot.Path,

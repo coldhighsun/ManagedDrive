@@ -14,7 +14,7 @@ public sealed partial class MainViewModel
             return;
         }
 
-        var snapshots = await Task.Run(() => SnapshotManager.ListSnapshots(imagePath));
+        var snapshots = await Task.Run(() => SnapshotManager.ListSnapshotsNewestFirst(imagePath));
         if (!IsStillMounted(vm))
         {
             return;
