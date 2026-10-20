@@ -274,6 +274,21 @@ public static partial class SnapshotManager
         ListSnapshotEntries(mainImagePath).Select(e => e.Info).ToList();
 
     /// <summary>
+    /// Lists the snapshots of <paramref name="mainImagePath"/> newest first, the order the UI and the
+    /// CLI number them in. This is <see cref="ListSnapshots"/> reversed rather than re-sorted by
+    /// timestamp: snapshots taken within the same second share a timestamp and only the order of
+    /// <see cref="ListSnapshots"/> (by <c>-N</c> sequence number) tells which one is newer.
+    /// </summary>
+    /// <param name="mainImagePath">The main image whose snapshots are listed.</param>
+    /// <returns>The snapshots, newest first.</returns>
+    public static List<SnapshotInfo> ListSnapshotsNewestFirst(string mainImagePath)
+    {
+        var snapshots = ListSnapshots(mainImagePath);
+        snapshots.Reverse();
+        return snapshots;
+    }
+
+    /// <summary>
     /// One snapshot's cheap metadata (<see cref="SnapshotInfo"/>) paired with its full
     /// <see cref="SnapshotStore.SnapshotSummary"/> (which also carries the referenced blob
     /// hashes), so a single index-file parse can serve both a listing and blob garbage collection.

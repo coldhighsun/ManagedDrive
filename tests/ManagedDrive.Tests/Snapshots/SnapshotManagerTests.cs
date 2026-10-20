@@ -766,6 +766,43 @@ public sealed class SnapshotManagerTests : IDisposable
         Assert.Equal(expected, names);
     }
 
+    /// <summary>
+    /// Snapshots taken in the same second are listed with the highest sequence number (the newest)
+    /// first; sorting by timestamp alone would leave them oldest first.
+    /// </summary>
+    [Fact]
+    public void ListSnapshotsNewestFirst_SameSecondSnapshots_ReturnsHighestSequenceFirst()
+    {
+        var timestamp = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
+        for (var i = 0; i <= 10; i++)
+        {
+            WriteSnapshotWithFile(timestamp, $"\\file{i}.txt", new byte[10]);
+        }
+
+        var names = SnapshotManager.ListSnapshotsNewestFirst(_mainImagePath).Select(s => Path.GetFileName(s.Path)).ToList();
+
+        string[] expected = [.. Enumerable.Range(1, 10).Reverse().Select(i => $"disk.20260101-000000-{i}.mdr"), "disk.20260101-000000.mdr"];
+        Assert.Equal(expected, names);
+    }
+
+    /// <summary>
+    /// Snapshots from different seconds are listed newest first, and a same-second pair keeps its
+    /// own newest-first order within that second.
+    /// </summary>
+    [Fact]
+    public void ListSnapshotsNewestFirst_MixedTimestamps_ReturnsNewestFirst()
+    {
+        var first = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
+        var second = first.AddSeconds(5);
+        WriteSnapshotWithFile(first, "\\a.txt", new byte[10]);
+        WriteSnapshotWithFile(second, "\\b.txt", new byte[10]);
+        WriteSnapshotWithFile(second, "\\c.txt", new byte[10]);
+
+        var names = SnapshotManager.ListSnapshotsNewestFirst(_mainImagePath).Select(s => Path.GetFileName(s.Path)).ToList();
+
+        Assert.Equal(["disk.20260101-000005-1.mdr", "disk.20260101-000005.mdr", "disk.20260101-000000.mdr"], names);
+    }
+
     [Fact]
     public void Prune_SameSecondSnapshots_KeepsHighestSequenceNumber()
     {
