@@ -112,7 +112,7 @@ public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
 
     /// <summary>
     /// Occurs at the start of <see cref="Dispose"/> — i.e. the disk this view model represents is
-    /// being unmounted (see <c>MainViewModel.ExecuteUnmount</c>). A modal dialog that was shown over
+    /// being unmounted (see <c>MainViewModel.ExecuteUnmountAsync</c>). A modal dialog that was shown over
     /// the main window and holds a reference to this disk (e.g. <c>DiskContentDialog</c>) can't rely
     /// on WPF's modal-disable to prevent that: it only blocks input to the owner window, not to the
     /// tray icon's WinForms context menu, which stays fully interactive and can unmount the very

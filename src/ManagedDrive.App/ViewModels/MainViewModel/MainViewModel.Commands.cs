@@ -21,7 +21,7 @@ public sealed partial class MainViewModel
         dialog.ShowDialog();
     }
 
-    private async void ExecuteCloneDisk(DiskViewModel? vm)
+    private async Task ExecuteCloneDiskAsync(DiskViewModel? vm)
     {
         if (vm == null || RejectIfBusy())
         {
@@ -137,7 +137,7 @@ public sealed partial class MainViewModel
         }
     }
 
-    private async void ExecuteCreateDisk()
+    private async Task ExecuteCreateDiskAsync()
     {
         var config = _settingsStore.Load();
         var dialog = new CreateDiskDialog(
@@ -164,7 +164,7 @@ public sealed partial class MainViewModel
         }
     }
 
-    private async void ExecuteEditDisk(DiskViewModel? vm)
+    private async Task ExecuteEditDiskAsync(DiskViewModel? vm)
     {
         if (vm == null)
         {
@@ -402,7 +402,7 @@ public sealed partial class MainViewModel
         }
     }
 
-    private async void ExecuteFormatDisk(DiskViewModel? vm)
+    private async Task ExecuteFormatDiskAsync(DiskViewModel? vm)
     {
         if (vm == null)
         {
@@ -445,7 +445,7 @@ public sealed partial class MainViewModel
         ShowInfo(Loc.Format("Msg.FormatDiskSuccess", vm.MountPoint));
     }
 
-    private async void ExecuteImportArchive()
+    private async Task ExecuteImportArchiveAsync()
     {
         if (RejectIfBusy())
         {
@@ -467,7 +467,7 @@ public sealed partial class MainViewModel
         await ImportArchiveAsync(openDialog.FileName);
     }
 
-    private async void ExecuteImportDisk()
+    private async Task ExecuteImportDiskAsync()
     {
         if (RejectIfBusy())
         {
@@ -492,7 +492,7 @@ public sealed partial class MainViewModel
     /// <summary>
     /// Imports an archive file (<c>.zip</c> etc.) at <paramref name="archivePath"/> as a new
     /// read-only disk, prompting for mount options via <see cref="CreateDiskDialog"/>. Shared by
-    /// <see cref="ExecuteImportArchive"/> (file picker) and drag-and-drop (see
+    /// <see cref="ExecuteImportArchiveAsync"/> (file picker) and drag-and-drop (see
     /// <see cref="ImportDroppedFileAsync"/>).
     /// </summary>
     private async Task ImportArchiveAsync(string archivePath)
@@ -549,7 +549,7 @@ public sealed partial class MainViewModel
 
     /// <summary>
     /// Imports a <c>.mdr</c> disk image at <paramref name="imagePath"/>, prompting for mount
-    /// options via <see cref="CreateDiskDialog"/>. Shared by <see cref="ExecuteImportDisk"/>
+    /// options via <see cref="CreateDiskDialog"/>. Shared by <see cref="ExecuteImportDiskAsync"/>
     /// (file picker) and drag-and-drop (see <see cref="ImportDroppedFileAsync"/>).
     /// </summary>
     private async Task ImportDiskAsync(string imagePath)
@@ -723,7 +723,7 @@ public sealed partial class MainViewModel
     /// Restores a group of redirected environment variables after the user confirms.
     /// </summary>
     /// <param name="group">The group to restore; <c>null</c> restores every group.</param>
-    private async void ExecuteRestoreEnv(EnvRestoreGroup? group)
+    private async Task ExecuteRestoreEnvAsync(EnvRestoreGroup? group)
     {
         if (RejectIfBusy())
         {
@@ -750,7 +750,7 @@ public sealed partial class MainViewModel
         }
         catch (Exception ex)
         {
-            // This is an async void command: an exception would otherwise reach the global crash handler.
+            // Reported here with a message specific to this command; OnCommandFailed is only the backstop.
             _logger.LogError(ex, "Restoring environment variables failed.");
             ShowError(Loc.Get("Msg.RestoreEnvFailed"));
             return;
@@ -773,7 +773,7 @@ public sealed partial class MainViewModel
         }
     }
 
-    private async void ExecuteSaveImage(DiskViewModel? vm)
+    private async Task ExecuteSaveImageAsync(DiskViewModel? vm)
     {
         if (vm == null || RejectIfBusy())
         {
@@ -963,7 +963,7 @@ public sealed partial class MainViewModel
         }
     }
 
-    private async void ExecuteUnmount(DiskViewModel? vm)
+    private async Task ExecuteUnmountAsync(DiskViewModel? vm)
     {
         if (vm == null)
         {
@@ -1003,12 +1003,24 @@ public sealed partial class MainViewModel
         }
 
         var mountPoint = vm.Disk.Options.MountPoint;
-        var saveError = await UnmountDiskAsync(vm);
+        Exception? saveError;
+        try
+        {
+            saveError = await UnmountDiskAsync(vm);
+        }
+        catch
+        {
+            // The unmount failed or raced with another one: the settings must still list whichever
+            // disks are mounted, and the failure being reported must not be replaced by a failed save.
+            TrySaveSettings();
+            throw;
+        }
 
-        await DeleteDiskImageIfRequestedAsync(deleteImage, persistImagePath, sourceArchivePath);
-
+        // Before the image is deleted: a failure there must neither skip the save nor hide a failed
+        // final save of the disk.
         SaveSettings();
         ShowUnmountResult(mountPoint, saveError);
+        await DeleteDiskImageIfRequestedAsync(deleteImage, persistImagePath, sourceArchivePath);
         _logger.LogInformation("Unmount completed for {MountPoint}.", mountPoint);
     }
 

@@ -43,7 +43,7 @@ internal static class MainViewModelHelpers
     /// <summary>
     /// Shows a modal <see cref="MessageBox"/> with the "ManagedDrive" title and an error icon.
     /// Shared boilerplate for the many failure paths across <see cref="MainViewModel"/> that don't
-    /// need a custom title (contrast <c>ExecuteEditDisk</c>'s inline apply-failure message, which
+    /// need a custom title (contrast <c>ExecuteEditDiskAsync</c>'s inline apply-failure message, which
     /// reuses <c>Msg.EditDiskConfirmTitle</c> as its title instead).
     /// </summary>
     public static void ShowError(string message) =>
