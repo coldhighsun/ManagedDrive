@@ -185,11 +185,34 @@ public partial class DiskContentDialog
     /// failure (e.g. a file becoming inaccessible mid-scan) just falls back to an unknown total,
     /// since the real error handling happens during the actual delete pass.
     /// </summary>
+    /// <remarks>
+    /// Counts what an export copies, which includes what lies behind junctions and symbolic links;
+    /// use <see cref="CountDeletableFilesSafe"/> for a delete, which never enters them.
+    /// </remarks>
+    /// <param name="directoryFullPath">The directory to count in.</param>
     private static int CountFilesSafe(string directoryFullPath)
     {
         try
         {
             return Directory.EnumerateFiles(directoryFullPath, "*", SearchOption.AllDirectories).Count();
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return 0;
+        }
+    }
+
+    /// <summary>
+    /// Counts the files a delete of <paramref name="directoryFullPath"/> removes one by one: those
+    /// behind a junction or symbolic link are left out, since the delete never enters them. Same
+    /// best-effort failure handling as <see cref="CountFilesSafe"/>.
+    /// </summary>
+    /// <param name="directoryFullPath">The directory to count in.</param>
+    private static int CountDeletableFilesSafe(string directoryFullPath)
+    {
+        try
+        {
+            return LinkSafeFileTree.CountFiles(directoryFullPath);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -386,7 +409,7 @@ public partial class DiskContentDialog
                 // Counted (and later enumerated) live off the real filesystem rather than the
                 // dialog's node-tree snapshot, so the total stays accurate even if the disk's
                 // contents changed after the dialog was opened.
-                var totalFiles = nodesToDelete.Sum(node => node.IsDirectory ? CountFilesSafe(ToRealPath(node.FullPath)) : 1);
+                var totalFiles = nodesToDelete.Sum(node => node.IsDirectory ? CountDeletableFilesSafe(ToRealPath(node.FullPath)) : 1);
                 var completed = 0;
                 progress.Report((completed, totalFiles));
 
@@ -400,15 +423,13 @@ public partial class DiskContentDialog
                     {
                         if (node.IsDirectory)
                         {
-                            foreach (var filePath in Directory.EnumerateFiles(fullPath, "*", SearchOption.AllDirectories))
+                            // Links are removed as links and never entered: their targets may lie
+                            // outside the disk and must survive.
+                            LinkSafeFileTree.DeleteDirectory(fullPath, () =>
                             {
-                                token.ThrowIfCancellationRequested();
-                                File.Delete(filePath);
                                 completed++;
                                 progress.Report((completed, totalFiles));
-                            }
-
-                            Directory.Delete(fullPath, recursive: true);
+                            }, token);
                         }
                         else
                         {
