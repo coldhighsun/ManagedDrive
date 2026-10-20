@@ -93,38 +93,45 @@ public sealed partial class MainViewModel : INotifyPropertyChanged, IDisposable
         Disks.CollectionChanged += (_, _) => OnPropertyChanged(nameof(IsEmpty));
         Disks.CollectionChanged += OnDisksChangedRestoreEnvRedirects;
 
-        CreateDiskCommand = new(_ => ExecuteCreateDisk());
-        ImportDiskCommand = new(_ => ExecuteImportDisk(), _ => !BusyOverlay.IsBusy);
-        ImportArchiveCommand = new(_ => ExecuteImportArchive(), _ => !BusyOverlay.IsBusy);
-        EditDiskCommand = new(
-            p => ExecuteEditDisk(ResolveTarget(p)),
+        CreateDiskCommand = RelayCommand.FromAsync(_ => ExecuteCreateDiskAsync(), OnCommandFailed);
+        ImportDiskCommand = RelayCommand.FromAsync(_ => ExecuteImportDiskAsync(), OnCommandFailed, _ => !BusyOverlay.IsBusy);
+        ImportArchiveCommand = RelayCommand.FromAsync(_ => ExecuteImportArchiveAsync(), OnCommandFailed, _ => !BusyOverlay.IsBusy);
+        EditDiskCommand = RelayCommand.FromAsync(
+            p => ExecuteEditDiskAsync(ResolveTarget(p)),
+            OnCommandFailed,
             p => ResolveTarget(p) != null);
         ExitCommand = new(_ => ExecuteExit());
-        UnmountCommand = new(
-            p => ExecuteUnmount(ResolveTarget(p)),
+        UnmountCommand = RelayCommand.FromAsync(
+            p => ExecuteUnmountAsync(ResolveTarget(p)),
+            OnCommandFailed,
             p => ResolveTarget(p) != null);
-        SaveImageCommand = new(
-            p => ExecuteSaveImage(ResolveTarget(p)),
+        SaveImageCommand = RelayCommand.FromAsync(
+            p => ExecuteSaveImageAsync(ResolveTarget(p)),
+            OnCommandFailed,
             p => !BusyOverlay.IsBusy && ResolveTarget(p) != null);
-        CreateSnapshotNowCommand = new(
-            p => ExecuteCreateSnapshotNow(ResolveTarget(p)),
+        CreateSnapshotNowCommand = RelayCommand.FromAsync(
+            p => ExecuteCreateSnapshotNowAsync(ResolveTarget(p)),
+            OnCommandFailed,
             p =>
             {
                 var vm = ResolveTarget(p);
                 return !BusyOverlay.IsBusy && vm is { SnapshotsEnabled: true, HasImagePath: true };
             });
-        FormatDiskCommand = new(
-            p => ExecuteFormatDisk(ResolveTarget(p)),
+        FormatDiskCommand = RelayCommand.FromAsync(
+            p => ExecuteFormatDiskAsync(ResolveTarget(p)),
+            OnCommandFailed,
             p =>
             {
                 var vm = ResolveTarget(p);
                 return vm is { Disk.Options.ReadOnly: false };
             });
-        CloneDiskCommand = new(
-            p => ExecuteCloneDisk(ResolveTarget(p)),
+        CloneDiskCommand = RelayCommand.FromAsync(
+            p => ExecuteCloneDiskAsync(ResolveTarget(p)),
+            OnCommandFailed,
             p => !BusyOverlay.IsBusy && ResolveTarget(p) != null);
-        RestoreSnapshotCommand = new(
-            p => ExecuteRestoreSnapshot(ResolveTarget(p)),
+        RestoreSnapshotCommand = RelayCommand.FromAsync(
+            p => ExecuteRestoreSnapshotAsync(ResolveTarget(p)),
+            OnCommandFailed,
             p =>
             {
                 var vm = ResolveTarget(p);
@@ -137,7 +144,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged, IDisposable
             p => ExecuteAnalyzeSpace(ResolveTarget(p)),
             p => ResolveTarget(p) != null);
         RefreshCommand = new(_ => RefreshAll());
-        RestoreEnvCommand = new(p => ExecuteRestoreEnv(p as EnvRestoreGroup));
+        RestoreEnvCommand = RelayCommand.FromAsync(p => ExecuteRestoreEnvAsync(p as EnvRestoreGroup), OnCommandFailed);
         SettingsCommand = new(_ => ExecuteSettings());
         AboutCommand = new(_ => ExecuteAbout());
 

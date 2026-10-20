@@ -7,7 +7,7 @@ namespace ManagedDrive.App.ViewModels;
 /// </summary>
 public sealed partial class MainViewModel
 {
-    private async void ExecuteRestoreSnapshot(DiskViewModel? vm)
+    private async Task ExecuteRestoreSnapshotAsync(DiskViewModel? vm)
     {
         if (vm == null || vm.Disk.Options.PersistImagePath is not { } imagePath)
         {
@@ -69,7 +69,7 @@ public sealed partial class MainViewModel
     /// <see cref="RamDisk.SaveToImageWithSnapshot"/> call the regular "Save Image" action uses —
     /// snapshot creation always piggybacks on a full image save, there's no lighter-weight path.
     /// </summary>
-    private async void ExecuteCreateSnapshotNow(DiskViewModel? vm)
+    private async Task ExecuteCreateSnapshotNowAsync(DiskViewModel? vm)
     {
         if (vm is not { SnapshotsEnabled: true, HasImagePath: true } || RejectIfBusy())
         {
@@ -81,7 +81,7 @@ public sealed partial class MainViewModel
     }
 
     /// <summary>
-    /// Shared body for <see cref="ExecuteSaveImage"/> and <see cref="ExecuteCreateSnapshotNow"/>:
+    /// Shared body for <see cref="ExecuteSaveImageAsync"/> and <see cref="ExecuteCreateSnapshotNowAsync"/>:
     /// runs <see cref="RamDisk.SaveToImageWithSnapshot"/> under the busy overlay (with
     /// cancellation), and reports the outcome via <see cref="StatusText"/>/logging.
     /// </summary>

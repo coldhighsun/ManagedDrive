@@ -139,7 +139,7 @@ public sealed partial class MainViewModel
     /// <summary>
     /// Mounts an existing <c>.mdr</c> disk image at <paramref name="mountPoint"/>, without any
     /// interactive dialogs, for use by the CLI command channel. Capacity and volume label are
-    /// read directly from the image header (mirrors <c>ExecuteImportDisk</c>'s non-interactive
+    /// read directly from the image header (mirrors <c>ExecuteImportDiskAsync</c>'s non-interactive
     /// steps). If a saved profile referencing this exact <paramref name="imagePath"/> is found in
     /// settings, its other options (read-only, auto-mount, auto-save interval, compression level,
     /// snapshot limits, high-usage threshold) are reused instead of falling back to
@@ -398,7 +398,7 @@ public sealed partial class MainViewModel
     /// <summary>
     /// Applies non-destructive option changes (capacity, volume label, auto-save interval) to the
     /// disk currently mounted at <paramref name="mountPoint"/>, for use by the CLI command
-    /// channel. Mirrors <c>ExecuteEditDisk</c>'s live (non-remounting) path — drive-letter and
+    /// channel. Mirrors <c>ExecuteEditDiskAsync</c>'s live (non-remounting) path — drive-letter and
     /// read-only changes, which require a full remount, are out of scope for this method.
     /// </summary>
     /// <param name="mountPoint">The mount point to edit, e.g. <c>"R:"</c>.</param>
@@ -455,7 +455,7 @@ public sealed partial class MainViewModel
     /// <summary>
     /// Replaces the contents of the disk mounted at <paramref name="targetMountPoint"/> with a
     /// copy of the disk mounted at <paramref name="sourceMountPoint"/>'s current contents, for use
-    /// by the CLI command channel. Mirrors <c>ExecuteCloneDisk</c>'s clone-to-mounted-disk branch,
+    /// by the CLI command channel. Mirrors <c>ExecuteCloneDiskAsync</c>'s clone-to-mounted-disk branch,
     /// but without the confirmation dialog.
     /// </summary>
     /// <param name="sourceMountPoint">The mount point to copy content from, e.g. <c>"R:"</c>.</param>
@@ -558,7 +558,7 @@ public sealed partial class MainViewModel
     /// <summary>
     /// Sets or removes the encryption password of the disk currently mounted at
     /// <paramref name="mountPoint"/>, for use by the CLI command channel. Takes effect on the
-    /// next save — mirrors <c>ExecuteEditDisk</c>'s live (non-remounting) password-change path,
+    /// next save — mirrors <c>ExecuteEditDiskAsync</c>'s live (non-remounting) password-change path,
     /// since <see cref="RamDisk.SetPassword"/> doesn't require a remount by itself.
     /// </summary>
     /// <param name="mountPoint">The mount point to change, e.g. <c>"R:"</c>.</param>

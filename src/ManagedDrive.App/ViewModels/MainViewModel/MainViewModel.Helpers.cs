@@ -549,7 +549,7 @@ public sealed partial class MainViewModel
     /// <summary>
     /// Deletes a disk's backing <c>.mdr</c> image (plus its snapshots) or source archive file, if
     /// <paramref name="deleteImage"/> is set and the corresponding path is non-null. Shared by the
-    /// interactive unmount flow (<see cref="ExecuteUnmount"/>) and the CLI unmount command
+    /// interactive unmount flow (<see cref="ExecuteUnmountAsync"/>) and the CLI unmount command
     /// (<see cref="UnmountByMountPointAsync"/>).
     /// </summary>
     private async Task DeleteDiskImageIfRequestedAsync(bool deleteImage, string? persistImagePath, string? sourceArchivePath)
@@ -617,6 +617,54 @@ public sealed partial class MainViewModel
 
         StatusText = Loc.Get("Status.OtherOperationInProgress");
         return true;
+    }
+
+    /// <summary>
+    /// Handles an exception that escaped an asynchronous UI command (see
+    /// <see cref="RelayCommand.FromAsync"/>), instead of letting it reach the dispatcher's global
+    /// handler and its "unexpected error" box. A disposed disk means another path (the CLI, the
+    /// tray, a second command) unmounted it while this command was running: that is reported in
+    /// the status bar only. Anything else, including other disposed objects, is logged and shown.
+    /// </summary>
+    /// <param name="exception">The exception the command threw.</param>
+    internal void OnCommandFailed(Exception exception)
+    {
+        if (IsDiskGone(exception))
+        {
+            _logger.LogWarning(exception, "A command stopped because its disk was unmounted meanwhile.");
+            StatusText = Loc.Get("Status.CommandTargetGone");
+            return;
+        }
+
+        _logger.LogError(exception, "A command failed unexpectedly.");
+        ShowError(Loc.Format("Msg.UnexpectedErrorBody", exception.Message));
+    }
+
+    /// <summary>
+    /// Returns whether <paramref name="exception"/> says a <see cref="RamDisk"/> was used after it
+    /// was disposed, i.e. unmounted. Any other disposed object (a dialog, a cancellation source)
+    /// is a bug that must stay visible, so it does not count.
+    /// </summary>
+    /// <param name="exception">The exception a command threw.</param>
+    /// <returns><c>true</c> when the exception comes from a disposed <see cref="RamDisk"/>.</returns>
+    internal static bool IsDiskGone(Exception exception) =>
+        exception is ObjectDisposedException { ObjectName: { } name } &&
+        (name == nameof(RamDisk) || name == typeof(RamDisk).FullName);
+
+    /// <summary>
+    /// Saves the settings after a failed operation without letting a failure of the save hide the
+    /// exception that is being reported.
+    /// </summary>
+    private void TrySaveSettings()
+    {
+        try
+        {
+            SaveSettings();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Saving the settings after a failed operation failed too.");
+        }
     }
 
     /// <summary>
