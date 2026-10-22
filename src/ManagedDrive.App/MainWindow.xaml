@@ -7,10 +7,7 @@
         xmlns:infra="clr-namespace:ManagedDrive.App.Infrastructure"
         xmlns:controls="clr-namespace:ManagedDrive.App.Controls"
         mc:Ignorable="d"
-        Style="{StaticResource AppWindow}"
-        WindowStyle="None"
-        AllowsTransparency="True"
-        Background="Transparent"
+        Style="{StaticResource BorderlessWindowStyle}"
         Icon="pack://application:,,,/ManagedDrive.ico"
         Title="{DynamicResource Window.Title}"
         Height="480" Width="760"
@@ -47,18 +44,12 @@
                       NonClientFrameEdges="None"/>
     </WindowChrome.WindowChrome>
 
-    <Border Background="{DynamicResource AppBackground}"
-            BorderBrush="{DynamicResource AppDivider}"
-            BorderThickness="1"
-            CornerRadius="10"
-            ClipToBounds="True">
     <Grid>
     <DockPanel>
 
         <!-- App bar -->
         <Border DockPanel.Dock="Top"
                 Background="{DynamicResource AppBarBackground}"
-                CornerRadius="9,9,0,0"
                 Padding="4,4,4,4">
             <DockPanel>
                 <StackPanel DockPanel.Dock="Right" Orientation="Horizontal"
@@ -147,7 +138,6 @@
                 Background="{DynamicResource AppToolBarBackground}"
                 BorderBrush="{DynamicResource AppDivider}"
                 BorderThickness="0,1,0,0"
-                CornerRadius="0,0,9,9"
                 Padding="12,4">
             <DockPanel>
                 <TextBlock DockPanel.Dock="Right"
@@ -706,5 +696,4 @@
         </StackPanel>
     </Border>
     </Grid>
-    </Border>
 </Window>

@@ -5,7 +5,7 @@ using System.Windows.Media;
 namespace ManagedDrive.App.Infrastructure;
 
 /// <summary>
-/// Fixes WM_GETMINMAXINFO for borderless (WindowStyle="None" + AllowsTransparency="True") windows
+/// Fixes WM_GETMINMAXINFO for borderless (WindowStyle="None") windows
 /// so maximizing snaps to the current monitor's work area instead of covering the taskbar.
 /// </summary>
 internal static class WindowMaximizeHelper
@@ -25,10 +25,10 @@ internal static class WindowMaximizeHelper
             }
         };
 
-        // Belt-and-suspenders for borderless + transparent (layered) windows, where WPF's
-        // own maximize sizing can ignore WM_GETMINMAXINFO and grow the window to the full
-        // monitor (sliding the bottom under the taskbar): re-clamp to the work area whenever
-        // the window enters the maximized state.
+        // Belt-and-suspenders for borderless windows, which Windows maximizes to the whole
+        // monitor plus the invisible frame overhang (about 7 px on every side), sliding the
+        // bottom under the taskbar, in case the size from WM_GETMINMAXINFO is not applied:
+        // re-clamp to the work area whenever the window enters the maximized state.
         window.StateChanged += (_, _) =>
         {
             if (window.WindowState == WindowState.Maximized)
@@ -98,8 +98,8 @@ internal static class WindowMaximizeHelper
         minMaxInfo.ptMaxPosition.Y = workArea.Top - monitorArea.Top;
         minMaxInfo.ptMaxSize.X = workArea.Right - workArea.Left;
         minMaxInfo.ptMaxSize.Y = workArea.Bottom - workArea.Top;
-        // Hard-clamp the maximum tracked size to the work area so a borderless + transparent
-        // (layered) window can't be grown past it and slide under the taskbar when maximized.
+        // Hard-clamp the maximum tracked size to the work area so a borderless window can't be
+        // grown past it and slide under the taskbar when maximized.
         minMaxInfo.ptMaxTrackSize.X = workArea.Right - workArea.Left;
         minMaxInfo.ptMaxTrackSize.Y = workArea.Bottom - workArea.Top;
         // Setting handled=true for WM_GETMINMAXINFO skips WPF's own default handling, which is

@@ -19,7 +19,7 @@ public class TrayTooltipControllerTests
     [Fact]
     public void ReplaceContent_NewContent_IsMeasuredBeforeLayout()
     {
-        RunSta(() =>
+        StaThread.Run(() =>
         {
             // Arrange
             var popup = new Popup();
@@ -39,7 +39,7 @@ public class TrayTooltipControllerTests
     [Fact]
     public void ClosePopup_OpenWithContent_ClosesAndDropsContent()
     {
-        RunSta(() =>
+        StaThread.Run(() =>
         {
             // Arrange
             var popup = new Popup { Child = new Border() };
@@ -59,7 +59,7 @@ public class TrayTooltipControllerTests
     [Fact]
     public void GetContentSize_NotYetLaidOut_FallsBackToDesiredSize()
     {
-        RunSta(() =>
+        StaThread.Run(() =>
         {
             // Arrange
             var content = new Border { Width = 120, Height = 40 };
@@ -80,7 +80,7 @@ public class TrayTooltipControllerTests
     [Fact]
     public void GetContentSize_LaidOut_UsesActualSize()
     {
-        RunSta(() =>
+        StaThread.Run(() =>
         {
             // Arrange
             var content = new Border { Width = 120, Height = 40 };
@@ -102,7 +102,7 @@ public class TrayTooltipControllerTests
     [Fact]
     public void ReplaceContent_AfterPaletteSwap_NewTooltipViewUsesTheNewPalette()
     {
-        RunSta(() =>
+        StaThread.Run(() =>
         {
             // Arrange
             // The popup is the logical parent of its content, so its resources stand in for the
@@ -176,7 +176,7 @@ public class TrayTooltipControllerTests
     [Fact]
     public void ShowTooltip_ShownTwice_BuildsANewViewEachTimeAndHideDropsIt()
     {
-        RunSta(() =>
+        StaThread.Run(() =>
         {
             // Arrange
             var source = new FakeHoverSource();
@@ -208,7 +208,7 @@ public class TrayTooltipControllerTests
     [Fact]
     public void ContextMenuOpening_TooltipShown_ClosesAndDropsContent()
     {
-        RunSta(() =>
+        StaThread.Run(() =>
         {
             // Arrange
             var source = new FakeHoverSource();
@@ -231,7 +231,7 @@ public class TrayTooltipControllerTests
     [Fact]
     public void MouseMoved_AfterHide_DoesNotScheduleAShowDuringTheCooldown()
     {
-        RunSta(() =>
+        StaThread.Run(() =>
         {
             // Arrange
             var source = new FakeHoverSource();
@@ -258,7 +258,7 @@ public class TrayTooltipControllerTests
     [Fact]
     public void MouseMoved_ContextMenuOpen_DoesNotScheduleAShow()
     {
-        RunSta(() =>
+        StaThread.Run(() =>
         {
             // Arrange
             var source = new FakeHoverSource();
@@ -280,7 +280,7 @@ public class TrayTooltipControllerTests
     [Fact]
     public void Dispose_TooltipShown_ClosesAndStopsListeningToTheSource()
     {
-        RunSta(() =>
+        StaThread.Run(() =>
         {
             // Arrange
             var source = new FakeHoverSource();
@@ -373,33 +373,5 @@ public class TrayTooltipControllerTests
         var view = Assert.IsType<TrayTooltipView>(popup.Child);
         var border = Assert.IsType<Border>(view.Content);
         return Assert.IsType<SolidColorBrush>(border.Background).Color;
-    }
-
-    /// <summary>
-    /// Runs <paramref name="action"/> on a dedicated STA thread, as WPF elements require, and
-    /// rethrows any exception on the calling thread.
-    /// </summary>
-    /// <param name="action">The work to run.</param>
-    private static void RunSta(Action action)
-    {
-        Exception? error = null;
-        var thread = new Thread(() =>
-        {
-            try
-            {
-                action();
-            }
-            catch (Exception ex)
-            {
-                error = ex;
-            }
-        });
-        thread.SetApartmentState(ApartmentState.STA);
-        thread.Start();
-        thread.Join();
-        if (error is not null)
-        {
-            throw new InvalidOperationException("STA test body failed.", error);
-        }
     }
 }

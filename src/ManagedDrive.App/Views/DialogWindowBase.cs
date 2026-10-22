@@ -20,7 +20,8 @@ public class DialogWindowBase : Window
     public static readonly RoutedCommand CloseDialogCommand = new();
 
     /// <summary>
-    /// Initializes the borderless window chrome and wires up <see cref="CloseDialogCommand"/>.
+    /// Initializes the borderless window chrome and wires up <see cref="CloseDialogCommand"/>. The
+    /// rounded corners come from <c>DialogWindowStyle</c>, through <c>BorderlessWindowStyle</c>.
     /// </summary>
     protected DialogWindowBase()
     {
