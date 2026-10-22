@@ -3,8 +3,8 @@ using System.Runtime.InteropServices;
 namespace ManagedDrive.App.Infrastructure;
 
 /// <summary>
-/// The user32 declarations shared by the window code, so that each view or helper does not declare
-/// its own copy of the same structs and imports.
+/// The user32 and dwmapi declarations shared by the window code, so that each view or helper does
+/// not declare its own copy of the same structs and imports.
 /// </summary>
 internal static class WindowNativeMethods
 {
@@ -27,6 +27,35 @@ internal static class WindowNativeMethods
     /// Only move the window: no resize, no z-order change, no activation.
     /// </summary>
     public const uint SwpMoveOnly = SwpNoSize | SwpNoZOrder | SwpNoActivate;
+
+    /// <summary>
+    /// <c>DWMWA_USE_IMMERSIVE_DARK_MODE</c>: tells DWM to draw a window's own chrome (border,
+    /// rounded-corner backdrop) in dark colors.
+    /// </summary>
+    public const int DwmwaUseImmersiveDarkMode = 20;
+
+    /// <summary>
+    /// <c>DWMWA_WINDOW_CORNER_PREFERENCE</c>: lets a window choose whether DWM rounds its corners.
+    /// Windows 11 only; earlier versions reject the attribute and the window stays square.
+    /// </summary>
+    public const int DwmwaWindowCornerPreference = 33;
+
+    /// <summary>
+    /// <c>DWMWA_BORDER_COLOR</c>: the color DWM draws the window border in, as a <c>COLORREF</c>.
+    /// Windows 11 only.
+    /// </summary>
+    public const int DwmwaBorderColor = 34;
+
+    /// <summary>
+    /// <c>DWMWCP_DEFAULT</c>: lets the system decide whether to round the window's corners, which is
+    /// how a window that never set the preference behaves.
+    /// </summary>
+    public const int DwmwcpDefault = 0;
+
+    /// <summary>
+    /// <c>DWMWCP_ROUND</c>: asks DWM to round the window's corners (8 px, like the shell's own menus).
+    /// </summary>
+    public const int DwmwcpRound = 2;
 
     /// <summary>
     /// A point in screen coordinates (<c>POINT</c>).
@@ -105,4 +134,25 @@ internal static class WindowNativeMethods
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     public static extern bool SetWindowPos(nint hWnd, nint hWndInsertAfter, int x, int y, int cx, int cy, uint flags);
+
+    /// <summary>
+    /// Sets an integer <c>DWMWA_*</c> attribute of a window's DWM-drawn chrome. The return value is
+    /// ignored on purpose: it only reports an attribute this Windows version does not know.
+    /// </summary>
+    /// <param name="hwnd">The window handle.</param>
+    /// <param name="attribute">The <c>DWMWA_*</c> attribute to set.</param>
+    /// <param name="value">The attribute's value.</param>
+    public static void SetDwmAttribute(nint hwnd, int attribute, int value) =>
+        DwmSetWindowAttribute(hwnd, attribute, ref value, sizeof(int));
+
+    /// <summary>
+    /// Sets a <c>DWMWA_*</c> attribute of a window's DWM-drawn chrome.
+    /// </summary>
+    /// <param name="hwnd">The window handle.</param>
+    /// <param name="attribute">The <c>DWMWA_*</c> attribute to set.</param>
+    /// <param name="value">The attribute's value.</param>
+    /// <param name="valueSize">The size of <paramref name="value"/> in bytes.</param>
+    /// <returns>An <c>HRESULT</c>; non-zero when the attribute is unknown to this Windows version.</returns>
+    [DllImport("dwmapi.dll")]
+    private static extern int DwmSetWindowAttribute(nint hwnd, int attribute, ref int value, int valueSize);
 }
