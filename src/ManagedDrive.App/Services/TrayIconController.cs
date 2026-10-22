@@ -29,6 +29,13 @@ public sealed class TrayIconController : IDisposable, ITrayHoverSource
     /// </summary>
     private static readonly TimeSpan BalloonTipTimeout = TimeSpan.FromSeconds(5);
 
+    /// <summary>
+    /// The padding of a menu item on every side at 96 DPI, in pixels. The vertical part is the
+    /// spacing between neighbouring items, which WinForms' default (1 px) leaves too tight; the
+    /// horizontal part indents the text, where the default is 0.
+    /// </summary>
+    private const int MenuItemPadding = 4;
+
     private readonly Dispatcher _dispatcher;
     private readonly DispatcherTimer _timerActivityFlash = new()
     {
@@ -108,7 +115,7 @@ public sealed class TrayIconController : IDisposable, ITrayHoverSource
         _menuNewDisk = new(Loc.Get("Tray.NewDisk"), null, (_, _) => dispatcher.Invoke(onNewDisk));
         _menuRestoreEnv = new(Loc.Get("Tray.RestoreEnv"));
         _onRestoreEnvAsync = onRestoreEnvAsync;
-        _menuRestoreEnv.DropDown.HandleCreated += (_, _) => ApplyPopupDarkMode(_menuRestoreEnv.DropDown);
+        _menuRestoreEnv.DropDown.HandleCreated += (_, _) => ApplyPopupChrome(_menuRestoreEnv.DropDown);
         _menuSettings = new(Loc.Get("Tray.Settings"), null, (_, _) => dispatcher.Invoke(onSettings));
         _menuAbout = new(Loc.Get("Tray.About"), null, (_, _) => dispatcher.Invoke(onAbout));
         _menuExit = new(Loc.Get("Tray.Exit"), null, (_, _) => dispatcher.Invoke(onExit));
@@ -121,7 +128,7 @@ public sealed class TrayIconController : IDisposable, ITrayHoverSource
         menu.Items.Add(_menuAbout);
         menu.Items.Add(new System.Windows.Forms.ToolStripSeparator());
         menu.Items.Add(_menuExit);
-        menu.HandleCreated += (_, _) => ApplyPopupDarkMode(menu);
+        menu.HandleCreated += (_, _) => ApplyPopupChrome(menu);
         menu.Opening += (_, _) => dispatcher.Invoke(() =>
         {
             RebuildRestoreEnvItems();
@@ -347,26 +354,37 @@ public sealed class TrayIconController : IDisposable, ITrayHoverSource
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool DestroyIcon(IntPtr hIcon);
 
-    [DllImport("dwmapi.dll")]
-    private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attribute, ref int value, int valueSize);
-
     /// <summary>
-    /// <c>DWMWA_USE_IMMERSIVE_DARK_MODE</c>: tells DWM to draw a popup window's own chrome (border,
-    /// rounded-corner backdrop) in dark colors. Without this, a dark-themed
-    /// <see cref="System.Windows.Forms.ContextMenuStrip"/> keeps a light-colored surface around its
-    /// owner-drawn content on Windows 11, which washes out white menu text against it.
-    /// </summary>
-    private const int DwmwaUseImmersiveDarkMode = 20;
-
-    /// <summary>
-    /// Applies (or clears) <see cref="DwmwaUseImmersiveDarkMode"/> on the popup's native window so
-    /// its DWM-drawn chrome matches <see cref="ApplyTrayMenuTheme"/>'s owner-drawn colors. Requires
-    /// <paramref name="popup"/>'s handle to already exist; called from its
+    /// Applies the DWM-drawn chrome of a popup's native window so it matches
+    /// <see cref="ApplyTrayMenuTheme"/>'s owner-drawn colors. It sets three attributes:
+    /// <list type="bullet">
+    /// <item>
+    /// <description>
+    /// The dark or light frame (<see cref="WindowNativeMethods.DwmwaUseImmersiveDarkMode"/>); without
+    /// it a dark-themed <see cref="System.Windows.Forms.ContextMenuStrip"/> keeps a light-colored
+    /// surface around its owner-drawn content on Windows 11.
+    /// </description>
+    /// </item>
+    /// <item>
+    /// <description>
+    /// The native rounded corners (<see cref="WindowNativeMethods.DwmwaWindowCornerPreference"/>).
+    /// </description>
+    /// </item>
+    /// <item>
+    /// <description>
+    /// A border in the menu's border color that follows the rounding
+    /// (<see cref="WindowNativeMethods.DwmwaBorderColor"/>).
+    /// </description>
+    /// </item>
+    /// </list>
+    /// Requires <paramref name="popup"/>'s handle to already exist; called from its
     /// <see cref="System.Windows.Forms.Control.HandleCreated"/> event and again whenever the theme
-    /// changes while the handle is already live.
+    /// changes while the handle is already live. The return values are ignored on purpose: the
+    /// corner and border attributes do not exist before Windows 11, where the menu simply keeps its
+    /// square look.
     /// </summary>
     /// <param name="popup">The popup whose native window is updated.</param>
-    private static void ApplyPopupDarkMode(System.Windows.Forms.ToolStrip popup)
+    private static void ApplyPopupChrome(System.Windows.Forms.ToolStrip popup)
     {
         if (!popup.IsHandleCreated)
         {
@@ -374,10 +392,84 @@ public sealed class TrayIconController : IDisposable, ITrayHoverSource
         }
 
         var isDark = ThemeManager.Instance.CurrentTheme == "dark";
-        var value = isDark ? 1 : 0;
-        DwmSetWindowAttribute(popup.Handle, DwmwaUseImmersiveDarkMode, ref value, sizeof(int));
+        WindowNativeMethods.SetDwmAttribute(popup.Handle, WindowNativeMethods.DwmwaUseImmersiveDarkMode, isDark ? 1 : 0);
+        WindowNativeMethods.SetDwmAttribute(popup.Handle, WindowNativeMethods.DwmwaWindowCornerPreference, WindowNativeMethods.DwmwcpRound);
+        WindowNativeMethods.SetDwmAttribute(
+            popup.Handle,
+            WindowNativeMethods.DwmwaBorderColor,
+            System.Drawing.ColorTranslator.ToWin32(TrayColorTable.GetMenuBorder(isDark)));
     }
 
+    /// <summary>
+    /// Gets the padding of a menu item for a DPI: <see cref="MenuItemPadding"/> pixels at 96 DPI,
+    /// scaled up, because a padding assigned at runtime is taken as device pixels.
+    /// </summary>
+    /// <param name="deviceDpi">The DPI of the menu.</param>
+    /// <returns>The padding on all four sides.</returns>
+    internal static System.Windows.Forms.Padding GetItemPadding(int deviceDpi) =>
+        new((int)Math.Round(MenuItemPadding * deviceDpi / 96.0));
+
+    /// <summary>
+    /// Gives menu items, and the items of their submenus, the menu's foreground color and spacing.
+    /// Run for every item when the theme is applied, and for the items that are rebuilt each time
+    /// the menu opens, so that opening the menu does not have to re-apply the whole theme. The
+    /// color and padding are worked out once for all the items.
+    /// </summary>
+    /// <param name="items">
+    /// The <see cref="System.Windows.Forms.ToolStripItem"/>s to style; taken as the non-generic
+    /// <see cref="System.Collections.IEnumerable"/> because WinForms' item collections are not generic.
+    /// </param>
+    private void StyleMenuItems(System.Collections.IEnumerable items)
+    {
+        if (_trayIcon.ContextMenuStrip is not { } menu)
+        {
+            return;
+        }
+
+        var padding = GetItemPadding(menu.DeviceDpi);
+        foreach (System.Windows.Forms.ToolStripItem item in items)
+        {
+            StyleMenuItem(item, menu.ForeColor, padding);
+        }
+    }
+
+    /// <summary>
+    /// Gives one menu item, and the items of its submenu, a foreground color and, for menu items,
+    /// a padding; separators keep their own height.
+    /// </summary>
+    /// <param name="item">The item to style.</param>
+    /// <param name="foreground">The foreground color.</param>
+    /// <param name="padding">The padding of a menu item.</param>
+    private static void StyleMenuItem(
+        System.Windows.Forms.ToolStripItem item,
+        Color foreground,
+        System.Windows.Forms.Padding padding)
+    {
+        item.ForeColor = foreground;
+        if (item is not System.Windows.Forms.ToolStripMenuItem menuItem)
+        {
+            return;
+        }
+
+        menuItem.Padding = padding;
+
+        // Only ask for the drop-down of an item that has one: reading it creates it.
+        if (!menuItem.HasDropDownItems)
+        {
+            return;
+        }
+
+        foreach (System.Windows.Forms.ToolStripItem child in menuItem.DropDownItems)
+        {
+            StyleMenuItem(child, foreground, padding);
+        }
+    }
+
+    /// <summary>
+    /// Applies the current theme to the tray menu: the renderer, the colors, the item styling and
+    /// the DWM chrome. Run once at construction and again whenever the theme changes; the items
+    /// that are rebuilt each time the menu opens are styled by <see cref="StyleMenuItems"/> instead.
+    /// </summary>
     private void ApplyTrayMenuTheme()
     {
         if (_trayIcon.ContextMenuStrip is not { } menu)
@@ -395,19 +487,8 @@ public sealed class TrayIconController : IDisposable, ITrayHoverSource
         menu.Renderer = new TrayMenuRenderer(isDark);
         menu.BackColor = background;
         menu.ForeColor = foreground;
-        foreach (System.Windows.Forms.ToolStripItem item in menu.Items)
-        {
-            item.ForeColor = foreground;
-            if (item is System.Windows.Forms.ToolStripMenuItem { HasDropDownItems: true } parent)
-            {
-                foreach (System.Windows.Forms.ToolStripItem child in parent.DropDownItems)
-                {
-                    child.ForeColor = foreground;
-                }
-            }
-        }
-
-        ApplyPopupDarkMode(menu);
+        StyleMenuItems(menu.Items);
+        ApplyPopupChrome(menu);
     }
 
     /// <summary>
@@ -545,6 +626,8 @@ public sealed class TrayIconController : IDisposable, ITrayHoverSource
                     break;
             }
         }
+
+        StyleMenuItems(_menuRestoreEnv.DropDownItems);
     }
 
     /// <summary>
@@ -568,8 +651,9 @@ public sealed class TrayIconController : IDisposable, ITrayHoverSource
     /// <summary>
     /// Rebuilds the per-disk submenu (one entry per mounted disk, each expanding to Open in
     /// Explorer / Save Image / Unmount) right before the context menu is shown, so it always
-    /// reflects the current <see cref="MainViewModel.Disks"/> contents and current language/theme
-    /// without needing to track collection or property-changed events between openings.
+    /// reflects the current <see cref="MainViewModel.Disks"/> contents and current language
+    /// without needing to track collection or property-changed events between openings. The new
+    /// items get the current theme's colors and spacing; the theme itself is applied when it changes.
     /// </summary>
     private void RebuildDiskMenuItems()
     {
@@ -586,20 +670,21 @@ public sealed class TrayIconController : IDisposable, ITrayHoverSource
 
         _diskMenuItems.Clear();
 
-        var insertIndex = menu.Items.IndexOf(_menuShow) + 1;
+        // After "New Disk", so that it stays right below "Show" and the disks follow the two.
+        var insertIndex = menu.Items.IndexOf(_menuNewDisk) + 1;
         foreach (var vm in _mainViewModel.Disks)
         {
             var diskItem = new System.Windows.Forms.ToolStripMenuItem($"{vm.MountPoint} ({vm.VolumeLabel})");
             diskItem.DropDownItems.Add(Loc.Get("Btn.OpenInExplorer"), null, (_, _) => _dispatcher.Invoke(() => vm.OpenInExplorerCommand.Execute(null)));
             diskItem.DropDownItems.Add(Loc.Get("Btn.SaveImage"), null, (_, _) => _dispatcher.Invoke(() => _mainViewModel.SaveImageCommand.Execute(vm)));
             diskItem.DropDownItems.Add(Loc.Get("Btn.Unmount"), null, (_, _) => _dispatcher.Invoke(() => _mainViewModel.UnmountCommand.Execute(vm)));
-            diskItem.DropDown.HandleCreated += (_, _) => ApplyPopupDarkMode(diskItem.DropDown);
+            diskItem.DropDown.HandleCreated += (_, _) => ApplyPopupChrome(diskItem.DropDown);
 
             menu.Items.Insert(insertIndex, diskItem);
             _diskMenuItems.Add(diskItem);
             insertIndex++;
         }
 
-        ApplyTrayMenuTheme();
+        StyleMenuItems(_diskMenuItems);
     }
 }
