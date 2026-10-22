@@ -182,7 +182,7 @@ public sealed class MemoryFileSystemCallbackTests
     }
 
     [Fact]
-    public void ClearDirty_AfterMarkDirty_ResetsIsDirty()
+    public void ClearDirty_AfterMarkMetadataDirty_ResetsIsDirty()
     {
         var fs = new MemoryFileSystem(1024 * 1024, "Label");
         fs.Create("\\file.bin", 0, 0, (uint)FileAttributes.Normal, [], 0, out _, out _, out _, out _);
@@ -202,7 +202,7 @@ public sealed class MemoryFileSystemCallbackTests
 
         // Simulates a write racing an in-progress save: it happens after the save captured its
         // starting version, so clearing dirty "since" that version must not appear to clean it up.
-        fs.MarkDirty();
+        fs.MarkMetadataDirty();
 
         fs.ClearDirtySince(versionAtSaveStart);
 
@@ -603,6 +603,284 @@ public sealed class MemoryFileSystemCallbackTests
     }
 
     [Fact]
+    public void SetBasicInfo_AttributeChange_DoesNotUpdateLastContentWriteTime()
+    {
+        var fs = new MemoryFileSystem(1024 * 1024, "Label");
+        var fileNode = AddWithoutWriteTime(fs, "\\file.bin");
+
+        fs.SetBasicInfo(fileNode, null!, (uint)FileAttributes.ReadOnly, 0, 0, 0, 0, out _);
+
+        Assert.True(fs.IsDirty);
+        Assert.Null(fs.LastContentWriteTimeUtc);
+    }
+
+    [Fact]
+    public void SetBasicInfo_AttributeChange_DoesNotRaiseWriteActivity()
+    {
+        var fs = new MemoryFileSystem(1024 * 1024, "Label");
+        fs.Create("\\file.bin", 0, 0, (uint)FileAttributes.Normal, [], 0,
+            out var fileNode, out _, out _, out _);
+        var events = new List<bool>();
+        fs.ContentAccessed += events.Add;
+
+        fs.SetBasicInfo(fileNode!, null!, (uint)FileAttributes.ReadOnly, 0, 0, 0, 0, out _);
+
+        Assert.Empty(events);
+    }
+
+    [Fact]
+    public void Cleanup_SetLastWriteTimeFlag_DoesNotUpdateLastContentWriteTime()
+    {
+        var fs = new MemoryFileSystem(1024 * 1024, "Label");
+        var fileNode = AddWithoutWriteTime(fs, "\\file.bin");
+        fs.ClearDirty();
+
+        fs.Cleanup(fileNode, null!, "\\file.bin", FileSystemBase.CleanupSetLastWriteTime);
+
+        Assert.True(fs.IsDirty);
+        Assert.Null(fs.LastContentWriteTimeUtc);
+    }
+
+    [Fact]
+    public void SetVolumeLabel_NewLabel_DoesNotUpdateLastContentWriteTime()
+    {
+        var fs = new MemoryFileSystem(1024 * 1024, "Label");
+
+        fs.SetVolumeLabel("Other", out _);
+
+        Assert.True(fs.IsDirty);
+        Assert.Null(fs.LastContentWriteTimeUtc);
+    }
+
+    [Fact]
+    public void Create_NewFile_UpdatesLastContentWriteTime()
+    {
+        var fs = new MemoryFileSystem(1024 * 1024, "Label");
+
+        fs.Create("\\file.bin", 0, 0, (uint)FileAttributes.Normal, [], 0, out _, out _, out _, out _);
+
+        Assert.NotNull(fs.LastContentWriteTimeUtc);
+    }
+
+    [Fact]
+    public void Write_Bytes_UpdatesLastContentWriteTime()
+    {
+        var fs = new MemoryFileSystem(1024 * 1024, "Label");
+        var fileNode = AddWithoutWriteTime(fs, "\\file.bin");
+
+        WriteBytes(fs, fileNode, [1, 2, 3], offset: 0);
+
+        Assert.NotNull(fs.LastContentWriteTimeUtc);
+    }
+
+    [Fact]
+    public void Rename_File_UpdatesLastContentWriteTime()
+    {
+        var fs = new MemoryFileSystem(1024 * 1024, "Label");
+        var fileNode = AddWithoutWriteTime(fs, "\\old.bin");
+
+        fs.Rename(fileNode, null!, "\\old.bin", "\\new.bin", replaceIfExists: false);
+
+        Assert.NotNull(fs.LastContentWriteTimeUtc);
+    }
+
+    [Fact]
+    public void Cleanup_WithDeleteFlag_UpdatesLastContentWriteTime()
+    {
+        var fs = new MemoryFileSystem(1024 * 1024, "Label");
+        var fileNode = AddWithoutWriteTime(fs, "\\file.bin");
+
+        fs.Cleanup(fileNode, null!, "\\file.bin", FileSystemBase.CleanupDelete);
+
+        Assert.NotNull(fs.LastContentWriteTimeUtc);
+    }
+
+    [Fact]
+    public void Create_DirectoryListedInOpenAppFolderScope_KeepsDiskDirtyWithoutWriteTime()
+    {
+        var fs = new MemoryFileSystem(1024 * 1024, "Label");
+        using var scope = fs.BeginAppFolders(["Cache"]);
+
+        fs.Create("\\Cache", 0, 0, (uint)FileAttributes.Directory, [], 0, out _, out _, out _, out _);
+
+        Assert.True(fs.IsDirty);
+        Assert.Null(fs.LastContentWriteTimeUtc);
+    }
+
+    [Fact]
+    public void Create_DirectoryListedInOpenAppFolderScope_DoesNotRaiseWriteActivity()
+    {
+        var fs = new MemoryFileSystem(1024 * 1024, "Label");
+        var events = new List<bool>();
+        fs.ContentAccessed += events.Add;
+        using var scope = fs.BeginAppFolders(["Cache"]);
+
+        fs.Create("\\Cache", 0, 0, (uint)FileAttributes.Directory, [], 0, out _, out _, out _, out _);
+
+        Assert.Empty(events);
+    }
+
+    [Fact]
+    public void Create_NestedAppFolderAndItsParents_DoNotUpdateLastContentWriteTime()
+    {
+        var fs = new MemoryFileSystem(1024 * 1024, "Label");
+        using var scope = fs.BeginAppFolders(["Dev/Cache\\npm"]);
+
+        fs.Create("\\Dev", 0, 0, (uint)FileAttributes.Directory, [], 0, out _, out _, out _, out _);
+        fs.Create("\\dev\\Cache", 0, 0, (uint)FileAttributes.Directory, [], 0, out _, out _, out _, out _);
+        fs.Create("\\Dev\\Cache\\npm", 0, 0, (uint)FileAttributes.Directory, [], 0, out _, out _, out _, out _);
+
+        Assert.Null(fs.LastContentWriteTimeUtc);
+    }
+
+    [Fact]
+    public void Create_AppFolderFollowedByTypicalCloseAndAttributeCallbacks_KeepsWriteTimeUnset()
+    {
+        // Directory.CreateDirectory on the drive is a Create, then the handle is closed with
+        // whatever bookkeeping flags the driver asks for, and Explorer-style tools may touch the
+        // attributes: none of that may turn the app's own folder into a recorded write.
+        var fs = new MemoryFileSystem(1024 * 1024, "Label");
+        using var scope = fs.BeginAppFolders(["Cache"]);
+        fs.Create("\\Cache", 0, 0, (uint)FileAttributes.Directory, [], 0,
+            out var dirNode, out _, out _, out _);
+
+        fs.SetBasicInfo(dirNode!, null!, (uint)FileAttributes.Hidden, 0, 0, 0, 0, out _);
+        fs.Cleanup(dirNode!, null!, "\\Cache",
+            FileSystemBase.CleanupSetLastWriteTime | FileSystemBase.CleanupSetArchiveBit |
+            FileSystemBase.CleanupSetAllocationSize);
+
+        Assert.True(fs.IsDirty);
+        Assert.Null(fs.LastContentWriteTimeUtc);
+    }
+
+    [Theory]
+    [InlineData("Dev/./Cache")]
+    [InlineData("Dev\\Sub\\..\\Cache")]
+    [InlineData("Dev/Cache.")]
+    [InlineData("Dev/Cache ")]
+    [InlineData("dev\\\\cache")]
+    public void BeginAppFolders_SubPathNeedingNormalization_MatchesTheNameTheDriverSees(string subPath)
+    {
+        var fs = new MemoryFileSystem(1024 * 1024, "Label");
+        using var scope = fs.BeginAppFolders([subPath]);
+
+        fs.Create("\\Dev", 0, 0, (uint)FileAttributes.Directory, [], 0, out _, out _, out _, out _);
+        fs.Create("\\Dev\\Cache", 0, 0, (uint)FileAttributes.Directory, [], 0, out _, out _, out _, out _);
+
+        Assert.Null(fs.LastContentWriteTimeUtc);
+    }
+
+    [Fact]
+    public void BeginAppFolders_SubPathWindowsRejects_IsIgnoredAndOthersStillApply()
+    {
+        var fs = new MemoryFileSystem(1024 * 1024, "Label");
+        using var scope = fs.BeginAppFolders(["bad\0name", "Cache"]);
+
+        fs.Create("\\Cache", 0, 0, (uint)FileAttributes.Directory, [], 0, out _, out _, out _, out _);
+
+        Assert.Null(fs.LastContentWriteTimeUtc);
+    }
+
+    [Fact]
+    public void BeginAppFolders_SubPathClimbingAboveRoot_ResolvesToRootLikeWindows()
+    {
+        // Windows stops ".." at the root, so the driver is handed "\Cache"; sub-paths with ".."
+        // are refused earlier (EnvRedirectPolicy.IsValidSubPath), this only pins the mirroring.
+        var fs = new MemoryFileSystem(1024 * 1024, "Label");
+        using var scope = fs.BeginAppFolders(["..\\Cache"]);
+
+        fs.Create("\\Cache", 0, 0, (uint)FileAttributes.Directory, [], 0, out _, out _, out _, out _);
+
+        Assert.Null(fs.LastContentWriteTimeUtc);
+    }
+
+    [Fact]
+    public void Create_FileWithAppFolderName_UpdatesLastContentWriteTime()
+    {
+        var fs = new MemoryFileSystem(1024 * 1024, "Label");
+        using var scope = fs.BeginAppFolders(["Cache"]);
+
+        fs.Create("\\Cache", 0, 0, (uint)FileAttributes.Normal, [], 0, out _, out _, out _, out _);
+
+        Assert.NotNull(fs.LastContentWriteTimeUtc);
+    }
+
+    [Fact]
+    public void Create_DirectoryNotListedInAppFolderScope_UpdatesLastContentWriteTime()
+    {
+        var fs = new MemoryFileSystem(1024 * 1024, "Label");
+        using var scope = fs.BeginAppFolders(["Cache"]);
+
+        fs.Create("\\Mine", 0, 0, (uint)FileAttributes.Directory, [], 0, out _, out _, out _, out _);
+
+        Assert.NotNull(fs.LastContentWriteTimeUtc);
+    }
+
+    [Fact]
+    public void Create_DirectoryAfterAppFolderScopeEnded_UpdatesLastContentWriteTime()
+    {
+        var fs = new MemoryFileSystem(1024 * 1024, "Label");
+        fs.BeginAppFolders(["Cache"]).Dispose();
+
+        fs.Create("\\Cache", 0, 0, (uint)FileAttributes.Directory, [], 0, out _, out _, out _, out _);
+
+        Assert.NotNull(fs.LastContentWriteTimeUtc);
+    }
+
+    [Fact]
+    public void BeginAppFolders_TwoScopesForSameFolder_StaysExemptUntilBothEnded()
+    {
+        var fs = new MemoryFileSystem(1024 * 1024, "Label");
+        var first = fs.BeginAppFolders(["Cache"]);
+        var second = fs.BeginAppFolders(["Cache"]);
+        first.Dispose();
+        first.Dispose();
+
+        fs.Create("\\Cache", 0, 0, (uint)FileAttributes.Directory, [], 0, out _, out _, out _, out _);
+        second.Dispose();
+
+        Assert.Null(fs.LastContentWriteTimeUtc);
+    }
+
+    [Fact]
+    public void Write_ToFileInsideAppFolderWhileScopeOpen_UpdatesLastContentWriteTime()
+    {
+        var fs = new MemoryFileSystem(1024 * 1024, "Label");
+        using var scope = fs.BeginAppFolders(["Temp"]);
+        fs.Create("\\Temp", 0, 0, (uint)FileAttributes.Directory, [], 0, out _, out _, out _, out _);
+        var fileNode = AddWithoutWriteTime(fs, "\\Temp\\a.tmp");
+
+        WriteBytes(fs, fileNode, [1, 2, 3], offset: 0);
+
+        Assert.NotNull(fs.LastContentWriteTimeUtc);
+        Assert.Equal("\\Temp\\a.tmp", fs.LastContentWritePath);
+    }
+
+    [Fact]
+    public void Rename_DuringAppFolderScope_UpdatesLastContentWriteTime()
+    {
+        var fs = new MemoryFileSystem(1024 * 1024, "Label");
+        var fileNode = AddWithoutWriteTime(fs, "\\old.bin");
+        using var scope = fs.BeginAppFolders(["Cache"]);
+
+        fs.Rename(fileNode, null!, "\\old.bin", "\\new.bin", replaceIfExists: false);
+
+        Assert.NotNull(fs.LastContentWriteTimeUtc);
+    }
+
+    [Fact]
+    public void Cleanup_DeleteDuringAppFolderScope_UpdatesLastContentWriteTime()
+    {
+        var fs = new MemoryFileSystem(1024 * 1024, "Label");
+        var fileNode = AddWithoutWriteTime(fs, "\\file.bin");
+        using var scope = fs.BeginAppFolders(["Cache"]);
+
+        fs.Cleanup(fileNode, null!, "\\file.bin", FileSystemBase.CleanupDelete);
+
+        Assert.NotNull(fs.LastContentWriteTimeUtc);
+    }
+
+    [Fact]
     public void SetFileSize_ExtendAfterTruncateAndAllocationTrim_ReadsZerosInsteadOfOldData()
     {
         // Closing trims the allocation to 512 but keeps the chunk, so bytes 100..511 survive the
@@ -762,6 +1040,25 @@ public sealed class MemoryFileSystemCallbackTests
         {
             Marshal.FreeHGlobal(ptr);
         }
+    }
+
+    /// <summary>
+    /// Adds an empty file straight to the node map, so the disk has a file but no recorded
+    /// content write time yet (creating it through <see cref="MemoryFileSystem.Create"/> would
+    /// record one).
+    /// </summary>
+    /// <param name="fs">The file system.</param>
+    /// <param name="path">The file's path.</param>
+    /// <returns>The added node.</returns>
+    private static FileNode AddWithoutWriteTime(MemoryFileSystem fs, string path)
+    {
+        var node = new FileNode
+        {
+            FileInfo = { FileAttributes = (uint)FileAttributes.Normal, AllocationSize = 512 },
+            FileData = FileContent.CreateZeroed(512),
+        };
+        fs.NodeMap.Add(path, node);
+        return node;
     }
 
     private static void WriteBytes(MemoryFileSystem fs, object fileNode, byte[] data, ulong offset)

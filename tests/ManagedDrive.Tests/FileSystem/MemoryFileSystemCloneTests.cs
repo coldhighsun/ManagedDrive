@@ -57,6 +57,33 @@ public sealed class MemoryFileSystemCloneTests
         Assert.True(target.IsDirty);
     }
 
+    [Fact]
+    public void TryReplaceContents_Succeeds_UpdatesLastContentWriteTime()
+    {
+        var source = new MemoryFileSystem(1024 * 1024, "Source");
+        source.Create("\\a.bin", 0, 0, (uint)FileAttributes.Normal, [], 0, out _, out _, out _, out _);
+        var target = new MemoryFileSystem(1024 * 1024, "Target");
+        Assert.Null(target.LastContentWriteTimeUtc);
+
+        var ok = target.TryReplaceContents(source.NodeMap, out _);
+
+        Assert.True(ok);
+        Assert.NotNull(target.LastContentWriteTimeUtc);
+    }
+
+    [Fact]
+    public void TryReplaceContents_TargetTooSmall_LeavesLastContentWriteTimeUnset()
+    {
+        var source = new MemoryFileSystem(1024 * 1024, "Source");
+        source.Create("\\big.bin", 0, 0, (uint)FileAttributes.Normal, [], 512 * 1024, out _, out _, out _, out _);
+        var target = new MemoryFileSystem(4096, "Target");
+
+        var ok = target.TryReplaceContents(source.NodeMap, out _);
+
+        Assert.False(ok);
+        Assert.Null(target.LastContentWriteTimeUtc);
+    }
+
     private static void WriteBytes(MemoryFileSystem fs, object fileNode, byte[] data)
     {
         var ptr = Marshal.AllocHGlobal(data.Length);

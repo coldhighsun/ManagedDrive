@@ -212,6 +212,17 @@ public sealed record DiskOptions
     public bool AppliesPresets() => !ReadOnly;
 
     /// <summary>
+    /// Returns the folders, relative to the disk's root, that applying the presets creates: the
+    /// plain <see cref="Folders"/> and the folder of every <see cref="EnvRedirects"/> entry. Empty
+    /// when the presets are not applied (see <see cref="AppliesPresets"/>).
+    /// </summary>
+    /// <returns>The relative folder paths, in the order they are created.</returns>
+    public IReadOnlyList<string> GetPresetFolderPaths() =>
+        AppliesPresets()
+            ? [.. Folders ?? [], .. (EnvRedirects ?? []).Select(r => r.SubPath)]
+            : [];
+
+    /// <summary>
     /// Returns the high-usage warning threshold that is in effect: <see cref="HighUsageWarnPercent"/>,
     /// except that a read-only disk never warns since its usage never grows.
     /// </summary>

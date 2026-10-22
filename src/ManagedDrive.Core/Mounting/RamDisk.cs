@@ -183,10 +183,25 @@ public sealed class RamDisk : IDisposable
     public string? LastContentWritePath => _fs.LastContentWritePath;
 
     /// <summary>
-    /// Gets the UTC timestamp of the most recent content mutation (create/write/rename/delete/etc.),
-    /// or <c>null</c> if the disk has never been modified since mount.
+    /// Gets the UTC timestamp of the most recent content mutation (create, data write, resize,
+    /// rename, delete, format, or replacing the whole contents), or <c>null</c> if the disk has
+    /// never been modified since mount. Changes that need saving but do not alter what the disk
+    /// holds do not count: attributes, timestamps, security, reparse data, the volume label, the
+    /// disk's options and password, and the preset folders created while mounting (see
+    /// <see cref="BeginAppFolderCreation"/>).
     /// </summary>
     public DateTimeOffset? LastContentWriteTime => _fs.LastContentWriteTimeUtc;
+
+    /// <summary>
+    /// Makes the directories at <paramref name="subPaths"/>, when created while the returned scope
+    /// is open, count as changes to save but not as content writes. Wrap the app's own creation
+    /// of a freshly mounted disk's preset folders in it, so the disk card does not report a write
+    /// the user never made. Only these exact new directories are exempt; every other change made
+    /// meanwhile still counts as a write.
+    /// </summary>
+    /// <param name="subPaths">Folders relative to the disk's root, separated by <c>\</c> or <c>/</c>.</param>
+    /// <returns>A scope that ends the exemption when disposed.</returns>
+    public IDisposable BeginAppFolderCreation(IEnumerable<string> subPaths) => _fs.BeginAppFolders(subPaths);
 
     /// <summary>
     /// Gets the UTC timestamp of the most recent successful image save (auto-save, final
@@ -804,7 +819,7 @@ public sealed class RamDisk : IDisposable
         {
             ThrowIfDisposed();
             _fs.NodeMap.ClearAll();
-            _fs.MarkDirty();
+            _fs.MarkContentChanged();
         }
 
         NotifyVolumeContentsChanged();
@@ -1103,7 +1118,7 @@ public sealed class RamDisk : IDisposable
                 _cek = null;
             }
 
-            _fs.MarkDirty();
+            _fs.MarkMetadataDirty();
         }
     }
 
@@ -1174,7 +1189,7 @@ public sealed class RamDisk : IDisposable
             {
                 // Capacity and label live in the image header; without a dirty mark the next save
                 // is skipped and a remount reads the stale header value.
-                _fs.MarkDirty();
+                _fs.MarkMetadataDirty();
             }
 
             Options = newOptions;

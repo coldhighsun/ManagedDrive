@@ -241,7 +241,17 @@ public sealed partial class MainViewModel
 
         try
         {
-            var result = await Task.Run(() => _envRedirector.ApplyDiskEffects(options, () => _disksAcceptingEffects.ContainsKey(disk)));
+            // The preset folders are created through the drive, which would count as a write, but
+            // they are not one by the user: the card should still read "not yet modified". Only
+            // these exact folders are exempt, so whatever a program or the user does meanwhile
+            // (for example into a redirected TEMP) still counts. The disk stays dirty, so the
+            // folders are written with the next save.
+            RedirectResult result;
+            using (disk.BeginAppFolderCreation(options.GetPresetFolderPaths()))
+            {
+                result = await Task.Run(() => _envRedirector.ApplyDiskEffects(options, () => _disksAcceptingEffects.ContainsKey(disk)));
+            }
+
             if (!result.IsComplete)
             {
                 _logger.LogWarning(

@@ -45,7 +45,7 @@ public sealed class MemoryFileSystem : FileSystemBase
     private readonly long[] _lastWriteRejectedTicks = [NeverRaised, NeverRaised];
 
     /// <summary>
-    /// Monotonically increasing counter bumped by every mutation (see <see cref="MarkDirty()"/>).
+    /// Monotonically increasing counter bumped by every mutation (see <see cref="MarkMetadataDirty()"/> and <see cref="MarkContentChanged()"/>).
     /// Compared against <see cref="_savedVersion"/> to determine <see cref="IsDirty"/>.
     /// </summary>
     private long _mutationVersion;
@@ -69,6 +69,12 @@ public sealed class MemoryFileSystem : FileSystemBase
     private long _totalBytesRead;
     private long _totalBytesWritten;
     private string _volumeLabel;
+
+    /// <summary>
+    /// The directories the app is creating itself while a scope from <see cref="BeginAppFolders"/>
+    /// is open.
+    /// </summary>
+    private readonly AppFolderRegistry _appFolders = new();
 
     /// <summary>
     /// Initializes a new, empty in-memory file system.
@@ -149,8 +155,11 @@ public sealed class MemoryFileSystem : FileSystemBase
     internal string? LastContentWritePath => Volatile.Read(ref _lastContentWritePath);
 
     /// <summary>
-    /// Gets the UTC timestamp of the most recent content mutation (create/write/rename/delete/etc.),
-    /// or <c>null</c> if the disk's content has never changed since mount.
+    /// Gets the UTC timestamp of the most recent content mutation (create/write/rename/delete or
+    /// a whole-disk replacement), or <c>null</c> if the disk's content has never changed since
+    /// mount. Metadata-only changes (attributes, timestamps, security, reparse data, volume label)
+    /// and the preset folders the app creates while mounting (see <see cref="BeginAppFolders"/>)
+    /// do not count; neither does a periodic or final save.
     /// </summary>
     internal DateTimeOffset? LastContentWriteTimeUtc
     {
@@ -226,7 +235,7 @@ public sealed class MemoryFileSystem : FileSystemBase
             // may now live at the same path, and it must not be deleted in its place. A directory
             // that gained a child since CanDelete approved it is kept rather than orphaning it.
             NodeMap.TryDelete(AlternateStreamName.KeyOrSelf(fileName), node);
-            MarkDirty();
+            MarkContentChanged();
         }
 
         if ((flags & CleanupSetLastWriteTime) != 0)
@@ -234,7 +243,7 @@ public sealed class MemoryFileSystem : FileSystemBase
             node.FileInfo.LastWriteTime = now;
             node.FileInfo.ChangeTime = now;
             node.MetadataVersion++;
-            MarkDirty();
+            MarkMetadataDirty();
         }
 
         // NTFS and FAT set a file's archive bit whenever it's modified, so backup tools can find
@@ -247,7 +256,7 @@ public sealed class MemoryFileSystem : FileSystemBase
             {
                 node.FileInfo.FileAttributes |= ArchiveAttribute;
                 node.MetadataVersion++;
-                MarkDirty();
+                MarkMetadataDirty();
             }
         }
 
@@ -261,7 +270,7 @@ public sealed class MemoryFileSystem : FileSystemBase
             SetFileSizeCore(node, node.FileInfo.FileSize, setAllocationSize: true);
             if (node.ContentVersion != versionBefore)
             {
-                MarkDirty();
+                MarkMetadataDirty();
             }
         }
     }
@@ -384,7 +393,15 @@ public sealed class MemoryFileSystem : FileSystemBase
             };
         }
 
-        MarkDirty();
+        if (node.IsDirectory && IsAppFolder(key))
+        {
+            MarkMetadataDirty();
+        }
+        else
+        {
+            MarkContentChanged();
+        }
+
         fileNode = node;
         fileInfo = node.FileInfo;
         return STATUS_SUCCESS;
@@ -676,7 +693,7 @@ public sealed class MemoryFileSystem : FileSystemBase
         NodeMap.NoteReparsePoint();
         node.ApplyReparseData(reparseData.ToArray());
         node.MetadataVersion++;
-        MarkDirty();
+        MarkMetadataDirty();
         return STATUS_SUCCESS;
     }
 
@@ -709,7 +726,7 @@ public sealed class MemoryFileSystem : FileSystemBase
 
         node.ApplyReparseData(null);
         node.MetadataVersion++;
-        MarkDirty();
+        MarkMetadataDirty();
         return STATUS_SUCCESS;
     }
 
@@ -870,7 +887,7 @@ public sealed class MemoryFileSystem : FileSystemBase
         node.FileInfo.LastWriteTime = now;
         node.FileInfo.ChangeTime = now;
 
-        MarkDirty();
+        MarkContentChanged();
         fileInfo = node.FileInfo;
         return STATUS_SUCCESS;
     }
@@ -1097,7 +1114,7 @@ public sealed class MemoryFileSystem : FileSystemBase
         }
 
         // NodeMap.Rename already bumped the node's MetadataVersion under its write lock.
-        MarkDirty();
+        MarkContentChanged();
         return STATUS_SUCCESS;
     }
 
@@ -1158,7 +1175,7 @@ public sealed class MemoryFileSystem : FileSystemBase
             node.FileInfo.ChangeTime != before.ChangeTime)
         {
             node.MetadataVersion++;
-            MarkDirty();
+            MarkMetadataDirty();
         }
 
         fileInfo = node.FileInfo;
@@ -1195,7 +1212,7 @@ public sealed class MemoryFileSystem : FileSystemBase
         // (common: callers re-assert the current size) must not trigger an auto-save.
         if (node.ContentVersion != versionBefore)
         {
-            MarkDirty();
+            MarkContentChanged();
         }
 
         fileInfo = node.FileInfo;
@@ -1246,7 +1263,7 @@ public sealed class MemoryFileSystem : FileSystemBase
 
         node.FileSecurity = merged;
         node.MetadataVersion++;
-        MarkDirty();
+        MarkMetadataDirty();
         return STATUS_SUCCESS;
     }
 
@@ -1265,7 +1282,7 @@ public sealed class MemoryFileSystem : FileSystemBase
         }
 
         _volumeLabel = volumeLabel;
-        MarkDirty();
+        MarkMetadataDirty();
         VolumeLabelChanged?.Invoke(volumeLabel);
         return GetVolumeInfo(out volumeInfo);
     }
@@ -1343,7 +1360,7 @@ public sealed class MemoryFileSystem : FileSystemBase
                 if (node.FileInfo.FileSize != originalFileSize)
                 {
                     node.FileInfo.FileSize = originalFileSize;
-                    MarkDirty();
+                    MarkMetadataDirty();
                 }
 
                 fileInfo = node.FileInfo;
@@ -1363,7 +1380,7 @@ public sealed class MemoryFileSystem : FileSystemBase
         node.FileInfo.LastWriteTime = now;
         node.FileInfo.ChangeTime = now;
 
-        MarkDirty(nowOffset);
+        MarkContentChanged(nowOffset);
         RecordLastPath(ref _lastContentWritePath, node.FilePath);
         fileInfo = node.FileInfo;
         return STATUS_SUCCESS;
@@ -1407,9 +1424,17 @@ public sealed class MemoryFileSystem : FileSystemBase
     }
 
     /// <summary>
-    /// Marks the disk's content as changed since the last save.
+    /// Marks the disk as changed since the last save without counting it as a content write:
+    /// metadata, security, volume label and configuration changes need saving but must not move
+    /// <see cref="LastContentWriteTimeUtc"/> or raise write activity.
     /// </summary>
-    internal void MarkDirty() => MarkDirty(DateTimeOffset.UtcNow);
+    internal void MarkMetadataDirty() => Interlocked.Increment(ref _mutationVersion);
+
+    /// <summary>
+    /// Marks the disk's content as changed since the last save, records the time as the last
+    /// content write and reports write activity.
+    /// </summary>
+    internal void MarkContentChanged() => MarkContentChanged(DateTimeOffset.UtcNow);
 
     /// <summary>
     /// Replaces this file system's entire contents with those of <paramref name="sourceMap"/>.
@@ -1472,7 +1497,7 @@ public sealed class MemoryFileSystem : FileSystemBase
             : nodes.Select(kvp => KeyValuePair.Create(kvp.Key, kvp.Value.Clone())).ToList();
         NodeMap.ReplaceAll(replacement);
 
-        MarkDirty();
+        MarkContentChanged();
         error = null;
         return true;
     }
@@ -1585,14 +1610,35 @@ public sealed class MemoryFileSystem : FileSystemBase
     /// <summary>
     /// Marks the disk's content as changed since the last save, using a caller-supplied
     /// timestamp to avoid redundant <see cref="DateTimeOffset.UtcNow"/> calls on hot paths
-    /// that already captured "now" for other purposes.
+    /// that already captured "now" for other purposes. Also records the time as the last
+    /// content write and reports write activity.
     /// </summary>
-    private void MarkDirty(DateTimeOffset now)
+    /// <param name="now">The time to record as the last content write.</param>
+    private void MarkContentChanged(DateTimeOffset now)
     {
         Interlocked.Increment(ref _mutationVersion);
         Interlocked.Exchange(ref _lastContentWriteTicks, now.UtcTicks);
         ContentAccessed?.Invoke(true);
     }
+
+    /// <summary>
+    /// Makes the directories at <paramref name="subPaths"/> (and the parents they need), when
+    /// created while the returned scope is open, count as changes to save but not as content
+    /// writes. Used while the app itself creates a freshly mounted disk's preset folders, which
+    /// is not a write by the user. Only these exact new directories are exempt: anything else done
+    /// in the meantime (a rename, a delete, a file written by a program) still counts.
+    /// </summary>
+    /// <param name="subPaths">Folders relative to the disk's root, separated by <c>\</c> or <c>/</c>.</param>
+    /// <returns>A scope that ends the exemption when disposed.</returns>
+    internal IDisposable BeginAppFolders(IEnumerable<string> subPaths) => _appFolders.Begin(subPaths);
+
+    /// <summary>
+    /// Whether a directory just created at <paramref name="key"/> is one the app is creating
+    /// itself (see <see cref="BeginAppFolders"/>). Costs one volatile read while no scope is open.
+    /// </summary>
+    /// <param name="key">The normalized path of the new directory.</param>
+    /// <returns><c>true</c> if the creation should not count as a content write.</returns>
+    private bool IsAppFolder(string key) => _appFolders.Contains(key);
 
     /// <summary>
     /// Raises <see cref="WriteRejected"/> unless one with the same <paramref name="reason"/> was

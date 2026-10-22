@@ -58,6 +58,37 @@ public sealed class DiskOptionsReadOnlyTests
     }
 
     /// <summary>
+    /// A writable disk creates its plain folders and the folder of every redirection.
+    /// </summary>
+    [Fact]
+    public void GetPresetFolderPaths_Writable_ListsFoldersThenRedirectFolders()
+    {
+        var paths = Create(readOnly: false).GetPresetFolderPaths();
+
+        Assert.Equal(["cache", "temp"], paths);
+    }
+
+    /// <summary>
+    /// A read-only disk applies no presets, so no folder is created for it.
+    /// </summary>
+    [Fact]
+    public void GetPresetFolderPaths_ReadOnly_IsEmpty()
+    {
+        Assert.Empty(Create(readOnly: true).GetPresetFolderPaths());
+    }
+
+    /// <summary>
+    /// A disk without presets has no folders to create.
+    /// </summary>
+    [Fact]
+    public void GetPresetFolderPaths_NoFoldersOrRedirects_IsEmpty()
+    {
+        var options = Create(readOnly: false) with { Folders = null, EnvRedirects = null };
+
+        Assert.Empty(options.GetPresetFolderPaths());
+    }
+
+    /// <summary>
     /// A writable disk uses its stored threshold; a read-only disk never warns, even if one is stored.
     /// </summary>
     /// <param name="readOnly">Whether the disk is read-only.</param>
