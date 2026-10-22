@@ -199,6 +199,19 @@ public sealed class MemoryFileSystemReparsePointTests
     }
 
     [Fact]
+    public void SetReparsePoint_Succeeds_DoesNotUpdateLastContentWriteTime()
+    {
+        var fs = new MemoryFileSystem(1024 * 1024, "Label");
+        var node = new FileNode();
+        fs.NodeMap.Add("\\link", node);
+
+        fs.SetReparsePoint(node, null!, "\\link", MakeReparse(SymlinkTag, 12));
+
+        Assert.True(fs.IsDirty);
+        Assert.Null(fs.LastContentWriteTimeUtc);
+    }
+
+    [Fact]
     public void GetReparsePoint_ReparseNode_ReturnsItsData()
     {
         var fs = new MemoryFileSystem(1024 * 1024, "Label");
