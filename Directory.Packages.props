@@ -13,7 +13,7 @@
     <PackageVersion Include="BenchmarkDotNet" Version="0.15.8" />
     <PackageVersion Include="System.CommandLine" Version="2.0.13" />
     <PackageVersion Include="Spectre.Console" Version="0.57.2" />
-    <PackageVersion Include="SharpCompress" Version="0.50.5" />
+    <PackageVersion Include="SharpCompress" Version="0.50.7" />
     <PackageVersion Include="Microsoft.Extensions.Hosting.WindowsServices" Version="10.0.13" />
     <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.13" />
     <PackageVersion Include="Microsoft.Extensions.Logging" Version="10.0.13" />
@@ -23,7 +23,7 @@
     <PackageVersion Include="Serilog.Sinks.File" Version="7.0.0" />
     <PackageVersion Include="Serilog.Sinks.Async" Version="2.1.0" />
     <PackageVersion Include="YamlDotNet" Version="18.1.0" />
-    <PackageVersion Include="ThrottledLogging" Version="2.1.2" />
+    <PackageVersion Include="ThrottledLogging" Version="2.2.0" />
     <PackageVersion Include="ZstdSharp.Port" Version="0.8.8" />
   </ItemGroup>
 </Project>
