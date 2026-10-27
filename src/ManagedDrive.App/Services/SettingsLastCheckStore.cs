@@ -27,12 +27,15 @@ internal sealed class SettingsLastCheckStore(SettingsStore settings) : ILastChec
         return Task.FromResult(skipped != null && SemanticVersion.TryParse(skipped, out var version) ? version : null);
     }
 
-    public Task SetSkippedVersionAsync(SemanticVersion? version, CancellationToken cancellationToken = default)
-    {
-        settings.Update(current => current with { SkippedVersion = version?.ToString() });
-        return Task.CompletedTask;
-    }
+    public Task SetSkippedVersionAsync(SemanticVersion version, CancellationToken cancellationToken = default) =>
+        StoreSkippedVersion(version.ToString());
 
     public Task ClearSkippedVersionAsync(CancellationToken cancellationToken = default) =>
-        SetSkippedVersionAsync(null, cancellationToken);
+        StoreSkippedVersion(null);
+
+    private Task StoreSkippedVersion(string? version)
+    {
+        settings.Update(current => current with { SkippedVersion = version });
+        return Task.CompletedTask;
+    }
 }

@@ -7,13 +7,12 @@ namespace ManagedDrive.App.Views;
 /// </summary>
 public partial class AboutDialog
 {
-    private const string GitHubUrl = "https://github.com/coldhighsun/ManagedDrive";
-    private const string ThirdPartyNoticesUrl = "https://github.com/coldhighsun/ManagedDrive/blob/main/docs/THIRD-PARTY-NOTICES.md";
+    private const string GitHubUrl = UpdateCheckService.RepositoryUrl;
+    private const string ThirdPartyNoticesUrl = GitHubUrl + "/blob/main/docs/THIRD-PARTY-NOTICES.md";
     private readonly UpdateCheckService? _updateCheckService;
-    private UpdateInfo? _updateInfo;
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="AboutDialog"/> class and starts an update check when a service is supplied.
+    /// Initializes a new instance of the <see cref="AboutDialog"/> class and shows the update the service's automatic check has found.
     /// </summary>
     public AboutDialog(UpdateCheckService? updateCheckService = null)
     {
@@ -24,35 +23,39 @@ public partial class AboutDialog
         GitHubLink.NavigateUri = new(GitHubUrl);
         ThirdPartyNoticesLink.NavigateUri = new(ThirdPartyNoticesUrl);
 
-        _ = CheckForUpdateAsync();
+        if (updateCheckService != null)
+        {
+            updateCheckService.Controller.Changed += OnUpdateStateChanged;
+            Closed += (_, _) => updateCheckService.Controller.Changed -= OnUpdateStateChanged;
+            ShowAvailableUpdate();
+        }
     }
 
-    private async Task CheckForUpdateAsync()
+    /// <summary>
+    /// Shows the "update available" link while the controller knows of a newer version (found by its startup
+    /// and daily checks, so a version the user skipped is not offered again here).
+    /// </summary>
+    private void OnUpdateStateChanged(object? sender, EventArgs e) => ShowAvailableUpdate();
+
+    private void ShowAvailableUpdate()
+    {
+        if (_updateCheckService?.Controller.Available is not { } update)
+        {
+            return;
+        }
+
+        UpdateLinkRun.Text = Loc.Format("About.UpdateAvailable", update.Version.ToString(includeMetadata: false));
+        UpdateStatusText.Visibility = Visibility.Visible;
+    }
+
+    private void UpdateLink_Click(object sender, RoutedEventArgs e)
     {
         if (_updateCheckService == null)
         {
             return;
         }
 
-        var (success, info) = await _updateCheckService.CheckSilentlyAsync();
-        if (!success || info == null)
-        {
-            return;
-        }
-
-        _updateInfo = info;
-        UpdateLinkRun.Text = Loc.Format("About.UpdateAvailable", info.Version);
-        UpdateStatusText.Visibility = Visibility.Visible;
-    }
-
-    private void UpdateLink_Click(object sender, RoutedEventArgs e)
-    {
-        if (_updateCheckService == null || _updateInfo == null)
-        {
-            return;
-        }
-
-        if (UpdateDialog.ShowFor(_updateCheckService, _updateInfo, this))
+        if (UpdateDialog.ShowFor(_updateCheckService, this))
         {
             // The installer has been started and will ask the app to exit; nothing else should stay open.
             Close();

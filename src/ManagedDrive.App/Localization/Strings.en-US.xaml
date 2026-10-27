@@ -325,7 +325,7 @@
     <sys:String x:Key="Tip.StartMinimized">Hide the main window on startup and show only the system tray icon</sys:String>
     <sys:String x:Key="Tip.ContextMenuEnabled">Add a right-click menu entry to mount zip/7z/rar/tar archives directly as a RAM disk</sys:String>
     <sys:String x:Key="Settings.AutoCheckForUpdates">Automatically check for updates</sys:String>
-    <sys:String x:Key="Tip.AutoCheckForUpdates">Check GitHub for a newer version once a day at startup</sys:String>
+    <sys:String x:Key="Tip.AutoCheckForUpdates">Check GitHub for a newer version once a day (at startup and while the app keeps running)</sys:String>
     <sys:String x:Key="Settings.OpenLogDirectory">Open Log Directory</sys:String>
     <sys:String x:Key="Settings.CloseToTray">Closing the window minimizes to tray instead of exiting</sys:String>
     <sys:String x:Key="Tip.CloseToTray">When checked, the title bar close button hides the window to the tray. When unchecked, it exits the application (same as the tray "Exit" menu item).</sys:String>

@@ -1,3 +1,4 @@
+using GitHubReleaseUpdater;
 using GitHubReleaseUpdater.Download;
 using ManagedDrive.Cli.Core;
 
@@ -30,14 +31,14 @@ public partial class UpdateDialog
     }
 
     /// <summary>
-    /// Provides the installer and records skipped versions.
+    /// Runs the installation and records skipped versions.
     /// </summary>
     private readonly UpdateCheckService _service;
 
     /// <summary>
     /// The update this dialog offers.
     /// </summary>
-    private readonly UpdateInfo _info;
+    private readonly AvailableUpdate _update;
 
     /// <summary>
     /// Cancels the in-flight download, or <see langword="null"/> when none is running.
@@ -45,31 +46,45 @@ public partial class UpdateDialog
     private CancellationTokenSource? _downloadCts;
 
     /// <summary>
+    /// What the dialog is showing now.
+    /// </summary>
+    private DialogState _state;
+
+    /// <summary>
     /// Set once the window has closed, so a download that finishes late does not touch it.
     /// </summary>
     private bool _closed;
 
     /// <summary>
-    /// Initializes the dialog for <paramref name="info"/>.
+    /// Hands the controller's progress reports, which may come from a pool thread, to the UI thread at background priority.
     /// </summary>
-    /// <param name="service">Provides the installer and records skipped versions.</param>
-    /// <param name="info">The update to offer.</param>
-    private UpdateDialog(UpdateCheckService service, UpdateInfo info)
+    private readonly CoalescingSignal _progressSignal;
+
+    /// <summary>
+    /// Initializes the dialog for <paramref name="update"/>.
+    /// </summary>
+    /// <param name="service">Runs the installation and records skipped versions.</param>
+    /// <param name="update">The update to offer.</param>
+    private UpdateDialog(UpdateCheckService service, AvailableUpdate update)
     {
         InitializeComponent();
         _service = service;
-        _info = info;
+        _update = update;
+        _progressSignal = new(ShowLatestProgress, action => Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Background, action));
 
-        HeaderText.Text = Loc.Format("Update.Header", info.Version);
+        HeaderText.Text = Loc.Format("Update.Header", update.Version.ToString(includeMetadata: false));
         CurrentVersionText.Text = Loc.Format("Update.CurrentVersion", UpdateCheckService.GetRunningVersion());
-        ShowReleaseNotes(info.ReleaseNotes);
+        ShowReleaseNotes(update.Release.Body);
         InfoText.Text = BuildInfoText();
         SetState(DialogState.Prompt);
 
+        service.Controller.ProgressChanged += OnProgressChanged;
         Loaded += (_, _) => DialogPlacement.BringToFrontWhenUnowned(this);
         Closed += (_, _) =>
         {
             _closed = true;
+            _progressSignal.Complete();
+            service.Controller.ProgressChanged -= OnProgressChanged;
             _downloadCts?.Cancel();
         };
     }
@@ -81,15 +96,14 @@ public partial class UpdateDialog
     public static bool IsShowing { get; private set; }
 
     /// <summary>
-    /// Shows the dialog modally unless one is already open.
+    /// Shows the dialog for the update the service has found, modally unless one is already open.
     /// </summary>
-    /// <param name="service">Provides the installer and records skipped versions.</param>
-    /// <param name="info">The update to offer.</param>
+    /// <param name="service">Runs the installation and records skipped versions.</param>
     /// <param name="owner">The window to centre on, or <see langword="null"/> when none is visible.</param>
     /// <returns><see langword="true"/> when the installer was started.</returns>
-    public static bool ShowFor(UpdateCheckService service, UpdateInfo info, Window? owner)
+    public static bool ShowFor(UpdateCheckService service, Window? owner)
     {
-        if (IsShowing)
+        if (IsShowing || service.Controller.Available is not { } update)
         {
             return false;
         }
@@ -97,7 +111,7 @@ public partial class UpdateDialog
         IsShowing = true;
         try
         {
-            var dialog = new UpdateDialog(service, info);
+            var dialog = new UpdateDialog(service, update);
             if (owner is { IsLoaded: true })
             {
                 dialog.Owner = owner;
@@ -131,7 +145,7 @@ public partial class UpdateDialog
     /// </summary>
     private string BuildInfoText()
     {
-        if (!_info.CanInstall)
+        if (!_service.Controller.HasInstaller)
         {
             return Loc.Get("Update.NoInstaller");
         }
@@ -145,6 +159,7 @@ public partial class UpdateDialog
     /// </summary>
     private void SetState(DialogState state)
     {
+        _state = state;
         var prompt = state == DialogState.Prompt;
         var downloading = state == DialogState.Downloading;
         var failed = state == DialogState.Failed;
@@ -153,12 +168,12 @@ public partial class UpdateDialog
         ProgressPanel.Visibility = downloading ? Visibility.Visible : Visibility.Collapsed;
         ErrorText.Visibility = failed ? Visibility.Visible : Visibility.Collapsed;
 
-        UpdateButton.Visibility = !downloading && _info.CanInstall ? Visibility.Visible : Visibility.Collapsed;
+        UpdateButton.Visibility = !downloading && _service.Controller.HasInstaller ? Visibility.Visible : Visibility.Collapsed;
         UpdateButton.Content = Loc.Get(failed ? "Update.Retry" : "Update.UpdateNow");
         SkipButton.Visibility = prompt ? Visibility.Visible : Visibility.Collapsed;
         LaterButton.Visibility = downloading ? Visibility.Collapsed : Visibility.Visible;
         LaterButton.Content = Loc.Get(failed ? "Btn.Close" : "Update.RemindLater");
-        ViewReleaseButton.Visibility = !downloading && (failed || !_info.CanInstall) ? Visibility.Visible : Visibility.Collapsed;
+        ViewReleaseButton.Visibility = !downloading && (failed || !_service.Controller.HasInstaller) ? Visibility.Visible : Visibility.Collapsed;
         CancelDownloadButton.Visibility = downloading ? Visibility.Visible : Visibility.Collapsed;
 
         if (downloading)
@@ -175,6 +190,22 @@ public partial class UpdateDialog
     {
         ErrorText.Text = message;
         SetState(DialogState.Failed);
+    }
+
+    /// <summary>
+    /// Shows the controller's latest download progress.
+    /// </summary>
+    private void OnProgressChanged(object? sender, EventArgs e) => _progressSignal.Notify();
+
+    /// <summary>
+    /// Applies the latest progress on the UI thread; a report that arrives after the download ended is dropped.
+    /// </summary>
+    private void ShowLatestProgress()
+    {
+        if (!_closed && _state == DialogState.Downloading && _service.Controller.Progress is { } progress)
+        {
+            OnDownloadProgress(progress);
+        }
     }
 
     /// <summary>
@@ -211,8 +242,7 @@ public partial class UpdateDialog
 
         try
         {
-            using var installer = _service.CreateInstaller();
-            var launched = await installer.DownloadAndLaunchAsync(_info, new Progress<DownloadProgress>(OnDownloadProgress), cts.Token);
+            var launched = await _service.InstallAsync(cts.Token);
             if (_closed)
             {
                 return;
@@ -224,7 +254,10 @@ public partial class UpdateDialog
                 return;
             }
 
-            ShowFailure(Loc.Get("Update.UacDeclined"));
+            // Without a recorded failure the user declined the elevation prompt.
+            ShowFailure(_service.LastInstallError is { } error
+                ? Loc.Format("Update.Failed", error.Message)
+                : Loc.Get("Update.UacDeclined"));
         }
         catch (OperationCanceledException) when (cts.IsCancellationRequested)
         {
@@ -260,7 +293,7 @@ public partial class UpdateDialog
     {
         try
         {
-            await _service.SkipVersionAsync(_info);
+            await _service.Controller.SkipVersionAsync();
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -274,5 +307,5 @@ public partial class UpdateDialog
     /// Opens the release page in the browser, for a manual download.
     /// </summary>
     private void ViewReleaseButton_Click(object sender, RoutedEventArgs e) =>
-        Process.Start(new ProcessStartInfo(_info.ReleaseUrl.AbsoluteUri) { UseShellExecute = true });
+        Process.Start(new ProcessStartInfo(_update.Release.HtmlUrl ?? UpdateCheckService.ReleasesUrl) { UseShellExecute = true });
 }
