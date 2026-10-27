@@ -325,7 +325,7 @@
     <sys:String x:Key="Tip.StartMinimized">启动时隐藏主窗口，仅显示系统托盘图标</sys:String>
     <sys:String x:Key="Tip.ContextMenuEnabled">添加右键菜单项，可直接将 zip/7z/rar/tar 压缩包挂载为内存盘</sys:String>
     <sys:String x:Key="Settings.AutoCheckForUpdates">自动检查更新</sys:String>
-    <sys:String x:Key="Tip.AutoCheckForUpdates">启动时每天检查一次 GitHub 上是否有新版本</sys:String>
+    <sys:String x:Key="Tip.AutoCheckForUpdates">每天检查一次 GitHub 上是否有新版本（启动时以及程序持续运行期间）</sys:String>
     <sys:String x:Key="Settings.OpenLogDirectory">打开日志目录</sys:String>
     <sys:String x:Key="Settings.CloseToTray">关闭窗口时最小化到托盘，而不是退出程序</sys:String>
     <sys:String x:Key="Tip.CloseToTray">勾选时，标题栏关闭按钮会将窗口隐藏到托盘；不勾选时，会直接退出程序（等同于托盘菜单的"退出"）。</sys:String>

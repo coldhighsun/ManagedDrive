@@ -88,12 +88,18 @@ public partial class App
     private TrayIconController? _trayIconController;
     private TrayTooltipController? _trayTooltipController;
     private UpdateCheckService? _updateCheckService;
+    private readonly CancellationTokenSource _updateCts = new();
 
     private void App_Exit(object sender, ExitEventArgs e)
     {
         _logger.LogInformation("App_Exit invoked.");
 
         TeardownBeforeMountManagerDispose();
+        RunTeardownStep(() =>
+        {
+            _updateCheckService?.Dispose();
+            _updateCts.Dispose();
+        });
         RunTeardownStep(() => TempDirResetService.WaitForPendingBroadcasts(TimeSpan.FromSeconds(3)));
 
         // Safety net: if ShutdownAsync already disposed the mount manager, this is a no-op.
@@ -398,9 +404,13 @@ public partial class App
 
         await YieldToUiAsync();
 
-        _updateCheckService = new(settings, _trayIconController, () => _mainViewModel.Disks);
+        _updateCheckService = UpdateCheckService.Create(settings, () => _mainViewModel.Disks);
         _mainViewModel.UpdateCheckService = _updateCheckService;
-        _ = PromptForUpdateOnStartupAsync(config);
+        if (_updateCheckService is { } updates)
+        {
+            updates.UpdateAnnounced += update => _ = RunUpdateTaskAsync(() => AnnounceUpdateAsync(updates));
+            _ = RunUpdateTaskAsync(() => updates.Controller.RunAsync(_updateCts.Token));
+        }
 
         // The main window is not shown here: the splash is always up at this point, and
         // SplashLifecycle shows the main window once the loading has finished (never, when
@@ -831,34 +841,48 @@ public partial class App
         _mainViewModel!.RejectEnvRestoreIfBusy() ? Task.CompletedTask : _envRestoreTrayAction!.RunAsync(group);
 
     /// <summary>
-    /// Runs the startup update check and, when a newer release exists, asks the user whether to install it.
-    /// A modal prompt is only shown while the main window is visible; when the app sits in the tray
-    /// (e.g. started minimized) a balloon pointing at About is shown instead of interrupting the user.
+    /// Runs a background update task nobody awaits and logs its failure; cancellation at exit is expected.
     /// </summary>
-    private async Task PromptForUpdateOnStartupAsync(AppConfiguration config)
+    private async Task RunUpdateTaskAsync(Func<Task> work)
     {
-        var service = _updateCheckService!;
-        var info = await service.CheckOnStartupAsync(config);
-        if (info is null || _isExiting)
+        try
         {
-            return;
+            await work();
         }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "A background update task failed.");
+        }
+    }
 
+    /// <summary>
+    /// Tells the user about a newer release found by the automatic check. A modal prompt is only shown while the
+    /// main window is visible; when the app sits in the tray (e.g. started minimized) a balloon pointing at
+    /// About is shown instead of interrupting the user.
+    /// </summary>
+    private async Task AnnounceUpdateAsync(UpdateCheckService service)
+    {
         // The main window is hidden while the splash is up; decide dialog versus balloon only once
         // it is known whether the main window is shown.
         await _splashLifecycle!.Closed;
-        if (_isExiting)
+        if (_isExiting || service.Controller.Available is not { } update)
         {
             return;
         }
 
         if (WindowVisibility.IsShownToUser(_mainWindow))
         {
-            UpdateDialog.ShowFor(service, info, _mainWindow);
+            UpdateDialog.ShowFor(service, _mainWindow);
         }
         else
         {
-            service.NotifyUpdateAvailable(info);
+            _trayIconController?.ShowBalloonTip(
+                "ManagedDrive",
+                Loc.Format("Update.BalloonBody", update.Version.ToString(includeMetadata: false)),
+                System.Windows.Forms.ToolTipIcon.Info);
         }
     }
 
@@ -928,6 +952,7 @@ public partial class App
         _logger.LogInformation("ShutdownAsync starting.");
 
         _isExiting = true;
+        _updateCts.Cancel();
 
         if (_mainViewModel != null)
         {

@@ -29,7 +29,7 @@ ManagedDrive uses the following open-source software.
 
 ## GitHubReleaseUpdater
 
-- **Package:** `GitHubReleaseUpdater` 0.4.0
+- **Package:** `GitHubReleaseUpdater` 0.7.1
 - **Copyright:** Copyright (c) coldhighsun
 - **License:** [MIT License](https://github.com/coldhighsun/GitHubReleaseUpdater/blob/main/LICENSE)
 
