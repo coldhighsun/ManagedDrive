@@ -165,6 +165,29 @@ public sealed class RamDiskSaveDecisionsTests : IDisposable
         FileInfo = { FileAttributes = (uint)FileAttributes.Directory },
     };
 
+    [Theory]
+    [InlineData("a.mdr", "a.mdr", "a.mdr", true, false, true)]
+    [InlineData(null, null, null, true, false, false)]
+    [InlineData("a.mdr", "b.mdr", "a.mdr", true, false, false)]
+    [InlineData("a.mdr", null, "a.mdr", true, false, false)]
+    [InlineData("a.mdr", "a.mdr", "other.mdr", true, false, false)]
+    [InlineData("a.mdr", "a.mdr", null, true, false, false)]
+    [InlineData("a.mdr", "a.mdr", "a.mdr", false, false, false)]
+    [InlineData("a.mdr", "a.mdr", "a.mdr", true, true, false)]
+    public void CanPatchImageCapacity_VariousStates_ReturnsExpected(
+        string? currentPath,
+        string? newPath,
+        string? lastSavedPath,
+        bool saveImageOnExit,
+        bool readOnly,
+        bool expected)
+    {
+        var result = RamDiskSaveDecisions.CanPatchImageCapacity(
+            currentPath, newPath, lastSavedPath, saveImageOnExit, readOnly);
+
+        Assert.Equal(expected, result);
+    }
+
     private static FileNode MakeFile(byte[] content)
     {
         var fileSize = (ulong)content.Length;

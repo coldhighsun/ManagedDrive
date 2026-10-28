@@ -59,6 +59,32 @@ internal static class RamDiskSaveDecisions
         cekRotatedSinceLastSave || configuredPersistImagePath != lastSavedImagePath;
 
     /// <summary>
+    /// Whether a changed capacity can be written straight into the header of the disk's existing
+    /// image instead of marking the disk dirty (and so copying the whole image on the next save).
+    /// The image qualifies only if the options keep the same image path and that file is the one the
+    /// disk was last saved to or loaded from. A disk that is read-only or opted out of saving on
+    /// exit is not patched: it must not touch its image at edit time, so it keeps the dirty mark
+    /// and lets the normal save rules decide whether the image is ever written.
+    /// </summary>
+    /// <param name="currentPersistImagePath">The image path the disk uses now.</param>
+    /// <param name="newPersistImagePath">The image path in the options being applied.</param>
+    /// <param name="lastSavedImagePath">The image the disk was last saved to or loaded from.</param>
+    /// <param name="saveImageOnExit">Whether the options being applied save the image on exit.</param>
+    /// <param name="readOnly">Whether the options being applied make the disk read-only.</param>
+    /// <returns><see langword="true"/> when the existing image may be patched.</returns>
+    internal static bool CanPatchImageCapacity(
+        string? currentPersistImagePath,
+        string? newPersistImagePath,
+        string? lastSavedImagePath,
+        bool saveImageOnExit,
+        bool readOnly) =>
+        currentPersistImagePath is not null &&
+        newPersistImagePath == currentPersistImagePath &&
+        lastSavedImagePath == currentPersistImagePath &&
+        saveImageOnExit &&
+        !readOnly;
+
+    /// <summary>
     /// Compares <paramref name="nodeMap"/> against the most recently written snapshot of
     /// <paramref name="mainImagePath"/>, if one exists. Returns <c>false</c> (i.e. "write a new
     /// snapshot") when there is no prior snapshot, or when reading/comparing it fails for any

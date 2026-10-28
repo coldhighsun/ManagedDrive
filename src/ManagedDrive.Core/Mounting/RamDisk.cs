@@ -1168,6 +1168,7 @@ public sealed class RamDisk : IDisposable
             }
 
             var persistedHeaderChanged = false;
+            var capacityChanged = false;
 
             if (newOptions.CapacityBytes != Options.CapacityBytes)
             {
@@ -1177,7 +1178,7 @@ public sealed class RamDisk : IDisposable
                     return false;
                 }
 
-                persistedHeaderChanged = true;
+                capacityChanged = true;
             }
 
             if (newOptions.VolumeLabel != Options.VolumeLabel)
@@ -1192,7 +1193,12 @@ public sealed class RamDisk : IDisposable
                 persistedHeaderChanged = true;
             }
 
-            if (persistedHeaderChanged)
+            // A capacity change alone is patched into the existing image's header right away, so
+            // the exit save does not have to copy the whole image for it. Anything else that lives
+            // in the header, or a patch that is not possible, falls back to the dirty mark.
+            var needsHeaderSave = persistedHeaderChanged || (capacityChanged && !TryPatchImageCapacity(newOptions));
+
+            if (needsHeaderSave)
             {
                 // Capacity and label live in the image header; without a dirty mark the next save
                 // is skipped and a remount reads the stale header value.
@@ -1204,6 +1210,37 @@ public sealed class RamDisk : IDisposable
             error = null;
             return true;
         }
+    }
+
+    /// <summary>
+    /// Records a changed capacity in the header of the image this disk was last saved to or loaded
+    /// from, without rewriting the image, as far as
+    /// <see cref="RamDiskSaveDecisions.CanPatchImageCapacity"/> and the serializer's own checks
+    /// allow. Callers must hold <see cref="_autoSaveLock"/> so no save is writing the file.
+    /// </summary>
+    /// <param name="newOptions">The options being applied.</param>
+    /// <returns>
+    /// <see langword="true"/> when the image now records the new capacity; <see langword="false"/>
+    /// when the caller must mark the disk dirty so the next save writes it.
+    /// </returns>
+    private bool TryPatchImageCapacity(DiskOptions newOptions)
+    {
+        if (!RamDiskSaveDecisions.CanPatchImageCapacity(
+            Options.PersistImagePath,
+            newOptions.PersistImagePath,
+            _lastSavedImagePath,
+            newOptions.SaveImageOnExit,
+            newOptions.ReadOnly))
+        {
+            return false;
+        }
+
+        return DiskImageSerializer.TrySetCapacityInPlace(
+            Options.PersistImagePath!,
+            newOptions.CapacityBytes,
+            // A decrease is only safe when the image is exactly the disk: not dirty, and holding as
+            // many nodes as memory does (it holds more if the load dropped damaged nodes).
+            nodeCountForDecrease: _fs.IsDirty ? null : _fs.NodeMap.Count);
     }
 
     /// <summary>

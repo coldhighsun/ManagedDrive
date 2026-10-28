@@ -1,3 +1,4 @@
+using System.Buffers.Binary;
 using System.IO.Compression;
 using System.Runtime.ExceptionServices;
 using System.Security.Cryptography;
@@ -470,6 +471,115 @@ public static class DiskImageSerializer
 
             throw;
         }
+    }
+
+    /// <summary>
+    /// Changes the capacity stored in the header of an existing version 7 segmented image by
+    /// overwriting that fixed-width field in place, so a capacity-only change does not force the
+    /// whole image (potentially gigabytes of reused segments) to be copied again. Nothing but those
+    /// eight bytes is touched; segment payloads, the segment index and the key-wrap fields are
+    /// independent of the capacity. A decrease is only done when the caller vouches that the image
+    /// holds exactly the disk's nodes: an image that holds more (stale, or nodes the load dropped)
+    /// could contain more than the new capacity and would then fail to load.
+    /// </summary>
+    /// <param name="imagePath">Path of the existing image.</param>
+    /// <param name="newCapacityBytes">The new capacity in bytes.</param>
+    /// <param name="nodeCountForDecrease">
+    /// For a capacity below the one in the image: the number of nodes the image must hold (its
+    /// segment index is summed and compared) for the decrease to be written. <see langword="null"/>
+    /// never allows a decrease.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when the image now records <paramref name="newCapacityBytes"/> (or
+    /// already did); <see langword="false"/> when the file is missing, not a version 7 segmented
+    /// image, would need a disallowed decrease, or could not be written — the caller must then save
+    /// in full.
+    /// </returns>
+    internal static bool TrySetCapacityInPlace(string imagePath, ulong newCapacityBytes, int? nodeCountForDecrease = null)
+    {
+        try
+        {
+            using var stream = new FileStream(imagePath, FileMode.Open, FileAccess.ReadWrite, FileShare.Read);
+            using var reader = new BinaryReader(stream, System.Text.Encoding.UTF8, leaveOpen: true);
+
+            ReadHeader(reader, out var version, out _, out var isEncrypted, out var segmented);
+            if (version != ReparseVersion || !segmented)
+            {
+                LogCapacityPatchRefused(imagePath, "it is not a version 7 segmented image");
+                return false;
+            }
+
+            // ReadHeader leaves the reader at the capacity field.
+            var capacityOffset = stream.Position;
+            var currentCapacity = reader.ReadUInt64();
+            if (newCapacityBytes == currentCapacity)
+            {
+                return true;
+            }
+
+            if (newCapacityBytes < currentCapacity && !HoldsExactlyNodes(reader, isEncrypted, nodeCountForDecrease))
+            {
+                LogCapacityPatchRefused(
+                    imagePath, "a decrease needs an image holding exactly the disk's nodes, and this one does not");
+                return false;
+            }
+
+            // One write of eight bytes that sit inside the first disk sector, so it lands entirely
+            // or not at all; there is no temp-file-and-rename step for an in-place patch.
+            var capacityBytes = new byte[sizeof(ulong)];
+            BinaryPrimitives.WriteUInt64LittleEndian(capacityBytes, newCapacityBytes);
+            stream.Position = capacityOffset;
+            stream.Write(capacityBytes);
+            stream.Flush(flushToDisk: true);
+            return true;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException or FormatException)
+        {
+            LogCapacityPatchRefused(imagePath, ex.Message);
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Logs why <see cref="TrySetCapacityInPlace"/> left the image alone, so a slow exit save that
+    /// follows (the dirty-mark fallback rewrites the whole image) can be explained from the log.
+    /// </summary>
+    /// <param name="imagePath">Path of the image.</param>
+    /// <param name="reason">Why the capacity was not patched in place.</param>
+    private static void LogCapacityPatchRefused(string imagePath, string reason)
+    {
+        Logger.LogInformation(
+            "Did not change the capacity of '{ImagePath}' in place ({Reason}); a full save is needed.",
+            imagePath, reason);
+    }
+
+    /// <summary>
+    /// Whether the segment index of the image <paramref name="reader"/> is reading describes
+    /// exactly <paramref name="expectedNodeCount"/> nodes. The reader must be just past the capacity
+    /// field; it is left at an unspecified position.
+    /// </summary>
+    /// <param name="reader">The reader positioned after the capacity field.</param>
+    /// <param name="isEncrypted">Whether the image carries key-wrap fields and per-segment nonces.</param>
+    /// <param name="expectedNodeCount">The node count to compare with, or <see langword="null"/>.</param>
+    /// <returns>
+    /// <see langword="false"/> when <paramref name="expectedNodeCount"/> is <see langword="null"/>,
+    /// the index does not fit the file, or the counts differ.
+    /// </returns>
+    private static bool HoldsExactlyNodes(BinaryReader reader, bool isEncrypted, int? expectedNodeCount)
+    {
+        if (expectedNodeCount is not { } expected)
+        {
+            return false;
+        }
+
+        reader.ReadString(); // volume label
+        if (isEncrypted)
+        {
+            SkipKeyWrapFields(reader);
+        }
+
+        return TryReadSegmentIndex(reader, isEncrypted) is { } entries &&
+            entries.Sum(entry => (long)entry.NodeCount) == expected;
     }
 
     /// <summary>
@@ -2042,11 +2152,7 @@ public static class DiskImageSerializer
                 // never wrapped by these fields — only the content-encryption key (assumed, by
                 // caller contract, to be the same key across saves once encryption is enabled) was
                 // ever used to encrypt segment payloads.
-                candidateReader.ReadBytes(SaltSize);
-                candidateReader.ReadInt32();
-                candidateReader.ReadBytes(NonceSize);
-                candidateReader.ReadBytes(TagSize);
-                candidateReader.ReadBytes(CekSize);
+                SkipKeyWrapFields(candidateReader);
             }
 
             if (TryReadSegmentIndex(candidateReader, isEncrypted) is not { } entries)
@@ -2071,6 +2177,21 @@ public static class DiskImageSerializer
             candidateStream?.Dispose();
             return false;
         }
+    }
+
+    /// <summary>
+    /// Advances <paramref name="reader"/> past the key-wrap fields of an encrypted image header
+    /// (salt, PBKDF2 iteration count, wrap nonce, wrap tag and wrapped key), which sit between the
+    /// volume label and the segment index.
+    /// </summary>
+    /// <param name="reader">The reader positioned at the salt.</param>
+    private static void SkipKeyWrapFields(BinaryReader reader)
+    {
+        reader.ReadBytes(SaltSize);
+        reader.ReadInt32();
+        reader.ReadBytes(NonceSize);
+        reader.ReadBytes(TagSize);
+        reader.ReadBytes(CekSize);
     }
 
     /// <summary>
