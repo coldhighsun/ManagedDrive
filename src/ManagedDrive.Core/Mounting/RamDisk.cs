@@ -323,6 +323,13 @@ public sealed class RamDisk : IDisposable
         var loadedFromPersistImagePath = false;
         var cancellableProgress = CancellableProgress.Wrap(progress, cancellationToken);
 
+        // A save killed mid-write (e.g. at shutdown) leaves its .tmp behind, whether or not the
+        // image exists yet; the image itself is intact, and the file can be gigabytes.
+        if (options.PersistImagePath != null)
+        {
+            DiskImageSerializer.DeleteStaleTempFile(options.PersistImagePath);
+        }
+
         if (options.SourceArchivePath != null &&
             !File.Exists(options.SourceArchivePath))
         {

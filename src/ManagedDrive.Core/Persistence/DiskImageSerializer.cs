@@ -210,6 +210,33 @@ public static class DiskImageSerializer
     public static byte[] GenerateCek() => RandomNumberGenerator.GetBytes(CekSize);
 
     /// <summary>
+    /// Deletes the <c>.tmp</c> file a save writes next to <paramref name="imagePath"/>, which is
+    /// left behind when the process is killed during the save. Best effort: a file that cannot be
+    /// deleted is left alone, as the image itself is unaffected. A save still writing its temp file
+    /// keeps it open without delete sharing, so it is never deleted from under that save.
+    /// </summary>
+    /// <param name="imagePath">The disk image whose leftover temp file should be removed.</param>
+    /// <returns><see langword="true"/> when a leftover file was deleted.</returns>
+    public static bool DeleteStaleTempFile(string imagePath)
+    {
+        var tempPath = imagePath + ".tmp";
+        try
+        {
+            if (!File.Exists(tempPath))
+            {
+                return false;
+            }
+
+            File.Delete(tempPath);
+            return true;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
     /// Reads a disk image from <paramref name="imagePath"/> and returns a populated
     /// <see cref="FileNodeMap"/> along with the stored capacity and volume label.
     /// </summary>
