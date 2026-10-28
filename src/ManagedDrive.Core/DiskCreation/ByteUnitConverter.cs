@@ -54,4 +54,30 @@ public static class ByteUnitConverter
         var divisor = isGb ? BytesPerGb : BytesPerMb;
         return (int)Math.Max(1, Math.Min(maxBytes / divisor, int.MaxValue));
     }
+
+    /// <summary>
+    /// Parses a typed capacity value. The upper limit is deliberately not applied so the caller can
+    /// report a value that is too large instead of silently changing it.
+    /// </summary>
+    /// <param name="text">The text typed by the user.</param>
+    /// <param name="fallback">The value returned when the text is not a whole number.</param>
+    /// <returns>
+    /// The parsed value, at least 1 and at most <see cref="int.MaxValue"/>, or
+    /// <paramref name="fallback"/> when the text is empty or not numeric.
+    /// </returns>
+    public static int ParseCapacityInput(string? text, int fallback)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return fallback;
+        }
+
+        if (!long.TryParse(text.Trim(), System.Globalization.NumberStyles.None,
+                System.Globalization.CultureInfo.InvariantCulture, out var parsed))
+        {
+            return fallback;
+        }
+
+        return (int)Math.Clamp(parsed, 1, int.MaxValue);
+    }
 }

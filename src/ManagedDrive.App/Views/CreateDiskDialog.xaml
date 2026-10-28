@@ -68,9 +68,14 @@
                                 Style="{StaticResource AppSlider}"
                                 Minimum="1" Maximum="999999" Value="2"
                                 ValueChanged="CapacitySlider_ValueChanged"/>
-                        <TextBlock Grid.Column="4" x:Name="CapacityValueText"
-                                   Foreground="{DynamicResource AppForeground}"
-                                   VerticalAlignment="Center" TextAlignment="Right"/>
+                        <TextBox Grid.Column="4" x:Name="CapacityValueBox" MaxLength="7"
+                                 TextAlignment="Right" VerticalContentAlignment="Center"
+                                 Style="{StaticResource OutlinedTextBox}"
+                                 InputMethod.IsInputMethodEnabled="False"
+                                 PreviewTextInput="CapacityValueBox_PreviewTextInput"
+                                 DataObject.Pasting="CapacityValueBox_Pasting"
+                                 KeyDown="CapacityValueBox_KeyDown"
+                                 LostFocus="CapacityValueBox_LostFocus"/>
                         <ComboBox Grid.Column="6" x:Name="CapacityUnitBox" IsEditable="False"
                                   Style="{StaticResource OutlinedComboBox}"/>
                     </Grid>
