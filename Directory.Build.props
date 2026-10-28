@@ -5,6 +5,8 @@
         <Nullable>enable</Nullable>
         <ImplicitUsings>enable</ImplicitUsings>
         <SatelliteResourceLanguages>en;zh-CN</SatelliteResourceLanguages>
+        <!-- Lets non-Windows tooling (GitHub's NuGet dependency submission runs dotnet restore on Linux) restore the Windows-targeting projects. -->
+        <EnableWindowsTargeting>true</EnableWindowsTargeting>
     </PropertyGroup>
 
     <PropertyGroup>
