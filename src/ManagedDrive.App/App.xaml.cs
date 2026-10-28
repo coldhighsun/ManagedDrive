@@ -90,6 +90,24 @@ public partial class App
     private UpdateCheckService? _updateCheckService;
     private readonly CancellationTokenSource _updateCts = new();
 
+    /// <summary>
+    /// Fires on the UI thread when Windows asks to log off, shut down or restart. WPF raises this
+    /// (and then <c>Exit</c>) before or instead of <see cref="SystemEvents.SessionEnding"/>, and
+    /// <see cref="App_Exit"/> unsubscribes that one, so the disks are saved here, under a shutdown
+    /// block reason, or the process would be killed mid-write and leave only a <c>.tmp</c> image.
+    /// The save blocks the UI thread on purpose: pumping messages meanwhile would let commands, CLI
+    /// requests or an exit run against disks that are being saved. Skipped when the session end is
+    /// already cancelled, and repeatable: the end can still be vetoed after this returns.
+    /// </summary>
+    /// <param name="e">The session-ending arguments.</param>
+    protected override void OnSessionEnding(SessionEndingCancelEventArgs e)
+    {
+        _logger.LogInformation("OnSessionEnding (WPF) invoked: {Reason}.", e.ReasonSessionEnding);
+        RunTeardownStep(() => _sessionEndingSaveHandler?.SaveUnlessCancelled(e.Cancel));
+
+        base.OnSessionEnding(e);
+    }
+
     private void App_Exit(object sender, ExitEventArgs e)
     {
         _logger.LogInformation("App_Exit invoked.");
@@ -360,6 +378,7 @@ public partial class App
             _serviceProvider!.GetRequiredService<ILogger<SessionEndingSaveHandler>>(),
             ResetEnvironmentForSessionEnding);
         SystemEvents.SessionEnding += _sessionEndingSaveHandler.OnSessionEnding;
+        SystemEvents.SessionEnded += _sessionEndingSaveHandler.OnSessionEnded;
         await YieldToUiAsync();
 
         var iconStream = GetResourceStream(new("pack://application:,,,/ManagedDrive.ico"))!.Stream;
@@ -1079,6 +1098,7 @@ public partial class App
             if (_sessionEndingSaveHandler != null)
             {
                 SystemEvents.SessionEnding -= _sessionEndingSaveHandler.OnSessionEnding;
+                SystemEvents.SessionEnded -= _sessionEndingSaveHandler.OnSessionEnded;
             }
         });
         RunTeardownStep(() =>
