@@ -36,4 +36,27 @@ public sealed class ByteUnitConverterTests
         Assert.Equal(4, ByteUnitConverter.MaxValueForUnit(4UL * 1024 * 1024 * 1024, isGb: true));
         Assert.Equal(4096, ByteUnitConverter.MaxValueForUnit(4UL * 1024 * 1024 * 1024, isGb: false));
     }
+
+    [Theory]
+    [InlineData("8", 2, 8)]
+    [InlineData(" 16 ", 2, 16)]
+    [InlineData("999", 2, 999)]                   // no upper limit applied
+    [InlineData("9999999999", 2, int.MaxValue)]   // beyond int -> clamped to int.MaxValue
+    [InlineData("0", 2, 1)]                       // below min -> clamped
+    [InlineData("99999999999999999999", 2, 2)]    // long overflow -> fallback
+    [InlineData("", 2, 2)]                        // empty -> fallback
+    [InlineData("abc", 2, 2)]                     // not numeric -> fallback
+    [InlineData("-5", 2, 2)]                      // sign not allowed -> fallback
+    public void ParseCapacityInput_ReturnsParsedValueOrFallback(string text, int fallback, int expected)
+    {
+        var result = ByteUnitConverter.ParseCapacityInput(text, fallback);
+
+        Assert.Equal(expected, result);
+    }
+
+    [Fact]
+    public void ParseCapacityInput_NullText_ReturnsFallback()
+    {
+        Assert.Equal(3, ByteUnitConverter.ParseCapacityInput(null, 3));
+    }
 }

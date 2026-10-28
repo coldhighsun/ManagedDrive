@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Windows.Controls;
 using System.Windows.Input;
 
@@ -22,6 +23,12 @@ public partial class CreateDiskDialog
     private readonly bool _isArchiveImportMode;
     private readonly bool _isImportMode;
     private readonly ulong _maxCapacityBytes;
+
+    /// <summary>
+    /// The capacity the user typed when it exceeds the allowed maximum, or <c>null</c> otherwise.
+    /// Kept so that pressing OK reports the error instead of silently lowering the value.
+    /// </summary>
+    private int? _overLimitCapacityValue;
 
     /// <summary>
     /// The edited disk's exact capacity, or <c>null</c> outside edit mode. Passed to
@@ -398,6 +405,7 @@ public partial class CreateDiskDialog
         ApplyLockedCapacityAndLabel(importCapacityBytes, importVolumeLabel);
 
         CapacitySlider.IsEnabled = false;
+        CapacityValueBox.IsEnabled = false;
         CapacityUnitBox.IsEnabled = false;
         VolumeLabelBox.IsEnabled = false;
 
@@ -513,6 +521,7 @@ public partial class CreateDiskDialog
         get => _capacityValue;
         set
         {
+            _overLimitCapacityValue = null;
             _capacityValue = Math.Clamp(value, 1, _capacityMaximum);
             if (CapacityUnitBox is not null)
             {
@@ -626,7 +635,7 @@ public partial class CreateDiskDialog
             ImportVolumeLabel = _importVolumeLabel,
             ImportArchivePath = _importArchivePath,
             OriginalCapacityBytes = _originalCapacityBytes,
-            CapacityValue = _capacityValue,
+            CapacityValue = _overLimitCapacityValue ?? _capacityValue,
             CapacityIsGb = CapacityUnitBox.SelectedItem as string == "GB",
             MaxCapacityValue = GetMaxCapacityValue(),
             VolumeLabel = VolumeLabelBox.Text,
@@ -1275,13 +1284,72 @@ public partial class CreateDiskDialog
     private void UpdateCapacityDisplay()
     {
         CapacitySlider.Value = _capacityValue;
-        if (CapacityValueText is null || CapacityUnitBox is null)
+        if (CapacityValueBox is null)
         {
             return;
         }
 
-        var unit = CapacityUnitBox.SelectedItem as string ?? "GB";
-        CapacityValueText.Text = $"{_capacityValue} {unit}";
+        var text = _capacityValue.ToString(CultureInfo.InvariantCulture);
+        if (CapacityValueBox.Text != text)
+        {
+            CapacityValueBox.Text = text;
+        }
+    }
+
+    /// <summary>
+    /// Lets only digits into the capacity box.
+    /// </summary>
+    /// <param name="sender">The box.</param>
+    /// <param name="e">The typed text.</param>
+    private void CapacityValueBox_PreviewTextInput(object sender, TextCompositionEventArgs e) =>
+        e.Handled = !e.Text.All(char.IsAsciiDigit);
+
+    /// <summary>
+    /// Rejects pasted text that contains anything but digits.
+    /// </summary>
+    /// <param name="sender">The box.</param>
+    /// <param name="e">The paste operation.</param>
+    private void CapacityValueBox_Pasting(object sender, DataObjectPastingEventArgs e)
+    {
+        if (e.DataObject.GetData(DataFormats.UnicodeText) is not string text || !text.All(char.IsAsciiDigit))
+        {
+            e.CancelCommand();
+        }
+    }
+
+    /// <summary>
+    /// Applies the typed capacity when Enter is pressed.
+    /// </summary>
+    /// <param name="sender">The box.</param>
+    /// <param name="e">The key.</param>
+    private void CapacityValueBox_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Enter)
+        {
+            e.Handled = true;
+            CommitCapacityText();
+        }
+    }
+
+    /// <summary>
+    /// Applies the typed capacity when the box loses focus.
+    /// </summary>
+    /// <param name="sender">The box.</param>
+    /// <param name="e">The event data.</param>
+    private void CapacityValueBox_LostFocus(object sender, RoutedEventArgs e) => CommitCapacityText();
+
+    /// <summary>
+    /// Parses the capacity box text and applies it, or restores the current value when it is invalid.
+    /// </summary>
+    private void CommitCapacityText()
+    {
+        var typed = ByteUnitConverter.ParseCapacityInput(CapacityValueBox.Text, _capacityValue);
+        CapacityValue = typed;
+
+        // A value above the maximum is kept as typed so the OK validation can report it.
+        _overLimitCapacityValue = typed > _capacityMaximum ? typed : null;
+        CapacityValueBox.Text = (_overLimitCapacityValue ?? _capacityValue).ToString(CultureInfo.InvariantCulture);
+        CapacityValueBox.CaretIndex = CapacityValueBox.Text.Length;
     }
 
     private void UpdateCompressionLevelState()
