@@ -37,7 +37,7 @@ public partial class SplashWindow
 
         VersionText.Text = UpdateCheckService.GetRunningVersion();
         StatusText.Text = Loc.Get("Splash.Starting");
-        FeatureViewport.OpacityMask = CreateEdgeFadeMask();
+        FeatureViewport.SizeChanged += (_, e) => FeatureViewport.OpacityMask = CreateEdgeFadeMask(e.NewSize.Height);
         Loaded += (_, _) =>
         {
             StartTopmostTimer();
@@ -91,9 +91,12 @@ public partial class SplashWindow
     /// <summary>
     /// Builds the mask that fades the feature list out at the top and bottom of its viewport, with
     /// the same fraction the first scroll pass is positioned by (<see cref="SplashTicker.EdgeFadeFraction"/>).
+    /// The brush is mapped in absolute units: a relative one would be resolved against the rendered
+    /// bounds of the content, which include the scrolling text, so the fade would move with it.
     /// </summary>
+    /// <param name="viewportHeight">The height of the viewport the mask covers.</param>
     /// <returns>A vertical gradient from transparent through opaque back to transparent.</returns>
-    private static LinearGradientBrush CreateEdgeFadeMask() => new(
+    private static LinearGradientBrush CreateEdgeFadeMask(double viewportHeight) => new(
         [
             new(Colors.Transparent, 0),
             new(Colors.Black, SplashTicker.EdgeFadeFraction),
@@ -101,7 +104,11 @@ public partial class SplashWindow
             new(Colors.Transparent, 1)
         ],
         new(0, 0),
-        new(0, 1));
+        new(0, 1))
+    {
+        MappingMode = BrushMappingMode.Absolute,
+        EndPoint = new(0, viewportHeight)
+    };
 
     /// <summary>
     /// Decides whether the splash is currently on top of other windows.
