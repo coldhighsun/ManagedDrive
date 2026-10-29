@@ -36,7 +36,7 @@ public sealed class SettingsDialogTests
             Theme = "Dark",
             ContextMenuEnabled = true,
             AutoCheckForUpdates = false,
-            DefaultCompressionLevel = ImageCompressionLevel.SmallestSize,
+            DefaultCompressionLevel = 19,
             DefaultImageDirectory = @"D:\Images",
         };
 
@@ -53,7 +53,7 @@ public sealed class SettingsDialogTests
         Assert.Equal("Dark", result.Theme);
         Assert.True(result.ContextMenuEnabled);
         Assert.False(result.AutoCheckForUpdates);
-        Assert.Equal(ImageCompressionLevel.SmallestSize, result.DefaultCompressionLevel);
+        Assert.Equal(19, result.DefaultCompressionLevel);
         Assert.Equal(@"D:\Images", result.DefaultImageDirectory);
     }
 }

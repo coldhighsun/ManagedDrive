@@ -261,11 +261,11 @@ internal static class SnapshotStore
         string volumeLabel,
         string indexPath,
         string blobDirectory,
-        ImageCompressionLevel level,
+        int level,
         byte[]? cek,
-        IProgress<double>? progress = null,
-        int? customZstdLevel = null)
+        IProgress<double>? progress = null)
     {
+        ZstdLevels.ThrowIfInvalid(level);
         Directory.CreateDirectory(blobDirectory);
 
         var tempPath = indexPath + ".tmp";
@@ -295,7 +295,7 @@ internal static class SnapshotStore
                         var written = 0;
                         foreach (var kvp in nodes)
                         {
-                            WriteNode(writer, kvp.Key, kvp.Value, blobDirectory, level, cek, customZstdLevel);
+                            WriteNode(writer, kvp.Key, kvp.Value, blobDirectory, level, cek);
                             written++;
                             progress?.Report((double)written / nodes.Count);
                         }
@@ -348,11 +348,10 @@ internal static class SnapshotStore
     /// <param name="blobDirectory">The shared blob directory for snapshots of the main image.</param>
     /// <param name="data">The file content to store as a blob.</param>
     /// <param name="length">The number of bytes of <paramref name="data"/> to store.</param>
-    /// <param name="level">The compression level to use, or <see cref="ImageCompressionLevel.None"/> to skip compression.</param>
+    /// <param name="level">The compression level to use, or <c>0</c> to skip compression.</param>
     /// <param name="cek">The content encryption key to encrypt the blob under, or <see langword="null"/> to leave it unencrypted.</param>
-    /// <param name="customZstdLevel">The Zstd level to use when <paramref name="level"/> is <see cref="ImageCompressionLevel"/>, or <see langword="null"/> to use the default.</param>
     /// <param name="beforeBlobWrite">Test seam invoked between the two passes.</param>
-    internal static byte[] WriteBlob(string blobDirectory, FileContent data, long length, ImageCompressionLevel level, byte[]? cek, int? customZstdLevel, Action? beforeBlobWrite = null)
+    internal static byte[] WriteBlob(string blobDirectory, FileContent data, long length, int level, byte[]? cek, Action? beforeBlobWrite = null)
     {
         byte[] hash;
         using (var incrementalHash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256))
@@ -371,7 +370,7 @@ internal static class SnapshotStore
         beforeBlobWrite?.Invoke();
         Directory.CreateDirectory(Path.GetDirectoryName(blobPath)!);
 
-        var compress = level != ImageCompressionLevel.None;
+        var compress = level != ZstdLevels.None;
         var flag = (compress ? BlobFlagCompressed | BlobFlagZstd : 0) | (encrypted ? BlobFlagEncrypted | BlobFlagChunked : 0);
 
         var tempPath = blobPath + "." + Guid.NewGuid().ToString("N") + ".tmp";
@@ -397,7 +396,7 @@ internal static class SnapshotStore
                 {
                     if (compress)
                     {
-                        var zstd = new ParallelZstd.WriteStream(target, level.ToZstdLevel(customZstdLevel));
+                        var zstd = new ParallelZstd.WriteStream(target, level);
                         try
                         {
                             data.CopyTo(new HashingWriteStream(zstd, writtenHash), length);
@@ -733,7 +732,7 @@ internal static class SnapshotStore
         return (metadata.Path, header);
     }
 
-    private static void WriteNode(BinaryWriter writer, string path, FileNode node, string blobDirectory, ImageCompressionLevel level, byte[]? cek, int? customZstdLevel)
+    private static void WriteNode(BinaryWriter writer, string path, FileNode node, string blobDirectory, int level, byte[]? cek)
     {
         // The disk stays mounted while a snapshot is written, so capture the node's metadata and
         // content reference once (Overwrite can swap FileData, a write can resize it) and record
@@ -760,7 +759,7 @@ internal static class SnapshotStore
             return;
         }
 
-        var hash = WriteBlob(blobDirectory, data!, length, level, cek, customZstdLevel);
+        var hash = WriteBlob(blobDirectory, data!, length, level, cek);
 
         writer.Write((byte)1); // HasBlob marker
         writer.Write(hash);

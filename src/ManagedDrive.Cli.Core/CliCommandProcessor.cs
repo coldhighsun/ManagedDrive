@@ -11,6 +11,18 @@ namespace ManagedDrive.Cli.Core;
 public static class CliCommandProcessor
 {
     /// <summary>
+    /// The highest Zstd compression level. Cli.Core cannot see <c>ZstdLevels.Max</c>, so a test
+    /// keeps the two equal.
+    /// </summary>
+    internal const int MaxZstdLevel = 22;
+
+    /// <summary>
+    /// The highest compression level of the zip/7z export scale. Cli.Core cannot see
+    /// <c>ZstdLevels.ArchiveMax</c>, so a test keeps the two equal.
+    /// </summary>
+    internal const int MaxArchiveLevel = 9;
+
+    /// <summary>
     /// The shortest password the app accepts when encrypting something. Cli.Core cannot see
     /// <c>CreateDiskOptionsBuilder.MinPasswordLength</c>, so a test keeps the two equal.
     /// </summary>
@@ -115,13 +127,9 @@ public static class CliCommandProcessor
         {
             Description = "Auto-save interval in minutes. If omitted, keeps the saved profile's value (or the default: disabled).",
         };
-        var mountCompressionOption = new Option<ImageCompressionLevel?>("--compression")
+        var mountCompressionOption = new Option<int?>("--compression")
         {
-            Description = "Image compression level: None, Fastest, Optimal, or SmallestSize. If omitted, keeps the saved profile's value (or the default: Fastest).",
-        };
-        var mountCustomZstdLevelOption = new Option<int?>("--custom-zstd-level")
-        {
-            Description = "Custom Zstd compression level (1-22), overriding the preset mapping for --compression. Only takes effect when the compression level is not None.",
+            Description = "Image compression as a Zstd level: 0 = no compression, 1 (fastest) to 22 (smallest). If omitted, keeps the saved profile's value (or the default: 1).",
         };
         var mountMaxSnapshotCountOption = new Option<uint?>("--max-snapshot-count")
         {
@@ -151,7 +159,6 @@ public static class CliCommandProcessor
         mountCommand.Options.Add(mountAutoMountOption);
         mountCommand.Options.Add(mountAutoSaveMinutesOption);
         mountCommand.Options.Add(mountCompressionOption);
-        mountCommand.Options.Add(mountCustomZstdLevelOption);
         mountCommand.Options.Add(mountMaxSnapshotCountOption);
         mountCommand.Options.Add(mountMaxSnapshotSizeMbOption);
         mountCommand.Options.Add(mountHighUsageWarnPercentOption);
@@ -160,14 +167,14 @@ public static class CliCommandProcessor
         mountCommand.SetAction(async (parseResult, _) =>
         {
             var maxSnapshotSizeMb = parseResult.GetValue(mountMaxSnapshotSizeMbOption);
-            var customZstdLevel = parseResult.GetValue(mountCustomZstdLevelOption);
+            var compressionLevel = parseResult.GetValue(mountCompressionOption);
             var highUsageWarnPercent = parseResult.GetValue(mountHighUsageWarnPercentOption);
             var password = parseResult.GetValue(mountPasswordOption);
             var passwordFile = parseResult.GetValue(mountPasswordFileOption);
 
-            if (customZstdLevel is < 1 or > 22)
+            if (compressionLevel is < 0 or > MaxZstdLevel)
             {
-                outcome = new(false, "--custom-zstd-level must be between 1 and 22.", null, 1);
+                outcome = new(false, $"--compression must be between 0 and {MaxZstdLevel}.", null, 1);
                 return 1;
             }
 
@@ -195,8 +202,7 @@ public static class CliCommandProcessor
                 ReadOnly = parseResult.GetValue(mountReadOnlyOption),
                 AutoMount = parseResult.GetValue(mountAutoMountOption),
                 AutoSaveIntervalMinutes = parseResult.GetValue(mountAutoSaveMinutesOption),
-                CompressionLevel = parseResult.GetValue(mountCompressionOption),
-                CustomZstdLevel = customZstdLevel,
+                CompressionLevel = compressionLevel,
                 MaxSnapshotCount = parseResult.GetValue(mountMaxSnapshotCountOption),
                 MaxSnapshotSizeBytes = maxSnapshotSizeMb * 1024UL * 1024UL,
                 HighUsageWarnPercent = highUsageWarnPercent,
@@ -684,10 +690,10 @@ public static class CliCommandProcessor
         {
             Description = "Export as an archive instead of a .mdr image: Zip or SevenZip.",
         };
-        var exportCompressionOption = new Option<ImageCompressionLevel>("--compression")
+        var exportCompressionOption = new Option<int>("--compression")
         {
-            DefaultValueFactory = _ => ImageCompressionLevel.Fastest,
-            Description = "Compression level: None, Fastest, Optimal, or SmallestSize.",
+            DefaultValueFactory = _ => 1,
+            Description = $"Compression level: 0 = none, 1 (fastest) to {MaxZstdLevel} (smallest) for .mdr (Zstd), 1 to {MaxArchiveLevel} for --format archives.",
         };
         var exportPasswordOption = new Option<string?>("--password")
         {
@@ -715,6 +721,14 @@ public static class CliCommandProcessor
             var format = parseResult.GetValue(exportFormatOption);
             var password = parseResult.GetValue(exportPasswordOption);
             var passwordFile = parseResult.GetValue(exportPasswordFileOption);
+            var exportCompression = parseResult.GetValue(exportCompressionOption);
+            var maxExportLevel = format is null ? MaxZstdLevel : MaxArchiveLevel;
+
+            if (exportCompression < 0 || exportCompression > maxExportLevel)
+            {
+                outcome = new(false, $"--compression must be between 0 and {maxExportLevel} for this export.", null, 1);
+                return 1;
+            }
 
             if (password is not null && passwordFile is not null)
             {
@@ -738,7 +752,7 @@ public static class CliCommandProcessor
                 parseResult.GetValue(exportDriveArgument)!,
                 ResolvePath(parseResult.GetValue(exportOutputArgument)!, workingDirectory),
                 format,
-                parseResult.GetValue(exportCompressionOption),
+                exportCompression,
                 password,
                 parseResult.GetValue(exportForceOption),
                 diskController,
@@ -999,7 +1013,7 @@ public static class CliCommandProcessor
             ("Source archive", details.SourceArchivePath ?? "(none)"),
             ("Encrypted", details.PasswordProtected ? "yes" : "no"),
             ("Auto-save", details.AutoSaveIntervalMinutes is > 0 and var minutes ? $"every {minutes} min" : "off"),
-            ("Compression", details.CompressionLevel),
+            ("Compression", details.CompressionLevel == "0" ? "0 (off)" : details.CompressionLevel),
             ("Snapshots", snapshots),
             ("Last save", details.LastSaveTime is { } saved ? saved.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss") : "(not saved yet)"),
         };
@@ -1125,7 +1139,7 @@ public static class CliCommandProcessor
         whole == 0 ? "0%" : $"{(double)part / whole * 100.0:0.#}%";
 
     private static async Task<int> ExportAsync(
-        string driveLetter, string outputPath, ArchiveExportFormat? archiveFormat, ImageCompressionLevel compressionLevel,
+        string driveLetter, string outputPath, ArchiveExportFormat? archiveFormat, int compressionLevel,
         string? password, bool overwrite, ICliDiskController diskController, Action<CliOutcome> setOutcome)
     {
         driveLetter = NormalizeDriveLetter(driveLetter);

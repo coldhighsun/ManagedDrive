@@ -23,7 +23,7 @@ public readonly record struct ImageEncryptionInfo(string Password, byte[] Cek);
 /// <list type="bullet">
 ///   <item>4-byte magic "MDRD"</item>
 ///   <item>Int32 version (currently 5)</item>
-///   <item>Byte holding an <see cref="ImageCompressionLevel"/> value (version 2+ only; absent in version 1, which is always uncompressed)</item>
+///   <item>Byte holding the Zstd level (0 = none) (version 2+ only; absent in version 1, which is always uncompressed)</item>
 ///   <item>Byte IsEncrypted (version 3+ only; absent/false in earlier versions)</item>
 ///   <item>UInt64 capacity in bytes (always plaintext, so callers can preview it without a password)</item>
 ///   <item>length-prefixed UTF-8 string volume label (always plaintext, same reason)</item>
@@ -50,7 +50,7 @@ public readonly record struct ImageEncryptionInfo(string Password, byte[] Cek);
 ///     Identical layout for both version 4 and 5 — only the compression algorithm wrapped inside
 ///     differs.
 ///   </item>
-///   <item>When not encrypted (any version): the node region follows directly, compressed whenever the level is not <see cref="ImageCompressionLevel.None"/>, streamed straight from/to the file rather than buffered.</item>
+///   <item>When not encrypted (any version): the node region follows directly, compressed whenever the level is not <c>0</c>, streamed straight from/to the file rather than buffered.</item>
 ///   <item>
 ///     Compression algorithm is determined entirely by the file's version, not by any separate
 ///     field: versions 1-4 use gzip/deflate (<see cref="GZipStream"/>), read-only — nothing writes
@@ -356,7 +356,7 @@ public static class DiskImageSerializer
     /// <param name="capacityBytes">Configured capacity of the disk in bytes.</param>
     /// <param name="volumeLabel">Volume label string.</param>
     /// <param name="imagePath">Destination file path.</param>
-    /// <param name="level">Compression level applied to the payload; <see cref="ImageCompressionLevel.None"/> disables compression.</param>
+    /// <param name="level">Compression level applied to the payload; <c>0</c> disables compression.</param>
     /// <param name="encryption">
     /// Password/content-encryption-key pair to protect the image, or <see langword="null"/>
     /// to save unencrypted.
@@ -368,24 +368,17 @@ public static class DiskImageSerializer
     /// The subsequent gzip compression and (when encrypting) AES-256-GCM chunk encryption happen
     /// as nodes stream through and are not individually reported.
     /// </param>
-    /// <param name="customZstdLevel">
-    /// Optional advanced override (1-22) of the exact Zstd level used instead of the one mapped
-    /// from <paramref name="level"/> (see <see cref="ImageCompressionLevelExtensions.ToZstdLevel"/>).
-    /// Purely an encoder-side speed/ratio choice — not persisted in the image itself, since Zstd
-    /// decompression needs no level parameter, so <see cref="Load"/> works identically regardless
-    /// of what level a given image was originally written with.
-    /// </param>
     public static void Save(
         FileNodeMap nodeMap,
         ulong capacityBytes,
         string volumeLabel,
         string imagePath,
-        ImageCompressionLevel level,
+        int level,
         ImageEncryptionInfo? encryption = null,
-        IProgress<double>? progress = null,
-        int? customZstdLevel = null)
+        IProgress<double>? progress = null)
     {
-        var compress = level != ImageCompressionLevel.None;
+        ZstdLevels.ThrowIfInvalid(level);
+        var compress = level != ZstdLevels.None;
 
         // Version 5 has no field for a reparse buffer, so a disk with links is written as version 7
         // (continuous layout) instead; a disk without any keeps version 5, which older builds read.
@@ -443,13 +436,13 @@ public static class DiskImageSerializer
                         // Node data streams straight into chunked AES-GCM encryption below —
                         // never buffered whole, so there is no ~2 GB ceiling on disk content.
                         using var chunkedStream = new ChunkedGcm.WriteStream(stream, enc.Cek, baseNonce, ChunkedGcm.ChunkSize);
-                        WriteNodeRegion(chunkedStream, compress, level, customZstdLevel, nodeMap, includeReparse, progress);
+                        WriteNodeRegion(chunkedStream, compress, level, nodeMap, includeReparse, progress);
                         chunkedStream.Complete();
                     }
                     else
                     {
                         writer.Flush();
-                        WriteNodeRegion(stream, compress, level, customZstdLevel, nodeMap, includeReparse, progress);
+                        WriteNodeRegion(stream, compress, level, nodeMap, includeReparse, progress);
                     }
                 }
 
@@ -598,16 +591,12 @@ public static class DiskImageSerializer
     /// <param name="capacityBytes">Configured capacity of the disk in bytes.</param>
     /// <param name="volumeLabel">Volume label string.</param>
     /// <param name="imagePath">Destination file path.</param>
-    /// <param name="level">Compression level applied to the payload; <see cref="ImageCompressionLevel.None"/> disables compression.</param>
+    /// <param name="level">Compression level applied to the payload; <c>0</c> disables compression.</param>
     /// <param name="encryption">
     /// Password/content-encryption-key pair to protect the image, or <see langword="null"/>
     /// to save unencrypted.
     /// </param>
     /// <param name="progress">Optional progress reporter, updated with a fraction in [0, 1].</param>
-    /// <param name="customZstdLevel">
-    /// Optional advanced override (1-22) of the exact Zstd level used instead of the one mapped
-    /// from <paramref name="level"/> (see <see cref="ImageCompressionLevelExtensions.ToZstdLevel"/>).
-    /// </param>
     /// <param name="forceFullRewrite">
     /// When <see langword="true"/>, skips segment reuse entirely and performs a full
     /// <see cref="SaveSegmented"/> rewrite, as if no existing image were present. Callers must set
@@ -622,27 +611,28 @@ public static class DiskImageSerializer
         ulong capacityBytes,
         string volumeLabel,
         string imagePath,
-        ImageCompressionLevel level,
+        int level,
         ImageEncryptionInfo? encryption = null,
         IProgress<double>? progress = null,
-        int? customZstdLevel = null,
         bool forceFullRewrite = false)
     {
+        ZstdLevels.ThrowIfInvalid(level);
+
         if (nodeMap.GetAllNodes().Any(kvp => kvp.Value.FileInfo.AllocationSize > MaxSafeSegmentNodeBytes))
         {
-            Save(nodeMap, capacityBytes, volumeLabel, imagePath, level, encryption, progress, customZstdLevel);
+            Save(nodeMap, capacityBytes, volumeLabel, imagePath, level, encryption, progress);
             return;
         }
 
         if (forceFullRewrite)
         {
             SaveSegmented(nodeMap, capacityBytes, volumeLabel, imagePath, level, encryption, progress,
-                customZstdLevel, SegmentTargetBytes);
+                SegmentTargetBytes);
             return;
         }
 
         SaveSegmentedIncremental(nodeMap, capacityBytes, volumeLabel, imagePath, level, encryption, progress,
-            customZstdLevel, SegmentTargetBytes);
+                SegmentTargetBytes);
     }
 
     /// <summary>
@@ -657,12 +647,12 @@ public static class DiskImageSerializer
         ulong capacityBytes,
         string volumeLabel,
         string imagePath,
-        ImageCompressionLevel level,
+        int level,
         ImageEncryptionInfo? encryption,
         long segmentTargetBytes)
     {
         SaveSegmented(nodeMap, capacityBytes, volumeLabel, imagePath, level, encryption, progress: null,
-            customZstdLevel: null, segmentTargetBytes);
+            segmentTargetBytes);
     }
 
     /// <summary>
@@ -674,13 +664,13 @@ public static class DiskImageSerializer
         ulong capacityBytes,
         string volumeLabel,
         string imagePath,
-        ImageCompressionLevel level,
+        int level,
         ImageEncryptionInfo? encryption,
         long segmentTargetBytes,
         IProgress<double>? progress = null)
     {
         SaveSegmentedIncremental(nodeMap, capacityBytes, volumeLabel, imagePath, level, encryption, progress,
-            customZstdLevel: null, segmentTargetBytes);
+            segmentTargetBytes);
     }
 
     /// <summary>
@@ -712,7 +702,7 @@ public static class DiskImageSerializer
     /// <summary>
     /// Serializes <paramref name="chunkNodes"/> into a single version 6 segment payload: writes
     /// each node, hashes the resulting plaintext, Zstd-compresses it (unless
-    /// <paramref name="level"/> is <see cref="ImageCompressionLevel.None"/>), and — when
+    /// <paramref name="level"/> is <c>0</c>), and — when
     /// <paramref name="encryption"/> is supplied — AES-256-GCM encrypts it under a freshly
     /// generated nonce. Shared by <see cref="SaveSegmented"/>'s per-segment loop and
     /// <see cref="SaveSegmentedIncremental"/>'s rewrite-pool loop so the two write paths can't
@@ -721,8 +711,7 @@ public static class DiskImageSerializer
     /// </summary>
     private static (byte[] Payload, byte[] ContentHash, byte[]? Nonce, byte[]? Tag) BuildSegmentPayload(
         IEnumerable<KeyValuePair<string, FileNode>> chunkNodes,
-        ImageCompressionLevel level,
-        int? customZstdLevel,
+        int level,
         ImageEncryptionInfo? encryption,
         Action<FileNode>? onNodeWritten = null)
     {
@@ -758,11 +747,11 @@ public static class DiskImageSerializer
             // The payload is retained until the whole image is written, so it must be exactly sized.
             // Compression already produces an exact-size array; uncompressed output needs a trimmed
             // copy of the plaintext buffer (unless it happens to be exactly full already).
-            var compressed = level != ImageCompressionLevel.None;
+            var compressed = level != ZstdLevels.None;
             byte[] payload;
             if (compressed)
             {
-                payload = ParallelZstd.CompressFramed(plainBuffer, plainLength, level.ToZstdLevel(customZstdLevel));
+                payload = ParallelZstd.CompressFramed(plainBuffer, plainLength, level);
             }
             else if (encryption is null && plainBuffer.Length != plainLength)
             {
@@ -911,7 +900,7 @@ public static class DiskImageSerializer
         BinaryReader reader,
         int version,
         bool segmented,
-        ImageCompressionLevel level,
+        int level,
         bool isEncrypted,
         string? password,
         out ulong capacityBytes,
@@ -922,7 +911,7 @@ public static class DiskImageSerializer
         capacityBytes = reader.ReadUInt64();
         volumeLabel = reader.ReadString();
         cek = null;
-        var compressed = level != ImageCompressionLevel.None;
+        var compressed = level != ZstdLevels.None;
         var maxNodeBytes = MaxNodeBytesFor(capacityBytes);
 
         if (segmented)
@@ -971,7 +960,7 @@ public static class DiskImageSerializer
         FileStream stream,
         BinaryReader reader,
         int version,
-        ImageCompressionLevel level,
+        int level,
         out ulong capacityBytes,
         out string volumeLabel,
         Action? reportTick = null)
@@ -1184,9 +1173,9 @@ public static class DiskImageSerializer
     /// <see cref="PeekHeader"/> (reads capacity/label only) and <see cref="LoadLegacy"/> (reads
     /// capacity/label, then the full node region) so both stay in sync on this legacy layout rule.
     /// </summary>
-    private static BinaryReader OpenLegacyPayloadReader(FileStream stream, BinaryReader reader, int version, ImageCompressionLevel level)
+    private static BinaryReader OpenLegacyPayloadReader(FileStream stream, BinaryReader reader, int version, int level)
     {
-        var compressed = version == 2 && level != ImageCompressionLevel.None;
+        var compressed = version == 2 && level != ZstdLevels.None;
         return compressed
             ? new(new GZipStream(stream, CompressionMode.Decompress, leaveOpen: true), System.Text.Encoding.UTF8)
             : reader;
@@ -1243,7 +1232,7 @@ public static class DiskImageSerializer
     private static void ReadHeader(
             BinaryReader reader,
             out int version,
-            out ImageCompressionLevel level,
+            out int level,
             out bool isEncrypted,
             out bool segmented)
     {
@@ -1259,7 +1248,7 @@ public static class DiskImageSerializer
             throw new InvalidDataException($"Unsupported image version: {version}.");
         }
 
-        level = version >= 2 ? (ImageCompressionLevel)reader.ReadByte() : ImageCompressionLevel.None;
+        level = version >= 2 ? (int)reader.ReadByte() : ZstdLevels.None;
         isEncrypted = version >= 3 && reader.ReadByte() != 0;
 
         if (version == ReparseVersion)
@@ -1504,10 +1493,9 @@ public static class DiskImageSerializer
         ulong capacityBytes,
         string volumeLabel,
         string imagePath,
-        ImageCompressionLevel level,
+        int level,
         ImageEncryptionInfo? encryption,
         IProgress<double>? progress,
-        int? customZstdLevel,
         long segmentTargetBytes)
     {
         var directory = Path.GetDirectoryName(imagePath);
@@ -1571,7 +1559,6 @@ public static class DiskImageSerializer
                 var (finalPayload, contentHash, nonce, tag) = BuildSegmentPayload(
                     chunk,
                     level,
-                    customZstdLevel,
                     encryption,
                     node => Interlocked.Add(ref writtenBytes, node.FileInfo.AllocationSize));
 
@@ -1736,10 +1723,9 @@ public static class DiskImageSerializer
         ulong capacityBytes,
         string volumeLabel,
         string imagePath,
-        ImageCompressionLevel level,
+        int level,
         ImageEncryptionInfo? encryption,
         IProgress<double>? progress,
-        int? customZstdLevel,
         long segmentTargetBytes)
     {
         var isEncrypted = encryption is not null;
@@ -1747,7 +1733,7 @@ public static class DiskImageSerializer
         if (!TryOpenOldSegmentIndex(imagePath, level, isEncrypted, out var oldStream, out var oldReader, out var oldSegments))
         {
             SaveSegmented(nodeMap, capacityBytes, volumeLabel, imagePath, level, encryption, progress,
-                customZstdLevel, segmentTargetBytes);
+                segmentTargetBytes);
             return;
         }
 
@@ -1913,7 +1899,6 @@ public static class DiskImageSerializer
                     var (finalPayload, contentHash, nonce, tag) = BuildSegmentPayload(
                         chunkPositions.Select(pos => nodes[pos]),
                         level,
-                        customZstdLevel,
                         encryption,
                         node => Interlocked.Add(ref writtenBytes, node.FileInfo.AllocationSize));
 
@@ -2098,7 +2083,7 @@ public static class DiskImageSerializer
     /// </summary>
     private static bool TryOpenOldSegmentIndex(
         string imagePath,
-        ImageCompressionLevel level,
+        int level,
         bool isEncrypted,
         [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out FileStream? stream,
         [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out BinaryReader? reader,
@@ -2133,7 +2118,7 @@ public static class DiskImageSerializer
                 return false;
             }
 
-            var oldLevel = (ImageCompressionLevel)candidateReader.ReadByte();
+            var oldLevel = (int)candidateReader.ReadByte();
             var oldIsEncrypted = candidateReader.ReadByte() != 0;
             if (oldLevel != level || oldIsEncrypted != isEncrypted || candidateReader.ReadByte() != LayoutSegmented)
             {
@@ -2368,14 +2353,13 @@ public static class DiskImageSerializer
     private static void WriteNodeRegion(
         Stream target,
         bool compress,
-        ImageCompressionLevel level,
-        int? customZstdLevel,
+        int level,
         FileNodeMap nodeMap,
         bool includeReparse,
         IProgress<double>? progress)
     {
         var payloadStream = compress
-            ? new ParallelZstd.WriteStream(target, level.ToZstdLevel(customZstdLevel))
+            ? new ParallelZstd.WriteStream(target, level)
             : target;
         var succeeded = false;
 

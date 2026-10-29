@@ -15,13 +15,6 @@ public partial class SettingsDialog
     /// </summary>
     private static readonly ILogger Logger = AppLog.CreateLogger<SettingsDialog>();
 
-    private static readonly List<ImageCompressionLevel> CompressionLevels = [
-        ImageCompressionLevel.None,
-        ImageCompressionLevel.Fastest,
-        ImageCompressionLevel.Optimal,
-        ImageCompressionLevel.SmallestSize,
-    ];
-
     /// <summary>
     /// Initializes the dialog with the current application configuration.
     /// </summary>
@@ -38,13 +31,7 @@ public partial class SettingsDialog
         HelperServiceStatusText.Text = Loc.Get("Settings.HelperServiceChecking");
         _ = UpdateHelperServiceStatusAsync();
 
-        foreach (var level in CompressionLevels)
-        {
-            DefaultCompressionLevelBox.Items.Add(new CompressionLevelItem(level, Loc.Get(CompressionLevelKey(level))));
-        }
-
-        DefaultCompressionLevelBox.SelectedIndex =
-            CompressionLevels.IndexOf(config.DefaultCompressionLevel ?? ImageCompressionLevel.Fastest);
+        DefaultCompressionLevelBox.Level = config.DefaultCompressionLevel ?? ZstdLevels.Default;
 
         LanguageBox.Items.Add(new ComboBoxItem { Content = Loc.Get("Lang.System"), Tag = "" });
         foreach (var (tag, displayName) in LanguageManager.SupportedLanguages)
@@ -142,8 +129,7 @@ public partial class SettingsDialog
             Theme = selectedTheme,
             ContextMenuEnabled = contextMenuEnabled,
             AutoCheckForUpdates = AutoCheckForUpdatesBox.IsChecked == true,
-            DefaultCompressionLevel = (DefaultCompressionLevelBox.SelectedItem as CompressionLevelItem)?.Level
-                ?? ImageCompressionLevel.Fastest,
+            DefaultCompressionLevel = DefaultCompressionLevelBox.Level,
             DefaultImageDirectory = string.IsNullOrWhiteSpace(DefaultImageDirectoryBox.Text) ? null : DefaultImageDirectoryBox.Text,
         };
 
@@ -187,19 +173,6 @@ public partial class SettingsDialog
         {
             DefaultImageDirectoryBox.Text = dlg.FolderName;
         }
-    }
-
-    private static string CompressionLevelKey(ImageCompressionLevel level) => level switch
-    {
-        ImageCompressionLevel.None => "CompressionLevel.None",
-        ImageCompressionLevel.Fastest => "CompressionLevel.Fastest",
-        ImageCompressionLevel.SmallestSize => "CompressionLevel.SmallestSize",
-        _ => "CompressionLevel.Optimal",
-    };
-
-    private sealed record CompressionLevelItem(ImageCompressionLevel Level, string Display)
-    {
-        public override string ToString() => Display;
     }
 
     /// <summary>

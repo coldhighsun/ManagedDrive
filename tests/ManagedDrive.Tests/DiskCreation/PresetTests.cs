@@ -165,13 +165,13 @@ public sealed class PresetComposerTests
     public void Merge_TakesTheFirstLabelAndCompressionThatAreSet()
     {
         var first = new DiskPreset { Id = "a", CapacityBytes = 1 };
-        var second = new DiskPreset { Id = "b", CapacityBytes = 1, VolumeLabel = "B", CompressionLevel = ImageCompressionLevel.Optimal };
-        var third = new DiskPreset { Id = "c", CapacityBytes = 1, VolumeLabel = "C", CompressionLevel = ImageCompressionLevel.None };
+        var second = new DiskPreset { Id = "b", CapacityBytes = 1, VolumeLabel = "B", CompressionLevel = 3 };
+        var third = new DiskPreset { Id = "c", CapacityBytes = 1, VolumeLabel = "C", CompressionLevel = 0 };
 
         var result = PresetComposer.Merge([first, second, third]);
 
         Assert.Equal("B", result.VolumeLabel);
-        Assert.Equal(ImageCompressionLevel.Optimal, result.CompressionLevel);
+        Assert.Equal(3, result.CompressionLevel);
     }
 
     [Fact]

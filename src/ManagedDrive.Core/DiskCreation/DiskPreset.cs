@@ -31,7 +31,7 @@ public sealed record DiskPreset
     /// <summary>
     /// Gets the suggested compression level, or <c>null</c> to keep the default.
     /// </summary>
-    public ImageCompressionLevel? CompressionLevel
+    public int? CompressionLevel
     {
         get; init;
     }

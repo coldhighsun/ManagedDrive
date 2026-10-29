@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace ManagedDrive.App.Models;
 
 /// <summary>
@@ -66,18 +68,12 @@ public sealed record DiskProfile
     }
 
     /// <summary>
-    /// Gets or sets the compression level applied when the saved image is written.
+    /// Gets or sets the Zstd compression level applied when the saved image is written: 0 = none,
+    /// 1-22 = Zstd level. Stored as <c>ZstdLevel</c>; files from versions with the
+    /// Fastest/Optimal/SmallestSize presets are converted by <see cref="Services.CompressionSettingsMigration"/>.
     /// </summary>
-    public ImageCompressionLevel CompressionLevel { get; init; } = ImageCompressionLevel.Fastest;
-
-    /// <summary>
-    /// Gets or sets the optional advanced override (1-22) of the exact Zstd level used instead of
-    /// the preset mapped from <see cref="CompressionLevel"/>. <c>null</c> means use the preset.
-    /// </summary>
-    public int? CustomZstdLevel
-    {
-        get; init;
-    }
+    [JsonPropertyName("ZstdLevel")]
+    public int CompressionLevel { get; init; } = ZstdLevels.Default;
 
     /// <summary>
     /// Gets or sets the optional maximum number of retained snapshot images. <c>null</c>

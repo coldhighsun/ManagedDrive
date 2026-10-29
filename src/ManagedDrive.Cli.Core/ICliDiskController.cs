@@ -27,7 +27,7 @@ public interface ICliDiskController
     /// <param name="mountPoint">The mount point to export, e.g. <c>"R:"</c>.</param>
     /// <param name="outputPath">Destination file path to write the export to.</param>
     /// <param name="archiveFormat"><c>null</c> to export a <c>.mdr</c> image; otherwise the archive container format.</param>
-    /// <param name="compressionLevel">Compression level applied to the export.</param>
+    /// <param name="compressionLevel">Compression level applied to the export (0-22 for .mdr, 0-9 for archives).</param>
     /// <param name="password">
     /// Password to encrypt the exported <c>.mdr</c> image with, or <c>null</c> for no encryption.
     /// Ignored when <paramref name="archiveFormat"/> is set, since archive formats don't support it.
@@ -38,7 +38,7 @@ public interface ICliDiskController
     /// <c>(false, string.Empty)</c> so the CLI layer can render its own not-mounted message.
     /// </returns>
     Task<(bool Success, string Message)> ExportAsync(
-        string mountPoint, string outputPath, ArchiveExportFormat? archiveFormat, ImageCompressionLevel compressionLevel, string? password);
+        string mountPoint, string outputPath, ArchiveExportFormat? archiveFormat, int compressionLevel, string? password);
 
     /// <summary>
     /// Returns a snapshot of all currently mounted disks.
@@ -360,7 +360,7 @@ public sealed record CliDiskInfo(string MountPoint, string VolumeLabel, ulong Us
 /// <param name="SourceArchivePath">The archive the disk was mounted from, or <c>null</c>.</param>
 /// <param name="PasswordProtected">Whether the image is encrypted.</param>
 /// <param name="AutoSaveIntervalMinutes">The auto-save interval, or <c>null</c> when auto-save is off.</param>
-/// <param name="CompressionLevel">The image compression level, by name.</param>
+/// <param name="CompressionLevel">The image compression level as a Zstd level (0 = none).</param>
 /// <param name="MaxSnapshotCount">The snapshot count limit, or <c>null</c> for none.</param>
 /// <param name="MaxSnapshotSizeBytes">The snapshot total-size limit in bytes, or <c>null</c> for none.</param>
 /// <param name="SnapshotCount">How many snapshots exist, or <c>null</c> when the disk has no image to hold them.</param>

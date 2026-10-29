@@ -252,7 +252,7 @@ public class CliCommandProcessorMountTests
         var controller = new FakeCliDiskController { ExportSuccess = true, ExportMessage = "Exported." };
 
         var outcome = await CliCommandProcessor.ExecuteAsync(
-            ["export", "r", "out.zip", "--format", "Zip", "--compression", "SmallestSize"],
+            ["export", "r", "out.zip", "--format", "Zip", "--compression", "9"],
             controller);
 
         Assert.True(outcome.Success);
@@ -260,8 +260,81 @@ public class CliCommandProcessorMountTests
         Assert.Equal("R:", controller.LastMountPoint);
         Assert.Equal("out.zip", controller.LastExportOutputPath);
         Assert.Equal(Cli.Core.ArchiveExportFormat.Zip, controller.LastExportFormat);
-        Assert.Equal(Cli.Core.ImageCompressionLevel.SmallestSize, controller.LastExportCompressionLevel);
+        Assert.Equal(9, controller.LastExportCompressionLevel);
         Assert.Null(controller.LastExportPassword);
+    }
+
+    [Fact]
+    public async Task Export_MdrWithZstdLevel_ForwardsLevel()
+    {
+        var controller = new FakeCliDiskController { ExportSuccess = true };
+
+        var outcome = await CliCommandProcessor.ExecuteAsync(["export", "r", "out.mdr", "--compression", "19"], controller);
+
+        Assert.True(outcome.Success);
+        Assert.Equal(19, controller.LastExportCompressionLevel);
+    }
+
+    [Fact]
+    public async Task Export_ArchiveAboveNine_IsRejected()
+    {
+        var controller = new FakeCliDiskController { ExportSuccess = true };
+
+        var outcome = await CliCommandProcessor.ExecuteAsync(
+            ["export", "r", "out.zip", "--format", "Zip", "--compression", "19"], controller);
+
+        Assert.False(outcome.Success);
+        Assert.Null(controller.LastExportCompressionLevel);
+    }
+
+    [Theory]
+    [InlineData("0", 0)]
+    [InlineData("5", 5)]
+    [InlineData("22", 22)]
+    public async Task Mount_CompressionLevel_IsForwardedAsNumber(string value, int expected)
+    {
+        var imagePath = CreateTempImageFile();
+        try
+        {
+            var controller = new FakeCliDiskController { MountSuccess = true };
+
+            var outcome = await CliCommandProcessor.ExecuteAsync(["mount", imagePath, "R:", "--compression", value], controller);
+
+            Assert.True(outcome.Success);
+            Assert.Equal(expected, controller.LastOverrides!.CompressionLevel);
+        }
+        finally
+        {
+            File.Delete(imagePath);
+        }
+    }
+
+    [Theory]
+    [InlineData("23")]
+    [InlineData("-1")]
+    public async Task Mount_CompressionLevelOutOfRange_IsRejected(string value)
+    {
+        var imagePath = CreateTempImageFile();
+        try
+        {
+            var controller = new FakeCliDiskController { MountSuccess = true };
+
+            var outcome = await CliCommandProcessor.ExecuteAsync(["mount", imagePath, "R:", "--compression", value], controller);
+
+            Assert.False(outcome.Success);
+            Assert.Null(controller.LastOverrides);
+        }
+        finally
+        {
+            File.Delete(imagePath);
+        }
+    }
+
+    [Fact]
+    public void CliLevelLimits_MatchCore()
+    {
+        Assert.Equal(ZstdLevels.Max, CliCommandProcessor.MaxZstdLevel);
+        Assert.Equal(ZstdLevels.ArchiveMax, CliCommandProcessor.MaxArchiveLevel);
     }
 
     [Fact]
@@ -461,7 +534,7 @@ public class CliCommandProcessorMountTests
             get; private set;
         }
 
-        public ManagedDrive.Cli.Core.ImageCompressionLevel? LastExportCompressionLevel
+        public int? LastExportCompressionLevel
         {
             get; private set;
         }
@@ -475,7 +548,7 @@ public class CliCommandProcessorMountTests
 
         public string ExportMessage { get; set; } = string.Empty;
 
-        public Task<(bool Success, string Message)> ExportAsync(string mountPoint, string outputPath, ManagedDrive.Cli.Core.ArchiveExportFormat? archiveFormat, ManagedDrive.Cli.Core.ImageCompressionLevel compressionLevel, string? password)
+        public Task<(bool Success, string Message)> ExportAsync(string mountPoint, string outputPath, ManagedDrive.Cli.Core.ArchiveExportFormat? archiveFormat, int compressionLevel, string? password)
         {
             LastMountPoint = mountPoint;
             LastExportOutputPath = outputPath;

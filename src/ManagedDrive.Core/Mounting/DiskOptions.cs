@@ -1,67 +1,6 @@
 namespace ManagedDrive.Core.Mounting;
 
 /// <summary>
-/// Compression level applied when saving a <c>.mdr</c> disk image.
-/// </summary>
-public enum ImageCompressionLevel
-{
-    /// <summary>
-    /// No compression; the image is written uncompressed.
-    /// </summary>
-    None = 0,
-
-    /// <summary>
-    /// Lowest compression ratio, optimized for write speed.
-    /// </summary>
-    Fastest = 1,
-
-    /// <summary>
-    /// Balanced compression ratio and speed. Default.
-    /// </summary>
-    Optimal = 2,
-
-    /// <summary>
-    /// Highest compression ratio, at the cost of write speed.
-    /// </summary>
-    SmallestSize = 3,
-}
-
-/// <summary>
-/// Conversion helpers for <see cref="ImageCompressionLevel"/>, shared by every writer that hands
-/// it off to a compression stream (<c>DiskImageSerializer</c> for image saves, <c>SnapshotStore</c>
-/// for snapshot blobs).
-/// </summary>
-internal static class ImageCompressionLevelExtensions
-{
-    /// <summary>
-    /// Maps to the corresponding <see cref="System.IO.Compression.CompressionLevel"/>, used only
-    /// when reading legacy gzip-compressed images/blobs (nothing writes gzip anymore). Callers are
-    /// expected to have already checked <see cref="ImageCompressionLevel.None"/> and skipped
-    /// compression entirely in that case; it otherwise falls back to <see cref="System.IO.Compression.CompressionLevel.Optimal"/>.
-    /// </summary>
-    public static System.IO.Compression.CompressionLevel ToDotNetCompressionLevel(this ImageCompressionLevel level) => level switch
-    {
-        ImageCompressionLevel.Fastest => System.IO.Compression.CompressionLevel.Fastest,
-        ImageCompressionLevel.SmallestSize => System.IO.Compression.CompressionLevel.SmallestSize,
-        _ => System.IO.Compression.CompressionLevel.Optimal,
-    };
-
-    /// <summary>
-    /// Maps to the corresponding Zstd compression level (1-22 range), used for all newly written
-    /// images/blobs. Callers are expected to have already checked <see cref="ImageCompressionLevel.None"/>
-    /// and skipped compression entirely in that case. <paramref name="customLevel"/> (typically
-    /// <see cref="DiskOptions.CustomZstdLevel"/>) overrides the preset mapping when set, letting
-    /// advanced users pick an exact Zstd level instead of one of the three coarse presets.
-    /// </summary>
-    public static int ToZstdLevel(this ImageCompressionLevel level, int? customLevel = null) => customLevel ?? level switch
-    {
-        ImageCompressionLevel.Fastest => 1,
-        ImageCompressionLevel.SmallestSize => 19,
-        _ => 3,
-    };
-}
-
-/// <summary>
 /// Immutable configuration record used to create and mount a RAM disk.
 /// </summary>
 public sealed record DiskOptions
@@ -137,17 +76,10 @@ public sealed record DiskOptions
     }
 
     /// <summary>
-    /// Compression level applied when the saved <c>.mdr</c> image is written.
+    /// Zstd compression level applied when the saved <c>.mdr</c> image is written: 0 disables
+    /// compression, 1 (fastest) to 22 (smallest) are Zstd levels. See <see cref="ZstdLevels"/>.
     /// </summary>
-    public ImageCompressionLevel CompressionLevel { get; init; } = ImageCompressionLevel.Fastest;
-
-    /// <summary>
-    /// Optional advanced override of the exact Zstd compression level (1-22) used instead of the
-    /// preset mapped from <see cref="CompressionLevel"/>. <c>null</c> (the default) means use the
-    /// preset's level. Has no effect when <see cref="CompressionLevel"/> is
-    /// <see cref="ImageCompressionLevel.None"/> — that always skips compression regardless.
-    /// </summary>
-    public int? CustomZstdLevel { get; init; }
+    public int CompressionLevel { get; init; } = ZstdLevels.Default;
 
     /// <summary>
     /// Optional maximum number of timestamped snapshot images to retain alongside

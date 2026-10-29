@@ -63,14 +63,9 @@
     <sys:String x:Key="Val.BadHighUsagePercent">请输入 1 到 99 之间的使用率告警百分比。</sys:String>
     <sys:String x:Key="Tip.ImageFile">可选：.mdr 镜像文件路径，用于持久化存储（留空则为临时磁盘）。点击可打开文件选择对话框。</sys:String>
     <sys:String x:Key="Tip.ClearImagePath">清空镜像文件路径</sys:String>
-    <sys:String x:Key="Tip.CompressionLevel">压缩保存的镜像以减少磁盘占用。压缩级别越高，文件越小，但保存/加载耗时也越长。</sys:String>
-    <sys:String x:Key="CompressionLevel.None">不压缩</sys:String>
-    <sys:String x:Key="CompressionLevel.Fastest">快速</sys:String>
-    <sys:String x:Key="CompressionLevel.Optimal">均衡</sys:String>
-    <sys:String x:Key="CompressionLevel.SmallestSize">最高</sys:String>
-    <sys:String x:Key="CreateDisk.CustomZstdLevel">自定义 Zstd 级别：</sys:String>
-    <sys:String x:Key="Tip.CustomZstdLevel">高级选项：用精确的 Zstd 级别覆盖上方的预设档位（1=最快，22=最小）。不勾选则使用预设档位对应的级别。</sys:String>
-    <sys:String x:Key="Val.BadCustomZstdLevel">请输入 1 到 22 之间的自定义 Zstd 级别。</sys:String>
+    <sys:String x:Key="Tip.CompressionLevel">保存镜像使用的 Zstd 压缩级别：0=不压缩，1=最快，22=最小。级别越高，文件越小，但保存/加载耗时也越长。</sys:String>
+    <sys:String x:Key="CreateDisk.CompressionNone">不压缩</sys:String>
+    <sys:String x:Key="Val.BadCompressionLevel">请输入 0 到 22 之间的压缩级别。</sys:String>
     <sys:String x:Key="Val.BadFolder">缓存文件夹无效，必须是磁盘内的相对路径。</sys:String>
     <sys:String x:Key="Val.BadEnvRedirect">环境变量重定向无效，或同一个变量出现了多次。</sys:String>
     <sys:String x:Key="CreateDisk.Section.Presets">临时与缓存</sys:String>
@@ -332,7 +327,7 @@
     <sys:String x:Key="Settings.CloseToTray">关闭窗口时最小化到托盘，而不是退出程序</sys:String>
     <sys:String x:Key="Tip.CloseToTray">勾选时，标题栏关闭按钮会将窗口隐藏到托盘；不勾选时，会直接退出程序（等同于托盘菜单的"退出"）。</sys:String>
     <sys:String x:Key="Settings.DefaultCompressionLevel">默认压缩级别：</sys:String>
-    <sys:String x:Key="Tip.DefaultCompressionLevel">新建磁盘时预选的压缩级别</sys:String>
+    <sys:String x:Key="Tip.DefaultCompressionLevel">新建磁盘时预选的 Zstd 压缩级别（0=不压缩，1-22）</sys:String>
     <sys:String x:Key="Settings.DefaultImageDirectory">默认镜像目录：</sys:String>
     <sys:String x:Key="Tip.DefaultImageDirectory">浏览新磁盘镜像文件路径时预选的文件夹</sys:String>
     <sys:String x:Key="Btn.Browse">浏览...</sys:String>

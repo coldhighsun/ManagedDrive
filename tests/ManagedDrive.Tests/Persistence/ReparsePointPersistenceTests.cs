@@ -26,11 +26,11 @@ public sealed class ReparsePointPersistenceTests : IDisposable
     }
 
     [Theory]
-    [InlineData(ImageCompressionLevel.None, false)]
-    [InlineData(ImageCompressionLevel.None, true)]
-    [InlineData(ImageCompressionLevel.Fastest, false)]
-    [InlineData(ImageCompressionLevel.Fastest, true)]
-    public void SaveIncremental_MapWithLinks_RoundTripsLinksAndOrdinaryNodes(ImageCompressionLevel level, bool encrypted)
+    [InlineData(0, false)]
+    [InlineData(0, true)]
+    [InlineData(1, false)]
+    [InlineData(1, true)]
+    public void SaveIncremental_MapWithLinks_RoundTripsLinksAndOrdinaryNodes(int level, bool encrypted)
     {
         var path = ImagePath();
         var map = BuildMapWithLinks(out var symlinkData, out var junctionData);
@@ -59,7 +59,7 @@ public sealed class ReparsePointPersistenceTests : IDisposable
     {
         var path = ImagePath();
 
-        DiskImageSerializer.SaveIncremental(BuildMapWithLinks(out _, out _), Capacity, "Label", path, ImageCompressionLevel.None);
+        DiskImageSerializer.SaveIncremental(BuildMapWithLinks(out _, out _), Capacity, "Label", path, 0);
 
         Assert.Equal(7, ReadVersion(path));
     }
@@ -69,13 +69,13 @@ public sealed class ReparsePointPersistenceTests : IDisposable
     {
         var path = ImagePath();
         var map = BuildMapWithLinks(out _, out _);
-        DiskImageSerializer.SaveIncremental(map, Capacity, "Label", path, ImageCompressionLevel.None);
+        DiskImageSerializer.SaveIncremental(map, Capacity, "Label", path, 0);
         Assert.True(map.TryGet("\\file-link", out var link));
         var newTarget = MakeReparse(SymlinkTag, 40);
         link!.ApplyReparseData(newTarget);
         link.MetadataVersion++;
 
-        DiskImageSerializer.SaveIncremental(map, Capacity, "Label", path, ImageCompressionLevel.None);
+        DiskImageSerializer.SaveIncremental(map, Capacity, "Label", path, 0);
         var loaded = DiskImageSerializer.Load(path, out _, out _, null, out _);
 
         Assert.True(loaded.TryGet("\\file-link", out var reloaded));
@@ -87,12 +87,12 @@ public sealed class ReparsePointPersistenceTests : IDisposable
     {
         var path = ImagePath();
         var map = BuildMapWithLinks(out _, out _);
-        DiskImageSerializer.SaveIncremental(map, Capacity, "Label", path, ImageCompressionLevel.None);
+        DiskImageSerializer.SaveIncremental(map, Capacity, "Label", path, 0);
         Assert.True(map.TryGet("\\file-link", out var link));
         link!.ApplyReparseData(null);
         link.MetadataVersion++;
 
-        DiskImageSerializer.SaveIncremental(map, Capacity, "Label", path, ImageCompressionLevel.None);
+        DiskImageSerializer.SaveIncremental(map, Capacity, "Label", path, 0);
         var loaded = DiskImageSerializer.Load(path, out _, out _, null, out _);
 
         Assert.True(loaded.TryGet("\\file-link", out var reloaded));
@@ -101,11 +101,11 @@ public sealed class ReparsePointPersistenceTests : IDisposable
     }
 
     [Theory]
-    [InlineData(ImageCompressionLevel.None, false)]
-    [InlineData(ImageCompressionLevel.None, true)]
-    [InlineData(ImageCompressionLevel.Fastest, false)]
-    [InlineData(ImageCompressionLevel.Fastest, true)]
-    public void Save_MapWithLinks_WritesContinuousVersion7AndKeepsTheLinks(ImageCompressionLevel level, bool encrypted)
+    [InlineData(0, false)]
+    [InlineData(0, true)]
+    [InlineData(1, false)]
+    [InlineData(1, true)]
+    public void Save_MapWithLinks_WritesContinuousVersion7AndKeepsTheLinks(int level, bool encrypted)
     {
         var path = ImagePath();
         var map = BuildMapWithLinks(out var symlinkData, out var junctionData);
@@ -135,7 +135,7 @@ public sealed class ReparsePointPersistenceTests : IDisposable
         map.Remove("\\file-link");
         map.Remove("\\junction");
 
-        DiskImageSerializer.Save(map, Capacity, "Label", path, ImageCompressionLevel.None);
+        DiskImageSerializer.Save(map, Capacity, "Label", path, 0);
 
         Assert.Equal(5, ReadVersion(path));
         var loaded = DiskImageSerializer.Load(path, out _, out _, null, out _);
@@ -153,7 +153,7 @@ public sealed class ReparsePointPersistenceTests : IDisposable
         Assert.True(map.TryGet("\\plain.txt", out var plain));
         plain!.FileInfo.AllocationSize = 2UL * 1024 * 1024 * 1024;
 
-        DiskImageSerializer.SaveIncremental(map, 4UL * 1024 * 1024 * 1024, "Label", path, ImageCompressionLevel.None);
+        DiskImageSerializer.SaveIncremental(map, 4UL * 1024 * 1024 * 1024, "Label", path, 0);
 
         Assert.Equal(7, ReadVersion(path));
         Assert.Equal(0, ReadLayoutByte(path));
@@ -167,10 +167,10 @@ public sealed class ReparsePointPersistenceTests : IDisposable
     {
         var path = ImagePath();
         var map = BuildMapWithLinks(out var symlinkData, out _);
-        DiskImageSerializer.Save(map, Capacity, "Label", path, ImageCompressionLevel.None);
+        DiskImageSerializer.Save(map, Capacity, "Label", path, 0);
 
         // The existing image has no segment index to reuse; the save must not trip over that.
-        DiskImageSerializer.SaveIncremental(map, Capacity, "Label", path, ImageCompressionLevel.None);
+        DiskImageSerializer.SaveIncremental(map, Capacity, "Label", path, 0);
 
         Assert.Equal(7, ReadVersion(path));
         Assert.Equal(1, ReadLayoutByte(path));
@@ -189,11 +189,11 @@ public sealed class ReparsePointPersistenceTests : IDisposable
         var map = BuildMapWithLinks(out _, out _);
         if (segmented)
         {
-            DiskImageSerializer.SaveIncremental(map, Capacity, "PeekLabel", path, ImageCompressionLevel.None);
+            DiskImageSerializer.SaveIncremental(map, Capacity, "PeekLabel", path, 0);
         }
         else
         {
-            DiskImageSerializer.Save(map, Capacity, "PeekLabel", path, ImageCompressionLevel.None);
+            DiskImageSerializer.Save(map, Capacity, "PeekLabel", path, 0);
         }
 
         DiskImageSerializer.PeekHeader(path, out var capacity, out var label, out var isEncrypted);
@@ -207,7 +207,7 @@ public sealed class ReparsePointPersistenceTests : IDisposable
     public void Load_Version7ImageWithUnknownLayoutByte_ThrowsInvalidData()
     {
         var path = ImagePath();
-        DiskImageSerializer.SaveIncremental(BuildMapWithLinks(out _, out _), Capacity, "Label", path, ImageCompressionLevel.None);
+        DiskImageSerializer.SaveIncremental(BuildMapWithLinks(out _, out _), Capacity, "Label", path, 0);
         var bytes = File.ReadAllBytes(path);
         bytes[LayoutByteOffset] = 9;
         File.WriteAllBytes(path, bytes);
@@ -226,11 +226,11 @@ public sealed class ReparsePointPersistenceTests : IDisposable
         root!.ApplyReparseData(MakeReparse(MountPointTag, 20));
         if (segmented)
         {
-            DiskImageSerializer.SaveIncremental(map, Capacity, "Label", path, ImageCompressionLevel.None);
+            DiskImageSerializer.SaveIncremental(map, Capacity, "Label", path, 0);
         }
         else
         {
-            DiskImageSerializer.Save(map, Capacity, "Label", path, ImageCompressionLevel.None);
+            DiskImageSerializer.Save(map, Capacity, "Label", path, 0);
         }
 
         var loaded = DiskImageSerializer.Load(path, out _, out _, null, out _);
@@ -252,7 +252,7 @@ public sealed class ReparsePointPersistenceTests : IDisposable
         root!.ApplyReparseData(MakeReparse(MountPointTag, 20));
         var index = Path.Combine(_dir, "snap.mdrs");
         var blobs = Path.Combine(_dir, "blobs");
-        SnapshotStore.Write(map, Capacity, "Label", index, blobs, ImageCompressionLevel.None, cek: null);
+        SnapshotStore.Write(map, Capacity, "Label", index, blobs, 0, cek: null);
 
         var loaded = SnapshotStore.Load(index, blobs, out _, out _, cek: null);
 
@@ -282,7 +282,7 @@ public sealed class ReparsePointPersistenceTests : IDisposable
         var link = new FileNode { FileInfo = { FileAttributes = (uint)FileAttributes.Normal } };
         link.ApplyReparseData(MakeReparse(SymlinkTag, 12));
         loaded.Add("\\new-link", link);
-        DiskImageSerializer.SaveIncremental(loaded, Capacity, "Old", path, ImageCompressionLevel.None);
+        DiskImageSerializer.SaveIncremental(loaded, Capacity, "Old", path, 0);
 
         Assert.Equal(7, ReadVersion(path));
         var reloaded = DiskImageSerializer.Load(path, out _, out _, null, out _);
@@ -381,7 +381,7 @@ public sealed class ReparsePointPersistenceTests : IDisposable
         var index = Path.Combine(_dir, "snap.mdrs");
         var blobs = Path.Combine(_dir, "blobs");
 
-        SnapshotStore.Write(map, Capacity, "Label", index, blobs, ImageCompressionLevel.None, cek: null);
+        SnapshotStore.Write(map, Capacity, "Label", index, blobs, 0, cek: null);
         var loaded = SnapshotStore.Load(index, blobs, out _, out _, cek: null);
 
         Assert.Equal(map.Count, loaded.Count);
@@ -400,7 +400,7 @@ public sealed class ReparsePointPersistenceTests : IDisposable
         var map = BuildMapWithLinks(out _, out _);
         var index = Path.Combine(_dir, "snap.mdrs");
 
-        SnapshotStore.Write(map, Capacity, "Label", index, Path.Combine(_dir, "blobs"), ImageCompressionLevel.None, cek: null);
+        SnapshotStore.Write(map, Capacity, "Label", index, Path.Combine(_dir, "blobs"), 0, cek: null);
         var entries = SnapshotStore.ReadEntries(index);
 
         Assert.Contains(entries, entry => entry.Path == "\\file-link" && !entry.IsDirectory);
@@ -558,7 +558,7 @@ public sealed class ReparsePointPersistenceTests : IDisposable
         using var writer = new BinaryWriter(stream);
         writer.Write("MDRD"u8.ToArray());
         writer.Write(6);
-        writer.Write((byte)ImageCompressionLevel.None);
+        writer.Write((byte)0);
         writer.Write((byte)0); // not encrypted
         writer.Write(Capacity);
         writer.Write("Old");

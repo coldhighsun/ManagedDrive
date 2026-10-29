@@ -928,51 +928,39 @@ public sealed class CreateDiskOptionsBuilderTests
     }
 
     [Fact]
-    public void Build_CustomZstdLevelDisabled_LeavesCustomZstdLevelNull()
+    public void Build_DefaultInput_UsesDefaultCompressionLevel()
     {
         var result = CreateDiskOptionsBuilder.Build(ValidCreateInput());
 
         Assert.True(result.Success);
-        Assert.Null(result.Options!.CustomZstdLevel);
-    }
-
-    [Fact]
-    public void Build_CustomZstdLevelEnabled_SetsCustomZstdLevel()
-    {
-        var input = ValidCreateInput() with { CustomZstdLevelEnabled = true, CustomZstdLevelValue = 12 };
-
-        var result = CreateDiskOptionsBuilder.Build(input);
-
-        Assert.True(result.Success);
-        Assert.Equal(12, result.Options!.CustomZstdLevel);
+        Assert.Equal(ZstdLevels.Default, result.Options!.CompressionLevel);
     }
 
     [Theory]
     [InlineData(0)]
-    [InlineData(23)]
-    public void Build_CustomZstdLevelOutOfRange_ReturnsBadCustomZstdLevel(int value)
+    [InlineData(1)]
+    [InlineData(12)]
+    [InlineData(22)]
+    public void Build_CompressionLevelInRange_IsCarriedToOptions(int level)
     {
-        var input = ValidCreateInput() with { CustomZstdLevelEnabled = true, CustomZstdLevelValue = value };
-
-        var result = CreateDiskOptionsBuilder.Build(input);
-
-        Assert.Equal(CreateDiskValidationError.BadCustomZstdLevel, result.Error);
-    }
-
-    [Fact]
-    public void Build_CustomZstdLevelEnabledButCompressionNone_IgnoresCustomZstdLevel()
-    {
-        var input = ValidCreateInput() with
-        {
-            CompressionLevel = ImageCompressionLevel.None,
-            CustomZstdLevelEnabled = true,
-            CustomZstdLevelValue = 12,
-        };
+        var input = ValidCreateInput() with { CompressionLevel = level };
 
         var result = CreateDiskOptionsBuilder.Build(input);
 
         Assert.True(result.Success);
-        Assert.Null(result.Options!.CustomZstdLevel);
+        Assert.Equal(level, result.Options!.CompressionLevel);
+    }
+
+    [Theory]
+    [InlineData(-1)]
+    [InlineData(23)]
+    public void Build_CompressionLevelOutOfRange_ReturnsBadCompressionLevel(int level)
+    {
+        var input = ValidCreateInput() with { CompressionLevel = level };
+
+        var result = CreateDiskOptionsBuilder.Build(input);
+
+        Assert.Equal(CreateDiskValidationError.BadCompressionLevel, result.Error);
     }
 
     /// <summary>
@@ -1051,7 +1039,7 @@ public sealed class CreateDiskOptionsBuilderTests
         ImagePathText = null,
         IsReadOnly = false,
         AutoMount = false,
-        CompressionLevel = ImageCompressionLevel.Fastest,
+        CompressionLevel = 1,
         SaveImageOnExit = true,
         OtherDisks = [],
     };

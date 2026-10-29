@@ -17,11 +17,33 @@ public sealed class ArchiveNodeMapWriterTests
                 nodeMap,
                 path,
                 ArchiveExportFormat.Zip,
-                ImageCompressionLevel.Fastest,
+                1,
                 new RecordingProgress(reports));
 
             Assert.NotEmpty(reports);
             Assert.Equal(1.0, reports[^1]);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(5)]
+    [InlineData(9)]
+    [InlineData(22)]
+    public void WriteArchive_AnyLevel_WritesReadableArchive(int level)
+    {
+        var nodeMap = BuildSourceNodeMap();
+        var path = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid()}.zip");
+
+        try
+        {
+            ArchiveNodeMapWriter.WriteArchive(nodeMap, path, ArchiveExportFormat.Zip, level);
+
+            Assert.True(new FileInfo(path).Length > 0);
         }
         finally
         {
@@ -34,7 +56,7 @@ public sealed class ArchiveNodeMapWriterTests
     {
         // Regression test for a bug where the entry size was cast to `int` before being handed to
         // FileContent.AsReadOnlyStream, silently truncating/corrupting the export for any file at
-        // or above 2 GiB. Use ImageCompressionLevel.None (stored, no deflate work) to keep a
+        // or above 2 GiB. Use 0 (stored, no deflate work) to keep a
         // 2 GiB-plus export fast enough for a unit test.
         const long size = (long)int.MaxValue + 4096;
         var alignedSize = FileNode.AlignToAllocationUnit(size);
@@ -83,7 +105,7 @@ public sealed class ArchiveNodeMapWriterTests
         var path = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid()}.zip");
         try
         {
-            ArchiveNodeMapWriter.WriteArchive(nodeMap, path, ArchiveExportFormat.Zip, ImageCompressionLevel.None);
+            ArchiveNodeMapWriter.WriteArchive(nodeMap, path, ArchiveExportFormat.Zip, 0);
 
             FileNodeMap restored;
             try
@@ -117,7 +139,7 @@ public sealed class ArchiveNodeMapWriterTests
 
         try
         {
-            ArchiveNodeMapWriter.WriteArchive(nodeMap, path, format, ImageCompressionLevel.Fastest);
+            ArchiveNodeMapWriter.WriteArchive(nodeMap, path, format, 1);
 
             var restored = ArchiveNodeMapBuilder.BuildNodeMap(path);
 
@@ -152,7 +174,7 @@ public sealed class ArchiveNodeMapWriterTests
 
         try
         {
-            ArchiveNodeMapWriter.WriteArchive(nodeMap, path, ArchiveExportFormat.Zip, ImageCompressionLevel.Fastest);
+            ArchiveNodeMapWriter.WriteArchive(nodeMap, path, ArchiveExportFormat.Zip, 1);
 
             var restored = ArchiveNodeMapBuilder.BuildNodeMap(path);
 

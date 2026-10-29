@@ -14,7 +14,7 @@ public sealed class DiskImageSerializerTests
         {
             var map = new FileNodeMap();
             map.Add("\\", MakeDir());
-            DiskImageSerializer.Save(map, capacityBytes: 1024 * 1024, "MyLabel", path, ImageCompressionLevel.Fastest,
+            DiskImageSerializer.Save(map, capacityBytes: 1024 * 1024, "MyLabel", path, 1,
                 new ImageEncryptionInfo("s3cret", DiskImageSerializer.GenerateCek()));
 
             Assert.Throws<ImagePasswordRequiredException>(() =>
@@ -39,7 +39,7 @@ public sealed class DiskImageSerializerTests
             var map = new FileNodeMap();
             map.Add("\\", MakeDir());
             map.Add("\\File.txt", MakeFile("hello world"u8.ToArray()));
-            DiskImageSerializer.Save(map, capacityBytes: 1024 * 1024, "MyLabel", path, ImageCompressionLevel.Fastest,
+            DiskImageSerializer.Save(map, capacityBytes: 1024 * 1024, "MyLabel", path, 1,
                 new ImageEncryptionInfo("s3cret", DiskImageSerializer.GenerateCek()));
             var bytes = File.ReadAllBytes(path);
 
@@ -67,7 +67,7 @@ public sealed class DiskImageSerializerTests
         {
             var map = new FileNodeMap();
             map.Add("\\", MakeDir());
-            DiskImageSerializer.Save(map, capacityBytes: 1024 * 1024, "MyLabel", path, ImageCompressionLevel.Fastest,
+            DiskImageSerializer.Save(map, capacityBytes: 1024 * 1024, "MyLabel", path, 1,
                 new ImageEncryptionInfo("s3cret", DiskImageSerializer.GenerateCek()));
 
             Assert.Throws<ImagePasswordIncorrectException>(() =>
@@ -116,7 +116,7 @@ public sealed class DiskImageSerializerTests
         {
             var map = new FileNodeMap();
             map.Add("\\", MakeDir());
-            DiskImageSerializer.Save(map, capacityBytes: 1024 * 1024, "MyLabel", path, ImageCompressionLevel.Fastest,
+            DiskImageSerializer.Save(map, capacityBytes: 1024 * 1024, "MyLabel", path, 1,
                 new ImageEncryptionInfo("s3cret", DiskImageSerializer.GenerateCek()));
 
             DiskImageSerializer.PeekHeader(path, out var capacityBytes, out var volumeLabel, out var isEncrypted);
@@ -159,7 +159,7 @@ public sealed class DiskImageSerializerTests
 
             for (var i = 0; i < 20; i++)
             {
-                DiskImageSerializer.Save(map, capacityBytes: 1024 * 1024, "MyLabel", path, ImageCompressionLevel.Fastest);
+                DiskImageSerializer.Save(map, capacityBytes: 1024 * 1024, "MyLabel", path, 1);
 
                 var loaded = DiskImageSerializer.Load(path, out _, out _, password: null, out _);
                 Assert.True(loaded.Count >= 51);
@@ -174,6 +174,23 @@ public sealed class DiskImageSerializerTests
         }
     }
 
+    [Theory]
+    [InlineData(-1)]
+    [InlineData(23)]
+    [InlineData(300)]
+    public void SaveAndSaveIncremental_LevelOutOfRange_ThrowBeforeTouchingTheFile(int level)
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid()}.mdr");
+        var map = new FileNodeMap();
+        map.Add("\\", MakeDir());
+
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            DiskImageSerializer.Save(map, 1024 * 1024, "L", path, level));
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            DiskImageSerializer.SaveIncremental(map, 1024 * 1024, "L", path, level));
+        Assert.False(File.Exists(path));
+    }
+
     [Fact]
     public void Save_EmptyNodeMap_ReportsOnlyOne()
     {
@@ -183,7 +200,7 @@ public sealed class DiskImageSerializerTests
             var map = new FileNodeMap();
 
             var reports = new List<double>();
-            DiskImageSerializer.Save(map, capacityBytes: 1024 * 1024, "MyLabel", path, ImageCompressionLevel.Fastest,
+            DiskImageSerializer.Save(map, capacityBytes: 1024 * 1024, "MyLabel", path, 1,
                 progress: new RecordingProgress(reports));
 
             Assert.Equal([1.0], reports);
@@ -208,7 +225,7 @@ public sealed class DiskImageSerializerTests
             }
 
             var reports = new List<double>();
-            DiskImageSerializer.Save(map, capacityBytes: 1024 * 1024, "MyLabel", path, ImageCompressionLevel.Fastest,
+            DiskImageSerializer.Save(map, capacityBytes: 1024 * 1024, "MyLabel", path, 1,
                 progress: new RecordingProgress(reports));
 
             // Progress is now weighted by each node's allocation size rather than a flat
@@ -229,11 +246,11 @@ public sealed class DiskImageSerializerTests
     }
 
     [Theory]
-    [InlineData(ImageCompressionLevel.None)]
-    [InlineData(ImageCompressionLevel.Fastest)]
-    [InlineData(ImageCompressionLevel.Optimal)]
-    [InlineData(ImageCompressionLevel.SmallestSize)]
-    public void SaveThenLoad_RoundTrips_CapacityLabelAndNodes(ImageCompressionLevel level)
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(3)]
+    [InlineData(19)]
+    public void SaveThenLoad_RoundTrips_CapacityLabelAndNodes(int level)
     {
         var path = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid()}.mdr");
         try
@@ -260,11 +277,11 @@ public sealed class DiskImageSerializerTests
     }
 
     [Theory]
-    [InlineData(ImageCompressionLevel.None)]
-    [InlineData(ImageCompressionLevel.Fastest)]
-    [InlineData(ImageCompressionLevel.Optimal)]
-    [InlineData(ImageCompressionLevel.SmallestSize)]
-    public void SaveThenLoad_WithPassword_RoundTrips(ImageCompressionLevel level)
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(3)]
+    [InlineData(19)]
+    public void SaveThenLoad_WithPassword_RoundTrips(int level)
     {
         var path = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid()}.mdr");
         try
@@ -292,9 +309,9 @@ public sealed class DiskImageSerializerTests
     }
 
     [Theory]
-    [InlineData(ImageCompressionLevel.None)]
-    [InlineData(ImageCompressionLevel.Fastest)]
-    public void SaveThenLoad_WithPasswordAcrossMultipleChunks_RoundTrips(ImageCompressionLevel level)
+    [InlineData(0)]
+    [InlineData(1)]
+    public void SaveThenLoad_WithPasswordAcrossMultipleChunks_RoundTrips(int level)
     {
         // Force a tiny chunk size so a handful of KB of node data spans several chunks,
         // exercising the version-4 chunked AES-GCM path without allocating a real 64 MB buffer.
@@ -347,7 +364,7 @@ public sealed class DiskImageSerializerTests
                 map.Add($"\\File{i}.txt", MakeFile("hello world"u8.ToArray()));
             }
 
-            DiskImageSerializer.Save(map, capacityBytes: 1024 * 1024, "MyLabel", path, ImageCompressionLevel.Fastest,
+            DiskImageSerializer.Save(map, capacityBytes: 1024 * 1024, "MyLabel", path, 1,
                 new ImageEncryptionInfo("s3cret", DiskImageSerializer.GenerateCek()));
 
             Assert.Throws<ImagePasswordIncorrectException>(() =>
@@ -405,7 +422,7 @@ public sealed class DiskImageSerializerTests
             {
                 writer.Write("MDRD"u8.ToArray());
                 writer.Write(3); // legacy whole-blob encrypted version
-                writer.Write((byte)ImageCompressionLevel.Fastest);
+                writer.Write((byte)1);
                 writer.Write((byte)1); // isEncrypted
                 writer.Write(2048UL);
                 writer.Write("LegacyEncryptedLabel");
@@ -440,7 +457,7 @@ public sealed class DiskImageSerializerTests
         {
             var map = new FileNodeMap();
             map.Add("\\", MakeDir());
-            DiskImageSerializer.Save(map, capacityBytes: 1024 * 1024, "MyLabel", path, ImageCompressionLevel.Fastest);
+            DiskImageSerializer.Save(map, capacityBytes: 1024 * 1024, "MyLabel", path, 1);
 
             using var stream = new FileStream(path, FileMode.Open, FileAccess.Read);
             using var reader = new BinaryReader(stream);
@@ -454,10 +471,10 @@ public sealed class DiskImageSerializerTests
     }
 
     [Theory]
-    [InlineData(ImageCompressionLevel.Fastest)]
-    [InlineData(ImageCompressionLevel.Optimal)]
-    [InlineData(ImageCompressionLevel.SmallestSize)]
-    public void Save_Compressed_DoesNotUseGzip(ImageCompressionLevel level)
+    [InlineData(1)]
+    [InlineData(3)]
+    [InlineData(19)]
+    public void Save_Compressed_DoesNotUseGzip(int level)
     {
         var path = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid()}.mdr");
         try
@@ -504,7 +521,7 @@ public sealed class DiskImageSerializerTests
             {
                 writer.Write("MDRD"u8.ToArray());
                 writer.Write(4); // legacy gzip-compressed version, unencrypted
-                writer.Write((byte)ImageCompressionLevel.Fastest);
+                writer.Write((byte)1);
                 writer.Write((byte)0); // isEncrypted
                 writer.Write(2048UL);
                 writer.Write("LegacyGzipLabel");
@@ -541,7 +558,7 @@ public sealed class DiskImageSerializerTests
                 map.Add($"\\File{i}.txt", MakeFile(System.Text.Encoding.UTF8.GetBytes($"content for file number {i}")));
             }
 
-            DiskImageSerializer.Save(map, capacityBytes: 1024 * 1024, "ChunkedLabel", path, ImageCompressionLevel.Fastest);
+            DiskImageSerializer.Save(map, capacityBytes: 1024 * 1024, "ChunkedLabel", path, 1);
 
             var loaded = DiskImageSerializer.Load(path, out var capacityBytes, out var volumeLabel, password: null, out var cek);
 
@@ -565,10 +582,11 @@ public sealed class DiskImageSerializerTests
     }
 
     [Theory]
+    [InlineData(0)]
     [InlineData(1)]
     [InlineData(19)]
     [InlineData(22)]
-    public void SaveThenLoad_WithCustomZstdLevel_RoundTrips(int customZstdLevel)
+    public void SaveThenLoad_WithZstdLevel_RoundTrips(int level)
     {
         var path = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid()}.mdr");
         try
@@ -577,8 +595,7 @@ public sealed class DiskImageSerializerTests
             map.Add("\\", MakeDir());
             map.Add("\\File.txt", MakeFile("hello world"u8.ToArray()));
 
-            DiskImageSerializer.Save(map, capacityBytes: 1024 * 1024, "MyLabel", path, ImageCompressionLevel.Fastest,
-                customZstdLevel: customZstdLevel);
+            DiskImageSerializer.Save(map, capacityBytes: 1024 * 1024, "MyLabel", path, level);
 
             var loaded = DiskImageSerializer.Load(path, out var capacityBytes, out var volumeLabel, password: null, out var cek);
 
@@ -615,12 +632,12 @@ public sealed class DiskImageSerializerTests
             if (incremental)
             {
                 DiskImageSerializer.SaveIncremental(source.NodeMap, capacityBytes: 1024 * 1024, "Label", path,
-                    ImageCompressionLevel.Fastest);
+                    1);
             }
             else
             {
                 DiskImageSerializer.Save(source.NodeMap, capacityBytes: 1024 * 1024, "Label", path,
-                    ImageCompressionLevel.Fastest);
+                    1);
             }
 
             var loaded = DiskImageSerializer.Load(path, out _, out _, password: null, out _);
@@ -661,7 +678,7 @@ public sealed class DiskImageSerializerTests
             var map = new FileNodeMap();
             map.Add("\\", MakeDir());
             map.Add("\\File.txt", MakeFile(new byte[1000]));
-            DiskImageSerializer.Save(map, capacityBytes: 1024 * 1024, "MyLabel", path, ImageCompressionLevel.None);
+            DiskImageSerializer.Save(map, capacityBytes: 1024 * 1024, "MyLabel", path, 0);
             using (var stream = new FileStream(path, FileMode.Open, FileAccess.Write))
             {
                 stream.SetLength(stream.Length - 100);

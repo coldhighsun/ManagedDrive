@@ -135,7 +135,7 @@ public sealed class DiskImageCapacityPatchTests
         {
             var map = NewMap();
             map.Add("\\orphan:s", NewFileNode("stream"u8.ToArray()));
-            DiskImageSerializer.SaveIncremental(map, 4UL * 1024 * 1024, "Label", path, ImageCompressionLevel.Fastest);
+            DiskImageSerializer.SaveIncremental(map, 4UL * 1024 * 1024, "Label", path, 1);
             var loaded = DiskImageSerializer.Load(path, out _, out _, null, out _);
             Assert.False(loaded.TryGet("\\orphan:s", out _));
             var before = File.ReadAllBytes(path);
@@ -194,7 +194,7 @@ public sealed class DiskImageCapacityPatchTests
         try
         {
             var map = NewMap();
-            DiskImageSerializer.Save(map, 4UL * 1024 * 1024, "Label", path, ImageCompressionLevel.Fastest);
+            DiskImageSerializer.Save(map, 4UL * 1024 * 1024, "Label", path, 1);
             var before = File.ReadAllBytes(path);
 
             var raised = DiskImageSerializer.TrySetCapacityInPlace(path, 8UL * 1024 * 1024);
@@ -259,6 +259,6 @@ public sealed class DiskImageCapacityPatchTests
             : new ImageEncryptionInfo(password, DiskImageSerializer.GenerateCek());
 
         DiskImageSerializer.SaveIncremental(
-            NewMap(), capacity, "Label", path, ImageCompressionLevel.Fastest, encryption);
+            NewMap(), capacity, "Label", path, 1, encryption);
     }
 }

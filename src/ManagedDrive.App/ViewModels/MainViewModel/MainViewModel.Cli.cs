@@ -219,10 +219,7 @@ public sealed partial class MainViewModel
                 ReadOnly = overrides.ReadOnly,
                 AutoMount = overrides.AutoMount,
                 AutoSaveIntervalMinutes = overrides.AutoSaveIntervalMinutes,
-                CompressionLevel = overrides.CompressionLevel is { } compressionLevel
-                    ? (Core.Mounting.ImageCompressionLevel)compressionLevel
-                    : null,
-                CustomZstdLevel = overrides.CustomZstdLevel,
+                CompressionLevel = overrides.CompressionLevel,
                 MaxSnapshotCount = overrides.MaxSnapshotCount,
                 MaxSnapshotSizeBytes = overrides.MaxSnapshotSizeBytes,
                 HighUsageWarnPercent = overrides.HighUsageWarnPercent,
@@ -320,7 +317,7 @@ public sealed partial class MainViewModel
             VolumeLabel = string.IsNullOrWhiteSpace(volumeLabel) ? "RAM Disk" : volumeLabel.Trim(),
             CapacityBytes = capacityBytes,
             PersistImagePath = imagePath,
-            CompressionLevel = preset?.CompressionLevel ?? ManagedDrive.Core.Mounting.ImageCompressionLevel.Fastest,
+            CompressionLevel = preset?.CompressionLevel ?? ZstdLevels.Default,
             Folders = preset is { Folders.Count: > 0 } ? preset.Folders : null,
             EnvRedirects = preset is { EnvRedirects.Count: > 0 } ? preset.EnvRedirects : null,
         };
@@ -825,7 +822,7 @@ public sealed partial class MainViewModel
     /// <c>(false, string.Empty)</c> if no disk is currently mounted at <paramref name="mountPoint"/>.
     /// </returns>
     public async Task<(bool Success, string Message)> ExportByMountPointAsync(
-        string mountPoint, string outputPath, Core.Archive.ArchiveExportFormat? archiveFormat, Core.Mounting.ImageCompressionLevel compressionLevel, string? password)
+        string mountPoint, string outputPath, Core.Archive.ArchiveExportFormat? archiveFormat, int compressionLevel, string? password)
     {
         _logger.LogInformation("CLI export requested: {MountPoint} -> {OutputPath}.", mountPoint, outputPath);
 

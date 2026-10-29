@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace ManagedDrive.App.Models;
 
 /// <summary>
@@ -110,11 +112,13 @@ public sealed record AppConfiguration
     public bool CloseToTray { get; init; } = true;
 
     /// <summary>
-    /// Gets or sets the compression level preselected for a new disk's image file in
-    /// <c>CreateDiskDialog</c>, or <c>null</c> (e.g. configs saved before this setting existed)
-    /// to fall back to <see cref="ImageCompressionLevel.Fastest"/>.
+    /// Gets or sets the Zstd compression level (0 = none, 1-22) preselected for a new disk's image
+    /// file in <c>CreateDiskDialog</c>, or <c>null</c> (e.g. configs saved before this setting
+    /// existed) to fall back to <see cref="ZstdLevels.Default"/>. Stored as <c>DefaultZstdLevel</c>;
+    /// older files are converted by <see cref="Services.CompressionSettingsMigration"/>.
     /// </summary>
-    public ImageCompressionLevel? DefaultCompressionLevel
+    [JsonPropertyName("DefaultZstdLevel")]
+    public int? DefaultCompressionLevel
     {
         get; init;
     }

@@ -9,14 +9,6 @@ namespace ManagedDrive.App.Views;
 /// </summary>
 public partial class CloneDiskDialog
 {
-    private static readonly List<ImageCompressionLevel> CompressionLevels =
-    [
-        ImageCompressionLevel.None,
-        ImageCompressionLevel.Fastest,
-        ImageCompressionLevel.Optimal,
-        ImageCompressionLevel.SmallestSize,
-    ];
-
     private static readonly List<ArchiveExportFormat?> ExportFormats =
     [
         null,
@@ -66,18 +58,19 @@ public partial class CloneDiskDialog
             TargetDiskBox.Items.Add(new CloneTargetItem(target, $"{target.MountPoint} ({target.VolumeLabel})"));
         }
 
-        foreach (var level in CompressionLevels)
-        {
-            CompressionLevelBox.Items.Add(new CompressionLevelItem(level, Loc.Get(CompressionLevelKey(level))));
-        }
-        CompressionLevelBox.SelectedIndex = CompressionLevels.IndexOf(ImageCompressionLevel.Fastest);
+        CompressionLevelBox.Level = ZstdLevels.Default;
 
         foreach (var format in ExportFormats)
         {
             ExportFormatBox.Items.Add(new ExportFormatItem(format, Loc.Get(ExportFormatKey(format))));
         }
         ExportFormatBox.SelectedIndex = 0;
-        ExportFormatBox.SelectionChanged += (_, _) => UpdateExportPathExtension();
+        ExportFormatBox.SelectionChanged += (_, _) =>
+        {
+            // zip/7z use the 0-9 scale of Deflate/LZMA, a .mdr image the 0-22 Zstd scale.
+            CompressionLevelBox.Maximum = ZstdLevels.MaxFor((ExportFormatBox.SelectedItem as ExportFormatItem)?.Format is not null);
+            UpdateExportPathExtension();
+        };
 
         // Set the initial radio selection only after all named elements above are assigned —
         // setting IsChecked in XAML would fire the Checked handler mid-InitializeComponent,
@@ -97,9 +90,9 @@ public partial class CloneDiskDialog
     }
 
     /// <summary>
-    /// Gets the compression level to use, valid only when <see cref="ExportPath"/> is set.
+    /// Gets the compression level to use (0-22 for a <c>.mdr</c> image, 0-9 for an archive), valid only when <see cref="ExportPath"/> is set.
     /// </summary>
-    public ImageCompressionLevel ExportCompressionLevel
+    public int ExportCompressionLevel
     {
         get; private set;
     }
@@ -131,14 +124,6 @@ public partial class CloneDiskDialog
     {
         get; private set;
     }
-
-    private static string CompressionLevelKey(ImageCompressionLevel level) => level switch
-    {
-        ImageCompressionLevel.None => "CompressionLevel.None",
-        ImageCompressionLevel.Fastest => "CompressionLevel.Fastest",
-        ImageCompressionLevel.SmallestSize => "CompressionLevel.SmallestSize",
-        _ => "CompressionLevel.Optimal",
-    };
 
     private static string ExportFormatKey(ArchiveExportFormat? format) => format switch
     {
@@ -195,11 +180,6 @@ public partial class CloneDiskDialog
         ArchiveExportFormat.SevenZip => "SaveDlg.Filter.SevenZip",
         _ => "SaveDlg.Filter",
     };
-
-    private sealed record CompressionLevelItem(ImageCompressionLevel Level, string Display)
-    {
-        public override string ToString() => Display;
-    }
 
     private sealed record ExportFormatItem(ArchiveExportFormat? Format, string Display)
     {
@@ -260,8 +240,7 @@ public partial class CloneDiskDialog
             TargetDisk = null;
             ExportPath = exportPath;
             ExportArchiveFormat = (ExportFormatBox.SelectedItem as ExportFormatItem)?.Format;
-            ExportCompressionLevel = (CompressionLevelBox.SelectedItem as CompressionLevelItem)?.Level
-                ?? ImageCompressionLevel.Fastest;
+            ExportCompressionLevel = CompressionLevelBox.Level;
         }
 
         DialogResult = true;

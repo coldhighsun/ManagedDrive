@@ -196,7 +196,7 @@ public class CliCommandProcessorEditAndSnapshotDiffTests
         public Task<(bool Success, string Message)> DeleteSnapshotAsync(string mountPoint, int index) =>
             Task.FromResult((false, string.Empty));
 
-        public Task<(bool Success, string Message)> ExportAsync(string mountPoint, string outputPath, ManagedDrive.Cli.Core.ArchiveExportFormat? archiveFormat, ManagedDrive.Cli.Core.ImageCompressionLevel compressionLevel, string? password) =>
+        public Task<(bool Success, string Message)> ExportAsync(string mountPoint, string outputPath, ManagedDrive.Cli.Core.ArchiveExportFormat? archiveFormat, int compressionLevel, string? password) =>
             Task.FromResult((false, string.Empty));
 
         public Task<(bool Success, string Message)> FormatAsync(string mountPoint) =>

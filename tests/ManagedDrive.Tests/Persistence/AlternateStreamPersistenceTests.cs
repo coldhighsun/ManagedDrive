@@ -23,9 +23,9 @@ public sealed class AlternateStreamPersistenceTests : IDisposable
     }
 
     [Theory]
-    [InlineData(ImageCompressionLevel.None, false)]
-    [InlineData(ImageCompressionLevel.Fastest, true)]
-    public void SaveIncremental_FileWithStreams_RoundTripsTheStreams(ImageCompressionLevel level, bool encrypted)
+    [InlineData(0, false)]
+    [InlineData(1, true)]
+    public void SaveIncremental_FileWithStreams_RoundTripsTheStreams(int level, bool encrypted)
     {
         var path = ImagePath();
         var map = BuildMapWithStreams();
@@ -49,7 +49,7 @@ public sealed class AlternateStreamPersistenceTests : IDisposable
         var path = ImagePath();
         var map = BuildMapWithStreams();
 
-        DiskImageSerializer.Save(map, Capacity, "Label", path, ImageCompressionLevel.None);
+        DiskImageSerializer.Save(map, Capacity, "Label", path, 0);
         var loaded = DiskImageSerializer.Load(path, out _, out _, null, out _);
 
         Assert.True(loaded.TryGet("\\b.txt:Zone.Identifier", out _));
@@ -61,13 +61,13 @@ public sealed class AlternateStreamPersistenceTests : IDisposable
     {
         var path = ImagePath();
         var map = BuildMapWithStreams();
-        DiskImageSerializer.SaveIncremental(map, Capacity, "Label", path, ImageCompressionLevel.None);
+        DiskImageSerializer.SaveIncremental(map, Capacity, "Label", path, 0);
         Assert.True(map.TryGet("\\b.txt:Zone.Identifier", out var zone));
         zone!.FileData = FileContent.FromSpan("[ZoneTransferX]"u8, 512);
         zone.FileInfo.FileSize = 15;
         zone.ContentVersion++;
 
-        DiskImageSerializer.SaveIncremental(map, Capacity, "Label", path, ImageCompressionLevel.None);
+        DiskImageSerializer.SaveIncremental(map, Capacity, "Label", path, 0);
         var loaded = DiskImageSerializer.Load(path, out _, out _, null, out _);
 
         Assert.True(loaded.TryGet("\\b.txt:Zone.Identifier", out var reloaded));
@@ -80,7 +80,7 @@ public sealed class AlternateStreamPersistenceTests : IDisposable
         var path = ImagePath();
         var map = BuildMapWithStreams();
         map.Add("\\ghost.txt:s", MakeFile("x"u8));
-        DiskImageSerializer.SaveIncremental(map, Capacity, "Label", path, ImageCompressionLevel.None);
+        DiskImageSerializer.SaveIncremental(map, Capacity, "Label", path, 0);
 
         var loaded = DiskImageSerializer.Load(path, out _, out _, null, out _);
 
@@ -94,10 +94,10 @@ public sealed class AlternateStreamPersistenceTests : IDisposable
         var path = ImagePath();
         var map = BuildMapWithStreams();
         map.Add("\\ghost.txt:s", MakeFile("x"u8));
-        DiskImageSerializer.SaveIncremental(map, Capacity, "Label", path, ImageCompressionLevel.None);
+        DiskImageSerializer.SaveIncremental(map, Capacity, "Label", path, 0);
         var loaded = DiskImageSerializer.Load(path, out _, out _, null, out _);
 
-        DiskImageSerializer.SaveIncremental(loaded, Capacity, "Label", path, ImageCompressionLevel.None);
+        DiskImageSerializer.SaveIncremental(loaded, Capacity, "Label", path, 0);
         var reloaded = DiskImageSerializer.Load(path, out _, out _, null, out _);
 
         Assert.False(reloaded.TryGet("\\ghost.txt:s", out _));
@@ -110,7 +110,7 @@ public sealed class AlternateStreamPersistenceTests : IDisposable
         var path = ImagePath();
         var map = BuildMapWithStreams();
         map.Add("\\ghost.txt:s", MakeFile("x"u8));
-        DiskImageSerializer.Save(map, Capacity, "Label", path, ImageCompressionLevel.None);
+        DiskImageSerializer.Save(map, Capacity, "Label", path, 0);
 
         var loaded = DiskImageSerializer.Load(path, out _, out _, null, out _);
 
@@ -123,7 +123,7 @@ public sealed class AlternateStreamPersistenceTests : IDisposable
         var path = ImagePath();
         var map = BuildMapWithStreams();
         map.Add("\\C:", MakeFile("imported"u8));
-        DiskImageSerializer.SaveIncremental(map, Capacity, "Label", path, ImageCompressionLevel.None);
+        DiskImageSerializer.SaveIncremental(map, Capacity, "Label", path, 0);
 
         var loaded = DiskImageSerializer.Load(path, out _, out _, null, out _);
 
@@ -137,7 +137,7 @@ public sealed class AlternateStreamPersistenceTests : IDisposable
         var map = BuildMapWithStreams();
         var index = Path.Combine(_dir, "snap.mdrs");
         var blobs = Path.Combine(_dir, "blobs");
-        SnapshotStore.Write(map, Capacity, "Label", index, blobs, ImageCompressionLevel.None, cek: null);
+        SnapshotStore.Write(map, Capacity, "Label", index, blobs, 0, cek: null);
 
         var loaded = SnapshotStore.Load(index, blobs, out _, out _, cek: null);
 
@@ -153,7 +153,7 @@ public sealed class AlternateStreamPersistenceTests : IDisposable
         map.Add("\\ghost.txt:s", MakeFile("x"u8));
         var index = Path.Combine(_dir, "snap.mdrs");
         var blobs = Path.Combine(_dir, "blobs");
-        SnapshotStore.Write(map, Capacity, "Label", index, blobs, ImageCompressionLevel.None, cek: null);
+        SnapshotStore.Write(map, Capacity, "Label", index, blobs, 0, cek: null);
 
         var loaded = SnapshotStore.Load(index, blobs, out _, out _, cek: null);
 
@@ -167,7 +167,7 @@ public sealed class AlternateStreamPersistenceTests : IDisposable
         var map = BuildMapWithStreams();
         var path = Path.Combine(_dir, "export.zip");
 
-        ArchiveNodeMapWriter.WriteArchive(map, path, ArchiveExportFormat.Zip, ImageCompressionLevel.Fastest);
+        ArchiveNodeMapWriter.WriteArchive(map, path, ArchiveExportFormat.Zip, 1);
 
         using var zip = ZipFile.OpenRead(path);
         Assert.Equal(["b.txt", "dir/", "plain.txt"], zip.Entries.Select(e => e.FullName).Order(StringComparer.Ordinal));
