@@ -54,6 +54,8 @@
     <sys:String x:Key="CreateDisk.CompressionLevel">压缩：</sys:String>
     <sys:String x:Key="CreateDisk.DefaultLabel">RAM 磁盘</sys:String>
     <sys:String x:Key="Tip.Capacity">磁盘大小（选择单位：MB 或 GB）</sys:String>
+    <sys:String x:Key="Tip.CapacityIncrease">增加（按住 Shift：每次 10；也可用向上键或鼠标滚轮）</sys:String>
+    <sys:String x:Key="Tip.CapacityDecrease">减少（按住 Shift：每次 10；也可用向下键或鼠标滚轮）</sys:String>
     <sys:String x:Key="Tip.ReadOnly">禁止对此磁盘的所有写入操作（同时会禁用自动保存，因为只读磁盘的内容不会变化）</sys:String>
     <sys:String x:Key="Tip.AutoMount">下次启动时自动重新挂载此磁盘</sys:String>
     <sys:String x:Key="CreateDisk.HighUsageWarn">使用率达到该百分比时告警：</sys:String>

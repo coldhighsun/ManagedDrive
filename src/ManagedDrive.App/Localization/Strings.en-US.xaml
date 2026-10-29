@@ -54,6 +54,8 @@
     <sys:String x:Key="CreateDisk.CompressionLevel">Compression:</sys:String>
     <sys:String x:Key="CreateDisk.DefaultLabel">RAM Disk</sys:String>
     <sys:String x:Key="Tip.Capacity">Disk size (select unit: MB or GB)</sys:String>
+    <sys:String x:Key="Tip.CapacityIncrease">Increase (Shift: by 10; also Up arrow or mouse wheel)</sys:String>
+    <sys:String x:Key="Tip.CapacityDecrease">Decrease (Shift: by 10; also Down arrow or mouse wheel)</sys:String>
     <sys:String x:Key="Tip.ReadOnly">Prevent all writes to this disk (also disables auto-save, since a read-only disk never changes)</sys:String>
     <sys:String x:Key="Tip.AutoMount">Re-mount this disk automatically on next application start</sys:String>
     <sys:String x:Key="CreateDisk.HighUsageWarn">Warn when usage reaches this percentage:</sys:String>

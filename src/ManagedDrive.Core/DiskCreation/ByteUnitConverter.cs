@@ -80,4 +80,40 @@ public static class ByteUnitConverter
 
         return (int)Math.Clamp(parsed, 1, int.MaxValue);
     }
+
+    /// <summary>
+    /// Moves a capacity value up or down by a number of steps. The allowed values are 1 to
+    /// <paramref name="normalMaximum"/>, plus the edited disk's own capacity when that is larger
+    /// (nothing in between), so a step crossing the limit jumps straight to the other edge.
+    /// </summary>
+    /// <param name="current">The current value; it may exceed the limit when an over-limit value was typed.</param>
+    /// <param name="delta">The signed step size.</param>
+    /// <param name="normalMaximum">The largest value allowed for a new capacity (the available-memory limit).</param>
+    /// <param name="existingValue">The edited disk's own capacity in the same unit, or <c>null</c>.</param>
+    /// <returns>
+    /// The stepped value: at least 1, and either at most <paramref name="normalMaximum"/> or exactly
+    /// <paramref name="existingValue"/> when that exceeds the limit.
+    /// </returns>
+    public static int AddToCapacity(int current, int delta, int normalMaximum, ulong? existingValue)
+    {
+        var limit = Math.Max(1, normalMaximum);
+        var target = (long)current + delta;
+        if (target <= limit)
+        {
+            return (int)Math.Max(target, 1);
+        }
+
+        if (existingValue is not { } existing || existing <= (ulong)limit)
+        {
+            return limit;
+        }
+
+        // Going up from below the limit stops on it first; the next step reaches the existing value.
+        if (delta > 0 && current < limit)
+        {
+            return limit;
+        }
+
+        return delta > 0 ? (int)Math.Min(existing, int.MaxValue) : limit;
+    }
 }

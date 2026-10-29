@@ -68,14 +68,39 @@
                                 Style="{StaticResource AppSlider}"
                                 Minimum="1" Maximum="999999" Value="2"
                                 ValueChanged="CapacitySlider_ValueChanged"/>
-                        <TextBox Grid.Column="4" x:Name="CapacityValueBox" MaxLength="7"
-                                 TextAlignment="Right" VerticalContentAlignment="Center"
-                                 Style="{StaticResource OutlinedTextBox}"
-                                 InputMethod.IsInputMethodEnabled="False"
-                                 PreviewTextInput="CapacityValueBox_PreviewTextInput"
-                                 DataObject.Pasting="CapacityValueBox_Pasting"
-                                 KeyDown="CapacityValueBox_KeyDown"
-                                 LostFocus="CapacityValueBox_LostFocus"/>
+                        <Grid Grid.Column="4">
+                            <TextBox x:Name="CapacityValueBox" MaxLength="7"
+                                     TextAlignment="Right" VerticalContentAlignment="Center"
+                                     Padding="8,8,22,8"
+                                     Style="{StaticResource OutlinedTextBox}"
+                                     InputMethod.IsInputMethodEnabled="False"
+                                     PreviewTextInput="CapacityValueBox_PreviewTextInput"
+                                     DataObject.Pasting="CapacityValueBox_Pasting"
+                                     PreviewKeyDown="CapacityValueBox_PreviewKeyDown"
+                                     KeyDown="CapacityValueBox_KeyDown"
+                                     PreviewMouseWheel="CapacityValueBox_PreviewMouseWheel"
+                                     LostFocus="CapacityValueBox_LostFocus"/>
+                            <Grid HorizontalAlignment="Right" Width="18" Margin="0,3,3,3">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="*"/>
+                                    <RowDefinition Height="*"/>
+                                </Grid.RowDefinitions>
+                                <RepeatButton Grid.Row="0" x:Name="CapacityUpButton" Focusable="False"
+                                              ToolTip="{DynamicResource Tip.CapacityIncrease}"
+                                              AutomationProperties.Name="{DynamicResource Tip.CapacityIncrease}"
+                                              Style="{StaticResource SpinRepeatButton}"
+                                              Click="CapacityUpButton_Click">
+                                    <TextBlock Text="&#xE70E;" FontFamily="Segoe Fluent Icons" FontSize="8"/>
+                                </RepeatButton>
+                                <RepeatButton Grid.Row="1" x:Name="CapacityDownButton" Focusable="False"
+                                              ToolTip="{DynamicResource Tip.CapacityDecrease}"
+                                              AutomationProperties.Name="{DynamicResource Tip.CapacityDecrease}"
+                                              Style="{StaticResource SpinRepeatButton}"
+                                              Click="CapacityDownButton_Click">
+                                    <TextBlock Text="&#xE70D;" FontFamily="Segoe Fluent Icons" FontSize="8"/>
+                                </RepeatButton>
+                            </Grid>
+                        </Grid>
                         <ComboBox Grid.Column="6" x:Name="CapacityUnitBox" IsEditable="False"
                                   Style="{StaticResource OutlinedComboBox}"/>
                     </Grid>
