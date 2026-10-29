@@ -1318,6 +1318,71 @@ public partial class CreateDiskDialog
     }
 
     /// <summary>
+    /// Steps the capacity with the Up and Down arrow keys.
+    /// </summary>
+    /// <param name="sender">The box.</param>
+    /// <param name="e">The key.</param>
+    private void CapacityValueBox_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        var direction = e.Key switch
+        {
+            Key.Up => 1,
+            Key.Down => -1,
+            _ => 0,
+        };
+
+        if (direction != 0)
+        {
+            e.Handled = true;
+            StepCapacity(direction);
+        }
+    }
+
+    /// <summary>
+    /// Steps the capacity with the mouse wheel while the box has keyboard focus.
+    /// </summary>
+    /// <param name="sender">The box.</param>
+    /// <param name="e">The wheel event.</param>
+    private void CapacityValueBox_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
+    {
+        if (!CapacityValueBox.IsKeyboardFocusWithin || e.Delta == 0)
+        {
+            return;
+        }
+
+        e.Handled = true;
+        StepCapacity(e.Delta > 0 ? 1 : -1);
+    }
+
+    /// <summary>
+    /// Increases the capacity by one step.
+    /// </summary>
+    /// <param name="sender">The button.</param>
+    /// <param name="e">The event data.</param>
+    private void CapacityUpButton_Click(object sender, RoutedEventArgs e) => StepCapacity(1);
+
+    /// <summary>
+    /// Decreases the capacity by one step.
+    /// </summary>
+    /// <param name="sender">The button.</param>
+    /// <param name="e">The event data.</param>
+    private void CapacityDownButton_Click(object sender, RoutedEventArgs e) => StepCapacity(-1);
+
+    /// <summary>
+    /// Moves the capacity by one step (ten with Shift) from what the box currently shows, so a value
+    /// typed but not yet committed is the starting point.
+    /// </summary>
+    /// <param name="direction">1 to increase, -1 to decrease.</param>
+    private void StepCapacity(int direction)
+    {
+        var shown = ByteUnitConverter.ParseCapacityInput(CapacityValueBox.Text, _capacityValue);
+        var step = Keyboard.Modifiers.HasFlag(ModifierKeys.Shift) ? 10 : 1;
+        CapacityValue = ByteUnitConverter.AddToCapacity(
+            shown, direction * step, GetMaxCapacityValue(), GetOriginalCapacityValueForSelectedUnit());
+        CapacityValueBox.CaretIndex = CapacityValueBox.Text.Length;
+    }
+
+    /// <summary>
     /// Applies the typed capacity when Enter is pressed.
     /// </summary>
     /// <param name="sender">The box.</param>
