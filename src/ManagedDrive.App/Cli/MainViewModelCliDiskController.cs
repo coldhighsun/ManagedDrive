@@ -36,12 +36,12 @@ internal sealed class MainViewModelCliDiskController(MainViewModel mainViewModel
     public Task<(bool Success, string Message)> DeleteSnapshotAsync(string mountPoint, int index) =>
         mainViewModel.DeleteSnapshotByMountPointAsync(mountPoint, index);
 
-    public Task<(bool Success, string Message)> ExportAsync(string mountPoint, string outputPath, CliCore.ArchiveExportFormat? archiveFormat, CliCore.ImageCompressionLevel compressionLevel, string? password) =>
+    public Task<(bool Success, string Message)> ExportAsync(string mountPoint, string outputPath, CliCore.ArchiveExportFormat? archiveFormat, int compressionLevel, string? password) =>
         mainViewModel.ExportByMountPointAsync(
             mountPoint,
             outputPath,
             archiveFormat is { } format ? (Core.Archive.ArchiveExportFormat)format : null,
-            (Core.Mounting.ImageCompressionLevel)compressionLevel,
+            compressionLevel,
             password);
 
     public Task<(bool Success, string Message)> FormatAsync(string mountPoint) =>

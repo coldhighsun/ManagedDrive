@@ -131,7 +131,7 @@ public sealed class RamDiskSaveDecisionsTests : IDisposable
     public void IsUnchangedSinceLatestSnapshot_LatestSnapshotMatchesCurrent_ReturnsTrue()
     {
         var nodeMap = MakeNodeMap("\\a.txt", [1, 2, 3]);
-        SnapshotManager.WriteSnapshot(nodeMap, 1024, "Label", _mainImagePath, DateTimeOffset.UtcNow, ImageCompressionLevel.None);
+        SnapshotManager.WriteSnapshot(nodeMap, 1024, "Label", _mainImagePath, DateTimeOffset.UtcNow, 0);
 
         Assert.True(RamDiskSaveDecisions.IsUnchangedSinceLatestSnapshot(_mainImagePath, nodeMap));
     }
@@ -140,7 +140,7 @@ public sealed class RamDiskSaveDecisionsTests : IDisposable
     public void IsUnchangedSinceLatestSnapshot_CurrentDiffersFromLatestSnapshot_ReturnsFalse()
     {
         var snapshotted = MakeNodeMap("\\a.txt", [1, 2, 3]);
-        SnapshotManager.WriteSnapshot(snapshotted, 1024, "Label", _mainImagePath, DateTimeOffset.UtcNow, ImageCompressionLevel.None);
+        SnapshotManager.WriteSnapshot(snapshotted, 1024, "Label", _mainImagePath, DateTimeOffset.UtcNow, 0);
 
         var current = MakeNodeMap("\\a.txt", [1, 2, 3]);
         current.Add("\\b.txt", MakeFile([4, 5, 6]));

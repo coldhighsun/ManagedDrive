@@ -717,7 +717,7 @@ public sealed class RamDisk : IDisposable
     public void ExportToArchive(
         string archivePath,
         ArchiveExportFormat format,
-        ImageCompressionLevel level,
+        int level,
         IProgress<double>? progress = null,
         CancellationToken cancellationToken = default)
     {
@@ -789,7 +789,7 @@ public sealed class RamDisk : IDisposable
     /// <exception cref="ObjectDisposedException">Thrown when the disk has been disposed.</exception>
     public void ExportToImage(
         string imagePath,
-        ImageCompressionLevel level,
+        int level,
         string? password = null,
         IProgress<double>? progress = null,
         CancellationToken cancellationToken = default)
@@ -942,7 +942,6 @@ public sealed class RamDisk : IDisposable
                 Options.CompressionLevel,
                 _password is not null && _cek is not null ? new ImageEncryptionInfo(_password, _cek) : null,
                 CancellableProgress.Wrap(progress, cancellationToken),
-                Options.CustomZstdLevel,
                 forceFullRewrite);
         }
         catch (OperationCanceledException)
@@ -1187,8 +1186,7 @@ public sealed class RamDisk : IDisposable
                 persistedHeaderChanged = true;
             }
 
-            if (newOptions.CompressionLevel != Options.CompressionLevel ||
-                newOptions.CustomZstdLevel != Options.CustomZstdLevel)
+            if (newOptions.CompressionLevel != Options.CompressionLevel)
             {
                 persistedHeaderChanged = true;
             }
@@ -1628,8 +1626,7 @@ public sealed class RamDisk : IDisposable
                 DateTimeOffset.UtcNow,
                 Options.CompressionLevel,
                 _cek,
-                CancellableProgress.Wrap(progress, cancellationToken),
-                Options.CustomZstdLevel);
+                CancellableProgress.Wrap(progress, cancellationToken));
 
             SnapshotManager.Prune(path, Options.MaxSnapshotCount, Options.MaxSnapshotSizeBytes);
         }

@@ -63,14 +63,9 @@
     <sys:String x:Key="Val.BadHighUsagePercent">Enter a usage warning percentage between 1 and 99.</sys:String>
     <sys:String x:Key="Tip.ImageFile">Optional: path to a .mdr image file for persistence (leave blank for volatile disk). Click to browse.</sys:String>
     <sys:String x:Key="Tip.ClearImagePath">Clear image file path</sys:String>
-    <sys:String x:Key="Tip.CompressionLevel">Compress the saved image to reduce disk usage. Higher levels shrink the file more but take longer to save/load.</sys:String>
-    <sys:String x:Key="CompressionLevel.None">Off</sys:String>
-    <sys:String x:Key="CompressionLevel.Fastest">Fast</sys:String>
-    <sys:String x:Key="CompressionLevel.Optimal">Balanced</sys:String>
-    <sys:String x:Key="CompressionLevel.SmallestSize">Max</sys:String>
-    <sys:String x:Key="CreateDisk.CustomZstdLevel">Custom Zstd level:</sys:String>
-    <sys:String x:Key="Tip.CustomZstdLevel">Advanced: override the compression preset above with an exact Zstd level (1 = fastest, 22 = smallest). Leave unchecked to use the preset's level.</sys:String>
-    <sys:String x:Key="Val.BadCustomZstdLevel">Enter a custom Zstd level between 1 and 22.</sys:String>
+    <sys:String x:Key="Tip.CompressionLevel">Zstd compression level of the saved image: 0 = off, 1 = fastest, 22 = smallest. Higher levels shrink the file more but take longer to save/load.</sys:String>
+    <sys:String x:Key="CreateDisk.CompressionNone">Off</sys:String>
+    <sys:String x:Key="Val.BadCompressionLevel">Enter a compression level between 0 and 22.</sys:String>
     <sys:String x:Key="Val.BadFolder">A cache folder is not valid. It must be a relative path inside the disk.</sys:String>
     <sys:String x:Key="Val.BadEnvRedirect">An environment variable redirection is not valid, or a variable is listed twice.</sys:String>
     <sys:String x:Key="CreateDisk.Section.Presets">Temp &amp; Caches</sys:String>
@@ -332,7 +327,7 @@
     <sys:String x:Key="Settings.CloseToTray">Closing the window minimizes to tray instead of exiting</sys:String>
     <sys:String x:Key="Tip.CloseToTray">When checked, the title bar close button hides the window to the tray. When unchecked, it exits the application (same as the tray "Exit" menu item).</sys:String>
     <sys:String x:Key="Settings.DefaultCompressionLevel">Default compression:</sys:String>
-    <sys:String x:Key="Tip.DefaultCompressionLevel">Compression level preselected when creating a new disk</sys:String>
+    <sys:String x:Key="Tip.DefaultCompressionLevel">Zstd compression level (0 = off, 1-22) preselected when creating a new disk</sys:String>
     <sys:String x:Key="Settings.DefaultImageDirectory">Default image directory:</sys:String>
     <sys:String x:Key="Tip.DefaultImageDirectory">Folder preselected when browsing for a new disk's image file path</sys:String>
     <sys:String x:Key="Btn.Browse">Browse...</sys:String>

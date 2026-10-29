@@ -34,13 +34,13 @@ public static class ArchiveNodeMapWriter
     /// <param name="nodeMap">The node map to export.</param>
     /// <param name="archivePath">Destination archive file path.</param>
     /// <param name="format">The archive container format to write.</param>
-    /// <param name="level">Compression level applied to the archive.</param>
+    /// <param name="level">Archive compression level (0 = none, 1-9); values above 9 are treated as 9.</param>
     /// <param name="progress">Optional progress reporter, updated with a fraction in [0, 1].</param>
     public static void WriteArchive(
         FileNodeMap nodeMap,
         string archivePath,
         ArchiveExportFormat format,
-        ImageCompressionLevel level,
+        int level,
         IProgress<double>? progress = null)
     {
         var nodes = nodeMap.GetAllNodes();
@@ -128,25 +128,19 @@ public static class ArchiveNodeMapWriter
         progress?.Report(1.0);
     }
 
-    private static IWriter OpenWriter(Stream stream, ArchiveExportFormat format, ImageCompressionLevel level) => format switch
+    private static IWriter OpenWriter(Stream stream, ArchiveExportFormat format, int level) => format switch
     {
         ArchiveExportFormat.SevenZip => SevenZipWriter.OpenWriter(stream, new()
         {
-            CompressionType = level == ImageCompressionLevel.None ? CompressionType.None : CompressionType.LZMA,
+            CompressionType = level == ZstdLevels.None ? CompressionType.None : CompressionType.LZMA,
             CompressionLevel = ToSharpCompressLevel(level),
         }),
         _ => new ZipWriter(stream, new(
-            level == ImageCompressionLevel.None ? CompressionType.None : CompressionType.Deflate)
+            level == ZstdLevels.None ? CompressionType.None : CompressionType.Deflate)
         {
             CompressionLevel = ToSharpCompressLevel(level),
         }),
     };
 
-    private static int ToSharpCompressLevel(ImageCompressionLevel level) => level switch
-    {
-        ImageCompressionLevel.None => 0,
-        ImageCompressionLevel.Fastest => 1,
-        ImageCompressionLevel.SmallestSize => 9,
-        _ => 6,
-    };
+    private static int ToSharpCompressLevel(int level) => Math.Clamp(level, 0, ZstdLevels.ArchiveMax);
 }

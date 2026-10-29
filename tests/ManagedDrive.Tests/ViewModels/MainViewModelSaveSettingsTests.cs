@@ -44,7 +44,7 @@ public sealed class MainViewModelSaveSettingsTests : ViewModelTestBase
             LastUpdateCheckUtc = lastCheck,
             SkippedVersion = "1.2.3",
             SkippedWinFspVersion = "a|b",
-            DefaultCompressionLevel = ImageCompressionLevel.Optimal,
+            DefaultCompressionLevel = 3,
             DefaultImageDirectory = @"D:\images",
             SpaceUsageListSize = 7,
         };
@@ -64,7 +64,7 @@ public sealed class MainViewModelSaveSettingsTests : ViewModelTestBase
         Assert.Equal(lastCheck, result.LastUpdateCheckUtc);
         Assert.Equal("1.2.3", result.SkippedVersion);
         Assert.Equal("a|b", result.SkippedWinFspVersion);
-        Assert.Equal(ImageCompressionLevel.Optimal, result.DefaultCompressionLevel);
+        Assert.Equal(3, result.DefaultCompressionLevel);
         Assert.Equal(@"D:\images", result.DefaultImageDirectory);
         Assert.Equal(7, result.SpaceUsageListSize);
     }

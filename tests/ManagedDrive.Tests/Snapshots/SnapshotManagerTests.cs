@@ -137,13 +137,13 @@ public sealed class SnapshotManagerTests : IDisposable
         nodeMapA.Add("\\shared.txt", MakeFile(shared));
         nodeMapA.Add("\\unique.txt", MakeFile(unique));
         SnapshotManager.WriteSnapshot(nodeMapA, 1024, "Label", _mainImagePath,
-            new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), ImageCompressionLevel.None);
+            new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), 0);
 
         var nodeMapB = new FileNodeMap();
         nodeMapB.Add("\\", MakeDir());
         nodeMapB.Add("\\shared.txt", MakeFile(shared));
         SnapshotManager.WriteSnapshot(nodeMapB, 1024, "Label", _mainImagePath,
-            new(2026, 1, 2, 0, 0, 0, TimeSpan.Zero), ImageCompressionLevel.None);
+            new(2026, 1, 2, 0, 0, 0, TimeSpan.Zero), 0);
 
         Assert.Equal(2, BlobCount);
 
@@ -217,7 +217,7 @@ public sealed class SnapshotManagerTests : IDisposable
         nodeMap.Add("\\a.txt", MakeFile([1, 2, 3]));
         nodeMap.Add("\\b.txt", MakeFile([4, 5, 6]));
         SnapshotManager.WriteSnapshot(nodeMap, 1024, "Label", _mainImagePath,
-            new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), ImageCompressionLevel.None);
+            new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), 0);
         var snapshot = Assert.Single(SnapshotManager.ListSnapshots(_mainImagePath));
 
         var current = new FileNodeMap();
@@ -277,7 +277,7 @@ public sealed class SnapshotManagerTests : IDisposable
         nodeMap.Add("\\", MakeDir());
         nodeMap.Add("\\empty.txt", MakeFile([]));
         SnapshotManager.WriteSnapshot(nodeMap, 1024, "Label", _mainImagePath,
-            new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), ImageCompressionLevel.None);
+            new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), 0);
         var snapshot = Assert.Single(SnapshotManager.ListSnapshots(_mainImagePath));
 
         var current = new FileNodeMap();
@@ -350,7 +350,7 @@ public sealed class SnapshotManagerTests : IDisposable
         nodeMap.Add("\\Sub", MakeDir());
         nodeMap.Add("\\a.txt", MakeFile([1, 2, 3]));
         SnapshotManager.WriteSnapshot(nodeMap, 1024, "Label", _mainImagePath,
-            new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), ImageCompressionLevel.None);
+            new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), 0);
 
         var snapshot = Assert.Single(SnapshotManager.ListSnapshots(_mainImagePath));
         var entries = SnapshotManager.ListSnapshotContents(snapshot.Path);
@@ -368,7 +368,7 @@ public sealed class SnapshotManagerTests : IDisposable
         nodeMap.Add("\\", MakeDir());
         nodeMap.Add("\\a.txt", MakeFile([1, 2, 3]));
         SnapshotManager.WriteSnapshot(nodeMap, 1024, "Label", _mainImagePath,
-            new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), ImageCompressionLevel.Fastest, cek);
+            new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), 1, cek);
 
         var snapshot = Assert.Single(SnapshotManager.ListSnapshots(_mainImagePath));
 
@@ -385,7 +385,7 @@ public sealed class SnapshotManagerTests : IDisposable
         nodeMap.Add("\\", MakeDir());
         nodeMap.Add("\\a.txt", MakeFile([1, 2, 3]));
         SnapshotManager.WriteSnapshot(nodeMap, 1024, "Label", _mainImagePath,
-            new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), ImageCompressionLevel.Fastest, cek);
+            new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), 1, cek);
 
         var snapshot = Assert.Single(SnapshotManager.ListSnapshots(_mainImagePath));
 
@@ -405,7 +405,7 @@ public sealed class SnapshotManagerTests : IDisposable
         nodeMap.Add("\\", MakeDir());
         nodeMap.Add("\\a.txt", MakeFile(content));
         SnapshotManager.WriteSnapshot(nodeMap, 1024, "Label", _mainImagePath,
-            new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), ImageCompressionLevel.None, cek: null);
+            new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), 0, cek: null);
 
         var blobPath = Directory.EnumerateFiles(BlobDirectory, "*.blob", SearchOption.AllDirectories).Single();
         var bytes = File.ReadAllBytes(blobPath);
@@ -435,7 +435,7 @@ public sealed class SnapshotManagerTests : IDisposable
             nodeMap.Add("\\", MakeDir());
             nodeMap.Add("\\a.txt", MakeFile(content));
             SnapshotManager.WriteSnapshot(nodeMap, 1024, "Label", _mainImagePath,
-                new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), ImageCompressionLevel.Fastest, cek);
+                new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), 1, cek);
 
             var snapshot = Assert.Single(SnapshotManager.ListSnapshots(_mainImagePath));
             var loaded = SnapshotManager.LoadSnapshot(snapshot.Path, out _, out _, cek);
@@ -463,7 +463,7 @@ public sealed class SnapshotManagerTests : IDisposable
             nodeMap.Add("\\", MakeDir());
             nodeMap.Add("\\a.txt", MakeFile(content));
             SnapshotManager.WriteSnapshot(nodeMap, 1024, "Label", _mainImagePath,
-                new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), ImageCompressionLevel.Fastest, cek);
+                new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), 1, cek);
 
             var snapshot = Assert.Single(SnapshotManager.ListSnapshots(_mainImagePath));
 
@@ -490,7 +490,7 @@ public sealed class SnapshotManagerTests : IDisposable
         nodeMap.Add("\\", MakeDir());
         nodeMap.Add("\\a.txt", MakeFile(content));
         SnapshotManager.WriteSnapshot(nodeMap, 1024, "Label", _mainImagePath,
-            new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), ImageCompressionLevel.None, cek);
+            new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), 0, cek);
 
         var blobPath = Directory.EnumerateFiles(BlobDirectory, "*.blob", SearchOption.AllDirectories).Single();
 
@@ -530,7 +530,7 @@ public sealed class SnapshotManagerTests : IDisposable
         nodeMap.Add("\\", MakeDir());
         nodeMap.Add("\\a.txt", MakeFile(content));
         SnapshotManager.WriteSnapshot(nodeMap, 1024, "Label", _mainImagePath,
-            new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), ImageCompressionLevel.None, cek);
+            new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), 0, cek);
         var blobPath = Directory.EnumerateFiles(BlobDirectory, "*.blob", SearchOption.AllDirectories).Single();
         var nonce = RandomNumberGenerator.GetBytes(12);
         var ciphertext = new byte[content.Length];
@@ -558,7 +558,7 @@ public sealed class SnapshotManagerTests : IDisposable
     public void WriteSnapshot_CompressedBlob_FlagsZstd()
     {
         WriteSnapshotWithFile(new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), "\\a.txt",
-            "hello world, this is compressible content"u8.ToArray(), ImageCompressionLevel.Fastest);
+            "hello world, this is compressible content"u8.ToArray(), 1);
 
         var blobPath = Directory.EnumerateFiles(BlobDirectory, "*.blob", SearchOption.AllDirectories).Single();
         var flag = File.ReadAllBytes(blobPath)[0];
@@ -578,7 +578,7 @@ public sealed class SnapshotManagerTests : IDisposable
         nodeMap.Add("\\", MakeDir());
         nodeMap.Add("\\a.txt", MakeFile(content));
         SnapshotManager.WriteSnapshot(nodeMap, 1024, "Label", _mainImagePath,
-            new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), ImageCompressionLevel.Fastest);
+            new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), 1);
 
         var blobPath = Directory.EnumerateFiles(BlobDirectory, "*.blob", SearchOption.AllDirectories).Single();
 
@@ -606,7 +606,7 @@ public sealed class SnapshotManagerTests : IDisposable
         nodeMap.Add("\\", MakeDir());
         nodeMap.Add("\\legacy.txt", MakeFile(legacyContent));
         SnapshotManager.WriteSnapshot(nodeMap, 1024, "Label", _mainImagePath,
-            new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), ImageCompressionLevel.Fastest);
+            new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), 1);
 
         // Hand-overwrite the first snapshot's blob in the pre-Zstd gzip format, simulating
         // content written before Zstd support existed.
@@ -622,7 +622,7 @@ public sealed class SnapshotManagerTests : IDisposable
         // referencing the untouched legacy gzip blob for the unchanged file.
         nodeMap.Add("\\fresh.txt", MakeFile(freshContent));
         SnapshotManager.WriteSnapshot(nodeMap, 1024, "Label", _mainImagePath,
-            new(2026, 1, 2, 0, 0, 0, TimeSpan.Zero), ImageCompressionLevel.Fastest);
+            new(2026, 1, 2, 0, 0, 0, TimeSpan.Zero), 1);
 
         Assert.Equal(2, BlobCount);
 
@@ -883,13 +883,13 @@ public sealed class SnapshotManagerTests : IDisposable
         nodeMapA.Add("\\shared.txt", MakeFile(shared));
         nodeMapA.Add("\\unique.txt", MakeFile(unique));
         SnapshotManager.WriteSnapshot(nodeMapA, 1024, "Label", _mainImagePath,
-            new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), ImageCompressionLevel.None);
+            new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), 0);
 
         var nodeMapB = new FileNodeMap();
         nodeMapB.Add("\\", MakeDir());
         nodeMapB.Add("\\shared.txt", MakeFile(shared));
         SnapshotManager.WriteSnapshot(nodeMapB, 1024, "Label", _mainImagePath,
-            new(2026, 1, 2, 0, 0, 0, TimeSpan.Zero), ImageCompressionLevel.None);
+            new(2026, 1, 2, 0, 0, 0, TimeSpan.Zero), 0);
 
         Assert.Equal(2, BlobCount);
 
@@ -994,7 +994,7 @@ public sealed class SnapshotManagerTests : IDisposable
         nodeMap.Add("\\empty.txt", MakeFile([]));
 
         SnapshotManager.WriteSnapshot(nodeMap, 1024, "Label", _mainImagePath,
-            new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), ImageCompressionLevel.Fastest);
+            new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), 1);
 
         Assert.Equal(0, BlobCount);
 
@@ -1014,7 +1014,7 @@ public sealed class SnapshotManagerTests : IDisposable
         nodeMapA.Add("\\", MakeDir());
         nodeMapA.Add("\\a.txt", MakeFile(shared));
         SnapshotManager.WriteSnapshot(nodeMapA, 1024, "Label", _mainImagePath,
-            new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), ImageCompressionLevel.Fastest, cek);
+            new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), 1, cek);
 
         // Same CEK, different point in time (simulating a password change that only re-wraps the
         // CEK without touching it): identical content must still dedupe to the existing blob.
@@ -1022,7 +1022,7 @@ public sealed class SnapshotManagerTests : IDisposable
         nodeMapB.Add("\\", MakeDir());
         nodeMapB.Add("\\b.txt", MakeFile(shared));
         SnapshotManager.WriteSnapshot(nodeMapB, 1024, "Label", _mainImagePath,
-            new(2026, 1, 2, 0, 0, 0, TimeSpan.Zero), ImageCompressionLevel.Fastest, cek);
+            new(2026, 1, 2, 0, 0, 0, TimeSpan.Zero), 1, cek);
 
         Assert.Equal(1, BlobCount);
 
@@ -1064,7 +1064,7 @@ public sealed class SnapshotManagerTests : IDisposable
 
         var reports = new List<double>();
         SnapshotManager.WriteSnapshot(nodeMap, 1024 * 1024, "Label", _mainImagePath,
-            new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), ImageCompressionLevel.Fastest,
+            new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), 1,
             progress: new RecordingProgress(reports));
 
         Assert.NotEmpty(reports);
@@ -1087,7 +1087,7 @@ public sealed class SnapshotManagerTests : IDisposable
         nodeMap.Add("\\empty.txt", MakeFile([]));
 
         SnapshotManager.WriteSnapshot(nodeMap, 1024 * 1024, "MyLabel", _mainImagePath,
-            new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), ImageCompressionLevel.Fastest);
+            new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), 1);
 
         var snapshot = Assert.Single(SnapshotManager.ListSnapshots(_mainImagePath));
         var loaded = SnapshotManager.LoadSnapshot(snapshot.Path, out var capacity, out var label);
@@ -1131,11 +1131,11 @@ public sealed class SnapshotManagerTests : IDisposable
     }
 
     private void WriteSnapshotWithFile(DateTimeOffset timestampUtc, string path, byte[] content,
-        ImageCompressionLevel level = ImageCompressionLevel.None) =>
+        int level = 0) =>
         WriteSnapshotFor(_mainImagePath, timestampUtc, path, content, level);
 
     private static void WriteSnapshotFor(string mainImagePath, DateTimeOffset timestampUtc, string path, byte[] content,
-        ImageCompressionLevel level = ImageCompressionLevel.None)
+        int level = 0)
     {
         var nodeMap = new FileNodeMap();
         nodeMap.Add("\\", MakeDir());

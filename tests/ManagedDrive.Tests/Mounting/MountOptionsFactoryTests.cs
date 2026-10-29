@@ -18,7 +18,7 @@ public sealed class MountOptionsFactoryTests
         Assert.Equal(Image, options.PersistImagePath);
         // Defaults preserved.
         Assert.False(options.ReadOnly);
-        Assert.Equal(ImageCompressionLevel.Fastest, options.CompressionLevel);
+        Assert.Equal(1, options.CompressionLevel);
         Assert.True(options.SaveImageOnExit);
     }
 
@@ -33,7 +33,7 @@ public sealed class MountOptionsFactoryTests
             PersistImagePath = Image,
             ReadOnly = true,
             AutoMount = true,
-            CompressionLevel = ImageCompressionLevel.SmallestSize,
+            CompressionLevel = 19,
             HighUsageWarnPercent = 75,
         };
 
@@ -48,7 +48,7 @@ public sealed class MountOptionsFactoryTests
         // Profile fields reused when no override.
         Assert.True(options.ReadOnly);
         Assert.True(options.AutoMount);
-        Assert.Equal(ImageCompressionLevel.SmallestSize, options.CompressionLevel);
+        Assert.Equal(19, options.CompressionLevel);
         Assert.Equal(75, options.HighUsageWarnPercent);
     }
 
@@ -132,13 +132,13 @@ public sealed class MountOptionsFactoryTests
             VolumeLabel = "L",
             PersistImagePath = Image,
             ReadOnly = false,
-            CompressionLevel = ImageCompressionLevel.Fastest,
+            CompressionLevel = 1,
         };
 
         var overrides = new MountOverrides
         {
             ReadOnly = true,
-            CompressionLevel = ImageCompressionLevel.Optimal,
+            CompressionLevel = 3,
             MaxSnapshotCount = 5,
         };
 
@@ -146,12 +146,12 @@ public sealed class MountOptionsFactoryTests
             profile, "R:", Image, 4UL * 1024 * 1024, "L", overrides);
 
         Assert.True(options.ReadOnly);
-        Assert.Equal(ImageCompressionLevel.Optimal, options.CompressionLevel);
+        Assert.Equal(3, options.CompressionLevel);
         Assert.Equal(5U, options.MaxSnapshotCount);
     }
 
     [Fact]
-    public void BuildImageOptions_CustomZstdLevelOverrideWinsOverProfile()
+    public void BuildImageOptions_CompressionOverrideWinsOverProfile()
     {
         var profile = new DiskOptions
         {
@@ -159,20 +159,19 @@ public sealed class MountOptionsFactoryTests
             CapacityBytes = 1,
             VolumeLabel = "L",
             PersistImagePath = Image,
-            CompressionLevel = ImageCompressionLevel.Optimal,
-            CustomZstdLevel = 5,
+            CompressionLevel = 5,
         };
 
-        var overrides = new MountOverrides { CustomZstdLevel = 19 };
+        var overrides = new MountOverrides { CompressionLevel = 19 };
 
         var options = MountOptionsFactory.BuildImageOptions(
             profile, "R:", Image, 4UL * 1024 * 1024, "L", overrides);
 
-        Assert.Equal(19, options.CustomZstdLevel);
+        Assert.Equal(19, options.CompressionLevel);
     }
 
     [Fact]
-    public void BuildImageOptions_NoCustomZstdLevelOverride_ReusesProfileValue()
+    public void BuildImageOptions_NoCompressionOverride_ReusesProfileValue()
     {
         var profile = new DiskOptions
         {
@@ -180,14 +179,13 @@ public sealed class MountOptionsFactoryTests
             CapacityBytes = 1,
             VolumeLabel = "L",
             PersistImagePath = Image,
-            CompressionLevel = ImageCompressionLevel.Optimal,
-            CustomZstdLevel = 5,
+            CompressionLevel = 5,
         };
 
         var options = MountOptionsFactory.BuildImageOptions(
             profile, "R:", Image, 4UL * 1024 * 1024, "L", overrides: new());
 
-        Assert.Equal(5, options.CustomZstdLevel);
+        Assert.Equal(5, options.CompressionLevel);
     }
 
     [Fact]

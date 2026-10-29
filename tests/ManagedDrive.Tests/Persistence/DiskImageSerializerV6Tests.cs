@@ -3,11 +3,11 @@ namespace ManagedDrive.Tests;
 public sealed class DiskImageSerializerV6Tests
 {
     [Theory]
-    [InlineData(ImageCompressionLevel.None, false)]
-    [InlineData(ImageCompressionLevel.None, true)]
-    [InlineData(ImageCompressionLevel.Fastest, false)]
-    [InlineData(ImageCompressionLevel.Fastest, true)]
-    public void Load_SegmentedImage_RoundTripsNodeContentAndMetadata(ImageCompressionLevel level, bool encrypted)
+    [InlineData(0, false)]
+    [InlineData(0, true)]
+    [InlineData(1, false)]
+    [InlineData(1, true)]
+    public void Load_SegmentedImage_RoundTripsNodeContentAndMetadata(int level, bool encrypted)
     {
         var path = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid()}.mdr");
         try
@@ -60,7 +60,7 @@ public sealed class DiskImageSerializerV6Tests
             map.Add("\\File.txt", MakeFile("hello world"u8.ToArray()));
 
             DiskImageSerializer.SaveSegmentedForTest(map, capacityBytes: 1024 * 1024, "Label", path,
-                ImageCompressionLevel.Fastest, new ImageEncryptionInfo("s3cret", DiskImageSerializer.GenerateCek()),
+                1, new ImageEncryptionInfo("s3cret", DiskImageSerializer.GenerateCek()),
                 segmentTargetBytes: 4096);
 
             Assert.Throws<ImagePasswordIncorrectException>(() =>
@@ -83,7 +83,7 @@ public sealed class DiskImageSerializerV6Tests
             map.Add("\\File.txt", MakeFile("hello world"u8.ToArray()));
 
             DiskImageSerializer.SaveSegmentedForTest(map, capacityBytes: 1024 * 1024, "Label", path,
-                ImageCompressionLevel.Fastest, new ImageEncryptionInfo("s3cret", DiskImageSerializer.GenerateCek()),
+                1, new ImageEncryptionInfo("s3cret", DiskImageSerializer.GenerateCek()),
                 segmentTargetBytes: 4096);
 
             Assert.Throws<ImagePasswordRequiredException>(() =>
@@ -106,7 +106,7 @@ public sealed class DiskImageSerializerV6Tests
             map.Add("\\File.txt", MakeFile("hello world"u8.ToArray()));
 
             DiskImageSerializer.SaveSegmentedForTest(map, capacityBytes: 2 * 1024 * 1024, "PeekLabel", path,
-                ImageCompressionLevel.Fastest, new ImageEncryptionInfo("s3cret", DiskImageSerializer.GenerateCek()),
+                1, new ImageEncryptionInfo("s3cret", DiskImageSerializer.GenerateCek()),
                 segmentTargetBytes: 4096);
 
             DiskImageSerializer.PeekHeader(path, out var capacityBytes, out var volumeLabel, out var isEncrypted);
@@ -134,7 +134,7 @@ public sealed class DiskImageSerializerV6Tests
             map.Add("\\File.txt", node);
 
             DiskImageSerializer.SaveSegmentedForTest(map, capacityBytes: 1024 * 1024, "Label", path,
-                ImageCompressionLevel.None, encryption: null, segmentTargetBytes: 4096);
+                0, encryption: null, segmentTargetBytes: 4096);
 
             var loaded = DiskImageSerializer.Load(path, out _, out _, password: null, out _);
 
@@ -157,7 +157,7 @@ public sealed class DiskImageSerializerV6Tests
             var map = new FileNodeMap();
 
             DiskImageSerializer.SaveSegmentedForTest(map, capacityBytes: 1024, "Empty", path,
-                ImageCompressionLevel.None, encryption: null, segmentTargetBytes: 4096);
+                0, encryption: null, segmentTargetBytes: 4096);
 
             var loaded = DiskImageSerializer.Load(path, out _, out _, password: null, out _);
 
@@ -180,7 +180,7 @@ public sealed class DiskImageSerializerV6Tests
             map.Add("\\File.txt", MakeFile("hello world"u8.ToArray()));
 
             DiskImageSerializer.SaveIncremental(map, capacityBytes: 1024 * 1024, "MyLabel", path,
-                ImageCompressionLevel.Fastest);
+                1);
 
             DiskImageSerializer.PeekHeader(path, out _, out _, out var isEncrypted);
             Assert.False(isEncrypted);
@@ -210,9 +210,9 @@ public sealed class DiskImageSerializerV6Tests
                 map.Add($"\\File{i}.txt", MakeFile(System.Text.Encoding.UTF8.GetBytes($"content for file number {i}")));
             }
 
-            DiskImageSerializer.Save(map, capacityBytes: 1024 * 1024, "Label", v5Path, ImageCompressionLevel.Fastest);
+            DiskImageSerializer.Save(map, capacityBytes: 1024 * 1024, "Label", v5Path, 1);
             DiskImageSerializer.SaveIncremental(map, capacityBytes: 1024 * 1024, "Label", v6Path,
-                ImageCompressionLevel.Fastest);
+                1);
 
             var v5Loaded = DiskImageSerializer.Load(v5Path, out _, out _, password: null, out _);
             var v6Loaded = DiskImageSerializer.Load(v6Path, out _, out _, password: null, out _);
@@ -252,7 +252,7 @@ public sealed class DiskImageSerializerV6Tests
             Assert.Equal(-1, file.SavedSegmentIndex);
 
             DiskImageSerializer.SaveIncremental(map, capacityBytes: 1024 * 1024, "Label", path,
-                ImageCompressionLevel.Fastest);
+                1);
 
             Assert.Equal(file.ContentVersion, file.SavedContentVersion);
             Assert.Equal(file.MetadataVersion, file.SavedMetadataVersion);
@@ -285,11 +285,11 @@ public sealed class DiskImageSerializerV6Tests
 
             if (incremental)
             {
-                DiskImageSerializer.SaveIncremental(map, capacityBytes: 1024 * 1024, "Label", path, ImageCompressionLevel.Fastest);
+                DiskImageSerializer.SaveIncremental(map, capacityBytes: 1024 * 1024, "Label", path, 1);
             }
             else
             {
-                DiskImageSerializer.Save(map, capacityBytes: 1024 * 1024, "Label", path, ImageCompressionLevel.Fastest);
+                DiskImageSerializer.Save(map, capacityBytes: 1024 * 1024, "Label", path, 1);
             }
 
             var loaded = DiskImageSerializer.Load(path, out _, out _, password: null, out _);
@@ -315,7 +315,7 @@ public sealed class DiskImageSerializerV6Tests
             var map = new FileNodeMap();
             map.Add("\\", MakeDir());
             map.Add("\\Grown.bin", MakeFile(data));
-            DiskImageSerializer.Save(map, capacityBytes: 1024 * 1024, "Label", path, ImageCompressionLevel.None);
+            DiskImageSerializer.Save(map, capacityBytes: 1024 * 1024, "Label", path, 0);
 
             // Rewrite the node's recorded AllocationSize to 512, as an image saved mid-resize by
             // an older build could hold: it sits right after the length-prefixed path and the
@@ -356,7 +356,7 @@ public sealed class DiskImageSerializerV6Tests
             map.Add("\\", MakeDir());
             map.Add("\\File.txt", MakeFile("hello world"u8.ToArray()));
             DiskImageSerializer.SaveSegmentedForTest(map, capacityBytes: 1024 * 1024, "Label", path,
-                ImageCompressionLevel.Fastest, new ImageEncryptionInfo("s3cret", DiskImageSerializer.GenerateCek()),
+                1, new ImageEncryptionInfo("s3cret", DiskImageSerializer.GenerateCek()),
                 segmentTargetBytes: 4096);
             var bytes = File.ReadAllBytes(path);
             bytes[^1] ^= 0xFF;
@@ -388,12 +388,12 @@ public sealed class DiskImageSerializerV6Tests
             map.Add("\\File.txt", MakeFile("hello world"u8.ToArray()));
 
             DiskImageSerializer.SaveIncremental(map, capacityBytes: 1024 * 1024, "Label", path,
-                ImageCompressionLevel.Fastest, new ImageEncryptionInfo("old-pw", DiskImageSerializer.GenerateCek()));
+                1, new ImageEncryptionInfo("old-pw", DiskImageSerializer.GenerateCek()));
 
             // Same node content (nothing dirtied it), but a brand-new CEK — as happens when a
             // password is removed and re-added between saves — and forceFullRewrite left false.
             DiskImageSerializer.SaveIncremental(map, capacityBytes: 1024 * 1024, "Label", path,
-                ImageCompressionLevel.Fastest, new ImageEncryptionInfo("new-pw", DiskImageSerializer.GenerateCek()));
+                1, new ImageEncryptionInfo("new-pw", DiskImageSerializer.GenerateCek()));
 
             // The new password unwraps the new CEK fine; it's the reused segment, still
             // encrypted under the old CEK, that fails — so it reads as corruption.
@@ -417,12 +417,12 @@ public sealed class DiskImageSerializerV6Tests
             map.Add("\\File.txt", MakeFile("hello world"u8.ToArray()));
 
             DiskImageSerializer.SaveIncremental(map, capacityBytes: 1024 * 1024, "Label", path,
-                ImageCompressionLevel.Fastest, new ImageEncryptionInfo("old-pw", DiskImageSerializer.GenerateCek()));
+                1, new ImageEncryptionInfo("old-pw", DiskImageSerializer.GenerateCek()));
 
             // Same unchanged node, but forceFullRewrite forces a full rewrite under the new CEK
             // instead of copying the previous save's segment bytes.
             DiskImageSerializer.SaveIncremental(map, capacityBytes: 1024 * 1024, "Label", path,
-                ImageCompressionLevel.Fastest, new ImageEncryptionInfo("new-pw", DiskImageSerializer.GenerateCek()),
+                1, new ImageEncryptionInfo("new-pw", DiskImageSerializer.GenerateCek()),
                 forceFullRewrite: true);
 
             var loaded = DiskImageSerializer.Load(path, out _, out _, "new-pw", out var cek);
@@ -443,9 +443,9 @@ public sealed class DiskImageSerializerV6Tests
     /// </summary>
     /// <param name="level">The compression level to save with.</param>
     [Theory]
-    [InlineData(ImageCompressionLevel.None)]
-    [InlineData(ImageCompressionLevel.Fastest)]
-    public void SaveSegmented_EncryptedImage_RoundTripsAtCompressionLevel(ImageCompressionLevel level)
+    [InlineData(0)]
+    [InlineData(1)]
+    public void SaveSegmented_EncryptedImage_RoundTripsAtCompressionLevel(int level)
     {
         var path = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid()}.mdr");
         try
@@ -494,7 +494,7 @@ public sealed class DiskImageSerializerV6Tests
             var map = new FileNodeMap();
             map.Add("\\", MakeDir());
             DiskImageSerializer.SaveSegmentedForTest(map, capacityBytes: 1024 * 1024, "Label", path,
-                ImageCompressionLevel.None, new ImageEncryptionInfo("s3cret", DiskImageSerializer.GenerateCek()),
+                0, new ImageEncryptionInfo("s3cret", DiskImageSerializer.GenerateCek()),
                 segmentTargetBytes: 4096);
 
             // The iteration count follows the 16-byte salt, which follows the label.
@@ -585,7 +585,7 @@ public sealed class DiskImageSerializerV6Tests
         map.Add("\\", MakeDir());
         map.Add("\\File.txt", MakeFile("hello world"u8.ToArray()));
         DiskImageSerializer.SaveSegmentedForTest(map, capacityBytes: 1024 * 1024, "Label", path,
-            ImageCompressionLevel.None, encryption: null, segmentTargetBytes: 1024 * 1024);
+            0, encryption: null, segmentTargetBytes: 1024 * 1024);
         Assert.Equal(1, BitConverter.ToInt32(File.ReadAllBytes(path), SegmentCountOffset));
         return path;
     }

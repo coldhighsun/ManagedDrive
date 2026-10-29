@@ -88,6 +88,115 @@ public sealed class SettingsStoreTests : IDisposable
         Assert.Null(Assert.Single(loaded.Disks).Folders);
     }
 
+    [Theory]
+    [InlineData(0, null, 0)]
+    [InlineData(1, null, 1)]
+    [InlineData(2, null, 3)]
+    [InlineData(3, null, 19)]
+    [InlineData(2, 12, 12)]
+    [InlineData(0, 12, 0)]
+    public void Load_LegacyCompressionPreset_IsConvertedToZstdLevel(int preset, int? custom, int expected)
+    {
+        Directory.CreateDirectory(_dir);
+        var customJson = custom is { } c ? $", \"CustomZstdLevel\": {c}" : string.Empty;
+        File.WriteAllText(
+            SettingsPath,
+            $"{{ \"DefaultCompressionLevel\": {preset}, \"Disks\": [ {{ \"MountPoint\": \"R:\", \"CompressionLevel\": {preset}{customJson} }} ] }}");
+
+        var loaded = new SettingsStore(SettingsPath).Load();
+
+        Assert.Equal(expected, Assert.Single(loaded.Disks).CompressionLevel);
+        Assert.Equal(ZstdLevels.FromLegacy(preset, null), loaded.DefaultCompressionLevel);
+    }
+
+    [Fact]
+    public void Load_ConfigWithoutCompressionFields_UsesDefaults()
+    {
+        Directory.CreateDirectory(_dir);
+        File.WriteAllText(SettingsPath, "{ \"Disks\": [ { \"MountPoint\": \"R:\" } ] }");
+
+        var loaded = new SettingsStore(SettingsPath).Load();
+
+        Assert.Equal(ZstdLevels.Default, Assert.Single(loaded.Disks).CompressionLevel);
+        Assert.Null(loaded.DefaultCompressionLevel);
+    }
+
+    [Fact]
+    public void SaveThenLoad_RoundTripsZstdLevelsAndDropsLegacyKeys()
+    {
+        Directory.CreateDirectory(_dir);
+        File.WriteAllText(
+            SettingsPath,
+            "{ \"DefaultCompressionLevel\": 3, \"Disks\": [ { \"MountPoint\": \"R:\", \"CompressionLevel\": 3, \"CustomZstdLevel\": 7 } ] }");
+        var store = new SettingsStore(SettingsPath);
+
+        store.Save(store.Load());
+        var json = File.ReadAllText(SettingsPath);
+        var reloaded = store.Load();
+
+        Assert.Contains("\"ZstdLevel\": 7", json);
+        Assert.Contains("\"DefaultZstdLevel\": 19", json);
+        Assert.DoesNotContain("CustomZstdLevel", json);
+        Assert.DoesNotContain("\"CompressionLevel\"", json);
+        Assert.DoesNotContain("\"DefaultCompressionLevel\"", json);
+        Assert.Equal(7, Assert.Single(reloaded.Disks).CompressionLevel);
+        Assert.Equal(19, reloaded.DefaultCompressionLevel);
+    }
+
+    [Theory]
+    [InlineData("300")]
+    [InlineData("-1")]
+    [InlineData("23")]
+    [InlineData("3.5")]
+    [InlineData("\"fast\"")]
+    public void Load_InvalidZstdLevel_BecomesDefault(string value)
+    {
+        Directory.CreateDirectory(_dir);
+        File.WriteAllText(
+            SettingsPath,
+            $"{{ \"DefaultZstdLevel\": {value}, \"Disks\": [ {{ \"MountPoint\": \"R:\", \"ZstdLevel\": {value} }} ] }}");
+
+        var loaded = new SettingsStore(SettingsPath).Load();
+
+        Assert.Equal(ZstdLevels.Default, Assert.Single(loaded.Disks).CompressionLevel);
+        Assert.Equal(ZstdLevels.Default, loaded.DefaultCompressionLevel);
+    }
+
+    [Fact]
+    public void Load_LegacyCustomLevelWithoutPresetKey_KeepsCustomLevel()
+    {
+        Directory.CreateDirectory(_dir);
+        File.WriteAllText(SettingsPath, "{ \"Disks\": [ { \"MountPoint\": \"R:\", \"CustomZstdLevel\": 12 } ] }");
+
+        var loaded = new SettingsStore(SettingsPath).Load();
+
+        Assert.Equal(12, Assert.Single(loaded.Disks).CompressionLevel);
+    }
+
+    [Fact]
+    public void Load_LegacyCustomLevelOutOfRange_BecomesDefault()
+    {
+        Directory.CreateDirectory(_dir);
+        File.WriteAllText(
+            SettingsPath,
+            "{ \"Disks\": [ { \"MountPoint\": \"R:\", \"CompressionLevel\": 2, \"CustomZstdLevel\": 99 } ] }");
+
+        var loaded = new SettingsStore(SettingsPath).Load();
+
+        Assert.Equal(ZstdLevels.Default, Assert.Single(loaded.Disks).CompressionLevel);
+    }
+
+    [Fact]
+    public void Load_DuplicateKeys_DoesNotThrow()
+    {
+        Directory.CreateDirectory(_dir);
+        File.WriteAllText(SettingsPath, "{ \"Language\": \"en-US\", \"Language\": \"zh-CN\", \"Disks\": [ ] }");
+
+        var exception = Record.Exception(() => new SettingsStore(SettingsPath).Load());
+
+        Assert.Null(exception);
+    }
+
     [Fact]
     public void Load_LegacyConfigWithSavedPresets_IgnoresThemAndKeepsTheRest()
     {

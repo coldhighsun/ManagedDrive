@@ -20,7 +20,7 @@ internal abstract class StubCliDiskController : ICliDiskController
     /// <inheritdoc />
     public virtual Task<(bool Success, string Message)> ExportAsync(
         string mountPoint, string outputPath, ManagedDrive.Cli.Core.ArchiveExportFormat? archiveFormat,
-        ManagedDrive.Cli.Core.ImageCompressionLevel compressionLevel, string? password) =>
+        int compressionLevel, string? password) =>
         Task.FromResult(NotMounted);
 
     /// <inheritdoc />

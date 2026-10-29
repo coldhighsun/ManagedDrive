@@ -24,7 +24,7 @@ public sealed record PresetComposition
     /// <summary>
     /// Gets the compression level of the first preset that has one, or <c>null</c>.
     /// </summary>
-    public ImageCompressionLevel? CompressionLevel
+    public int? CompressionLevel
     {
         get; init;
     }
@@ -60,7 +60,7 @@ public static class PresetComposer
     {
         var capacity = 0UL;
         string? label = null;
-        ImageCompressionLevel? compression = null;
+        int? compression = null;
         var folders = new List<string>();
         var redirects = new List<EnvRedirect>();
         var conflicts = new List<string>();

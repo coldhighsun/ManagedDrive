@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 
 namespace ManagedDrive.App.Services;
 
@@ -158,10 +159,12 @@ public sealed class SettingsStore
             try
             {
                 var json = File.ReadAllText(_settingsPath);
-                var config = JsonSerializer.Deserialize<AppConfiguration>(json, JsonOptions);
+                var root = JsonNode.Parse(json);
+                CompressionSettingsMigration.Apply(root);
+                var config = root.Deserialize<AppConfiguration>(JsonOptions);
                 return config is null ? new() : Normalize(config);
             }
-            catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException or NotSupportedException)
+            catch (Exception ex) when (ex is JsonException or ArgumentException or InvalidOperationException or IOException or UnauthorizedAccessException or NotSupportedException)
             {
                 ioFailed = ex is IOException or UnauthorizedAccessException;
                 retryable = ex is IOException;

@@ -30,7 +30,7 @@ public sealed class SnapshotStoreTests : IDisposable
         var content = FileContent.FromSpan(original, 512);
 
         var hash = SnapshotStore.WriteBlob(
-            blobDirectory, content, original.Length, ImageCompressionLevel.None, cek: null, customZstdLevel: null,
+            blobDirectory, content, original.Length, 0, cek: null,
             beforeBlobWrite: () => WriteBytes(content, 0, changed));
 
         Assert.Equal(SHA256.HashData(changed), hash);
@@ -46,7 +46,7 @@ public sealed class SnapshotStoreTests : IDisposable
         byte[] data = [1, 2, 3, 4];
         var content = FileContent.FromSpan(data, 512);
 
-        var hash = SnapshotStore.WriteBlob(blobDirectory, content, data.Length, ImageCompressionLevel.Optimal, cek: null, customZstdLevel: null);
+        var hash = SnapshotStore.WriteBlob(blobDirectory, content, data.Length, 3, cek: null);
 
         Assert.Equal(SHA256.HashData(data), hash);
         Assert.True(File.Exists(SnapshotStore.HashToBlobPath(blobDirectory, hash)));
@@ -59,9 +59,9 @@ public sealed class SnapshotStoreTests : IDisposable
         var blobDirectory = Path.Combine(_dir, "blobs");
         byte[] data = [1, 2, 3, 4];
         var content = FileContent.FromSpan(data, 512);
-        SnapshotStore.WriteBlob(blobDirectory, content, data.Length, ImageCompressionLevel.None, cek: null, customZstdLevel: null);
+        SnapshotStore.WriteBlob(blobDirectory, content, data.Length, 0, cek: null);
 
-        var hash = SnapshotStore.WriteBlob(blobDirectory, content, data.Length, ImageCompressionLevel.None, DiskImageSerializer.GenerateCek(), customZstdLevel: null);
+        var hash = SnapshotStore.WriteBlob(blobDirectory, content, data.Length, 0, DiskImageSerializer.GenerateCek());
 
         var blob = File.ReadAllBytes(SnapshotStore.HashToBlobPath(blobDirectory, hash));
         Assert.NotEqual(0, blob[0] & 0b010);
@@ -74,9 +74,9 @@ public sealed class SnapshotStoreTests : IDisposable
         var blobDirectory = Path.Combine(_dir, "blobs");
         byte[] data = [1, 2, 3, 4];
         var content = FileContent.FromSpan(data, 512);
-        SnapshotStore.WriteBlob(blobDirectory, content, data.Length, ImageCompressionLevel.None, DiskImageSerializer.GenerateCek(), customZstdLevel: null);
+        SnapshotStore.WriteBlob(blobDirectory, content, data.Length, 0, DiskImageSerializer.GenerateCek());
 
-        var hash = SnapshotStore.WriteBlob(blobDirectory, content, data.Length, ImageCompressionLevel.None, cek: null, customZstdLevel: null);
+        var hash = SnapshotStore.WriteBlob(blobDirectory, content, data.Length, 0, cek: null);
 
         var blob = File.ReadAllBytes(SnapshotStore.HashToBlobPath(blobDirectory, hash));
         Assert.Equal(0, blob[0] & 0b010);
@@ -90,11 +90,11 @@ public sealed class SnapshotStoreTests : IDisposable
         byte[] data = [1, 2, 3, 4];
         var content = FileContent.FromSpan(data, 512);
         var cek = DiskImageSerializer.GenerateCek();
-        var hash = SnapshotStore.WriteBlob(blobDirectory, content, data.Length, ImageCompressionLevel.None, cek, customZstdLevel: null);
+        var hash = SnapshotStore.WriteBlob(blobDirectory, content, data.Length, 0, cek);
         var blobPath = SnapshotStore.HashToBlobPath(blobDirectory, hash);
         var original = File.ReadAllBytes(blobPath);
 
-        SnapshotStore.WriteBlob(blobDirectory, content, data.Length, ImageCompressionLevel.None, cek, customZstdLevel: null);
+        SnapshotStore.WriteBlob(blobDirectory, content, data.Length, 0, cek);
 
         // A rewrite would pick a fresh random nonce, so identical bytes mean the blob was reused.
         Assert.Equal(original, File.ReadAllBytes(blobPath));
@@ -106,13 +106,13 @@ public sealed class SnapshotStoreTests : IDisposable
         var blobDirectory = Path.Combine(_dir, "blobs");
         byte[] data = [1, 2, 3, 4];
         var content = FileContent.FromSpan(data, 512);
-        var hash = SnapshotStore.WriteBlob(blobDirectory, content, data.Length, ImageCompressionLevel.None, cek: null, customZstdLevel: null);
+        var hash = SnapshotStore.WriteBlob(blobDirectory, content, data.Length, 0, cek: null);
         var blobPath = SnapshotStore.HashToBlobPath(blobDirectory, hash);
 
         byte[] result;
         using (new FileStream(blobPath, FileMode.Open, FileAccess.Read, FileShare.None))
         {
-            result = SnapshotStore.WriteBlob(blobDirectory, content, data.Length, ImageCompressionLevel.None, cek: null, customZstdLevel: null);
+            result = SnapshotStore.WriteBlob(blobDirectory, content, data.Length, 0, cek: null);
         }
 
         Assert.Equal(hash, result);
@@ -132,10 +132,10 @@ public sealed class SnapshotStoreTests : IDisposable
         });
         var blobDirectory = Path.Combine(_dir, "blobs");
         var cek = DiskImageSerializer.GenerateCek();
-        SnapshotStore.Write(map, 1 << 20, "label", Path.Combine(_dir, "plain.mdr"), blobDirectory, ImageCompressionLevel.Optimal, cek: null);
+        SnapshotStore.Write(map, 1 << 20, "label", Path.Combine(_dir, "plain.mdr"), blobDirectory, 3, cek: null);
         var encryptedIndexPath = Path.Combine(_dir, "encrypted.mdr");
 
-        SnapshotStore.Write(map, 1 << 20, "label", encryptedIndexPath, blobDirectory, ImageCompressionLevel.Optimal, cek);
+        SnapshotStore.Write(map, 1 << 20, "label", encryptedIndexPath, blobDirectory, 3, cek);
         var loaded = SnapshotStore.Load(encryptedIndexPath, blobDirectory, out _, out _, cek);
 
         Assert.True(loaded.TryGet("\\a.bin", out var node));
@@ -157,7 +157,7 @@ public sealed class SnapshotStoreTests : IDisposable
         var indexPath = Path.Combine(_dir, "snap.mdr");
         var blobDirectory = Path.Combine(_dir, "blobs");
 
-        SnapshotStore.Write(map, 1 << 20, "label", indexPath, blobDirectory, ImageCompressionLevel.Optimal, cek: null);
+        SnapshotStore.Write(map, 1 << 20, "label", indexPath, blobDirectory, 3, cek: null);
         var loaded = SnapshotStore.Load(indexPath, blobDirectory, out _, out _, cek: null);
 
         Assert.True(loaded.TryGet("\\a.bin", out var node));

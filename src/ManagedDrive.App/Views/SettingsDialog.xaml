@@ -1,6 +1,7 @@
 <views:DialogWindowBase x:Class="ManagedDrive.App.Views.SettingsDialog"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="clr-namespace:ManagedDrive.App.Controls"
         xmlns:views="clr-namespace:ManagedDrive.App.Views"
         Style="{StaticResource DialogWindowStyle}"
         Title="{DynamicResource Settings.Title}"
@@ -99,10 +100,9 @@
                    Text="{DynamicResource Settings.DefaultCompressionLevel}"
                    ToolTip="{DynamicResource Tip.DefaultCompressionLevel}"
                    VerticalAlignment="Center"/>
-        <ComboBox Grid.Row="14" Grid.Column="1" Grid.ColumnSpan="2"
-                  x:Name="DefaultCompressionLevelBox"
-                  ToolTip="{DynamicResource Tip.DefaultCompressionLevel}"
-                  Style="{StaticResource OutlinedComboBox}"/>
+        <controls:CompressionLevelPicker Grid.Row="14" Grid.Column="1" Grid.ColumnSpan="2"
+                                         x:Name="DefaultCompressionLevelBox"
+                                         ToolTip="{DynamicResource Tip.DefaultCompressionLevel}"/>
 
         <!-- Default directory for new disk image files -->
         <TextBlock Grid.Row="16" Grid.Column="0"

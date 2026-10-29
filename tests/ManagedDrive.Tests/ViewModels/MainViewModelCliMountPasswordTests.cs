@@ -18,7 +18,7 @@ public sealed class MainViewModelCliMountPasswordTests : ViewModelTestBase
         var path = Path.Combine(Dir, "disk.mdr");
         var map = new FileNodeMap();
         map.Add("\\", new() { FileInfo = { FileAttributes = (uint)FileAttributes.Directory } });
-        DiskImageSerializer.Save(map, capacityBytes: 1024 * 1024, "Label", path, Core.Mounting.ImageCompressionLevel.None, encryption);
+        DiskImageSerializer.Save(map, capacityBytes: 1024 * 1024, "Label", path, 0, encryption);
         return path;
     }
 

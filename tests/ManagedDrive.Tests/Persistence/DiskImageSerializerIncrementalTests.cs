@@ -13,7 +13,7 @@ public sealed class DiskImageSerializerIncrementalTests
             map.Add("\\File.txt", MakeFile("hello world"u8.ToArray()));
 
             DiskImageSerializer.SaveSegmentedIncrementalForTest(map, 1024 * 1024, "Label", path,
-                ImageCompressionLevel.Fastest, encryption: null, segmentTargetBytes: 4096);
+                1, encryption: null, segmentTargetBytes: 4096);
 
             var loaded = DiskImageSerializer.Load(path, out _, out _, password: null, out _);
             Assert.Equal(2, loaded.Count);
@@ -38,9 +38,9 @@ public sealed class DiskImageSerializerIncrementalTests
             }
 
             DiskImageSerializer.SaveSegmentedIncrementalForTest(map, 1024 * 1024, "Label", path,
-                ImageCompressionLevel.Fastest, encryption: null, segmentTargetBytes: 500);
+                1, encryption: null, segmentTargetBytes: 500);
             DiskImageSerializer.SaveSegmentedIncrementalForTest(map, 1024 * 1024, "Label", path,
-                ImageCompressionLevel.Fastest, encryption: null, segmentTargetBytes: 500);
+                1, encryption: null, segmentTargetBytes: 500);
 
             var loaded = DiskImageSerializer.Load(path, out _, out _, password: null, out _);
             Assert.Equal(11, loaded.Count);
@@ -73,7 +73,7 @@ public sealed class DiskImageSerializerIncrementalTests
 
             // Small target so each of the two files lands in its own segment.
             DiskImageSerializer.SaveSegmentedIncrementalForTest(map, 1024 * 1024, "Label", path,
-                ImageCompressionLevel.Fastest, encryption: null, segmentTargetBytes: 1);
+                1, encryption: null, segmentTargetBytes: 1);
 
             Assert.True(untouched.SavedSegmentIndex >= 0);
             var untouchedSavedContentVersionAfterFirstSave = untouched.SavedContentVersion;
@@ -84,7 +84,7 @@ public sealed class DiskImageSerializerIncrementalTests
             toModify.ContentVersion++;
 
             DiskImageSerializer.SaveSegmentedIncrementalForTest(map, 1024 * 1024, "Label", path,
-                ImageCompressionLevel.Fastest, encryption: null, segmentTargetBytes: 1);
+                1, encryption: null, segmentTargetBytes: 1);
 
             // The untouched node was never itself written to again, so its recorded "last saved
             // content version" baseline is unchanged by the modified node's rewrite.
@@ -120,12 +120,12 @@ public sealed class DiskImageSerializerIncrementalTests
             map.Add("\\B.txt", MakeFile("b"u8.ToArray()));
 
             DiskImageSerializer.SaveSegmentedIncrementalForTest(map, 1024 * 1024, "Label", path,
-                ImageCompressionLevel.None, encryption: null, segmentTargetBytes: 100_000);
+                0, encryption: null, segmentTargetBytes: 100_000);
 
             map.Remove("\\A.txt");
 
             DiskImageSerializer.SaveSegmentedIncrementalForTest(map, 1024 * 1024, "Label", path,
-                ImageCompressionLevel.None, encryption: null, segmentTargetBytes: 100_000);
+                0, encryption: null, segmentTargetBytes: 100_000);
 
             var loaded = DiskImageSerializer.Load(path, out _, out _, password: null, out _);
             Assert.False(loaded.TryGet("\\A.txt", out _));
@@ -149,12 +149,12 @@ public sealed class DiskImageSerializerIncrementalTests
             map.Add("\\A.txt", MakeFile("a"u8.ToArray()));
 
             DiskImageSerializer.SaveSegmentedIncrementalForTest(map, 1024 * 1024, "Label", path,
-                ImageCompressionLevel.Fastest, encryption: null, segmentTargetBytes: 100_000);
+                1, encryption: null, segmentTargetBytes: 100_000);
 
             map.Add("\\B.txt", MakeFile("b"u8.ToArray()));
 
             DiskImageSerializer.SaveSegmentedIncrementalForTest(map, 1024 * 1024, "Label", path,
-                ImageCompressionLevel.Fastest, encryption: null, segmentTargetBytes: 100_000);
+                1, encryption: null, segmentTargetBytes: 100_000);
 
             var loaded = DiskImageSerializer.Load(path, out _, out _, password: null, out _);
             Assert.True(loaded.TryGet("\\A.txt", out _));
@@ -177,11 +177,11 @@ public sealed class DiskImageSerializerIncrementalTests
             map.Add("\\File.txt", MakeFile("hello world"u8.ToArray()));
 
             DiskImageSerializer.SaveSegmentedIncrementalForTest(map, 1024 * 1024, "Label", path,
-                ImageCompressionLevel.Fastest, encryption: null, segmentTargetBytes: 4096);
+                1, encryption: null, segmentTargetBytes: 4096);
 
             // Different level than the on-disk image: TryOpenOldSegmentIndex must reject reuse.
             DiskImageSerializer.SaveSegmentedIncrementalForTest(map, 1024 * 1024, "Label", path,
-                ImageCompressionLevel.SmallestSize, encryption: null, segmentTargetBytes: 4096);
+                19, encryption: null, segmentTargetBytes: 4096);
 
             var loaded = DiskImageSerializer.Load(path, out _, out _, password: null, out _);
             Assert.True(loaded.TryGet("\\File.txt", out var node));
@@ -210,14 +210,14 @@ public sealed class DiskImageSerializerIncrementalTests
             var encryption = new ImageEncryptionInfo("s3cret", cek);
 
             DiskImageSerializer.SaveSegmentedIncrementalForTest(map, 1024 * 1024, "Label", path,
-                ImageCompressionLevel.Fastest, encryption, segmentTargetBytes: 1);
+                1, encryption, segmentTargetBytes: 1);
 
             toModify.FileData = FileContent.FromSpan("changed"u8.ToArray(), 512);
             toModify.FileInfo.FileSize = 7;
             toModify.ContentVersion++;
 
             DiskImageSerializer.SaveSegmentedIncrementalForTest(map, 1024 * 1024, "Label", path,
-                ImageCompressionLevel.Fastest, encryption, segmentTargetBytes: 1);
+                1, encryption, segmentTargetBytes: 1);
 
             var loaded = DiskImageSerializer.Load(path, out _, out _, "s3cret", out var cek2);
             Assert.NotNull(cek2);
@@ -254,7 +254,7 @@ public sealed class DiskImageSerializerIncrementalTests
             }
 
             DiskImageSerializer.SaveSegmentedIncrementalForTest(map, 1024 * 1024, "Label", path,
-                ImageCompressionLevel.None, encryption: null, segmentTargetBytes: 4096);
+                0, encryption: null, segmentTargetBytes: 4096);
 
             var segmentCount = map.GetAllNodes().Max(kvp => kvp.Value.SavedSegmentIndex) + 1;
             Assert.True(segmentCount > 1, $"Expected several segments but got {segmentCount}.");
@@ -286,14 +286,14 @@ public sealed class DiskImageSerializerIncrementalTests
             map.Add("\\Small.txt", small);
 
             DiskImageSerializer.SaveSegmentedIncrementalForTest(map, 1024 * 1024, "Label", path,
-                ImageCompressionLevel.None, encryption: null, segmentTargetBytes: 1);
+                0, encryption: null, segmentTargetBytes: 1);
 
             small.FileData = FileContent.FromSpan("yy"u8.ToArray(), 512);
             small.FileInfo.FileSize = 2;
             small.ContentVersion++;
 
             DiskImageSerializer.SaveSegmentedIncrementalForTest(map, 1024 * 1024, "Label", path,
-                ImageCompressionLevel.None, encryption: null, segmentTargetBytes: 1);
+                0, encryption: null, segmentTargetBytes: 1);
 
             Assert.False(File.Exists(path + ".tmp"));
             var loaded = DiskImageSerializer.Load(path, out _, out _, password: null, out _);
@@ -322,21 +322,21 @@ public sealed class DiskImageSerializerIncrementalTests
             map.Add("\\B.txt", b);
 
             DiskImageSerializer.SaveSegmentedIncrementalForTest(map, 1024 * 1024, "Label", path,
-                ImageCompressionLevel.None, encryption: null, segmentTargetBytes: 1);
+                0, encryption: null, segmentTargetBytes: 1);
 
             b.FileData = FileContent.FromSpan("bb"u8.ToArray(), 512);
             b.FileInfo.FileSize = 2;
             b.ContentVersion++;
 
             DiskImageSerializer.SaveSegmentedIncrementalForTest(map, 1024 * 1024, "Label", path,
-                ImageCompressionLevel.None, encryption: null, segmentTargetBytes: 1);
+                0, encryption: null, segmentTargetBytes: 1);
 
             var aSegmentAfterSecondSave = a.SavedSegmentIndex;
 
             // Third save: nothing changed since the second save, so everything (including the
             // segment B was rewritten into during the second save) should now be reusable.
             DiskImageSerializer.SaveSegmentedIncrementalForTest(map, 1024 * 1024, "Label", path,
-                ImageCompressionLevel.None, encryption: null, segmentTargetBytes: 1);
+                0, encryption: null, segmentTargetBytes: 1);
 
             Assert.Equal(aSegmentAfterSecondSave, a.SavedSegmentIndex);
 
@@ -353,11 +353,11 @@ public sealed class DiskImageSerializerIncrementalTests
     }
 
     [Theory]
-    [InlineData(ImageCompressionLevel.None, false)]
-    [InlineData(ImageCompressionLevel.Fastest, false)]
-    [InlineData(ImageCompressionLevel.None, true)]
-    [InlineData(ImageCompressionLevel.Fastest, true)]
-    public void Load_ManySegments_DecodedInParallel_RoundTripsInOrder(ImageCompressionLevel level, bool encrypted)
+    [InlineData(0, false)]
+    [InlineData(1, false)]
+    [InlineData(0, true)]
+    [InlineData(1, true)]
+    public void Load_ManySegments_DecodedInParallel_RoundTripsInOrder(int level, bool encrypted)
     {
         // Far more segments than processors, so the load keeps a full window of segments in
         // flight and has to reassemble them in file order.
@@ -394,7 +394,7 @@ public sealed class DiskImageSerializerIncrementalTests
                 })
                 .ToArray();
 
-            AssertSegmentedRoundTrip(contents, ImageCompressionLevel.Fastest, encrypted);
+            AssertSegmentedRoundTrip(contents, 1, encrypted);
         }
         finally
         {
@@ -407,7 +407,7 @@ public sealed class DiskImageSerializerIncrementalTests
     /// loaded nodes were stamped with their segments in order: an incremental save straight after
     /// the load must find every segment clean and reproduce the image byte for byte.
     /// </summary>
-    private static void AssertSegmentedRoundTrip(byte[][] contents, ImageCompressionLevel level, bool encrypted)
+    private static void AssertSegmentedRoundTrip(byte[][] contents, int level, bool encrypted)
     {
         var path = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid()}.mdr");
         try
@@ -476,7 +476,7 @@ public sealed class DiskImageSerializerIncrementalTests
             map.Add("\\B.txt", b);
 
             DiskImageSerializer.SaveSegmentedIncrementalForTest(map, 1024 * 1024, "Label", path,
-                ImageCompressionLevel.None, encryption: null, segmentTargetBytes: 1);
+                0, encryption: null, segmentTargetBytes: 1);
 
             // B is dirty, so the second save rewrites it; the rename lands after the save took its
             // snapshot (still holding B under its old path) but before it rewrites B.
@@ -491,10 +491,10 @@ public sealed class DiskImageSerializerIncrementalTests
                 }
             });
             DiskImageSerializer.SaveSegmentedIncrementalForTest(map, 1024 * 1024, "Label", path,
-                ImageCompressionLevel.None, encryption: null, segmentTargetBytes: 1, renameDuringSave);
+                0, encryption: null, segmentTargetBytes: 1, renameDuringSave);
 
             DiskImageSerializer.SaveSegmentedIncrementalForTest(map, 1024 * 1024, "Label", path,
-                ImageCompressionLevel.None, encryption: null, segmentTargetBytes: 1);
+                0, encryption: null, segmentTargetBytes: 1);
 
             Assert.True(renamed);
             var loaded = DiskImageSerializer.Load(path, out _, out _, password: null, out _);
@@ -522,7 +522,7 @@ public sealed class DiskImageSerializerIncrementalTests
             }
 
             DiskImageSerializer.SaveSegmentedIncrementalForTest(map, 1024 * 1024, "Label", path,
-                ImageCompressionLevel.Fastest, encryption: null, segmentTargetBytes: 1);
+                1, encryption: null, segmentTargetBytes: 1);
             using (var stream = new FileStream(path, FileMode.Open, FileAccess.Write))
             {
                 stream.SetLength(stream.Length - 10);
@@ -531,7 +531,7 @@ public sealed class DiskImageSerializerIncrementalTests
             // Every node is still clean, so without the size check this would try to copy every
             // old segment verbatim and hit EOF in the last one — on this save and every one after.
             DiskImageSerializer.SaveSegmentedIncrementalForTest(map, 1024 * 1024, "Label", path,
-                ImageCompressionLevel.Fastest, encryption: null, segmentTargetBytes: 1);
+                1, encryption: null, segmentTargetBytes: 1);
 
             var loaded = DiskImageSerializer.Load(path, out _, out _, password: null, out _);
             Assert.Equal(5, loaded.Count);
@@ -558,7 +558,7 @@ public sealed class DiskImageSerializerIncrementalTests
             map.Add("\\", MakeDir());
             map.Add("\\A.txt", MakeFile("a"u8.ToArray()));
             DiskImageSerializer.SaveSegmentedIncrementalForTest(map, 1024 * 1024, "Label", path,
-                ImageCompressionLevel.None, encryption: null, segmentTargetBytes: 1);
+                0, encryption: null, segmentTargetBytes: 1);
 
             // Magic, version, level, encryption flag, layout byte, capacity, then "Label" with its length byte.
             const int segmentCountOffset = 4 + sizeof(int) + 1 + 1 + 1 + sizeof(ulong) + 1 + 5;
@@ -568,7 +568,7 @@ public sealed class DiskImageSerializerIncrementalTests
             File.WriteAllBytes(path, bytes);
 
             DiskImageSerializer.SaveSegmentedIncrementalForTest(map, 1024 * 1024, "Label", path,
-                ImageCompressionLevel.None, encryption: null, segmentTargetBytes: 1);
+                0, encryption: null, segmentTargetBytes: 1);
 
             var loaded = DiskImageSerializer.Load(path, out _, out _, password: null, out _);
             Assert.True(loaded.TryGet("\\A.txt", out var node));

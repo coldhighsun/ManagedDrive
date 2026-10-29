@@ -30,19 +30,9 @@ public sealed record CliMountOverrides
     }
 
     /// <summary>
-    /// Gets the image compression level to apply.
+    /// Gets the Zstd compression level (0 = none, 1-22) to apply.
     /// </summary>
-    public ImageCompressionLevel? CompressionLevel
-    {
-        get; init;
-    }
-
-    /// <summary>
-    /// Gets the custom Zstd compression level (1-22) to use instead of the preset mapping for
-    /// <see cref="CompressionLevel"/>. Only takes effect when the compression level is not
-    /// <see cref="ImageCompressionLevel.None"/>.
-    /// </summary>
-    public int? CustomZstdLevel
+    public int? CompressionLevel
     {
         get; init;
     }

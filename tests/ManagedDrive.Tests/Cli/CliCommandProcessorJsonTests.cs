@@ -174,13 +174,13 @@ public class CliCommandProcessorJsonTests
     public async Task Json_ValidationFailureInsideAHandler_IsPrintedAsJson()
     {
         var outcome = await CliCommandProcessor.ExecuteAsync(
-            ["mount", "x.mdr", "R:", "--custom-zstd-level", "99", "--json"], new Controller());
+            ["mount", "x.mdr", "R:", "--compression", "99", "--json"], new Controller());
 
         Assert.True(outcome.Json);
         Assert.False(outcome.Success);
         Assert.Equal(1, outcome.ExitCode);
         using var document = JsonDocument.Parse(outcome.Message);
-        Assert.Contains("--custom-zstd-level", document.RootElement.GetProperty("Message").GetString());
+        Assert.Contains("--compression", document.RootElement.GetProperty("Message").GetString());
     }
 
     [Fact]

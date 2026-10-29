@@ -22,7 +22,7 @@ public sealed class PersistenceHardeningTests
             map.Add("\\", MakeDir());
             map.Add("\\File.txt", MakeFile("distinctive-content-for-bit-rot"u8.ToArray()));
             DiskImageSerializer.SaveSegmentedForTest(map, 4 * 1024 * 1024, "Label", path,
-                ImageCompressionLevel.None, encryption: null, segmentTargetBytes: 1 << 20);
+                0, encryption: null, segmentTargetBytes: 1 << 20);
 
             var bytes = File.ReadAllBytes(path);
             var position = bytes.AsSpan().IndexOf("distinctive-content-for-bit-rot"u8);
@@ -52,7 +52,7 @@ public sealed class PersistenceHardeningTests
             map.Add("\\", MakeDir());
             map.Add("\\File.txt", MakeFile("intact"u8.ToArray()));
             DiskImageSerializer.SaveSegmentedForTest(map, 4 * 1024 * 1024, "Label", path,
-                ImageCompressionLevel.None, encryption: null, segmentTargetBytes: 1 << 20);
+                0, encryption: null, segmentTargetBytes: 1 << 20);
 
             var loaded = DiskImageSerializer.Load(path, out _, out _, password: null, out _);
 
@@ -89,7 +89,7 @@ public sealed class PersistenceHardeningTests
             map.Add("\\", MakeDir());
             map.Add("\\Huge.bin", huge);
             DiskImageSerializer.SaveSegmentedForTest(map, 1024 * 1024, "Label", path,
-                ImageCompressionLevel.None, encryption: null, segmentTargetBytes: 1 << 20);
+                0, encryption: null, segmentTargetBytes: 1 << 20);
 
             Assert.Throws<InvalidDataException>(
                 () => DiskImageSerializer.Load(path, out _, out _, password: null, out _));
@@ -111,7 +111,7 @@ public sealed class PersistenceHardeningTests
         {
             var map = new FileNodeMap();
             map.Add("\\", MakeDir());
-            DiskImageSerializer.Save(map, 1024 * 1024, "L", path, ImageCompressionLevel.None);
+            DiskImageSerializer.Save(map, 1024 * 1024, "L", path, 0);
 
             // Layout: magic(4) version(4) level(1) isEncrypted(1) capacity(8) label(1+1), then the
             // node count of the uncompressed node region.
@@ -141,7 +141,7 @@ public sealed class PersistenceHardeningTests
         {
             var map = new FileNodeMap();
             map.Add("\\", MakeDir());
-            DiskImageSerializer.Save(map, 1024 * 1024, "L", path, ImageCompressionLevel.None,
+            DiskImageSerializer.Save(map, 1024 * 1024, "L", path, 0,
                 new ImageEncryptionInfo("pw", DiskImageSerializer.GenerateCek()));
 
             // Cut inside the wrapped key material that follows the plaintext header fields.

@@ -8,7 +8,7 @@ public class CliCommandProcessorInfoTests
     private static readonly CliDiskDetails Details = new(
         "R:", "Scratch", 1024UL * 1024, 64UL * 1024 * 1024, ReadOnly: false,
         ImagePath: @"C:\disks\r.mdr", SourceArchivePath: null, PasswordProtected: true,
-        AutoSaveIntervalMinutes: 5, CompressionLevel: "Fastest",
+        AutoSaveIntervalMinutes: 5, CompressionLevel: "1",
         MaxSnapshotCount: 10, MaxSnapshotSizeBytes: null, SnapshotCount: 3, LastSaveTime: null);
 
     [Fact]
@@ -27,6 +27,16 @@ public class CliCommandProcessorInfoTests
         Assert.Contains("every 5 min", outcome.Message);
         Assert.Contains("3 kept (at most 10)", outcome.Message);
         Assert.Contains("(not saved yet)", outcome.Message);
+    }
+
+    [Fact]
+    public async Task Info_CompressionZero_IsShownAsOff()
+    {
+        var controller = new Controller { Result = (true, string.Empty, Details with { CompressionLevel = "0" }) };
+
+        var outcome = await CliCommandProcessor.ExecuteAsync(["info", "r"], controller);
+
+        Assert.Contains("0 (off)", outcome.Message);
     }
 
     [Fact]
@@ -74,7 +84,7 @@ public class CliCommandProcessorInfoTests
         Assert.True(root.GetProperty("PasswordProtected").GetBoolean());
         Assert.Equal(3, root.GetProperty("SnapshotCount").GetInt32());
         Assert.Equal(JsonValueKind.Null, root.GetProperty("SourceArchivePath").ValueKind);
-        Assert.Equal("Fastest", root.GetProperty("CompressionLevel").GetString());
+        Assert.Equal("1", root.GetProperty("CompressionLevel").GetString());
     }
 
     [Fact]
