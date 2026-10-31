@@ -113,4 +113,36 @@ public sealed class SilentInstallerHelpersTests
         Assert.Equal("arm64", SilentInstaller.ArchitectureOf(["-a", "arm64"]));
         Assert.Null(SilentInstaller.ArchitectureOf(["--id", "Git.Git"]));
     }
+
+    /// <summary>
+    /// Switches are split on whitespace.
+    /// </summary>
+    [Fact]
+    public void SplitSwitches_PlainSwitches_SplitsOnWhitespace()
+    {
+        Assert.Equal(["/quiet", "REBOOT=ReallySuppress"], SilentInstaller.SplitSwitches("/quiet  REBOOT=ReallySuppress"));
+    }
+
+    /// <summary>
+    /// A quoted segment stays one token with its quotes removed.
+    /// </summary>
+    [Fact]
+    public void SplitSwitches_QuotedSegment_KeepsItIntact()
+    {
+        Assert.Equal(
+            ["/log", @"C:\My Logs\a.log", "/S"],
+            SilentInstaller.SplitSwitches("/log \"C:\\My Logs\\a.log\" /S"));
+    }
+
+    /// <summary>
+    /// Empty or whitespace-only switches produce no tokens.
+    /// </summary>
+    /// <param name="switches">The switch string.</param>
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void SplitSwitches_Blank_ReturnsNothing(string switches)
+    {
+        Assert.Empty(SilentInstaller.SplitSwitches(switches));
+    }
 }

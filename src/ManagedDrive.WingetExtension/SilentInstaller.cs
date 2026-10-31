@@ -349,7 +349,7 @@ internal static class SilentInstaller
 
     // Minimal whitespace tokenizer that keeps double-quoted segments intact
     // (manifest switches occasionally quote paths, e.g. `/log "<LOGPATH>"`).
-    private static IEnumerable<string> SplitSwitches(string switches)
+    internal static IEnumerable<string> SplitSwitches(string switches)
     {
         var current = new System.Text.StringBuilder();
         var inQuotes = false;

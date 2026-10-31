@@ -136,6 +136,67 @@ public sealed class WingetManifestReaderTests
     }
 
     /// <summary>
+    /// A manifest without installers cannot be used.
+    /// </summary>
+    [Fact]
+    public void ReadInstallerInfo_NoInstallers_Throws()
+    {
+        Assert.Throws<InvalidOperationException>(() => ReadManifest("PackageIdentifier: A.B\n"));
+    }
+
+    /// <summary>
+    /// An installer entry with no type anywhere in the manifest cannot be used.
+    /// </summary>
+    [Fact]
+    public void ReadInstallerInfo_NoInstallerType_Throws()
+    {
+        Assert.Throws<InvalidOperationException>(() => ReadManifest("Installers:\n  - Architecture: x64\n"));
+    }
+
+    /// <summary>
+    /// Types without manifest switches use winget's documented defaults.
+    /// </summary>
+    /// <param name="type">The installer type.</param>
+    /// <param name="silent">The expected silent switches.</param>
+    /// <param name="withProgress">The expected silent-with-progress switches.</param>
+    [Theory]
+    [InlineData("msi", "/quiet REBOOT=ReallySuppress", "/passive REBOOT=ReallySuppress")]
+    [InlineData("inno", "/VERYSILENT /NORESTART", "/SILENT /NORESTART")]
+    [InlineData("nullsoft", "/S", "/S")]
+    [InlineData("burn", "/quiet", "/passive")]
+    public void ReadInstallerInfo_KnownTypeWithoutSwitches_UsesDefaults(string type, string silent, string withProgress)
+    {
+        var info = ReadManifest($"Installers:\n  - InstallerType: {type}\n");
+
+        Assert.Equal(silent, info.SilentSwitches);
+        Assert.Equal(withProgress, info.SilentWithProgressSwitches);
+    }
+
+    /// <summary>
+    /// A type with no known defaults and no manifest switches is left to plain winget.
+    /// </summary>
+    [Fact]
+    public void ReadInstallerInfo_UnknownTypeWithoutSwitches_Throws()
+    {
+        Assert.Throws<NotSupportedException>(() => ReadManifest("Installers:\n  - InstallerType: exe\n"));
+    }
+
+    /// <summary>
+    /// Switches the manifest states win over the defaults.
+    /// </summary>
+    [Fact]
+    public void ReadInstallerInfo_ExplicitSwitches_OverrideDefaults()
+    {
+        const string yaml =
+            "Installers:\n  - InstallerType: exe\n    InstallerSwitches:\n      Silent: /x\n      SilentWithProgress: /y\n";
+
+        var info = ReadManifest(yaml);
+
+        Assert.Equal("/x", info.SilentSwitches);
+        Assert.Equal("/y", info.SilentWithProgressSwitches);
+    }
+
+    /// <summary>
     /// Writes <paramref name="yaml"/> to a temporary manifest file and reads it.
     /// </summary>
     /// <param name="yaml">The manifest content.</param>

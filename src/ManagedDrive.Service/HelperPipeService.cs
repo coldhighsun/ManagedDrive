@@ -155,7 +155,7 @@ public sealed class HelperPipeService(GlobalMountManager mountManager, ILogger<H
     /// are refused then, since group membership and ownership decide who may change which letter.
     /// </param>
     /// <returns>The response to send back.</returns>
-    private HelperResponse Handle(HelperRequest request, PipeClientIdentity? caller)
+    internal HelperResponse Handle(HelperRequest request, PipeClientIdentity? caller)
     {
         if (request.Op is HelperPipeProtocol.OpPublish or HelperPipeProtocol.OpUnpublish)
         {
