@@ -1,6 +1,9 @@
 ignore:
   - src/ManagedDrive.App/**
   - src/ManagedDrive.Cli/**
+  - src/ManagedDrive.Service/Program.cs
+  - src/ManagedDrive.Service/NativeMethods.cs
+  - src/ManagedDrive.WingetExtension/Program.cs
 
 component_management:
   individual_components:
