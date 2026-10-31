@@ -1,5 +1,6 @@
 ignore:
   - src/ManagedDrive.App/**
+  - src/ManagedDrive.Cli/**
 
 component_management:
   individual_components:
