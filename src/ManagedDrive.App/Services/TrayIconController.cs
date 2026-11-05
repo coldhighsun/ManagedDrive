@@ -72,8 +72,18 @@ public sealed class TrayIconController : IDisposable, ITrayHoverSource
     /// Restores a group of redirected environment variables; <c>null</c> restores all groups.
     /// </summary>
     private readonly Func<EnvRestoreGroup?, Task> _onRestoreEnvAsync;
+
+    /// <summary>
+    /// Takes the user where a clicked balloon tip points.
+    /// </summary>
+    private readonly Action<NotificationClickTarget> _onBalloonClicked;
     private readonly System.Windows.Forms.NotifyIcon _trayIcon;
     private readonly Icon _trayIconNormal;
+
+    /// <summary>
+    /// The target of the latest balloon tip.
+    /// </summary>
+    private readonly BalloonClickTargetTracker _balloonClickTarget = new();
     private bool _blinkOn;
     private bool _isHighUsageActive;
 
@@ -96,6 +106,7 @@ public sealed class TrayIconController : IDisposable, ITrayHoverSource
     /// <param name="onSettings">Invoked from the "Settings" menu item.</param>
     /// <param name="onAbout">Invoked from the "About" menu item.</param>
     /// <param name="onExit">Invoked from the "Exit" menu item.</param>
+    /// <param name="onBalloonClicked">Invoked when a balloon tip shown with a click target is clicked.</param>
     public TrayIconController(
         Dispatcher dispatcher,
         Stream iconStream,
@@ -105,10 +116,12 @@ public sealed class TrayIconController : IDisposable, ITrayHoverSource
         Func<EnvRestoreGroup?, Task> onRestoreEnvAsync,
         Action onSettings,
         Action onAbout,
-        Action onExit)
+        Action onExit,
+        Action<NotificationClickTarget> onBalloonClicked)
     {
         _dispatcher = dispatcher;
         _mainViewModel = mainViewModel;
+        _onBalloonClicked = onBalloonClicked;
 
         var menu = new System.Windows.Forms.ContextMenuStrip();
         _menuShow = new(Loc.Get("Tray.Show"), null, (_, _) => dispatcher.Invoke(onShow));
@@ -148,7 +161,7 @@ public sealed class TrayIconController : IDisposable, ITrayHoverSource
         };
         _trayIcon.DoubleClick += (_, _) => dispatcher.Invoke(onShow);
         _trayIcon.BalloonTipClosed += (_, _) => OnBalloonTipClosed();
-        _trayIcon.BalloonTipClicked += (_, _) => OnBalloonTipClosed();
+        _trayIcon.BalloonTipClicked += (_, _) => OnBalloonTipClicked();
         _trayIcon.MouseMove += (_, _) =>
         {
             var point = System.Windows.Forms.Cursor.Position;
@@ -316,8 +329,15 @@ public sealed class TrayIconController : IDisposable, ITrayHoverSource
     /// <param name="title">The balloon tip title.</param>
     /// <param name="body">The balloon tip text.</param>
     /// <param name="icon">The balloon tip icon.</param>
-    public void ShowBalloonTip(string title, string body, System.Windows.Forms.ToolTipIcon icon)
+    /// <param name="clickTarget">Where clicking the balloon leads; <c>null</c> when it only informs.</param>
+    public void ShowBalloonTip(
+        string title,
+        string body,
+        System.Windows.Forms.ToolTipIcon icon,
+        NotificationClickTarget? clickTarget = null)
     {
+        _balloonClickTarget.OnBalloonShowing(clickTarget);
+
         if (_balloonOnlyIcon.OnBalloonShowing(_trayIcon.Visible))
         {
             _trayIcon.Visible = true;
@@ -347,6 +367,20 @@ public sealed class TrayIconController : IDisposable, ITrayHoverSource
         if (_balloonOnlyIcon.OnBalloonClosed())
         {
             _trayIcon.Visible = false;
+        }
+    }
+
+    /// <summary>
+    /// Handles a click on a balloon tip. The target runs through the dispatcher queue, not here: it
+    /// can open a modal dialog, which must not block the tray icon's message callback.
+    /// </summary>
+    private void OnBalloonTipClicked()
+    {
+        OnBalloonTipClosed();
+
+        if (_balloonClickTarget.TakeForClick() is { } target)
+        {
+            _dispatcher.BeginInvoke(() => _onBalloonClicked(target));
         }
     }
 
@@ -644,7 +678,11 @@ public sealed class TrayIconController : IDisposable, ITrayHoverSource
         {
             // An async void handler would hand this to the global crash handler; the user gets the failure message instead.
             AppLog.CreateLogger<TrayIconController>().LogError(ex, "Restoring environment variables from the tray failed.");
-            ShowBalloonTip("ManagedDrive", Loc.Get("Msg.RestoreEnvFailed"), System.Windows.Forms.ToolTipIcon.Warning);
+            ShowBalloonTip(
+                "ManagedDrive",
+                Loc.Get("Msg.RestoreEnvFailed"),
+                System.Windows.Forms.ToolTipIcon.Warning,
+                NotificationClickTarget.ShowWindow);
         }
     }
 

@@ -49,6 +49,19 @@ public partial class MainWindow
     private void UpdateMaximizeIcon() =>
         MaximizeIcon.Text = WindowState == WindowState.Maximized ? "" : "";
 
+    /// <summary>
+    /// Keeps the selected disk in view: a clicked notification can select one that is scrolled away.
+    /// </summary>
+    /// <param name="sender">The disk list.</param>
+    /// <param name="e">Unused.</param>
+    private void DiskList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (DiskList.SelectedItem is { } selected)
+        {
+            DiskList.ScrollIntoView(selected);
+        }
+    }
+
     private void ImportBtn_Click(object sender, RoutedEventArgs e) => OpenAttachedContextMenu(sender);
 
     /// <summary>

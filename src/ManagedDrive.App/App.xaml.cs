@@ -384,7 +384,8 @@ public partial class App
         var iconStream = GetResourceStream(new("pack://application:,,,/ManagedDrive.ico"))!.Stream;
         _trayIconController = new(
             Dispatcher, iconStream, _mainViewModel, ShowMainWindow, ShowMainWindowAndCreate, RestoreEnvFromTrayAsync,
-            ShowMainWindowAndSettings, ShowAboutDialog, ExitApplication);
+            ShowMainWindowAndSettings, ShowAboutDialog, ExitApplication,
+            target => _ = RunNotificationClickAsync(target));
         _trayTooltipController = new(_mainViewModel, _trayIconController);
         _tempDirCompatChecker = new(settings);
         _envRestoreTrayAction = new(
@@ -901,7 +902,8 @@ public partial class App
             _trayIconController?.ShowBalloonTip(
                 "ManagedDrive",
                 Loc.Format("Update.BalloonBody", update.Version.ToString(includeMetadata: false)),
-                System.Windows.Forms.ToolTipIcon.Info);
+                System.Windows.Forms.ToolTipIcon.Info,
+                NotificationClickTarget.Update);
         }
     }
 
@@ -923,6 +925,64 @@ public partial class App
         _mainWindow?.Show();
         _mainWindow?.Activate();
         _trayIconController?.Visible = false;
+    }
+
+    /// <summary>
+    /// Shows the main window for a clicked balloon tip, which can come while the window is
+    /// minimized and <see cref="Window.Activate"/> would not bring it back. Kept out of
+    /// <see cref="ShowMainWindow"/>, which also runs on exit, where a window the user minimized
+    /// must not pop up over their work. SW_RESTORE returns it to maximized if it was, and takes
+    /// effect right away, so a dialog opened next is placed over the restored window.
+    /// </summary>
+    private void ShowMainWindowForNotification()
+    {
+        if (_mainWindow is { WindowState: WindowState.Minimized })
+        {
+            WindowNativeMethods.ShowWindow(_mainWindowHandle, WindowNativeMethods.SwRestore);
+        }
+
+        ShowMainWindow();
+    }
+
+    /// <summary>
+    /// Takes the user where a clicked balloon tip points. Waits for the splash to close first: a
+    /// balloon can be raised while the disks load, and the main window stays hidden until then.
+    /// </summary>
+    /// <param name="target">Where the clicked balloon tip points.</param>
+    /// <returns>A task completing once the click was carried out, including any dialog it opened.</returns>
+    private async Task RunNotificationClickAsync(NotificationClickTarget target)
+    {
+        try
+        {
+            await _splashLifecycle!.Closed;
+            if (_isExiting || _mainViewModel is not { } viewModel)
+            {
+                return;
+            }
+
+            new NotificationClickRunner(
+                ShowMainWindowForNotification,
+                viewModel.SelectDisk,
+                () => !ComponentDispatcher.IsThreadModal && !viewModel.BusyOverlay.IsBusy,
+                () => viewModel.EditDiskCommand.Execute(null),
+                ShowUpdateDialog).Run(target);
+        }
+        catch (Exception ex)
+        {
+            // Nobody awaits this task, and a failed click is not worth an error box.
+            _logger.LogWarning(ex, "Handling a click on a notification failed.");
+        }
+    }
+
+    /// <summary>
+    /// Opens the update dialog for the update found, if the update check is available.
+    /// </summary>
+    private void ShowUpdateDialog()
+    {
+        if (_updateCheckService is { } updates)
+        {
+            UpdateDialog.ShowFor(updates, _mainWindow);
+        }
     }
 
     private void ShowMainWindowAndCreate()
