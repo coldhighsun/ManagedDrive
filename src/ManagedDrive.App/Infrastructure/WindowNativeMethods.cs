@@ -29,6 +29,11 @@ internal static class WindowNativeMethods
     public const uint SwpMoveOnly = SwpNoSize | SwpNoZOrder | SwpNoActivate;
 
     /// <summary>
+    /// <c>SW_RESTORE</c>: brings a minimized window back to its previous size, maximized if it was.
+    /// </summary>
+    public const int SwRestore = 9;
+
+    /// <summary>
     /// <c>DWMWA_USE_IMMERSIVE_DARK_MODE</c>: tells DWM to draw a window's own chrome (border,
     /// rounded-corner backdrop) in dark colors.
     /// </summary>
@@ -134,6 +139,16 @@ internal static class WindowNativeMethods
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     public static extern bool SetWindowPos(nint hWnd, nint hWndInsertAfter, int x, int y, int cx, int cy, uint flags);
+
+    /// <summary>
+    /// Changes a window's show state.
+    /// </summary>
+    /// <param name="hWnd">The window handle.</param>
+    /// <param name="command">The <c>SW_*</c> command, e.g. <see cref="SwRestore"/>.</param>
+    /// <returns>Whether the window was visible before the call.</returns>
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool ShowWindow(nint hWnd, int command);
 
     /// <summary>
     /// Sets an integer <c>DWMWA_*</c> attribute of a window's DWM-drawn chrome. The return value is

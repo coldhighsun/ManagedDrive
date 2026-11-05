@@ -155,8 +155,10 @@
 
         <!-- Disk card list (with empty-state guidance overlaid when no disks are mounted) -->
         <Grid>
-        <ListBox ItemsSource="{Binding Disks}"
+        <ListBox x:Name="DiskList"
+                 ItemsSource="{Binding Disks}"
                  SelectedItem="{Binding SelectedDisk}"
+                 SelectionChanged="DiskList_SelectionChanged"
                  ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                  Background="Transparent"
                  BorderThickness="0"

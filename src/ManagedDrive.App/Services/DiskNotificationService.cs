@@ -154,7 +154,8 @@ public sealed class DiskNotificationService
         ShowBalloonTipUnlessWindowShown(
             Loc.Get("Tray.CapacityAdjustedTitle"),
             Loc.Format("Tray.CapacityAdjustedBody", vm.VolumeLabel, vm.MountPoint, originalMb, newMb),
-            System.Windows.Forms.ToolTipIcon.Warning);
+            System.Windows.Forms.ToolTipIcon.Warning,
+            NotificationClickTarget.ForDisk(DiskNotificationKind.CapacityAdjusted, vm.MountPoint));
     }
 
     private void OnDiskHighUsageWarning(object? sender, EventArgs e)
@@ -165,7 +166,11 @@ public sealed class DiskNotificationService
         }
 
         var body = ShowHighUsageStatus(vm);
-        ShowBalloonTipUnlessWindowShown(Loc.Get("Tray.HighUsageTitle"), body, System.Windows.Forms.ToolTipIcon.Warning);
+        ShowBalloonTipUnlessWindowShown(
+            Loc.Get("Tray.HighUsageTitle"),
+            body,
+            System.Windows.Forms.ToolTipIcon.Warning,
+            NotificationClickTarget.ForDisk(DiskNotificationKind.HighUsage, vm.MountPoint));
 
         _logger.LogWarningThrottled(
             $"high-usage:{vm.MountPoint}", TimeSpan.FromMinutes(10),
@@ -244,7 +249,11 @@ public sealed class DiskNotificationService
 
         var title = Loc.Get("Tray.SaveCompletedTitle");
         var body = Loc.Format("Tray.SaveCompletedBody", vm.VolumeLabel, vm.MountPoint);
-        _trayIconController.ShowBalloonTip(title, body, System.Windows.Forms.ToolTipIcon.Info);
+        _trayIconController.ShowBalloonTip(
+            title,
+            body,
+            System.Windows.Forms.ToolTipIcon.Info,
+            NotificationClickTarget.ForDisk(DiskNotificationKind.SaveCompleted, vm.MountPoint));
     }
 
     private void OnDiskSaveFailed(object? sender, Exception ex)
@@ -261,7 +270,8 @@ public sealed class DiskNotificationService
         ShowBalloonTipUnlessWindowShown(
             Loc.Get("Tray.SaveFailedTitle"),
             Loc.Format("Tray.SaveFailedBody", vm.VolumeLabel, vm.MountPoint, ex.Message),
-            System.Windows.Forms.ToolTipIcon.Error);
+            System.Windows.Forms.ToolTipIcon.Error,
+            NotificationClickTarget.ForDisk(DiskNotificationKind.SaveFailed, vm.MountPoint));
     }
 
     /// <summary>
@@ -284,7 +294,8 @@ public sealed class DiskNotificationService
         ShowBalloonTipUnlessWindowShown(
             Loc.Get("Tray.SaveRecoveredTitle"),
             Loc.Format("Tray.SaveRecoveredBody", vm.VolumeLabel, vm.MountPoint),
-            System.Windows.Forms.ToolTipIcon.Info);
+            System.Windows.Forms.ToolTipIcon.Info,
+            NotificationClickTarget.ForDisk(DiskNotificationKind.SaveRecovered, vm.MountPoint));
     }
 
     /// <summary>
@@ -326,7 +337,8 @@ public sealed class DiskNotificationService
         _trayIconController.ShowBalloonTip(
             Loc.Get(isLowMemory ? "Tray.WriteRejectedMemoryTitle" : "Tray.WriteRejectedFullTitle"),
             Loc.Format(isLowMemory ? "Tray.WriteRejectedMemoryBody" : "Tray.WriteRejectedFullBody", vm.VolumeLabel, vm.MountPoint),
-            System.Windows.Forms.ToolTipIcon.Warning);
+            System.Windows.Forms.ToolTipIcon.Warning,
+            NotificationClickTarget.ForWriteRejection(reason, vm.MountPoint));
     }
 
     /// <summary>
@@ -346,7 +358,8 @@ public sealed class DiskNotificationService
                 ShowBalloonTipUnlessWindowShown(
                     Loc.Get("Tray.LowMemoryTitle"),
                     Loc.Format("Tray.LowMemoryBody", formatted),
-                    System.Windows.Forms.ToolTipIcon.Warning);
+                    System.Windows.Forms.ToolTipIcon.Warning,
+                    NotificationClickTarget.ShowWindow);
                 _logger.LogWarning("Available system memory is down to {Available}.", formatted);
                 break;
 
@@ -378,11 +391,16 @@ public sealed class DiskNotificationService
     /// <param name="title">The balloon tip title.</param>
     /// <param name="body">The balloon tip text.</param>
     /// <param name="icon">The balloon tip icon.</param>
-    private void ShowBalloonTipUnlessWindowShown(string title, string body, System.Windows.Forms.ToolTipIcon icon)
+    /// <param name="clickTarget">Where clicking the balloon tip leads.</param>
+    private void ShowBalloonTipUnlessWindowShown(
+        string title,
+        string body,
+        System.Windows.Forms.ToolTipIcon icon,
+        NotificationClickTarget clickTarget)
     {
         if (!_isMainWindowShown())
         {
-            _trayIconController.ShowBalloonTip(title, body, icon);
+            _trayIconController.ShowBalloonTip(title, body, icon, clickTarget);
         }
     }
 }

@@ -42,9 +42,11 @@ public sealed class EnvRestoreTrayAction(
             return;
         }
 
+        var failed = report.Result == EnvRestoreResult.Failed;
         trayIconController.ShowBalloonTip(
             "ManagedDrive",
             EnvRestoreGroupText.GetResultMessage(report),
-            report.Result == EnvRestoreResult.Failed ? System.Windows.Forms.ToolTipIcon.Warning : System.Windows.Forms.ToolTipIcon.Info);
+            failed ? System.Windows.Forms.ToolTipIcon.Warning : System.Windows.Forms.ToolTipIcon.Info,
+            failed ? NotificationClickTarget.ShowWindow : null);
     }
 }

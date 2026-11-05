@@ -715,13 +715,47 @@ public sealed partial class MainViewModel
         (parameter as DiskViewModel ?? SelectedDisk) is { IsRemounting: false } vm ? vm : null;
 
     /// <summary>
-    /// Finds the disk mounted at <paramref name="mountPoint"/> for a CLI request, skipping one
-    /// being remounted by an edit (see <see cref="ResolveTarget"/>).
+    /// Finds the disk mounted at <paramref name="mountPoint"/> for a CLI request or a clicked
+    /// notification, skipping one being remounted by an edit (see <see cref="ResolveTarget"/>).
     /// </summary>
     /// <param name="mountPoint">The drive letter (e.g. <c>R:</c>) to look up.</param>
     /// <returns>The matching disk, or <c>null</c> if none is available.</returns>
     private DiskViewModel? FindDisk(string mountPoint) =>
-        Disks.FirstOrDefault(d => !d.IsRemounting && string.Equals(d.MountPoint, mountPoint, StringComparison.OrdinalIgnoreCase));
+        FindAvailableDisk(Disks, mountPoint, d => d.MountPoint, d => d.IsRemounting);
+
+    /// <summary>
+    /// The rule of <see cref="FindDisk"/>, apart from <see cref="DiskViewModel"/>, which needs a
+    /// real mounted disk: drive letters match in any case, and a disk being remounted is skipped.
+    /// </summary>
+    /// <typeparam name="TDisk">The disk type.</typeparam>
+    /// <param name="disks">The disks to search.</param>
+    /// <param name="mountPoint">The drive letter (e.g. <c>R:</c>) to look up.</param>
+    /// <param name="getMountPoint">Gets a disk's mount point.</param>
+    /// <param name="isRemounting">Returns whether a disk is being remounted.</param>
+    /// <returns>The matching disk, or <c>null</c> if none is available.</returns>
+    internal static TDisk? FindAvailableDisk<TDisk>(
+        IEnumerable<TDisk> disks,
+        string mountPoint,
+        Func<TDisk, string> getMountPoint,
+        Func<TDisk, bool> isRemounting)
+        where TDisk : class =>
+        disks.FirstOrDefault(d => !isRemounting(d) && string.Equals(getMountPoint(d), mountPoint, StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>
+    /// Selects the disk mounted at <paramref name="mountPoint"/> in the disk list.
+    /// </summary>
+    /// <param name="mountPoint">The drive letter (e.g. <c>R:</c>) to look up.</param>
+    /// <returns>Whether the disk was found; if not, the selection is left as it was.</returns>
+    public bool SelectDisk(string mountPoint)
+    {
+        if (FindDisk(mountPoint) is not { } vm)
+        {
+            return false;
+        }
+
+        SelectedDisk = vm;
+        return true;
+    }
 
     /// <summary>
     /// Returns the <see cref="DiskOptions"/> of every currently active disk except
