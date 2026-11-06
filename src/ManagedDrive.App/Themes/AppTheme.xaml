@@ -4,6 +4,10 @@
                     xmlns:infra="clr-namespace:ManagedDrive.App.Infrastructure"
                     xmlns:views="clr-namespace:ManagedDrive.App.Views">
 
+    <!-- ========== Shape tokens (a style dictionary overrides these) ========== -->
+    <CornerRadius x:Key="ButtonCornerRadius">6</CornerRadius>
+    <CornerRadius x:Key="SectionCornerRadius">8</CornerRadius>
+
     <!-- ========== Icon font style ========== -->
     <Style x:Key="IconText" TargetType="TextBlock">
         <Setter Property="FontFamily" Value="Segoe Fluent Icons"/>
@@ -139,7 +143,7 @@
             <Setter.Value>
                 <ControlTemplate TargetType="Button">
                     <Border x:Name="Bd" Background="{TemplateBinding Background}"
-                            CornerRadius="6"
+                            CornerRadius="{DynamicResource ButtonCornerRadius}"
                             Padding="{TemplateBinding Padding}">
                         <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
                                           VerticalAlignment="{TemplateBinding VerticalContentAlignment}"/>
@@ -163,7 +167,7 @@
     <!-- Raised button (primary background) -->
     <Style x:Key="RaisedButton" TargetType="Button">
         <Setter Property="Background" Value="{DynamicResource AppPrimary}"/>
-        <Setter Property="Foreground" Value="White"/>
+        <Setter Property="Foreground" Value="{DynamicResource AppPrimaryForeground}"/>
         <Setter Property="BorderThickness" Value="0"/>
         <Setter Property="Cursor" Value="Hand"/>
         <Setter Property="Padding" Value="16,6"/>
@@ -174,7 +178,7 @@
             <Setter.Value>
                 <ControlTemplate TargetType="Button">
                     <Border x:Name="Bd" Background="{TemplateBinding Background}"
-                            CornerRadius="6"
+                            CornerRadius="{DynamicResource ButtonCornerRadius}"
                             Padding="{TemplateBinding Padding}">
                         <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
                                           VerticalAlignment="{TemplateBinding VerticalContentAlignment}"/>
@@ -211,7 +215,7 @@
                     <Border x:Name="Bd" Background="{TemplateBinding Background}"
                             BorderBrush="{TemplateBinding BorderBrush}"
                             BorderThickness="{TemplateBinding BorderThickness}"
-                            CornerRadius="6"
+                            CornerRadius="{DynamicResource ButtonCornerRadius}"
                             Padding="{TemplateBinding Padding}">
                         <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
                                           VerticalAlignment="{TemplateBinding VerticalContentAlignment}"/>
@@ -719,7 +723,7 @@
     <Style x:Key="SectionBorder" TargetType="Border">
         <Setter Property="BorderBrush" Value="{DynamicResource AppDivider}"/>
         <Setter Property="BorderThickness" Value="1"/>
-        <Setter Property="CornerRadius" Value="8"/>
+        <Setter Property="CornerRadius" Value="{DynamicResource SectionCornerRadius}"/>
         <Setter Property="Padding" Value="14,12"/>
     </Style>
 

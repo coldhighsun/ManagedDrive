@@ -45,96 +45,31 @@
     </WindowChrome.WindowChrome>
 
     <Grid>
-    <DockPanel>
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="Auto"/>
+            <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Sidebar background: only some styles show one (the tool buttons then sit on it). -->
+        <Border Style="{DynamicResource SidebarStyle}"/>
 
         <!-- App bar -->
-        <Border DockPanel.Dock="Top"
-                Background="{DynamicResource AppBarBackground}"
-                Padding="4,4,4,4">
-            <DockPanel>
-                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal"
-                            WindowChrome.IsHitTestVisibleInChrome="True">
-                    <Button Style="{StaticResource IconButton}"
-                            Command="{Binding CreateDiskCommand}"
-                            ToolTip="{DynamicResource Tip.NewDisk}"
-                            AutomationProperties.Name="{DynamicResource Tip.NewDisk}">
-                        <TextBlock Style="{StaticResource IconText}" Text="&#xE710;"/>
-                    </Button>
-                    <Button x:Name="ImportBtn" Style="{StaticResource IconButton}"
-                            Click="ImportBtn_Click"
-                            ToolTip="{DynamicResource Tip.Import}"
-                            AutomationProperties.Name="{DynamicResource Tip.Import}">
-                        <Button.ContextMenu>
-                            <ContextMenu>
-                                <MenuItem Header="{DynamicResource Btn.ImportDisk}"
-                                          ToolTip="{DynamicResource Tip.ImportDisk}"
-                                          Command="{Binding ImportDiskCommand}"/>
-                                <MenuItem Header="{DynamicResource Btn.ImportArchive}"
-                                          ToolTip="{DynamicResource Tip.ImportArchive}"
-                                          Command="{Binding ImportArchiveCommand}"/>
-                            </ContextMenu>
-                        </Button.ContextMenu>
-                        <TextBlock Style="{StaticResource IconText}" Text="&#xE8B5;"/>
-                    </Button>
-                    <Button x:Name="RestoreEnvBtn" Style="{StaticResource IconButton}"
-                            Click="RestoreEnvBtn_Click"
-                            ToolTip="{DynamicResource Tip.RestoreEnv}"
-                            AutomationProperties.Name="{DynamicResource Tip.RestoreEnv}">
-                        <Button.ContextMenu>
-                            <!-- Items are created in RestoreEnvBtn_Click, from the variables redirected at that moment. -->
-                            <ContextMenu/>
-                        </Button.ContextMenu>
-                        <TextBlock Style="{StaticResource IconText}" Text="&#xE7A7;"/>
-                    </Button>
-                    <Button Style="{StaticResource IconButton}"
-                            Command="{Binding SettingsCommand}"
-                            ToolTip="{DynamicResource Tip.Settings}"
-                            AutomationProperties.Name="{DynamicResource Tip.Settings}">
-                        <TextBlock Style="{StaticResource IconText}" Text="&#xE713;"/>
-                    </Button>
-                    <Button x:Name="OverflowBtn" Style="{StaticResource IconButton}"
-                            Click="OverflowBtn_Click"
-                            ToolTip="{DynamicResource Tip.More}"
-                            AutomationProperties.Name="{DynamicResource Tip.More}">
-                        <Button.ContextMenu>
-                            <ContextMenu x:Name="OverflowMenu">
-                                <MenuItem Header="{DynamicResource Menu.About}"
-                                          Command="{Binding AboutCommand}"/>
-                                <MenuItem Header="{DynamicResource Menu.Exit}"
-                                          Command="{Binding ExitCommand}"/>
-                            </ContextMenu>
-                        </Button.ContextMenu>
-                        <TextBlock Style="{StaticResource IconText}" Text="&#xE712;"/>
-                    </Button>
-                    <Button Style="{StaticResource IconButton}"
-                            Click="MinimizeButton_Click"
-                            ToolTip="{DynamicResource Tip.Minimize}"
-                            AutomationProperties.Name="{DynamicResource Tip.Minimize}">
-                        <TextBlock Style="{StaticResource IconText}" Text="&#xE921;" FontSize="12"/>
-                    </Button>
-                    <Button x:Name="MaximizeBtn" Style="{StaticResource IconButton}"
-                            Click="MaximizeButton_Click"
-                            ToolTip="{DynamicResource Tip.MaximizeRestore}"
-                            AutomationProperties.Name="{DynamicResource Tip.MaximizeRestore}">
-                        <TextBlock x:Name="MaximizeIcon" Style="{StaticResource IconText}" Text="&#xE922;" FontSize="12"/>
-                    </Button>
-                    <Button Style="{StaticResource IconButton}"
-                            Click="CloseButton_Click"
-                            ToolTip="{DynamicResource Tip.HideToTray}"
-                            AutomationProperties.Name="{DynamicResource Tip.HideToTray}">
-                        <TextBlock Style="{StaticResource IconText}" Text="&#xE8BB;"/>
-                    </Button>
-                </StackPanel>
-                <TextBlock VerticalAlignment="Center"
+        <Border Style="{DynamicResource AppBarStyle}">
+            <TextBlock VerticalAlignment="Center"
                            Margin="12,0,0,0"
                            FontSize="16" FontWeight="Medium"
                            Foreground="{DynamicResource AppBarForeground}"
                            Text="{DynamicResource Window.Title}"/>
-            </DockPanel>
         </Border>
 
         <!-- Status bar -->
-        <Border DockPanel.Dock="Bottom"
+        <Border Grid.Row="2" Grid.Column="1"
                 Background="{DynamicResource AppToolBarBackground}"
                 BorderBrush="{DynamicResource AppDivider}"
                 BorderThickness="0,1,0,0"
@@ -154,7 +89,7 @@
         </Border>
 
         <!-- Disk card list (with empty-state guidance overlaid when no disks are mounted) -->
-        <Grid>
+        <Grid Grid.Row="1" Grid.Column="1">
         <ListBox x:Name="DiskList"
                  ItemsSource="{Binding Disks}"
                  ItemTemplate="{DynamicResource DiskCardTemplate}"
@@ -229,7 +164,86 @@
         </StackPanel>
         </Grid>
 
-    </DockPanel>
+        <!-- Tool buttons: in the app bar, or in the sidebar, depending on the style. -->
+        <StackPanel x:Name="ToolButtons" Style="{DynamicResource ToolButtonsStyle}">
+<Button Style="{StaticResource IconButton}"
+                            Command="{Binding CreateDiskCommand}"
+                            ToolTip="{DynamicResource Tip.NewDisk}"
+                            AutomationProperties.Name="{DynamicResource Tip.NewDisk}">
+                        <TextBlock Style="{StaticResource IconText}" Text="&#xE710;"/>
+                    </Button>
+                    <Button x:Name="ImportBtn" Style="{StaticResource IconButton}"
+                            Click="ImportBtn_Click"
+                            ToolTip="{DynamicResource Tip.Import}"
+                            AutomationProperties.Name="{DynamicResource Tip.Import}">
+                        <Button.ContextMenu>
+                            <ContextMenu>
+                                <MenuItem Header="{DynamicResource Btn.ImportDisk}"
+                                          ToolTip="{DynamicResource Tip.ImportDisk}"
+                                          Command="{Binding ImportDiskCommand}"/>
+                                <MenuItem Header="{DynamicResource Btn.ImportArchive}"
+                                          ToolTip="{DynamicResource Tip.ImportArchive}"
+                                          Command="{Binding ImportArchiveCommand}"/>
+                            </ContextMenu>
+                        </Button.ContextMenu>
+                        <TextBlock Style="{StaticResource IconText}" Text="&#xE8B5;"/>
+                    </Button>
+                    <Button x:Name="RestoreEnvBtn" Style="{StaticResource IconButton}"
+                            Click="RestoreEnvBtn_Click"
+                            ToolTip="{DynamicResource Tip.RestoreEnv}"
+                            AutomationProperties.Name="{DynamicResource Tip.RestoreEnv}">
+                        <Button.ContextMenu>
+                            <!-- Items are created in RestoreEnvBtn_Click, from the variables redirected at that moment. -->
+                            <ContextMenu/>
+                        </Button.ContextMenu>
+                        <TextBlock Style="{StaticResource IconText}" Text="&#xE7A7;"/>
+                    </Button>
+                    <Button Style="{StaticResource IconButton}"
+                            Command="{Binding SettingsCommand}"
+                            ToolTip="{DynamicResource Tip.Settings}"
+                            AutomationProperties.Name="{DynamicResource Tip.Settings}">
+                        <TextBlock Style="{StaticResource IconText}" Text="&#xE713;"/>
+                    </Button>
+                    <Button x:Name="OverflowBtn" Style="{StaticResource IconButton}"
+                            Click="OverflowBtn_Click"
+                            ToolTip="{DynamicResource Tip.More}"
+                            AutomationProperties.Name="{DynamicResource Tip.More}">
+                        <Button.ContextMenu>
+                            <ContextMenu x:Name="OverflowMenu">
+                                <MenuItem Header="{DynamicResource Menu.About}"
+                                          Command="{Binding AboutCommand}"/>
+                                <MenuItem Header="{DynamicResource Menu.Exit}"
+                                          Command="{Binding ExitCommand}"/>
+                            </ContextMenu>
+                        </Button.ContextMenu>
+                        <TextBlock Style="{StaticResource IconText}" Text="&#xE712;"/>
+                    </Button>
+        </StackPanel>
+
+        <!-- Window buttons -->
+        <StackPanel Grid.Row="0" Grid.Column="1" Orientation="Horizontal"
+                    HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,4,4,0"
+                    WindowChrome.IsHitTestVisibleInChrome="True">
+<Button Style="{StaticResource IconButton}"
+                            Click="MinimizeButton_Click"
+                            ToolTip="{DynamicResource Tip.Minimize}"
+                            AutomationProperties.Name="{DynamicResource Tip.Minimize}">
+                        <TextBlock Style="{StaticResource IconText}" Text="&#xE921;" FontSize="12"/>
+                    </Button>
+                    <Button x:Name="MaximizeBtn" Style="{StaticResource IconButton}"
+                            Click="MaximizeButton_Click"
+                            ToolTip="{DynamicResource Tip.MaximizeRestore}"
+                            AutomationProperties.Name="{DynamicResource Tip.MaximizeRestore}">
+                        <TextBlock x:Name="MaximizeIcon" Style="{StaticResource IconText}" Text="&#xE922;" FontSize="12"/>
+                    </Button>
+                    <Button Style="{StaticResource IconButton}"
+                            Click="CloseButton_Click"
+                            ToolTip="{DynamicResource Tip.HideToTray}"
+                            AutomationProperties.Name="{DynamicResource Tip.HideToTray}">
+                        <TextBlock Style="{StaticResource IconText}" Text="&#xE8BB;"/>
+                    </Button>
+        </StackPanel>
+    </Grid>
 
     <!-- Exit saving overlay -->
     <Border Background="{DynamicResource AppSurface}"

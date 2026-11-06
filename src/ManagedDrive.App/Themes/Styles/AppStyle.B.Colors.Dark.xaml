@@ -1,0 +1,25 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- Style B (dashboard), dark: blue-black with a bright blue accent. Merged after the theme's colors by StyleManager, so these win. -->
+
+    <SolidColorBrush x:Key="AppPrimary" Color="#FF4F8DF7"/>
+    <SolidColorBrush x:Key="AppPrimaryDark" Color="#FF3A74DB"/>
+    <SolidColorBrush x:Key="AppPrimarySoft" Color="#334F8DF7"/>
+    <SolidColorBrush x:Key="AppPrimaryForeground" Color="White"/>
+    <SolidColorBrush x:Key="AppForeground" Color="#FFE7E9EE"/>
+    <SolidColorBrush x:Key="AppForegroundLight" Color="#FF8D95A6"/>
+    <SolidColorBrush x:Key="AppForegroundMuted" Color="#FF8D95A6"/>
+    <SolidColorBrush x:Key="AppBackground" Color="#FF12141A"/>
+    <SolidColorBrush x:Key="AppSurface" Color="#FF1B1E27"/>
+    <SolidColorBrush x:Key="AppDivider" Color="#FF2A2F3B"/>
+    <SolidColorBrush x:Key="AppProgressTrack" Color="#FF2A2F3B"/>
+    <SolidColorBrush x:Key="AppToolBarBackground" Color="#FF12141A"/>
+    <SolidColorBrush x:Key="AppWarning" Color="#FFF0B04A"/>
+    <SolidColorBrush x:Key="AppHover" Color="#14FFFFFF"/>
+    <SolidColorBrush x:Key="AppPressed" Color="#1FFFFFFF"/>
+    <SolidColorBrush x:Key="AppBarBackground" Color="#FF12141A"/>
+    <SolidColorBrush x:Key="AppBarForeground" Color="#FFE7E9EE"/>
+    <SolidColorBrush x:Key="AppSidebarBackground" Color="#FF0D0F14"/>
+
+</ResourceDictionary>

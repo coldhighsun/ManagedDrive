@@ -1,9 +1,345 @@
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:controls="clr-namespace:ManagedDrive.App.Controls">
 
-    <!-- Style B (dashboard): starts from style A; its own overrides come in a later stage. -->
+    <!-- Style B (dashboard): starts from style A. The tool buttons move into a left sidebar, cards are raised panels
+         with a big used-space number. Its palette is in AppStyle.B.Colors.{Light|Dark}.xaml, which StyleManager
+         merges after the theme's colors. -->
     <ResourceDictionary.MergedDictionaries>
         <ResourceDictionary Source="AppStyle.A.xaml"/>
     </ResourceDictionary.MergedDictionaries>
+
+    <CornerRadius x:Key="ButtonCornerRadius">8</CornerRadius>
+    <CornerRadius x:Key="SectionCornerRadius">10</CornerRadius>
+
+    <Style x:Key="SidebarStyle" TargetType="Border">
+        <Setter Property="Grid.Column" Value="0"/>
+        <Setter Property="Grid.RowSpan" Value="3"/>
+        <Setter Property="Width" Value="56"/>
+        <Setter Property="Background" Value="{DynamicResource AppSidebarBackground}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource AppDivider}"/>
+        <Setter Property="BorderThickness" Value="0,0,1,0"/>
+    </Style>
+
+    <!-- The tool buttons stand in a column on the sidebar, under the top strip that still drags the window. -->
+    <Style x:Key="ToolButtonsStyle" TargetType="StackPanel">
+        <Setter Property="Grid.Row" Value="0"/>
+        <Setter Property="Grid.RowSpan" Value="3"/>
+        <Setter Property="Grid.Column" Value="0"/>
+        <Setter Property="Orientation" Value="Vertical"/>
+        <Setter Property="HorizontalAlignment" Value="Center"/>
+        <Setter Property="VerticalAlignment" Value="Top"/>
+        <Setter Property="Margin" Value="0,56,0,0"/>
+        <Setter Property="WindowChrome.IsHitTestVisibleInChrome" Value="True"/>
+    </Style>
+
+    <!-- Disk card: a raised dark (or white) panel with a hairline border. -->
+    <Style x:Key="DiskCard" TargetType="Border">
+        <Setter Property="Background" Value="{DynamicResource AppSurface}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource AppDivider}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="CornerRadius" Value="14"/>
+        <Style.Triggers>
+            <!-- High-usage blink: see style A. -->
+            <DataTrigger Binding="{Binding IsHighUsage}" Value="True">
+                <Setter Property="BorderBrush" Value="{DynamicResource AppWarning}"/>
+                <Setter Property="BorderThickness" Value="2"/>
+                <DataTrigger.EnterActions>
+                    <BeginStoryboard x:Name="HighUsageBlinkStoryboard">
+                        <Storyboard>
+                            <DoubleAnimation Storyboard.TargetProperty="Opacity"
+                                             From="1.0" To="0.55" Duration="0:0:0.6"
+                                             AutoReverse="True" RepeatBehavior="Forever"/>
+                        </Storyboard>
+                    </BeginStoryboard>
+                </DataTrigger.EnterActions>
+                <DataTrigger.ExitActions>
+                    <StopStoryboard BeginStoryboardName="HighUsageBlinkStoryboard"/>
+                </DataTrigger.ExitActions>
+            </DataTrigger>
+        </Style.Triggers>
+    </Style>
+
+    <!-- Template of one disk card: the same parts as style A's, with a big used-space number. -->
+    <DataTemplate x:Key="DiskCardTemplate">
+                    <Border x:Name="Card"
+                            Style="{DynamicResource DiskCard}"
+                            Margin="16,6"
+                            Padding="18"
+                            Cursor="Hand"
+                            Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=Window}}">
+                        <Border.InputBindings>
+                            <MouseBinding MouseAction="LeftDoubleClick" Command="{Binding OpenInExplorerCommand}"/>
+                        </Border.InputBindings>
+                        <Border.ContextMenu>
+                            <controls:DiskCardContextMenu/>
+                        </Border.ContextMenu>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="56"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="64"/>
+                            </Grid.ColumnDefinitions>
+
+                            <!-- Drive letter badge; the status icons sit next to the label (see below) so they
+                                 never make the card taller -->
+                            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                                <Border Width="44" Height="44" CornerRadius="12"
+                                        Background="{DynamicResource AppPrimarySoft}">
+                                    <TextBlock Text="{Binding MountPoint}"
+                                               FontSize="17" FontWeight="SemiBold"
+                                               Foreground="{DynamicResource AppPrimary}"
+                                               HorizontalAlignment="Center"
+                                               VerticalAlignment="Center"/>
+                                </Border>
+                            </StackPanel>
+
+                            <!-- Label (+ used/capacity/percent on the same row), or read-only summary -->
+                            <StackPanel Grid.Column="1" Margin="12,0,16,0" VerticalAlignment="Center">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <!-- The label ellipsizes first; the badges stay next to the usage text -->
+                                    <DockPanel>
+                                        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                                            <Border Width="20" Height="20" CornerRadius="10" Margin="4,0,0,0"
+                                                    Background="{DynamicResource AppSurface}"
+                                                    BorderBrush="{DynamicResource AppDivider}" BorderThickness="1"
+                                                    ToolTip="{DynamicResource Card.ReadOnly}"
+                                                    AutomationProperties.Name="{DynamicResource Card.ReadOnly}"
+                                                    Visibility="{Binding IsReadOnly, Converter={StaticResource BoolToVis}}">
+                                                <TextBlock Text="&#xE72E;" Style="{DynamicResource IconText}" FontSize="12"
+                                                           Foreground="{DynamicResource AppForegroundLight}"/>
+                                            </Border>
+                                            <Border Width="20" Height="20" CornerRadius="10" Margin="4,0,0,0"
+                                                    Background="{DynamicResource AppSurface}"
+                                                    BorderBrush="{DynamicResource AppDivider}" BorderThickness="1"
+                                                    ToolTip="{Binding ActiveRedirectsTooltip}"
+                                                    AutomationProperties.Name="{Binding ActiveRedirectsTooltip}"
+                                                    Visibility="{Binding HasActiveRedirects, Converter={StaticResource BoolToVis}}">
+                                                <TextBlock Text="&#xE8B7;" Style="{DynamicResource IconText}" FontSize="12"
+                                                           Foreground="{DynamicResource AppForeground}"/>
+                                            </Border>
+                                            <Border Width="20" Height="20" CornerRadius="10" Margin="4,0,0,0"
+                                                    Background="{DynamicResource AppSurface}"
+                                                    BorderBrush="{DynamicResource AppDivider}" BorderThickness="1"
+                                                    ToolTip="{Binding SourcePath}"
+                                                    AutomationProperties.Name="{Binding SourcePath}"
+                                                    Visibility="{Binding HasImagePath, Converter={StaticResource BoolToVis}}">
+                                                <TextBlock Text="&#xE74E;" Style="{DynamicResource IconText}" FontSize="12"
+                                                           Foreground="{DynamicResource AppForegroundLight}"/>
+                                            </Border>
+                                            <Border Width="20" Height="20" CornerRadius="10" Margin="4,0,0,0"
+                                                    Background="{DynamicResource AppSurface}"
+                                                    BorderBrush="{DynamicResource AppDivider}" BorderThickness="1"
+                                                    ToolTip="{DynamicResource Card.Encrypted}"
+                                                    AutomationProperties.Name="{DynamicResource Card.Encrypted}"
+                                                    Visibility="{Binding IsPasswordProtected, Converter={StaticResource BoolToVis}}">
+                                                <TextBlock Text="&#xE192;" Style="{DynamicResource IconText}" FontSize="12"
+                                                           Foreground="{DynamicResource AppForegroundLight}"/>
+                                            </Border>
+                                        </StackPanel>
+                                        <TextBlock Text="{Binding VolumeLabel}"
+                                                   FontSize="14" FontWeight="Medium"
+                                                   Foreground="{DynamicResource AppForeground}"
+                                                   TextTrimming="CharacterEllipsis"/>
+                                    </DockPanel>
+                                    <StackPanel Grid.Column="1" Orientation="Horizontal"
+                                                HorizontalAlignment="Right" Margin="8,0,0,0"
+                                                Visibility="{Binding IsNotReadOnly, Converter={StaticResource BoolToVis}}">
+                                        <TextBlock Text="{Binding UsedFormatted}" VerticalAlignment="Bottom" FontSize="20" FontWeight="Medium"
+                                                   Foreground="{DynamicResource AppForeground}"/>
+                                        <TextBlock Text=" / " VerticalAlignment="Bottom" Margin="0,0,0,2" FontSize="12"
+                                                   Foreground="{DynamicResource AppForegroundLight}"/>
+                                        <TextBlock Text="{Binding CapacityFormatted}" VerticalAlignment="Bottom" Margin="0,0,0,2" FontSize="12"
+                                                   Foreground="{DynamicResource AppForegroundLight}"/>
+                                        <TextBlock Text="{Binding UsedPercent, StringFormat='  ({0:0}%)'}" VerticalAlignment="Bottom" Margin="0,0,0,2" FontSize="12"
+                                                   Foreground="{DynamicResource AppForegroundLight}"/>
+                                        <!-- Non-color high-usage indicator for color-blind accessibility; tooltip carries the text -->
+                                        <TextBlock Text="&#xE7BA;" Style="{DynamicResource IconText}" FontSize="11"
+                                                   Foreground="{DynamicResource AppWarning}"
+                                                   VerticalAlignment="Center" Margin="6,0,0,0"
+                                                   ToolTip="{DynamicResource Card.HighUsage}"
+                                                   AutomationProperties.Name="{DynamicResource Card.HighUsage}"
+                                                   Visibility="{Binding IsHighUsage, Converter={StaticResource BoolToVis}}"/>
+                                    </StackPanel>
+                                </Grid>
+
+                                <!-- Read-only and normal disks must have the same card height: the normal rows stay in the layout
+                                     (Hidden, not Collapsed) under the read-only summary. -->
+                                <Grid>
+                                    <StackPanel>
+                                        <StackPanel.Style>
+                                            <Style TargetType="StackPanel">
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsReadOnly}" Value="True">
+                                                        <Setter Property="Visibility" Value="Hidden"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </StackPanel.Style>
+                                        <Border Height="6" Margin="0,8,0,8" CornerRadius="3" ClipToBounds="True"
+                                                Background="{DynamicResource AppProgressTrack}">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="{Binding UsedPercent, Converter={StaticResource PercentToGridLengthConverter}, ConverterParameter=Fill}"/>
+                                                    <ColumnDefinition Width="{Binding UsedPercent, Converter={StaticResource PercentToGridLengthConverter}, ConverterParameter=Remainder}"/>
+                                                </Grid.ColumnDefinitions>
+                                                <Border Grid.Column="0" CornerRadius="3">
+                                                    <Border.Style>
+                                                        <Style TargetType="Border">
+                                                            <Setter Property="Background" Value="{DynamicResource AppPrimary}"/>
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding IsHighUsage}" Value="True">
+                                                                    <Setter Property="Background" Value="{DynamicResource AppWarning}"/>
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </Border.Style>
+                                                </Border>
+                                            </Grid>
+                                        </Border>
+
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Text="&#xE823;" FontFamily="Segoe Fluent Icons" FontSize="10"
+                                                       Foreground="{DynamicResource AppForegroundLight}"
+                                                       VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                            <TextBlock Text="{Binding LastContentWriteFormatted}"
+                                                       FontSize="11"
+                                                       Foreground="{DynamicResource AppForegroundLight}"/>
+                                            <TextBlock Text="&#xE74E;" FontFamily="Segoe Fluent Icons" FontSize="10"
+                                                       Foreground="{DynamicResource AppForegroundLight}"
+                                                       VerticalAlignment="Center" Margin="12,0,4,0"
+                                                       Visibility="{Binding ShowLastAutoSave, Converter={StaticResource BoolToVis}}"/>
+                                            <TextBlock Text="{Binding LastAutoSaveFormatted}"
+                                                       FontSize="11"
+                                                       Foreground="{DynamicResource AppForegroundLight}"
+                                                       Visibility="{Binding ShowLastAutoSave, Converter={StaticResource BoolToVis}}"/>
+                                        </StackPanel>
+
+                                        <controls:DiskSpeedRow/>
+                                    </StackPanel>
+                                    <StackPanel VerticalAlignment="Top" Visibility="{Binding IsReadOnly, Converter={StaticResource BoolToVis}}">
+                                        <TextBlock FontSize="12"
+                                                   Foreground="{DynamicResource AppForegroundLight}"
+                                                   TextTrimming="CharacterEllipsis">
+                                            <Run Text="{DynamicResource Card.ReadOnly}"/>
+                                            <Run Text=" · "/>
+                                            <Run Text="{Binding SourcePath, Mode=OneWay}"/>
+                                        </TextBlock>
+                                    </StackPanel>
+                                </Grid>
+                            </StackPanel>
+
+                            <!-- Free space -->
+                            <StackPanel Grid.Column="2" VerticalAlignment="Center" HorizontalAlignment="Right"
+                                        Visibility="{Binding IsNotReadOnly, Converter={StaticResource BoolToVis}}">
+                                <TextBlock Text="{Binding FreeFormatted}"
+                                           FontSize="14" FontWeight="Medium"
+                                           HorizontalAlignment="Right">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="Foreground" Value="{DynamicResource AppForeground}"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding IsHighUsage}" Value="True">
+                                                    <Setter Property="Foreground" Value="{DynamicResource AppWarning}"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+                                <TextBlock Text="{DynamicResource Col.Free}" FontSize="11"
+                                           Foreground="{DynamicResource AppForegroundLight}"
+                                           HorizontalAlignment="Right"/>
+                            </StackPanel>
+
+                            <!-- Saving overlay; negative margin cancels the card Padding so it covers the whole card -->
+                            <Border Grid.ColumnSpan="3" Margin="-18"
+                                    Background="{DynamicResource AppSurface}"
+                                    Opacity="0.85"
+                                    CornerRadius="14"
+                                    Visibility="{Binding IsSaving, Converter={StaticResource BoolToVis}}">
+                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                    <TextBlock x:Name="SavingSpinner"
+                                               Text="&#xE895;" FontFamily="Segoe Fluent Icons" FontSize="16"
+                                               Foreground="{DynamicResource AppPrimary}"
+                                               RenderTransformOrigin="0.5,0.5">
+                                        <TextBlock.RenderTransform>
+                                            <RotateTransform x:Name="SpinnerRotate" Angle="0"/>
+                                        </TextBlock.RenderTransform>
+                                    </TextBlock>
+                                    <TextBlock Text="{DynamicResource Card.Saving}" FontSize="12" Margin="6,0,0,0"
+                                               Foreground="{DynamicResource AppForeground}"/>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Remounting overlay -->
+                            <Border Grid.ColumnSpan="3" Margin="-18"
+                                    Background="{DynamicResource AppSurface}"
+                                    Opacity="0.85"
+                                    CornerRadius="14"
+                                    Visibility="{Binding IsRemounting, Converter={StaticResource BoolToVis}}">
+                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                    <TextBlock x:Name="RemountingSpinner"
+                                               Text="&#xE895;" FontFamily="Segoe Fluent Icons" FontSize="16"
+                                               Foreground="{DynamicResource AppPrimary}"
+                                               RenderTransformOrigin="0.5,0.5">
+                                        <TextBlock.RenderTransform>
+                                            <RotateTransform x:Name="RemountSpinnerRotate" Angle="0"/>
+                                        </TextBlock.RenderTransform>
+                                    </TextBlock>
+                                    <TextBlock Text="{DynamicResource Card.ApplyingChanges}" FontSize="12" Margin="6,0,0,0"
+                                               Foreground="{DynamicResource AppForeground}"/>
+                                </StackPanel>
+                            </Border>
+                        </Grid>
+                    </Border>
+                    <DataTemplate.Triggers>
+                        <DataTrigger Value="True">
+                            <DataTrigger.Binding>
+                                <Binding Path="IsSelected"
+                                         RelativeSource="{RelativeSource AncestorType=ListBoxItem}"/>
+                            </DataTrigger.Binding>
+                            <Setter TargetName="Card" Property="BorderBrush" Value="{DynamicResource AppPrimary}"/>
+                            <Setter TargetName="Card" Property="Effect">
+                                <Setter.Value>
+                                    <DropShadowEffect ShadowDepth="1" BlurRadius="8" Opacity="0.12"/>
+                                </Setter.Value>
+                            </Setter>
+                        </DataTrigger>
+                        <DataTrigger Binding="{Binding IsSaving}" Value="True">
+                            <DataTrigger.EnterActions>
+                                <BeginStoryboard x:Name="SpinStoryboard">
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetName="SpinnerRotate"
+                                                          Storyboard.TargetProperty="Angle"
+                                                          From="0" To="360" Duration="0:0:1"
+                                                          RepeatBehavior="Forever"/>
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </DataTrigger.EnterActions>
+                            <DataTrigger.ExitActions>
+                                <StopStoryboard BeginStoryboardName="SpinStoryboard"/>
+                            </DataTrigger.ExitActions>
+                        </DataTrigger>
+                        <DataTrigger Binding="{Binding IsRemounting}" Value="True">
+                            <DataTrigger.EnterActions>
+                                <BeginStoryboard x:Name="RemountSpinStoryboard">
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetName="RemountSpinnerRotate"
+                                                          Storyboard.TargetProperty="Angle"
+                                                          From="0" To="360" Duration="0:0:1"
+                                                          RepeatBehavior="Forever"/>
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </DataTrigger.EnterActions>
+                            <DataTrigger.ExitActions>
+                                <StopStoryboard BeginStoryboardName="RemountSpinStoryboard"/>
+                            </DataTrigger.ExitActions>
+                        </DataTrigger>
+                    </DataTemplate.Triggers>
+                </DataTemplate>
 
 </ResourceDictionary>

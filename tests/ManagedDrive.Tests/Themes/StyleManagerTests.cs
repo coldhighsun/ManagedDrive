@@ -11,7 +11,6 @@ public sealed class StyleManagerTests
     /// Verifies that supported tags resolve to themselves, ignoring case.
     /// </summary>
     [Theory]
-    [InlineData("a", "a")]
     [InlineData("b", "b")]
     [InlineData("C", "c")]
     public void Resolve_SupportedTag_ReturnsLowercaseTag(string saved, string expected)
@@ -26,10 +25,24 @@ public sealed class StyleManagerTests
     [InlineData(null)]
     [InlineData("")]
     [InlineData("z")]
+    [InlineData("a")]
     [InlineData("dark")]
     public void Resolve_MissingOrUnknown_ReturnsDefault(string? saved)
     {
         Assert.Equal(StyleManager.DefaultStyle, StyleManager.Resolve(saved));
+    }
+
+    /// <summary>
+    /// Verifies which styles bring their own palette: both selectable styles do; the retired style A,
+    /// whose colors are the theme's, does not.
+    /// </summary>
+    [Theory]
+    [InlineData("a", false)]
+    [InlineData("b", true)]
+    [InlineData("c", true)]
+    public void HasPalette_ReflectsShippedPalettes(string tag, bool expected)
+    {
+        Assert.Equal(expected, StyleManager.HasPalette(tag));
     }
 
     /// <summary>

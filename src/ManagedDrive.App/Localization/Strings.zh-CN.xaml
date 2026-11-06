@@ -319,7 +319,6 @@
     <sys:String x:Key="Settings.Theme.Light">浅色</sys:String>
     <sys:String x:Key="Settings.Theme.Dark">深色</sys:String>
     <sys:String x:Key="Settings.Style">界面风格</sys:String>
-    <sys:String x:Key="Settings.Style.A">流畅</sys:String>
     <sys:String x:Key="Settings.Style.B">仪表盘</sys:String>
     <sys:String x:Key="Settings.Style.C">极简</sys:String>
     <sys:String x:Key="Tip.RunAtStartup">Windows 启动时自动运行 ManagedDrive</sys:String>

@@ -41,7 +41,7 @@ public sealed record AppConfiguration
     }
 
     /// <summary>
-    /// Visual style of the UI: "a" (Fluent), "b" (dashboard), "c" (minimal), or <c>null</c> for the default.
+    /// Visual style of the UI: "b" (dashboard), "c" (minimal), or <c>null</c> for the default (dashboard).
     /// Independent of <see cref="Theme"/>.
     /// </summary>
     public string? UiStyle

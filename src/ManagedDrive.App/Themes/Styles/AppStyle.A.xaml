@@ -3,12 +3,39 @@
                     xmlns:infra="clr-namespace:ManagedDrive.App.Infrastructure"
                     xmlns:controls="clr-namespace:ManagedDrive.App.Controls">
 
-    <!-- Style A (Fluent): the default look. B and C start from this dictionary and override parts of it.
+    <!-- Style A (Fluent): no longer a choice in the settings, but the base that B and C merge and override.
+         Every key the windows reference must exist here.
          Resources from AppTheme.xaml are referenced with DynamicResource: this dictionary is loaded on its own,
          before it is merged into the application resources, so a StaticResource would not find them. -->
 
     <BooleanToVisibilityConverter x:Key="BoolToVis"/>
     <infra:PercentToGridLengthConverter x:Key="PercentToGridLengthConverter"/>
+
+    <!-- Main window shell. The window places its sidebar background, app bar and tool buttons through these styles,
+         so a style can move the tool buttons from the app bar into a sidebar (see style B). Column 0 is the sidebar. -->
+    <Style x:Key="SidebarStyle" TargetType="Border">
+        <Setter Property="Grid.Column" Value="0"/>
+        <Setter Property="Grid.RowSpan" Value="3"/>
+        <Setter Property="Visibility" Value="Collapsed"/>
+    </Style>
+
+    <Style x:Key="AppBarStyle" TargetType="Border">
+        <Setter Property="Grid.Row" Value="0"/>
+        <Setter Property="Grid.Column" Value="1"/>
+        <Setter Property="Height" Value="48"/>
+        <Setter Property="Background" Value="{DynamicResource AppBarBackground}"/>
+    </Style>
+
+    <!-- Tool buttons in the app bar, left of the window buttons (3 x 40 plus their margin). -->
+    <Style x:Key="ToolButtonsStyle" TargetType="StackPanel">
+        <Setter Property="Grid.Row" Value="0"/>
+        <Setter Property="Grid.Column" Value="1"/>
+        <Setter Property="Orientation" Value="Horizontal"/>
+        <Setter Property="HorizontalAlignment" Value="Right"/>
+        <Setter Property="VerticalAlignment" Value="Top"/>
+        <Setter Property="Margin" Value="0,4,124,0"/>
+        <Setter Property="WindowChrome.IsHitTestVisibleInChrome" Value="True"/>
+    </Style>
 
     <!-- Disk card border: a rounded white card with a hairline border and no heavy shadow. -->
     <Style x:Key="DiskCard" TargetType="Border">
