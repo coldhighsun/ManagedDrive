@@ -158,6 +158,7 @@ public partial class App
             config = _settings.Load();
             LanguageManager.Instance.ApplyDefault(config.Language);
             ThemeManager.Instance.ApplyDefault(config.Theme);
+            StyleManager.Instance.ApplyDefault(config.UiStyle);
 
             if (!AppInstance.TryAcquire(out _singleInstanceMutex))
             {

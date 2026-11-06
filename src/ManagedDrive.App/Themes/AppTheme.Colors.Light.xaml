@@ -1,22 +1,23 @@
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
-    <SolidColorBrush x:Key="AppPrimary" Color="#3F51B5"/>
-    <SolidColorBrush x:Key="AppPrimaryDark" Color="#303F9F"/>
+    <SolidColorBrush x:Key="AppPrimary" Color="#0F6CBD"/>
+    <SolidColorBrush x:Key="AppPrimaryDark" Color="#0C5A9E"/>
+    <SolidColorBrush x:Key="AppPrimarySoft" Color="#FFE1ECFB"/>
     <SolidColorBrush x:Key="AppPrimaryForeground" Color="White"/>
-    <SolidColorBrush x:Key="AppForeground" Color="#FF000000"/>
-    <SolidColorBrush x:Key="AppForegroundLight" Color="#E6000000"/>
-    <SolidColorBrush x:Key="AppForegroundMuted" Color="#CC000000"/>
-    <SolidColorBrush x:Key="AppBackground" Color="#FFFFFF"/>
-    <SolidColorBrush x:Key="AppSurface" Color="#FFFFFF"/>
-    <SolidColorBrush x:Key="AppDivider" Color="#33000000"/>
-    <SolidColorBrush x:Key="AppProgressTrack" Color="#FFDADADA"/>
-    <SolidColorBrush x:Key="AppToolBarBackground" Color="#F5F5F5"/>
-    <SolidColorBrush x:Key="AppWarning" Color="#FF9800"/>
-    <SolidColorBrush x:Key="AppHover" Color="#0A000000"/>
-    <SolidColorBrush x:Key="AppPressed" Color="#14000000"/>
-    <SolidColorBrush x:Key="AppBarBackground" Color="#3F51B5"/>
-    <SolidColorBrush x:Key="AppBarForeground" Color="White"/>
+    <SolidColorBrush x:Key="AppForeground" Color="#FF1B1B1F"/>
+    <SolidColorBrush x:Key="AppForegroundLight" Color="#FF5F6672"/>
+    <SolidColorBrush x:Key="AppForegroundMuted" Color="#FF5F6672"/>
+    <SolidColorBrush x:Key="AppBackground" Color="#FFEEF1F6"/>
+    <SolidColorBrush x:Key="AppSurface" Color="#FFFFFFFF"/>
+    <SolidColorBrush x:Key="AppDivider" Color="#1F000000"/>
+    <SolidColorBrush x:Key="AppProgressTrack" Color="#FFE3E6EC"/>
+    <SolidColorBrush x:Key="AppToolBarBackground" Color="#FFEEF1F6"/>
+    <SolidColorBrush x:Key="AppWarning" Color="#E08A00"/>
+    <SolidColorBrush x:Key="AppHover" Color="#0F000000"/>
+    <SolidColorBrush x:Key="AppPressed" Color="#1A000000"/>
+    <SolidColorBrush x:Key="AppBarBackground" Color="#FFEEF1F6"/>
+    <SolidColorBrush x:Key="AppBarForeground" Color="#FF1B1B1F"/>
     <SolidColorBrush x:Key="AppChartWrite" Color="#E64A19"/>
 
     <!-- Space usage treemap: one colour per file category, plus folders and the merged small-items block. -->

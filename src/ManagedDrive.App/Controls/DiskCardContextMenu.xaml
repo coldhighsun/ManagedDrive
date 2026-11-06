@@ -1,0 +1,73 @@
+<ContextMenu x:Class="ManagedDrive.App.Controls.DiskCardContextMenu"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             Style="{DynamicResource {x:Type ContextMenu}}">
+    <ContextMenu.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVis"/>
+    </ContextMenu.Resources>
+                                <!-- Navigation -->
+                                <MenuItem Header="{DynamicResource Btn.OpenInExplorer}"
+                                          Command="{Binding PlacementTarget.DataContext.OpenInExplorerCommand,
+                                                    RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
+                                <MenuItem Header="{DynamicResource Btn.OpenImageDirectory}"
+                                          Command="{Binding PlacementTarget.DataContext.OpenImageDirectoryCommand,
+                                                    RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
+                                <Separator/>
+                                <!-- Configuration -->
+                                <MenuItem Header="{DynamicResource Btn.EditDisk}"
+                                          Command="{Binding PlacementTarget.Tag.EditDiskCommand,
+                                                    RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                          CommandParameter="{Binding PlacementTarget.DataContext,
+                                                    RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
+                                <!-- The check items are created by DiskCardContextMenu and ticked each time it opens, from what the environment says. -->
+                                <MenuItem Header="{DynamicResource Btn.Presets}" Tag="PresetsMenu"
+                                          x:Name="PresetsItem"/>
+                                <MenuItem Header="{DynamicResource Btn.ViewDiskContents}"
+                                          Command="{Binding PlacementTarget.Tag.ViewDiskContentsCommand,
+                                                    RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                          CommandParameter="{Binding PlacementTarget.DataContext,
+                                                    RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
+                                <MenuItem Header="{DynamicResource Btn.AnalyzeSpace}"
+                                          Command="{Binding PlacementTarget.Tag.AnalyzeSpaceCommand,
+                                                    RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                          CommandParameter="{Binding PlacementTarget.DataContext,
+                                                    RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
+                                <Separator/>
+                                <!-- Destructive operations -->
+                                <MenuItem Header="{DynamicResource Btn.SaveImage}"
+                                          Command="{Binding PlacementTarget.Tag.SaveImageCommand,
+                                                    RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                          CommandParameter="{Binding PlacementTarget.DataContext,
+                                                    RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
+                                <MenuItem Header="{DynamicResource Btn.CloneDisk}"
+                                          Command="{Binding PlacementTarget.Tag.CloneDiskCommand,
+                                                    RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                          CommandParameter="{Binding PlacementTarget.DataContext,
+                                                    RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
+                                <MenuItem Header="{DynamicResource Btn.CreateSnapshotNow}"
+                                          Visibility="{Binding PlacementTarget.DataContext.SnapshotsEnabled,
+                                                        RelativeSource={RelativeSource AncestorType=ContextMenu},
+                                                        Converter={StaticResource BoolToVis}}"
+                                          Command="{Binding PlacementTarget.Tag.CreateSnapshotNowCommand,
+                                                    RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                          CommandParameter="{Binding PlacementTarget.DataContext,
+                                                    RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
+                                <MenuItem Header="{DynamicResource Btn.RestoreSnapshot}"
+                                          Visibility="{Binding PlacementTarget.DataContext.SnapshotsEnabled,
+                                                        RelativeSource={RelativeSource AncestorType=ContextMenu},
+                                                        Converter={StaticResource BoolToVis}}"
+                                          Command="{Binding PlacementTarget.Tag.RestoreSnapshotCommand,
+                                                    RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                          CommandParameter="{Binding PlacementTarget.DataContext,
+                                                    RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
+                                <MenuItem Header="{DynamicResource Btn.FormatDisk}"
+                                          Command="{Binding PlacementTarget.Tag.FormatDiskCommand,
+                                                    RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                          CommandParameter="{Binding PlacementTarget.DataContext,
+                                                    RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
+                                <MenuItem Header="{DynamicResource Btn.Unmount}"
+                                          Command="{Binding PlacementTarget.Tag.UnmountCommand,
+                                                    RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                          CommandParameter="{Binding PlacementTarget.DataContext,
+                                                    RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
+                            </ContextMenu>

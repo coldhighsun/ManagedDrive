@@ -72,6 +72,21 @@ public partial class SettingsDialog
         {
             ThemeBox.SelectedIndex = 0;
         }
+
+        foreach (var style in StyleManager.SupportedStyles)
+        {
+            StyleBox.Items.Add(new ComboBoxItem { Content = Loc.Get($"Settings.Style.{style.ToUpperInvariant()}"), Tag = style });
+        }
+
+        var savedStyle = StyleManager.Resolve(config.UiStyle);
+        foreach (ComboBoxItem item in StyleBox.Items)
+        {
+            if ((string)item.Tag == savedStyle)
+            {
+                StyleBox.SelectedItem = item;
+                break;
+            }
+        }
     }
 
     /// <summary>
@@ -120,6 +135,9 @@ public partial class SettingsDialog
         var selectedTheme = ThemeBox.SelectedItem is ComboBoxItem { Tag: string th } && !string.IsNullOrEmpty(th) ? th : null;
         ThemeManager.Instance.Apply(selectedTheme);
 
+        var selectedStyle = StyleBox.SelectedItem is ComboBoxItem { Tag: string st } && st != StyleManager.DefaultStyle ? st : null;
+        StyleManager.Instance.Apply(selectedStyle);
+
         Result = new()
         {
             RunAtStartup = runAtStartup,
@@ -127,6 +145,7 @@ public partial class SettingsDialog
             CloseToTray = CloseToTrayBox.IsChecked == true,
             Language = selectedTag,
             Theme = selectedTheme,
+            UiStyle = selectedStyle,
             ContextMenuEnabled = contextMenuEnabled,
             AutoCheckForUpdates = AutoCheckForUpdatesBox.IsChecked == true,
             DefaultCompressionLevel = DefaultCompressionLevelBox.Level,
@@ -152,6 +171,7 @@ public partial class SettingsDialog
         CloseToTray = edits.CloseToTray,
         Language = edits.Language,
         Theme = edits.Theme,
+        UiStyle = edits.UiStyle,
         ContextMenuEnabled = edits.ContextMenuEnabled,
         AutoCheckForUpdates = edits.AutoCheckForUpdates,
         DefaultCompressionLevel = edits.DefaultCompressionLevel,
