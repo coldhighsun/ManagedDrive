@@ -186,7 +186,7 @@
                                           Command="{Binding ImportArchiveCommand}"/>
                             </ContextMenu>
                         </Button.ContextMenu>
-                        <TextBlock Style="{StaticResource IconText}" Text="&#xE8B5;"/>
+                        <TextBlock Style="{StaticResource IconText}" Text="&#xE8E5;"/>
                     </Button>
                     <Button x:Name="RestoreEnvBtn" Style="{StaticResource IconButton}"
                             Click="RestoreEnvBtn_Click"
