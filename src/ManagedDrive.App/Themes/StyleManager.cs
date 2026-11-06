@@ -50,7 +50,7 @@ public sealed class StyleManager
     public string CurrentStyle { get; private set; } = DefaultStyle;
 
     /// <summary>
-    /// Gets the raw saved style choice, or <c>null</c> for the default.
+    /// Gets the saved style choice (see <see cref="Normalize"/>), or <c>null</c> for the default.
     /// </summary>
     public string? SavedStyle
     {
@@ -72,6 +72,20 @@ public sealed class StyleManager
     }
 
     /// <summary>
+    /// Gets the choice to persist for a saved or picked one: <c>null</c> when it means the default style
+    /// (including an empty, retired or unknown value, which resolve to it), otherwise the style's tag.
+    /// A value that is not kept as it is can not turn into a different style later, if a style is ever
+    /// added under that name.
+    /// </summary>
+    /// <param name="saved">The saved or picked choice.</param>
+    /// <returns>The choice to store, or <c>null</c> for the default.</returns>
+    public static string? Normalize(string? saved)
+    {
+        var tag = Resolve(saved);
+        return tag == DefaultStyle ? null : tag;
+    }
+
+    /// <summary>
     /// Returns whether the style <paramref name="tag"/> ships its own palette on top of the theme's colors.
     /// </summary>
     public static bool HasPalette(string tag) => StylesWithPalette.Contains(tag);
@@ -81,7 +95,7 @@ public sealed class StyleManager
     /// </summary>
     public void Apply(string? saved)
     {
-        SavedStyle = string.IsNullOrEmpty(saved) ? null : saved;
+        SavedStyle = Normalize(saved);
 
         var tag = Resolve(saved);
         if (tag == CurrentStyle && _currentDict != null)

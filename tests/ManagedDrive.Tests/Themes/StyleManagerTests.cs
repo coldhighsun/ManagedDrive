@@ -33,6 +33,23 @@ public sealed class StyleManagerTests
     }
 
     /// <summary>
+    /// Verifies that the choice to persist is null for the default style and for anything that resolves
+    /// to it, and the tag of the style otherwise.
+    /// </summary>
+    [Theory]
+    [InlineData(null, null)]
+    [InlineData("", null)]
+    [InlineData("b", null)]
+    [InlineData("a", null)]
+    [InlineData("z", null)]
+    [InlineData("c", "c")]
+    [InlineData("C", "c")]
+    public void Normalize_SavedChoice_IsNullForTheDefault(string? saved, string? expected)
+    {
+        Assert.Equal(expected, StyleManager.Normalize(saved));
+    }
+
+    /// <summary>
     /// Verifies which styles bring their own palette: both selectable styles do; the retired style A,
     /// whose colors are the theme's, does not.
     /// </summary>
