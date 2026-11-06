@@ -36,19 +36,6 @@ public sealed class TrayIconController : IDisposable, ITrayHoverSource
     /// </summary>
     private const int MenuItemPadding = 4;
 
-    /// <summary>
-    /// The space left and right of a menu item at 96 DPI, in pixels. A drop-down menu ignores the
-    /// horizontal item padding, so the text is kept away from the edges of the menu with the item's
-    /// margin instead, which also insets the highlight of the selected item.
-    /// </summary>
-    private const int MenuItemMargin = 8;
-
-    /// <summary>
-    /// The width at 96 DPI, in pixels, that a submenu without submenus of its own gives back: a menu
-    /// reserves room at the right of every item for a submenu arrow, which such a submenu never draws.
-    /// </summary>
-    private const int LeafSubmenuTrim = 28;
-
     private readonly Dispatcher _dispatcher;
     private readonly DispatcherTimer _timerActivityFlash = new()
     {
@@ -136,10 +123,10 @@ public sealed class TrayIconController : IDisposable, ITrayHoverSource
         _mainViewModel = mainViewModel;
         _onBalloonClicked = onBalloonClicked;
 
-        var menu = new System.Windows.Forms.ContextMenuStrip();
+        var menu = new TrayContextMenu();
         _menuShow = new(Loc.Get("Tray.Show"), null, (_, _) => dispatcher.Invoke(onShow));
         _menuNewDisk = new(Loc.Get("Tray.NewDisk"), null, (_, _) => dispatcher.Invoke(onNewDisk));
-        _menuRestoreEnv = new(Loc.Get("Tray.RestoreEnv"));
+        _menuRestoreEnv = new(Loc.Get("Tray.RestoreEnv")) { DropDown = new TraySubmenu() };
         _onRestoreEnvAsync = onRestoreEnvAsync;
         _menuRestoreEnv.DropDown.HandleCreated += (_, _) => ApplyPopupChrome(_menuRestoreEnv.DropDown);
         _menuSettings = new(Loc.Get("Tray.Settings"), null, (_, _) => dispatcher.Invoke(onSettings));
@@ -159,7 +146,6 @@ public sealed class TrayIconController : IDisposable, ITrayHoverSource
         {
             RebuildRestoreEnvItems();
             RebuildDiskMenuItems();
-            WidenForItemMargins(menu);
             ContextMenuOpening?.Invoke();
         });
 
@@ -458,18 +444,6 @@ public sealed class TrayIconController : IDisposable, ITrayHoverSource
         new((int)Math.Round(MenuItemPadding * deviceDpi / 96.0));
 
     /// <summary>
-    /// Gets the margin of a menu item for a DPI: <see cref="MenuItemMargin"/> pixels at 96 DPI on the
-    /// left and right, scaled up like <see cref="GetItemPadding"/>.
-    /// </summary>
-    /// <param name="deviceDpi">The DPI of the menu.</param>
-    /// <returns>The margin of the item; nothing above or below.</returns>
-    internal static System.Windows.Forms.Padding GetItemMargin(int deviceDpi)
-    {
-        var horizontal = (int)Math.Round(MenuItemMargin * deviceDpi / 96.0);
-        return new(horizontal, 0, horizontal, 0);
-    }
-
-    /// <summary>
     /// Gives menu items, and the items of their submenus, the menu's foreground color and spacing.
     /// Run for every item when the theme is applied, and for the items that are rebuilt each time
     /// the menu opens, so that opening the menu does not have to re-apply the whole theme. The
@@ -487,26 +461,29 @@ public sealed class TrayIconController : IDisposable, ITrayHoverSource
         }
 
         var padding = GetItemPadding(menu.DeviceDpi);
-        var margin = GetItemMargin(menu.DeviceDpi);
+        var margin = TrayMenuMetrics.GetItemMargin(menu.DeviceDpi);
         foreach (System.Windows.Forms.ToolStripItem item in items)
         {
-            StyleMenuItem(item, menu.ForeColor, padding, margin);
+            StyleMenuItem(item, menu.ForeColor, padding, margin, menu.Renderer);
         }
     }
 
     /// <summary>
     /// Gives one menu item, and the items of its submenu, a foreground color and, for menu items,
-    /// a padding and a margin; separators keep their own height.
+    /// a padding and a margin; separators keep their own height. A submenu gets the menu's renderer,
+    /// which a submenu made by WinForms inherits but a <see cref="TraySubmenu"/> does not.
     /// </summary>
     /// <param name="item">The item to style.</param>
     /// <param name="foreground">The foreground color.</param>
     /// <param name="padding">The padding of a menu item.</param>
     /// <param name="margin">The margin of a menu item.</param>
+    /// <param name="renderer">The renderer of the menu.</param>
     private static void StyleMenuItem(
         System.Windows.Forms.ToolStripItem item,
         Color foreground,
         System.Windows.Forms.Padding padding,
-        System.Windows.Forms.Padding margin)
+        System.Windows.Forms.Padding margin,
+        System.Windows.Forms.ToolStripRenderer renderer)
     {
         item.ForeColor = foreground;
         if (item is not System.Windows.Forms.ToolStripMenuItem menuItem)
@@ -517,8 +494,9 @@ public sealed class TrayIconController : IDisposable, ITrayHoverSource
         menuItem.Padding = padding;
         menuItem.Margin = margin;
 
-        // Only ask for the drop-down of an item that has one: reading it creates it.
-        if (!menuItem.HasDropDownItems)
+        // Only ask for the drop-down of an item that has one: reading it creates it. The restore item has
+        // one while it has no items yet, because they are added each time the menu opens.
+        if (!menuItem.HasDropDown)
         {
             return;
         }
@@ -528,54 +506,12 @@ public sealed class TrayIconController : IDisposable, ITrayHoverSource
         {
             submenu.ShowImageMargin = false;
             submenu.ShowCheckMargin = false;
+            submenu.Renderer = renderer;
         }
 
-        // Removed first, so that styling the same item again does not subscribe twice.
-        menuItem.DropDownOpening -= OnSubmenuOpening;
-        menuItem.DropDownOpening += OnSubmenuOpening;
         foreach (System.Windows.Forms.ToolStripItem child in menuItem.DropDownItems)
         {
-            StyleMenuItem(child, foreground, padding, margin);
-        }
-    }
-
-    /// <summary>
-    /// Widens a submenu for the margins of its items just before it opens.
-    /// </summary>
-    /// <param name="sender">The menu item whose submenu is about to open.</param>
-    /// <param name="e">Unused.</param>
-    private static void OnSubmenuOpening(object? sender, EventArgs e)
-    {
-        if (sender is System.Windows.Forms.ToolStripMenuItem { HasDropDownItems: true } item)
-        {
-            WidenForItemMargins(item.DropDown);
-        }
-    }
-
-    /// <summary>
-    /// Makes a menu as wide as its items need plus the left and right margin of an item. A drop-down
-    /// menu sizes itself from the items alone, so with the margins it would be too narrow and cut off
-    /// the right side (the submenu arrow) of the items. A submenu none of whose items opens a submenu
-    /// gives back the room reserved for the arrow (<see cref="LeafSubmenuTrim"/>), which would
-    /// otherwise show as an empty strip at its right. Called every time the menu is about to open,
-    /// after its items were rebuilt, so the width follows what the menu holds.
-    /// </summary>
-    /// <param name="dropDown">The menu or submenu.</param>
-    private static void WidenForItemMargins(System.Windows.Forms.ToolStripDropDown dropDown)
-    {
-        var items = dropDown.Items.OfType<System.Windows.Forms.ToolStripMenuItem>().ToList();
-        var margin = items.FirstOrDefault()?.Margin.Horizontal ?? 0;
-        var trim = dropDown.OwnerItem is not null && !items.Any(item => item.HasDropDownItems)
-            ? (int)Math.Round(LeafSubmenuTrim * dropDown.DeviceDpi / 96.0)
-            : 0;
-
-        dropDown.MinimumSize = System.Drawing.Size.Empty;
-        dropDown.MaximumSize = System.Drawing.Size.Empty;
-        var width = dropDown.GetPreferredSize(System.Drawing.Size.Empty).Width + margin - trim;
-        dropDown.MinimumSize = new(width, 0);
-        if (trim > 0)
-        {
-            dropDown.MaximumSize = new(width, 0);
+            StyleMenuItem(child, foreground, padding, margin, renderer);
         }
     }
 
@@ -792,7 +728,7 @@ public sealed class TrayIconController : IDisposable, ITrayHoverSource
         var insertIndex = menu.Items.IndexOf(_menuNewDisk) + 1;
         foreach (var vm in _mainViewModel.Disks)
         {
-            var diskItem = new System.Windows.Forms.ToolStripMenuItem($"{vm.MountPoint} ({vm.VolumeLabel})");
+            var diskItem = new System.Windows.Forms.ToolStripMenuItem($"{vm.MountPoint} ({vm.VolumeLabel})") { DropDown = new TraySubmenu() };
             diskItem.DropDownItems.Add(Loc.Get("Btn.OpenInExplorer"), null, (_, _) => _dispatcher.Invoke(() => vm.OpenInExplorerCommand.Execute(null)));
             diskItem.DropDownItems.Add(Loc.Get("Btn.SaveImage"), null, (_, _) => _dispatcher.Invoke(() => _mainViewModel.SaveImageCommand.Execute(vm)));
             diskItem.DropDownItems.Add(Loc.Get("Btn.Unmount"), null, (_, _) => _dispatcher.Invoke(() => _mainViewModel.UnmountCommand.Execute(vm)));
