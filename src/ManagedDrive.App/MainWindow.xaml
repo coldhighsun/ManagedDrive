@@ -72,7 +72,8 @@
                             Command="{Binding CreateDiskCommand}"
                             ToolTip="{DynamicResource Tip.NewDisk}"
                             AutomationProperties.Name="{DynamicResource Tip.NewDisk}">
-                        <TextBlock Style="{StaticResource IconText}" Text="&#xE710;"/>
+                        <TextBlock Style="{StaticResource IconText}" Text="&#xE710;"
+                                   Foreground="{DynamicResource ToolIconNew}"/>
                     </Button>
                     <Button x:Name="ImportBtn" Style="{StaticResource IconButton}"
                             Click="ImportBtn_Click"
@@ -88,7 +89,8 @@
                                           Command="{Binding ImportArchiveCommand}"/>
                             </ContextMenu>
                         </Button.ContextMenu>
-                        <TextBlock Style="{StaticResource IconText}" Text="&#xE8E5;"/>
+                        <TextBlock Style="{StaticResource IconText}" Text="&#xE8E5;"
+                                   Foreground="{DynamicResource ToolIconImport}"/>
                     </Button>
                     <Button x:Name="RestoreEnvBtn" Style="{StaticResource IconButton}"
                             Click="RestoreEnvBtn_Click"
@@ -98,25 +100,29 @@
                             <!-- Items are created in RestoreEnvBtn_Click, from the variables redirected at that moment. -->
                             <ContextMenu/>
                         </Button.ContextMenu>
-                        <TextBlock Style="{StaticResource IconText}" Text="&#xE7A7;"/>
+                        <TextBlock Style="{StaticResource IconText}" Text="&#xE7A7;"
+                                   Foreground="{DynamicResource ToolIconRestore}"/>
                     </Button>
                     <Button Style="{StaticResource IconButton}"
                             Command="{Binding SettingsCommand}"
                             ToolTip="{DynamicResource Tip.Settings}"
                             AutomationProperties.Name="{DynamicResource Tip.Settings}">
-                        <TextBlock Style="{StaticResource IconText}" Text="&#xE713;"/>
+                        <TextBlock Style="{StaticResource IconText}" Text="&#xE713;"
+                                   Foreground="{DynamicResource ToolIconSettings}"/>
                     </Button>
                     <Button Style="{StaticResource IconButton}"
                             Command="{Binding AboutCommand}"
                             ToolTip="{DynamicResource Menu.About}"
                             AutomationProperties.Name="{DynamicResource Menu.About}">
-                        <TextBlock Style="{StaticResource IconText}" Text="&#xE946;"/>
+                        <TextBlock Style="{StaticResource IconText}" Text="&#xE946;"
+                                   Foreground="{DynamicResource ToolIconAbout}"/>
                     </Button>
                     <Button Style="{StaticResource IconButton}"
                             Command="{Binding ExitCommand}"
                             ToolTip="{DynamicResource Menu.Exit}"
                             AutomationProperties.Name="{DynamicResource Menu.Exit}">
-                        <TextBlock Style="{StaticResource IconText}" Text="&#xE7E8;"/>
+                        <TextBlock Style="{StaticResource IconText}" Text="&#xE7E8;"
+                                   Foreground="{DynamicResource ToolIconExit}"/>
                     </Button>
         </StackPanel>
 
