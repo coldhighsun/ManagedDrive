@@ -34,6 +34,15 @@ public static class CliPipeClient
     /// </summary>
     internal static TimeSpan? TestReadTimeoutOverride;
 
+    /// <summary>
+    /// Test-only stage trace for <see cref="TrySend"/>: receives a stage name and the
+    /// <see cref="Stopwatch.GetTimestamp"/> value when it was reached, so a test that finds
+    /// <see cref="TrySend"/> slow can report which step took the time.
+    /// </summary>
+    internal static Action<string, long>? TestTrace;
+
+    private static void Trace(string stage) => TestTrace?.Invoke(stage, Stopwatch.GetTimestamp());
+
     private static TimeSpan ReadTimeout => TestReadTimeoutOverride ?? DefaultReadTimeout;
 
     /// <summary>
@@ -132,10 +141,13 @@ public static class CliPipeClient
     public static bool TrySend(string[] args, out CliResponse response)
     {
         response = new(false, string.Empty, null, 1);
+        Trace("TrySend start");
 
         using var pipe = new NamedPipeClientStream(".", PipeName, PipeDirection.InOut, PipeOptions.Asynchronous);
 
-        switch (Connect(pipe, out var refusal))
+        var connectResult = Connect(pipe, out var refusal);
+        Trace("Connect done");
+        switch (connectResult)
         {
             case ConnectResult.NotListening:
                 return false;
@@ -156,8 +168,11 @@ public static class CliPipeClient
         }
         finally
         {
+            Trace("TrySendCore done");
             try { reader.Dispose(); } catch (Exception) { }
+            Trace("reader disposed");
             try { writer.Dispose(); } catch (Exception) { }
+            Trace("writer disposed");
         }
     }
 
@@ -378,9 +393,13 @@ public static class CliPipeClient
         // block here forever.
         var writeTask = writer.WriteLineAsync(CliPipeProtocol.SerializeRequest(args, Environment.CurrentDirectory));
 
-        if (Task.WaitAny([writeTask], ReadTimeout) == -1)
+        Trace("write started");
+        var writeWait = Task.WaitAny([writeTask], ReadTimeout);
+        Trace("write wait returned");
+        if (writeWait == -1)
         {
             pipe.Dispose();
+            Trace("pipe disposed after write timeout");
             ObserveAbandoned(writeTask);
 
             // Part of the request may already sit in the instance's pipe, where it could still be

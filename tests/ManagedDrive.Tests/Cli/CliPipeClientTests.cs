@@ -16,6 +16,7 @@ public sealed class CliPipeClientTests : IDisposable
     {
         CliPipeClient.TestPipeNameOverride = null;
         CliPipeClient.TestReadTimeoutOverride = null;
+        CliPipeClient.TestTrace = null;
         CliPipeClient.TestCurrentUserSidOverride = null;
     }
 
@@ -121,6 +122,12 @@ public sealed class CliPipeClientTests : IDisposable
         using var server = new NamedPipeServerStream(
             pipeName, PipeDirection.InOut, 1, PipeTransmissionMode.Byte, PipeOptions.Asynchronous, 0, 0);
 
+        // Stage timestamps from inside TrySend, so a slow run (seen once on CI at 8.3 s against a
+        // 200 ms timeout) says which step took the time.
+        var trace = new System.Collections.Concurrent.ConcurrentQueue<(string Stage, long Timestamp)>();
+        CliPipeClient.TestTrace = (stage, timestamp) => trace.Enqueue((stage, timestamp));
+
+        var startTimestamp = Stopwatch.GetTimestamp();
         var stopwatch = Stopwatch.StartNew();
 
         // On a dedicated thread so a regression that blocks the write forever still lets the test
@@ -140,7 +147,10 @@ public sealed class CliPipeClientTests : IDisposable
         Assert.Equal(CliPipeClient.NoResponseMessage, response.Message);
         Assert.True(
             stopwatch.Elapsed < TimeSpan.FromSeconds(5),
-            $"TrySend blocked for {stopwatch.Elapsed}; the overridden 200ms timeout should have abandoned the write.");
+            $"TrySend blocked for {stopwatch.Elapsed}; the overridden 200ms timeout should have abandoned the write. "
+            + "Stages (ms since the test started): "
+            + string.Join(", ", trace.Select(t =>
+                $"{t.Stage}={Stopwatch.GetElapsedTime(startTimestamp, t.Timestamp).TotalMilliseconds:F0}")));
     }
 
     [Fact(Timeout = 10_000)]
