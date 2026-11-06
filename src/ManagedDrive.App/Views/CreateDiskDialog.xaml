@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:controls="clr-namespace:ManagedDrive.App.Controls"
         xmlns:views="clr-namespace:ManagedDrive.App.Views"
-        Style="{StaticResource DialogWindowStyle}"
+        Style="{DynamicResource DialogWindowStyle}"
         Title="{DynamicResource CreateDisk.Title}"
         Width="440" SizeToContent="Height"
         WindowStartupLocation="CenterOwner">

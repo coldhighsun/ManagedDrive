@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:views="clr-namespace:ManagedDrive.App.Views"
         xmlns:helpers="clr-namespace:ManagedDrive.App.Helpers"
-        Style="{StaticResource DialogWindowStyle}"
+        Style="{DynamicResource DialogWindowStyle}"
         Title="{DynamicResource DiskContent.Title}"
         Width="480" Height="480"
         MinWidth="360" MinHeight="320"
@@ -124,7 +124,7 @@
                  ToolTip="{DynamicResource Tip.DiskContentFilter}"
                  TextChanged="FilterBox_TextChanged"/>
 
-        <Border Grid.Row="4" Style="{StaticResource SectionBorder}">
+        <Border Grid.Row="4" Style="{DynamicResource SectionBorder}">
             <Grid>
                 <TextBlock x:Name="EmptyText"
                            Text="{DynamicResource DiskContent.Empty}"

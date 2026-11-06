@@ -4,7 +4,7 @@
         xmlns:helpers="clr-namespace:ManagedDrive.App.Helpers"
         xmlns:controls="clr-namespace:ManagedDrive.App.Controls"
         xmlns:views="clr-namespace:ManagedDrive.App.Views"
-        Style="{StaticResource DialogWindowStyle}"
+        Style="{DynamicResource DialogWindowStyle}"
         Title="{DynamicResource CloneDisk.Title}"
         Width="440" SizeToContent="Height"
         WindowStartupLocation="CenterOwner">
@@ -24,7 +24,7 @@
                    TextWrapping="Wrap"/>
 
         <!-- Clone to another mounted disk -->
-        <Border Grid.Row="2" Style="{StaticResource SectionBorder}">
+        <Border Grid.Row="2" Style="{DynamicResource SectionBorder}">
             <StackPanel Grid.IsSharedSizeScope="True">
                 <RadioButton x:Name="CloneToDiskOption" GroupName="CloneMode"
                              Content="{DynamicResource CloneDisk.ToDisk}"

@@ -1,0 +1,9 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- Style C (minimal): starts from style A; its own overrides come in a later stage. -->
+    <ResourceDictionary.MergedDictionaries>
+        <ResourceDictionary Source="AppStyle.A.xaml"/>
+    </ResourceDictionary.MergedDictionaries>
+
+</ResourceDictionary>

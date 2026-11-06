@@ -41,6 +41,15 @@ public sealed record AppConfiguration
     }
 
     /// <summary>
+    /// Visual style of the UI: "a" (Fluent), "b" (dashboard), "c" (minimal), or <c>null</c> for the default.
+    /// Independent of <see cref="Theme"/>.
+    /// </summary>
+    public string? UiStyle
+    {
+        get; init;
+    }
+
+    /// <summary>
     /// Gets or sets a value indicating whether the main window should be hidden on startup,
     /// showing only the system tray icon. Defaults to <c>false</c>.
     /// </summary>

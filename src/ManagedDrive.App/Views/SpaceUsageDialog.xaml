@@ -4,7 +4,7 @@
         xmlns:views="clr-namespace:ManagedDrive.App.Views"
         xmlns:controls="clr-namespace:ManagedDrive.App.Controls"
         xmlns:infra="clr-namespace:ManagedDrive.App.Infrastructure"
-        Style="{StaticResource DialogWindowStyle}"
+        Style="{DynamicResource DialogWindowStyle}"
         Title="{DynamicResource SpaceUsage.Title}"
         Width="980" Height="640"
         MinWidth="760" MinHeight="460"
@@ -198,7 +198,7 @@
                     <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
 
-                <Border Grid.Row="0" Style="{StaticResource SectionBorder}" Padding="0">
+                <Border Grid.Row="0" Style="{DynamicResource SectionBorder}" Padding="0">
                     <Grid>
                         <controls:TreemapControl x:Name="Treemap"
                                                  DirectoryChanged="Treemap_DirectoryChanged"

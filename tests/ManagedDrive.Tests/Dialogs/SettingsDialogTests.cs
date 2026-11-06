@@ -34,6 +34,7 @@ public sealed class SettingsDialogTests
             CloseToTray = false,
             Language = "zh-CN",
             Theme = "Dark",
+            UiStyle = "c",
             ContextMenuEnabled = true,
             AutoCheckForUpdates = false,
             DefaultCompressionLevel = 19,
@@ -51,6 +52,7 @@ public sealed class SettingsDialogTests
         Assert.False(result.CloseToTray);
         Assert.Equal("zh-CN", result.Language);
         Assert.Equal("Dark", result.Theme);
+        Assert.Equal("c", result.UiStyle);
         Assert.True(result.ContextMenuEnabled);
         Assert.False(result.AutoCheckForUpdates);
         Assert.Equal(19, result.DefaultCompressionLevel);

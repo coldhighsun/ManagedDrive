@@ -67,10 +67,10 @@
                     </Border>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="True">
-                            <Setter TargetName="Bd" Property="Background" Value="#33FFFFFF"/>
+                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource AppHover}"/>
                         </Trigger>
                         <Trigger Property="IsPressed" Value="True">
-                            <Setter TargetName="Bd" Property="Background" Value="#55FFFFFF"/>
+                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource AppPressed}"/>
                         </Trigger>
                         <Trigger Property="IsEnabled" Value="False">
                             <Setter Property="Opacity" Value="0.4"/>
@@ -139,7 +139,7 @@
             <Setter.Value>
                 <ControlTemplate TargetType="Button">
                     <Border x:Name="Bd" Background="{TemplateBinding Background}"
-                            CornerRadius="3"
+                            CornerRadius="6"
                             Padding="{TemplateBinding Padding}">
                         <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
                                           VerticalAlignment="{TemplateBinding VerticalContentAlignment}"/>
@@ -174,11 +174,8 @@
             <Setter.Value>
                 <ControlTemplate TargetType="Button">
                     <Border x:Name="Bd" Background="{TemplateBinding Background}"
-                            CornerRadius="3"
+                            CornerRadius="6"
                             Padding="{TemplateBinding Padding}">
-                        <Border.Effect>
-                            <DropShadowEffect ShadowDepth="1" BlurRadius="3" Opacity="0.25"/>
-                        </Border.Effect>
                         <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
                                           VerticalAlignment="{TemplateBinding VerticalContentAlignment}"/>
                     </Border>
@@ -214,7 +211,7 @@
                     <Border x:Name="Bd" Background="{TemplateBinding Background}"
                             BorderBrush="{TemplateBinding BorderBrush}"
                             BorderThickness="{TemplateBinding BorderThickness}"
-                            CornerRadius="3"
+                            CornerRadius="6"
                             Padding="{TemplateBinding Padding}">
                         <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
                                           VerticalAlignment="{TemplateBinding VerticalContentAlignment}"/>
@@ -718,46 +715,11 @@
         </Style.Triggers>
     </Style>
 
-    <!-- ========== Disk card border ========== -->
-    <Style x:Key="DiskCard" TargetType="Border">
-        <Setter Property="Background" Value="{DynamicResource AppSurface}"/>
-        <Setter Property="BorderBrush" Value="{DynamicResource AppDivider}"/>
-        <Setter Property="BorderThickness" Value="1"/>
-        <Setter Property="CornerRadius" Value="4"/>
-        <Setter Property="Effect">
-            <Setter.Value>
-                <DropShadowEffect ShadowDepth="1" BlurRadius="4" Opacity="0.12"/>
-            </Setter.Value>
-        </Setter>
-        <Style.Triggers>
-            <!-- High-usage blink: pulses opacity and switches to a thicker warning-colored
-                 border for as long as the bound disk stays over its warning threshold. Animates
-                 Opacity rather than BorderBrush.Color directly, since BorderBrush here resolves to
-                 a shared DynamicResource brush instance that other cards/elements also reference. -->
-            <DataTrigger Binding="{Binding IsHighUsage}" Value="True">
-                <Setter Property="BorderBrush" Value="{DynamicResource AppWarning}"/>
-                <Setter Property="BorderThickness" Value="2"/>
-                <DataTrigger.EnterActions>
-                    <BeginStoryboard x:Name="HighUsageBlinkStoryboard">
-                        <Storyboard>
-                            <DoubleAnimation Storyboard.TargetProperty="Opacity"
-                                             From="1.0" To="0.55" Duration="0:0:0.6"
-                                             AutoReverse="True" RepeatBehavior="Forever"/>
-                        </Storyboard>
-                    </BeginStoryboard>
-                </DataTrigger.EnterActions>
-                <DataTrigger.ExitActions>
-                    <StopStoryboard BeginStoryboardName="HighUsageBlinkStoryboard"/>
-                </DataTrigger.ExitActions>
-            </DataTrigger>
-        </Style.Triggers>
-    </Style>
-
     <!-- ========== Dialog field grouping ========== -->
     <Style x:Key="SectionBorder" TargetType="Border">
         <Setter Property="BorderBrush" Value="{DynamicResource AppDivider}"/>
         <Setter Property="BorderThickness" Value="1"/>
-        <Setter Property="CornerRadius" Value="4"/>
+        <Setter Property="CornerRadius" Value="8"/>
         <Setter Property="Padding" Value="14,12"/>
     </Style>
 

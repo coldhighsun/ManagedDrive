@@ -50,11 +50,12 @@ public sealed class MainViewModelSaveSettingsTests : ViewModelTestBase
         };
         List<DiskProfile> profiles = [new() { MountPoint = "R:" }];
 
-        var result = MainViewModel.ApplyLiveSettings(current, profiles, runAtStartup: true, language: "zh-CN", theme: "dark");
+        var result = MainViewModel.ApplyLiveSettings(current, profiles, runAtStartup: true, language: "zh-CN", theme: "dark", uiStyle: "b");
 
         Assert.True(result.RunAtStartup);
         Assert.Equal("zh-CN", result.Language);
         Assert.Equal("dark", result.Theme);
+        Assert.Equal("b", result.UiStyle);
         Assert.Same(profiles, result.Disks);
         Assert.True(result.StartMinimized);
         Assert.False(result.CloseToTray);

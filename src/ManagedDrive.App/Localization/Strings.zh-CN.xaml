@@ -318,6 +318,10 @@
     <sys:String x:Key="Settings.Theme.System">跟随系统</sys:String>
     <sys:String x:Key="Settings.Theme.Light">浅色</sys:String>
     <sys:String x:Key="Settings.Theme.Dark">深色</sys:String>
+    <sys:String x:Key="Settings.Style">界面风格</sys:String>
+    <sys:String x:Key="Settings.Style.A">流畅</sys:String>
+    <sys:String x:Key="Settings.Style.B">仪表盘</sys:String>
+    <sys:String x:Key="Settings.Style.C">极简</sys:String>
     <sys:String x:Key="Tip.RunAtStartup">Windows 启动时自动运行 ManagedDrive</sys:String>
     <sys:String x:Key="Tip.StartMinimized">启动时隐藏主窗口，仅显示系统托盘图标</sys:String>
     <sys:String x:Key="Tip.ContextMenuEnabled">添加右键菜单项，可直接将 zip/7z/rar/tar 压缩包挂载为内存盘</sys:String>

@@ -244,7 +244,8 @@ public sealed partial class MainViewModel
         var runAtStartup = StartupManager.IsEnabled;
         var language = LanguageManager.Instance.SavedLanguage;
         var theme = ThemeManager.Instance.SavedTheme;
-        _settingsStore.Update(current => ApplyLiveSettings(current, profiles, runAtStartup, language, theme));
+        var uiStyle = StyleManager.Instance.SavedStyle;
+        _settingsStore.Update(current => ApplyLiveSettings(current, profiles, runAtStartup, language, theme, uiStyle));
     }
 
     /// <summary>
@@ -258,15 +259,17 @@ public sealed partial class MainViewModel
     /// <param name="runAtStartup">Whether the app is registered to run at startup.</param>
     /// <param name="language">The user's saved language choice.</param>
     /// <param name="theme">The user's saved theme choice.</param>
+    /// <param name="uiStyle">The user's saved visual style choice.</param>
     /// <returns>The settings to store.</returns>
     internal static AppConfiguration ApplyLiveSettings(
-        AppConfiguration current, List<DiskProfile> profiles, bool runAtStartup, string? language, string? theme)
+        AppConfiguration current, List<DiskProfile> profiles, bool runAtStartup, string? language, string? theme, string? uiStyle)
     {
         return current with
         {
             RunAtStartup = runAtStartup,
             Language = language,
             Theme = theme,
+            UiStyle = uiStyle,
             Disks = profiles,
         };
     }
