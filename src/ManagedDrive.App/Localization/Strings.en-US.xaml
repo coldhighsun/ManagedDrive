@@ -31,7 +31,6 @@
     <sys:String x:Key="Tip.HideToTray">Hide to tray</sys:String>
     <sys:String x:Key="Tip.CloseDialog">Close</sys:String>
     <sys:String x:Key="Tip.Import">Import a disk image or archive</sys:String>
-    <sys:String x:Key="Tip.More">More options</sys:String>
     <sys:String x:Key="Col.Free">Free</sys:String>
 
     <!-- CreateDiskDialog -->
