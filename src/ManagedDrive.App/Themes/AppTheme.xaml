@@ -30,7 +30,7 @@
     <Style x:Key="AppWindow" TargetType="Window">
         <Setter Property="Background" Value="{DynamicResource AppBackground}"/>
         <Setter Property="TextElement.Foreground" Value="{DynamicResource AppForeground}"/>
-        <Setter Property="FontFamily" Value="Segoe UI"/>
+        <Setter Property="FontFamily" Value="{DynamicResource AppFontFamily}"/>
         <Setter Property="FontSize" Value="13"/>
         <Setter Property="SnapsToDevicePixels" Value="True"/>
         <Setter Property="TextOptions.TextFormattingMode" Value="Display"/>
@@ -408,6 +408,8 @@
     </Style>
 
     <Style x:Key="OutlinedComboBox" TargetType="ComboBox">
+        <!-- Pixel scrolling, unless a box with a virtualized list asks for item scrolling. -->
+        <Setter Property="ScrollViewer.CanContentScroll" Value="False"/>
         <Setter Property="Padding" Value="8,8"/>
         <Setter Property="BorderBrush" Value="{DynamicResource AppDivider}"/>
         <Setter Property="BorderThickness" Value="1"/>
@@ -461,7 +463,8 @@
                                 <Border.Effect>
                                     <DropShadowEffect ShadowDepth="1" BlurRadius="6" Opacity="0.2"/>
                                 </Border.Effect>
-                                <ScrollViewer SnapsToDevicePixels="True">
+                                <ScrollViewer SnapsToDevicePixels="True"
+                                              CanContentScroll="{TemplateBinding ScrollViewer.CanContentScroll}">
                                     <ItemsPresenter/>
                                 </ScrollViewer>
                             </Border>
@@ -492,10 +495,17 @@
         </Style.Triggers>
     </Style>
 
+    <!-- ========== Tooltip ========== -->
+    <!-- A tooltip opens in its own popup and does not inherit the window's font. -->
+    <Style TargetType="ToolTip">
+        <Setter Property="FontFamily" Value="{DynamicResource AppFontFamily}"/>
+    </Style>
+
     <!-- ========== Context menu ========== -->
     <!-- Implicit styles (no x:Key) so every ContextMenu/MenuItem/Separator in the app
          follows the theme, since the native popup chrome always renders white. -->
     <Style TargetType="ContextMenu">
+        <Setter Property="FontFamily" Value="{DynamicResource AppFontFamily}"/>
         <Setter Property="Background" Value="{DynamicResource AppSurface}"/>
         <Setter Property="BorderBrush" Value="{DynamicResource AppDivider}"/>
         <Setter Property="BorderThickness" Value="1"/>

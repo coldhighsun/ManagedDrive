@@ -87,6 +87,77 @@ public partial class SettingsDialog
                 break;
             }
         }
+
+        FontBox.Items.Add(new ComboBoxItem { Content = Loc.Get("Settings.Font.Default"), Tag = "" });
+        FontBox.SelectedIndex = 0;
+        var savedFont = FontManager.Normalize(config.UiFontFamily);
+        if (savedFont != null)
+        {
+            FontBox.SelectedIndex = FontBox.Items.Add(new ComboBoxItem { Content = savedFont, Tag = savedFont });
+        }
+
+        _ = LoadInstalledFontsAsync(savedFont);
+    }
+
+    /// <summary>
+    /// Fills <see cref="FontBox"/> with the installed fonts once they are read, so opening the dialog
+    /// doesn't wait for every font file. Until then it holds the default and the saved font, and it keeps
+    /// them if the fonts can't be listed. An open dropdown is left alone until it closes, so the rows
+    /// don't change under the pointer.
+    /// </summary>
+    /// <param name="savedFont">The saved font, listed even when it is not installed.</param>
+    private async Task LoadInstalledFontsAsync(string? savedFont)
+    {
+        IReadOnlyList<FontChoice> installed;
+        try
+        {
+            installed = await FontManager.Instance.GetInstalledFontsAsync(LanguageManager.Instance.CurrentLanguage);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Could not list the installed fonts.");
+            return;
+        }
+
+        if (!FontBox.IsDropDownOpen)
+        {
+            FillFontBox(installed, savedFont);
+            return;
+        }
+
+        void OnDropDownClosed(object? sender, EventArgs e)
+        {
+            FontBox.DropDownClosed -= OnDropDownClosed;
+            FillFontBox(installed, savedFont);
+        }
+
+        FontBox.DropDownClosed += OnDropDownClosed;
+    }
+
+    /// <summary>
+    /// Replaces everything in <see cref="FontBox"/> after the default entry, keeping what is selected.
+    /// </summary>
+    /// <param name="installed">The installed fonts.</param>
+    /// <param name="savedFont">The saved font, listed even when it is not installed.</param>
+    private void FillFontBox(IReadOnlyList<FontChoice> installed, string? savedFont)
+    {
+        var selected = FontBox.SelectedItem is ComboBoxItem { Tag: string tag } ? tag : "";
+        var fonts = FontManager.GetChoices(installed, savedFont, name => Loc.Format("Settings.Font.Missing", name));
+
+        FontBox.SelectedIndex = 0;
+        while (FontBox.Items.Count > 1)
+        {
+            FontBox.Items.RemoveAt(1);
+        }
+
+        foreach (var font in fonts)
+        {
+            var index = FontBox.Items.Add(new ComboBoxItem { Content = font.DisplayName, Tag = font.Source });
+            if (FontManager.IsSameFont(selected, font.Source))
+            {
+                FontBox.SelectedIndex = index;
+            }
+        }
     }
 
     /// <summary>
@@ -138,6 +209,9 @@ public partial class SettingsDialog
         var selectedStyle = StyleBox.SelectedItem is ComboBoxItem { Tag: string st } && st != StyleManager.DefaultStyle ? st : null;
         StyleManager.Instance.Apply(selectedStyle);
 
+        var selectedFont = FontManager.Normalize(FontBox.SelectedItem is ComboBoxItem { Tag: string f } ? f : null);
+        FontManager.Instance.Apply(selectedFont);
+
         Result = new()
         {
             RunAtStartup = runAtStartup,
@@ -146,6 +220,7 @@ public partial class SettingsDialog
             Language = selectedTag,
             Theme = selectedTheme,
             UiStyle = selectedStyle,
+            UiFontFamily = selectedFont,
             ContextMenuEnabled = contextMenuEnabled,
             AutoCheckForUpdates = AutoCheckForUpdatesBox.IsChecked == true,
             DefaultCompressionLevel = DefaultCompressionLevelBox.Level,
@@ -172,6 +247,7 @@ public partial class SettingsDialog
         Language = edits.Language,
         Theme = edits.Theme,
         UiStyle = edits.UiStyle,
+        UiFontFamily = edits.UiFontFamily,
         ContextMenuEnabled = edits.ContextMenuEnabled,
         AutoCheckForUpdates = edits.AutoCheckForUpdates,
         DefaultCompressionLevel = edits.DefaultCompressionLevel,

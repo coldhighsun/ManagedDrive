@@ -320,6 +320,10 @@
     <sys:String x:Key="Settings.Style">界面风格</sys:String>
     <sys:String x:Key="Settings.Style.B">仪表盘</sys:String>
     <sys:String x:Key="Settings.Style.C">极简</sys:String>
+    <sys:String x:Key="Settings.Font">界面字体</sys:String>
+    <sys:String x:Key="Settings.Font.Default">默认</sys:String>
+    <sys:String x:Key="Settings.Font.Missing">{0}（未安装）</sys:String>
+    <sys:String x:Key="Tip.Font">界面文字使用的字体，所选字体缺少的字符会用默认字体显示</sys:String>
     <sys:String x:Key="Tip.RunAtStartup">Windows 启动时自动运行 ManagedDrive</sys:String>
     <sys:String x:Key="Tip.StartMinimized">启动时隐藏主窗口，仅显示系统托盘图标</sys:String>
     <sys:String x:Key="Tip.ContextMenuEnabled">添加右键菜单项，可直接将 zip/7z/rar/tar 压缩包挂载为内存盘</sys:String>
