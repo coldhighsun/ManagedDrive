@@ -159,6 +159,7 @@ public partial class App
             LanguageManager.Instance.ApplyDefault(config.Language);
             ThemeManager.Instance.ApplyDefault(config.Theme);
             StyleManager.Instance.ApplyDefault(config.UiStyle);
+            FontManager.Instance.ApplyDefault(config.UiFontFamily);
 
             if (!AppInstance.TryAcquire(out _singleInstanceMutex))
             {

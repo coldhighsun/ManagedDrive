@@ -35,6 +35,7 @@ public sealed class SettingsDialogTests
             Language = "zh-CN",
             Theme = "Dark",
             UiStyle = "c",
+            UiFontFamily = "DengXian",
             ContextMenuEnabled = true,
             AutoCheckForUpdates = false,
             DefaultCompressionLevel = 19,
@@ -53,6 +54,7 @@ public sealed class SettingsDialogTests
         Assert.Equal("zh-CN", result.Language);
         Assert.Equal("Dark", result.Theme);
         Assert.Equal("c", result.UiStyle);
+        Assert.Equal("DengXian", result.UiFontFamily);
         Assert.True(result.ContextMenuEnabled);
         Assert.False(result.AutoCheckForUpdates);
         Assert.Equal(19, result.DefaultCompressionLevel);

@@ -25,6 +25,7 @@
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
             <RowDefinition Height="12"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="24"/>
@@ -105,45 +106,66 @@
                   Style="{StaticResource OutlinedComboBox}"
                   Margin="0,12,0,12"/>
 
-        <!-- Default compression level for new disks -->
+        <!-- UI font -->
         <TextBlock Grid.Row="14" Grid.Column="0"
+                   Text="{DynamicResource Settings.Font}"
+                   ToolTip="{DynamicResource Tip.Font}"
+                   VerticalAlignment="Center"
+                   Margin="0,0,0,12"/>
+        <ComboBox Grid.Row="14" Grid.Column="1" Grid.ColumnSpan="2"
+                  x:Name="FontBox"
+                  ToolTip="{DynamicResource Tip.Font}"
+                  Style="{StaticResource OutlinedComboBox}"
+                  ScrollViewer.CanContentScroll="True"
+                  Margin="0,0,0,12">
+            <!-- Hundreds of fonts: lay out only the rows in view. The fixed width keeps the popup from
+                 resizing with the rows that happen to be in view. -->
+            <ComboBox.ItemsPanel>
+                <ItemsPanelTemplate>
+                    <VirtualizingStackPanel Width="{Binding ActualWidth, RelativeSource={RelativeSource AncestorType=ComboBox}}"/>
+                </ItemsPanelTemplate>
+            </ComboBox.ItemsPanel>
+        </ComboBox>
+
+        <!-- Default compression level for new disks -->
+        <TextBlock Grid.Row="15" Grid.Column="0"
                    Text="{DynamicResource Settings.DefaultCompressionLevel}"
                    ToolTip="{DynamicResource Tip.DefaultCompressionLevel}"
                    VerticalAlignment="Center"/>
-        <controls:CompressionLevelPicker Grid.Row="14" Grid.Column="1" Grid.ColumnSpan="2"
+        <controls:CompressionLevelPicker Grid.Row="15" Grid.Column="1" Grid.ColumnSpan="2"
                                          x:Name="DefaultCompressionLevelBox"
                                          ToolTip="{DynamicResource Tip.DefaultCompressionLevel}"/>
 
         <!-- Default directory for new disk image files -->
-        <TextBlock Grid.Row="16" Grid.Column="0"
+        <TextBlock Grid.Row="17" Grid.Column="0"
                    Text="{DynamicResource Settings.DefaultImageDirectory}"
                    ToolTip="{DynamicResource Tip.DefaultImageDirectory}"
                    VerticalAlignment="Center"/>
-        <TextBox Grid.Row="16" Grid.Column="1"
+        <TextBox Grid.Row="17" Grid.Column="1"
                  x:Name="DefaultImageDirectoryBox"
                  ToolTip="{DynamicResource Tip.DefaultImageDirectory}"
                  Style="{StaticResource OutlinedTextBox}"
                  VerticalContentAlignment="Center"
                  Margin="0,0,8,0"/>
-        <Button Grid.Row="16" Grid.Column="2"
+        <Button Grid.Row="17" Grid.Column="2"
                 x:Name="BrowseDefaultImageDirectoryButton"
                 Content="{DynamicResource Btn.Browse}"
                 Click="BrowseDefaultImageDirectory_Click"
                 Style="{StaticResource FlatButton}"/>
 
         <!-- Helper service status -->
-        <TextBlock Grid.Row="18" Grid.Column="0"
+        <TextBlock Grid.Row="19" Grid.Column="0"
                    Text="{DynamicResource Settings.HelperServiceStatus}"
                    ToolTip="{DynamicResource Tip.HelperServiceStatus}"
                    VerticalAlignment="Center"/>
-        <TextBlock Grid.Row="18" Grid.Column="1" Grid.ColumnSpan="2"
+        <TextBlock Grid.Row="19" Grid.Column="1" Grid.ColumnSpan="2"
                    x:Name="HelperServiceStatusText"
                    ToolTip="{DynamicResource Tip.HelperServiceStatus}"
                    Foreground="{DynamicResource AppForeground}"
                    VerticalAlignment="Center"/>
 
         <!-- Open log directory / check for updates now -->
-        <StackPanel Grid.Row="20" Grid.ColumnSpan="3" Grid.Column="0"
+        <StackPanel Grid.Row="21" Grid.ColumnSpan="3" Grid.Column="0"
                     Orientation="Horizontal">
             <Button x:Name="OpenLogDirectoryButton"
                     Content="{DynamicResource Settings.OpenLogDirectory}"
@@ -152,7 +174,7 @@
         </StackPanel>
 
         <!-- OK / Cancel -->
-        <StackPanel Grid.Row="22" Grid.ColumnSpan="3" Grid.Column="0"
+        <StackPanel Grid.Row="23" Grid.ColumnSpan="3" Grid.Column="0"
                     Orientation="Horizontal" HorizontalAlignment="Right">
             <Button Content="{DynamicResource Btn.Cancel}" Width="80" IsCancel="True"
                     Style="{StaticResource FlatButton}"

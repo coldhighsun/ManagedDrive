@@ -50,6 +50,15 @@ public sealed record AppConfiguration
     }
 
     /// <summary>
+    /// Font family name chosen for the UI, or <c>null</c> for the default (Segoe UI with Microsoft YaHei UI
+    /// for Chinese).
+    /// </summary>
+    public string? UiFontFamily
+    {
+        get; init;
+    }
+
+    /// <summary>
     /// Gets or sets a value indicating whether the main window should be hidden on startup,
     /// showing only the system tray icon. Defaults to <c>false</c>.
     /// </summary>

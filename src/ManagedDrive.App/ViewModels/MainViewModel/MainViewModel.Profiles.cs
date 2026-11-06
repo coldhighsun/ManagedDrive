@@ -245,7 +245,8 @@ public sealed partial class MainViewModel
         var language = LanguageManager.Instance.SavedLanguage;
         var theme = ThemeManager.Instance.SavedTheme;
         var uiStyle = StyleManager.Instance.SavedStyle;
-        _settingsStore.Update(current => ApplyLiveSettings(current, profiles, runAtStartup, language, theme, uiStyle));
+        var uiFontFamily = FontManager.Instance.SavedFont;
+        _settingsStore.Update(current => ApplyLiveSettings(current, profiles, runAtStartup, language, theme, uiStyle, uiFontFamily));
     }
 
     /// <summary>
@@ -260,9 +261,10 @@ public sealed partial class MainViewModel
     /// <param name="language">The user's saved language choice.</param>
     /// <param name="theme">The user's saved theme choice.</param>
     /// <param name="uiStyle">The user's saved visual style choice.</param>
+    /// <param name="uiFontFamily">The user's saved font choice.</param>
     /// <returns>The settings to store.</returns>
     internal static AppConfiguration ApplyLiveSettings(
-        AppConfiguration current, List<DiskProfile> profiles, bool runAtStartup, string? language, string? theme, string? uiStyle)
+        AppConfiguration current, List<DiskProfile> profiles, bool runAtStartup, string? language, string? theme, string? uiStyle, string? uiFontFamily)
     {
         return current with
         {
@@ -270,6 +272,7 @@ public sealed partial class MainViewModel
             Language = language,
             Theme = theme,
             UiStyle = uiStyle,
+            UiFontFamily = uiFontFamily,
             Disks = profiles,
         };
     }
