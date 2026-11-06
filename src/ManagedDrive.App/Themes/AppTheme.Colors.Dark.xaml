@@ -4,7 +4,7 @@
     <SolidColorBrush x:Key="AppPrimary" Color="#4C9AEB"/>
     <SolidColorBrush x:Key="AppPrimaryDark" Color="#2F7FD1"/>
     <SolidColorBrush x:Key="AppPrimarySoft" Color="#334C9AEB"/>
-    <SolidColorBrush x:Key="AppPrimaryForeground" Color="#FF0B1B2E"/>
+    <SolidColorBrush x:Key="AppPrimaryForeground" Color="White"/>
     <SolidColorBrush x:Key="AppForeground" Color="#FFE8EAEE"/>
     <SolidColorBrush x:Key="AppForegroundLight" Color="#FF9AA1AE"/>
     <SolidColorBrush x:Key="AppForegroundMuted" Color="#FF9AA1AE"/>
