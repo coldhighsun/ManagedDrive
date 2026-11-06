@@ -24,8 +24,16 @@
 ### 软件截图
 
 <p align="center">
-  <img src="docs/screenshots/main_window_ch.png" alt="主窗口" width="400">
-  <img src="docs/screenshots/right_menu_ch.png" alt="磁盘右键菜单" width="400">
+  <img src="docs/screenshots/main_window_ch.png" alt="主窗口（深色主题）与实时读写速度图表" width="400">
+  <img src="docs/screenshots/main_window_light_ch.png" alt="主窗口（浅色主题）" width="400">
+</p>
+<p align="center">
+  <img src="docs/screenshots/right_menu_ch.png" alt="磁盘右键菜单与临时与缓存预设" width="400">
+  <img src="docs/screenshots/space_usage_ch.png" alt="空间占用分析：按文件类型着色的树图" width="400">
+</p>
+<p align="center">
+  <img src="docs/screenshots/snapshot_restore_ch.png" alt="恢复快照对话框" width="300">
+  <img src="docs/screenshots/snapshot_diff_ch.png" alt="快照变化：与当前磁盘对比的新增、删除和修改文件" width="250">
 </p>
 <p align="center">
   <img src="docs/screenshots/settings_window_ch.png" alt="设置窗口" width="200">

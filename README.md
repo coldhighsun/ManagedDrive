@@ -24,8 +24,16 @@ Create, mount and manage in-memory volumes that appear as normal drive letters i
 ### Screenshots
 
 <p align="center">
-  <img src="docs/screenshots/main_window.png" alt="Main window" width="400">
-  <img src="docs/screenshots/right_menu.png" alt="Disk context menu" width="400">
+  <img src="docs/screenshots/main_window.png" alt="Main window (dark theme) with the live read/write throughput chart" width="400">
+  <img src="docs/screenshots/main_window_light.png" alt="Main window (light theme)" width="400">
+</p>
+<p align="center">
+  <img src="docs/screenshots/right_menu.png" alt="Disk context menu with the Temp &amp; Caches presets" width="400">
+  <img src="docs/screenshots/space_usage.png" alt="Space Usage: a treemap of what fills the disk, colored by file type" width="400">
+</p>
+<p align="center">
+  <img src="docs/screenshots/snapshot_restore.png" alt="Restore Snapshot dialog" width="300">
+  <img src="docs/screenshots/snapshot_diff.png" alt="Snapshot Changes: added, removed and modified files against the live disk" width="250">
 </p>
 <p align="center">
   <img src="docs/screenshots/settings_window.png" alt="Settings window" width="200">
