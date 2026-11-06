@@ -51,8 +51,11 @@
                                             <Style TargetType="Border">
                                                 <Setter Property="Background" Value="{DynamicResource AppPrimary}" />
                                                 <Style.Triggers>
-                                                    <DataTrigger Binding="{Binding IsHighUsage}" Value="True">
+                                                    <DataTrigger Binding="{Binding UsageLevel}" Value="High">
                                                         <Setter Property="Background" Value="{DynamicResource AppWarning}" />
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding UsageLevel}" Value="Critical">
+                                                        <Setter Property="Background" Value="{DynamicResource AppDanger}" />
                                                     </DataTrigger>
                                                 </Style.Triggers>
                                             </Style>

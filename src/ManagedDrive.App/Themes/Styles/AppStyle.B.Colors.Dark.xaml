@@ -16,10 +16,19 @@
     <SolidColorBrush x:Key="AppProgressTrack" Color="#FF2A2F3B"/>
     <SolidColorBrush x:Key="AppToolBarBackground" Color="#FF12141A"/>
     <SolidColorBrush x:Key="AppWarning" Color="#FFF0B04A"/>
+    <SolidColorBrush x:Key="AppWarningSoft" Color="#33F0B04A"/>
     <SolidColorBrush x:Key="AppHover" Color="#14FFFFFF"/>
     <SolidColorBrush x:Key="AppPressed" Color="#1FFFFFFF"/>
     <SolidColorBrush x:Key="AppBarBackground" Color="#FF12141A"/>
     <SolidColorBrush x:Key="AppBarForeground" Color="#FFE7E9EE"/>
     <SolidColorBrush x:Key="AppSidebarBackground" Color="#FF0D0F14"/>
+
+    <!-- Sidebar tool icons: one colour each. Only style B defines these; elsewhere MainWindow's DynamicResource stays unresolved and the icon keeps the bar foreground it inherits. -->
+    <SolidColorBrush x:Key="ToolIconNew" Color="#FF4F8DF7"/>
+    <SolidColorBrush x:Key="ToolIconImport" Color="#FF2DD4BF"/>
+    <SolidColorBrush x:Key="ToolIconRestore" Color="#FFB388F5"/>
+    <SolidColorBrush x:Key="ToolIconSettings" Color="#FFFF9A4D"/>
+    <SolidColorBrush x:Key="ToolIconAbout" Color="#FF3CC4DD"/>
+    <SolidColorBrush x:Key="ToolIconExit" Color="#FFFF6B6B"/>
 
 </ResourceDictionary>

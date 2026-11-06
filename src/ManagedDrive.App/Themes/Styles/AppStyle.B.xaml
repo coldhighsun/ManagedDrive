@@ -84,14 +84,48 @@
                             <!-- Drive letter badge; the status icons sit next to the label (see below) so they
                                  never make the card taller -->
                             <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
-                                <Border Width="44" Height="44" CornerRadius="12"
-                                        Background="{DynamicResource AppPrimarySoft}">
-                                    <TextBlock Text="{Binding MountPoint}"
-                                               FontSize="17" FontWeight="SemiBold"
-                                               Foreground="{DynamicResource AppPrimary}"
-                                               HorizontalAlignment="Center"
-                                               VerticalAlignment="Center"/>
-                                </Border>
+                                <!-- Each drive letter keeps one of six accent colours (DiskViewModel.AccentIndex); the letter inherits the Foreground -->
+                                <ContentControl Width="44" Height="44" FontSize="17" FontWeight="SemiBold"
+                                                IsTabStop="False" Focusable="False">
+                                    <ContentControl.Style>
+                                        <Style TargetType="ContentControl">
+                                            <Setter Property="Foreground" Value="{DynamicResource AppAccent1}"/>
+                                            <Setter Property="Background" Value="{DynamicResource AppAccentSoft1}"/>
+                                            <Setter Property="Template">
+                                                <Setter.Value>
+                                                    <ControlTemplate TargetType="ContentControl">
+                                                        <Border CornerRadius="12" Background="{TemplateBinding Background}">
+                                                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                        </Border>
+                                                    </ControlTemplate>
+                                                </Setter.Value>
+                                            </Setter>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding AccentIndex}" Value="2">
+                                                    <Setter Property="Foreground" Value="{DynamicResource AppAccent2}"/>
+                                                    <Setter Property="Background" Value="{DynamicResource AppAccentSoft2}"/>
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding AccentIndex}" Value="3">
+                                                    <Setter Property="Foreground" Value="{DynamicResource AppAccent3}"/>
+                                                    <Setter Property="Background" Value="{DynamicResource AppAccentSoft3}"/>
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding AccentIndex}" Value="4">
+                                                    <Setter Property="Foreground" Value="{DynamicResource AppAccent4}"/>
+                                                    <Setter Property="Background" Value="{DynamicResource AppAccentSoft4}"/>
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding AccentIndex}" Value="5">
+                                                    <Setter Property="Foreground" Value="{DynamicResource AppAccent5}"/>
+                                                    <Setter Property="Background" Value="{DynamicResource AppAccentSoft5}"/>
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding AccentIndex}" Value="6">
+                                                    <Setter Property="Foreground" Value="{DynamicResource AppAccent6}"/>
+                                                    <Setter Property="Background" Value="{DynamicResource AppAccentSoft6}"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </ContentControl.Style>
+                                    <TextBlock Text="{Binding MountPoint}"/>
+                                </ContentControl>
                             </StackPanel>
 
                             <!-- Label (+ used/capacity/percent on the same row), or read-only summary -->
@@ -104,41 +138,42 @@
                                     <!-- The label ellipsizes first; the badges stay next to the usage text -->
                                     <DockPanel>
                                         <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                                            <!-- Status chips: read-only = warning, redirect = info, image path = primary, encrypted = success -->
                                             <Border Width="20" Height="20" CornerRadius="10" Margin="4,0,0,0"
-                                                    Background="{DynamicResource AppSurface}"
+                                                    Background="{DynamicResource AppWarningSoft}"
                                                     BorderBrush="{DynamicResource AppDivider}" BorderThickness="1"
                                                     ToolTip="{DynamicResource Card.ReadOnly}"
                                                     AutomationProperties.Name="{DynamicResource Card.ReadOnly}"
                                                     Visibility="{Binding IsReadOnly, Converter={StaticResource BoolToVis}}">
                                                 <TextBlock Text="&#xE72E;" Style="{DynamicResource IconText}" FontSize="12"
-                                                           Foreground="{DynamicResource AppForegroundLight}"/>
+                                                           Foreground="{DynamicResource AppWarning}"/>
                                             </Border>
                                             <Border Width="20" Height="20" CornerRadius="10" Margin="4,0,0,0"
-                                                    Background="{DynamicResource AppSurface}"
+                                                    Background="{DynamicResource AppInfoSoft}"
                                                     BorderBrush="{DynamicResource AppDivider}" BorderThickness="1"
                                                     ToolTip="{Binding ActiveRedirectsTooltip}"
                                                     AutomationProperties.Name="{Binding ActiveRedirectsTooltip}"
                                                     Visibility="{Binding HasActiveRedirects, Converter={StaticResource BoolToVis}}">
                                                 <TextBlock Text="&#xE8B7;" Style="{DynamicResource IconText}" FontSize="12"
-                                                           Foreground="{DynamicResource AppForeground}"/>
+                                                           Foreground="{DynamicResource AppInfo}"/>
                                             </Border>
                                             <Border Width="20" Height="20" CornerRadius="10" Margin="4,0,0,0"
-                                                    Background="{DynamicResource AppSurface}"
+                                                    Background="{DynamicResource AppPrimarySoft}"
                                                     BorderBrush="{DynamicResource AppDivider}" BorderThickness="1"
                                                     ToolTip="{Binding SourcePath}"
                                                     AutomationProperties.Name="{Binding SourcePath}"
                                                     Visibility="{Binding HasImagePath, Converter={StaticResource BoolToVis}}">
                                                 <TextBlock Text="&#xE74E;" Style="{DynamicResource IconText}" FontSize="12"
-                                                           Foreground="{DynamicResource AppForegroundLight}"/>
+                                                           Foreground="{DynamicResource AppPrimary}"/>
                                             </Border>
                                             <Border Width="20" Height="20" CornerRadius="10" Margin="4,0,0,0"
-                                                    Background="{DynamicResource AppSurface}"
+                                                    Background="{DynamicResource AppSuccessSoft}"
                                                     BorderBrush="{DynamicResource AppDivider}" BorderThickness="1"
                                                     ToolTip="{DynamicResource Card.Encrypted}"
                                                     AutomationProperties.Name="{DynamicResource Card.Encrypted}"
                                                     Visibility="{Binding IsPasswordProtected, Converter={StaticResource BoolToVis}}">
                                                 <TextBlock Text="&#xE192;" Style="{DynamicResource IconText}" FontSize="12"
-                                                           Foreground="{DynamicResource AppForegroundLight}"/>
+                                                           Foreground="{DynamicResource AppSuccess}"/>
                                             </Border>
                                         </StackPanel>
                                         <TextBlock Text="{Binding VolumeLabel}"
@@ -163,7 +198,7 @@
                                                    VerticalAlignment="Center" Margin="6,0,0,0"
                                                    ToolTip="{DynamicResource Card.HighUsage}"
                                                    AutomationProperties.Name="{DynamicResource Card.HighUsage}"
-                                                   Visibility="{Binding IsHighUsage, Converter={StaticResource BoolToVis}}"/>
+                                                   Visibility="{Binding ShowUsageWarning, Converter={StaticResource BoolToVis}}"/>
                                     </StackPanel>
                                 </Grid>
 
@@ -190,10 +225,13 @@
                                                 <Border Grid.Column="0" CornerRadius="3">
                                                     <Border.Style>
                                                         <Style TargetType="Border">
-                                                            <Setter Property="Background" Value="{DynamicResource AppPrimary}"/>
+                                                            <Setter Property="Background" Value="{DynamicResource AppSuccess}"/>
                                                             <Style.Triggers>
-                                                                <DataTrigger Binding="{Binding IsHighUsage}" Value="True">
+                                                                <DataTrigger Binding="{Binding UsageLevel}" Value="High">
                                                                     <Setter Property="Background" Value="{DynamicResource AppWarning}"/>
+                                                                </DataTrigger>
+                                                                <DataTrigger Binding="{Binding UsageLevel}" Value="Critical">
+                                                                    <Setter Property="Background" Value="{DynamicResource AppDanger}"/>
                                                                 </DataTrigger>
                                                             </Style.Triggers>
                                                         </Style>

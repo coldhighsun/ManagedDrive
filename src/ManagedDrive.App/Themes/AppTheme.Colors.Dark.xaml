@@ -20,6 +20,27 @@
     <SolidColorBrush x:Key="AppBarForeground" Color="#FFE8EAEE"/>
     <SolidColorBrush x:Key="AppChartWrite" Color="#FF7043"/>
 
+    <!-- Semantic and accent colours (shared by every style; style palettes do not override them). -->
+    <SolidColorBrush x:Key="AppWarningSoft" Color="#33F0B04A"/>
+    <SolidColorBrush x:Key="AppSuccess" Color="#43C77D"/>
+    <SolidColorBrush x:Key="AppSuccessSoft" Color="#3343C77D"/>
+    <SolidColorBrush x:Key="AppDanger" Color="#FF6B6B"/>
+    <SolidColorBrush x:Key="AppDangerSoft" Color="#33FF6B6B"/>
+    <SolidColorBrush x:Key="AppInfo" Color="#3CC4DD"/>
+    <SolidColorBrush x:Key="AppInfoSoft" Color="#333CC4DD"/>
+    <SolidColorBrush x:Key="AppAccent1" Color="#4F8DF7"/>
+    <SolidColorBrush x:Key="AppAccent2" Color="#2DD4BF"/>
+    <SolidColorBrush x:Key="AppAccent3" Color="#B388F5"/>
+    <SolidColorBrush x:Key="AppAccent4" Color="#FF9A4D"/>
+    <SolidColorBrush x:Key="AppAccent5" Color="#FF6FA3"/>
+    <SolidColorBrush x:Key="AppAccent6" Color="#8B8BFF"/>
+    <SolidColorBrush x:Key="AppAccentSoft1" Color="#334F8DF7"/>
+    <SolidColorBrush x:Key="AppAccentSoft2" Color="#332DD4BF"/>
+    <SolidColorBrush x:Key="AppAccentSoft3" Color="#33B388F5"/>
+    <SolidColorBrush x:Key="AppAccentSoft4" Color="#33FF9A4D"/>
+    <SolidColorBrush x:Key="AppAccentSoft5" Color="#33FF6FA3"/>
+    <SolidColorBrush x:Key="AppAccentSoft6" Color="#338B8BFF"/>
+
     <!-- Space usage treemap: one colour per file category, plus folders and the merged small-items block. -->
     <SolidColorBrush x:Key="AppSpaceImage" Color="#388E3C"/>
     <SolidColorBrush x:Key="AppSpaceVideo" Color="#7B1FA2"/>

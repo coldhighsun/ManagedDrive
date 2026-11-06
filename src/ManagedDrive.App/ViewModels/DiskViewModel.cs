@@ -394,6 +394,21 @@ public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
             : 0.0;
 
     /// <summary>
+    /// Gets how full the disk looks, which picks the colour of the usage bar.
+    /// </summary>
+    public UsageLevel UsageLevel => DiskCardColors.Classify(UsedPercent, IsHighUsage);
+
+    /// <summary>
+    /// Gets whether the card shows its warning icon: the high-usage warning is active, or the disk is nearly full even though the warning is off, so the red bar never stands alone as a colour-only cue.
+    /// </summary>
+    public bool ShowUsageWarning => UsageLevel != UsageLevel.Normal;
+
+    /// <summary>
+    /// Gets the accent colour number (1-6) of the drive-letter badge, stable per drive letter.
+    /// </summary>
+    public int AccentIndex => DiskCardColors.AccentIndexFor(MountPoint);
+
+    /// <summary>
     /// Gets the volume label from the disk options.
     /// </summary>
     public string VolumeLabel => Disk.Options.VolumeLabel;
@@ -478,6 +493,8 @@ public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
 
         // Bound by the tray tooltip, which can be visible even while the main window is hidden.
         OnPropertyChanged(nameof(UsedPercent));
+        OnPropertyChanged(nameof(UsageLevel));
+        OnPropertyChanged(nameof(ShowUsageWarning));
 
         if (Disk.Options.SourceArchivePath != null)
         {
@@ -491,6 +508,8 @@ public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
             {
                 IsHighUsage = false;
                 OnPropertyChanged(nameof(IsHighUsage));
+                OnPropertyChanged(nameof(UsageLevel));
+                OnPropertyChanged(nameof(ShowUsageWarning));
             }
 
             return;
@@ -501,12 +520,16 @@ public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
         {
             IsHighUsage = true;
             OnPropertyChanged(nameof(IsHighUsage));
+            OnPropertyChanged(nameof(UsageLevel));
+            OnPropertyChanged(nameof(ShowUsageWarning));
             HighUsageWarning?.Invoke(this, EventArgs.Empty);
         }
         else if (IsHighUsage && used < resetThreshold)
         {
             IsHighUsage = false;
             OnPropertyChanged(nameof(IsHighUsage));
+            OnPropertyChanged(nameof(UsageLevel));
+            OnPropertyChanged(nameof(ShowUsageWarning));
         }
     }
 
