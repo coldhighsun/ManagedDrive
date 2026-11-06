@@ -141,8 +141,6 @@ public partial class MainWindow
         return File.Exists(files[0]) ? files[0] : null;
     }
 
-    private void OverflowBtn_Click(object sender, RoutedEventArgs e) => OpenAttachedContextMenu(sender);
-
     private void OpenAttachedContextMenu(object sender)
     {
         if (sender is FrameworkElement { ContextMenu: not null } btn)

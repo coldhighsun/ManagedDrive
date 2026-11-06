@@ -11,7 +11,7 @@
         Icon="pack://application:,,,/ManagedDrive.ico"
         Title="{DynamicResource Window.Title}"
         Height="480" Width="760"
-        MinHeight="320" MinWidth="520"
+        MinHeight="360" MinWidth="720"
         ResizeMode="CanResize"
         WindowStartupLocation="CenterScreen"
         TextElement.Foreground="{DynamicResource AppForeground}"
@@ -204,19 +204,17 @@
                             AutomationProperties.Name="{DynamicResource Tip.Settings}">
                         <TextBlock Style="{StaticResource IconText}" Text="&#xE713;"/>
                     </Button>
-                    <Button x:Name="OverflowBtn" Style="{StaticResource IconButton}"
-                            Click="OverflowBtn_Click"
-                            ToolTip="{DynamicResource Tip.More}"
-                            AutomationProperties.Name="{DynamicResource Tip.More}">
-                        <Button.ContextMenu>
-                            <ContextMenu x:Name="OverflowMenu">
-                                <MenuItem Header="{DynamicResource Menu.About}"
-                                          Command="{Binding AboutCommand}"/>
-                                <MenuItem Header="{DynamicResource Menu.Exit}"
-                                          Command="{Binding ExitCommand}"/>
-                            </ContextMenu>
-                        </Button.ContextMenu>
-                        <TextBlock Style="{StaticResource IconText}" Text="&#xE712;"/>
+                    <Button Style="{StaticResource IconButton}"
+                            Command="{Binding AboutCommand}"
+                            ToolTip="{DynamicResource Menu.About}"
+                            AutomationProperties.Name="{DynamicResource Menu.About}">
+                        <TextBlock Style="{StaticResource IconText}" Text="&#xE946;"/>
+                    </Button>
+                    <Button Style="{StaticResource IconButton}"
+                            Command="{Binding ExitCommand}"
+                            ToolTip="{DynamicResource Menu.Exit}"
+                            AutomationProperties.Name="{DynamicResource Menu.Exit}">
+                        <TextBlock Style="{StaticResource IconText}" Text="&#xE7E8;"/>
                     </Button>
         </StackPanel>
 
