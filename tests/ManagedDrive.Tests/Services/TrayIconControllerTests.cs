@@ -1,4 +1,5 @@
 using ManagedDrive.App.Services;
+using ManagedDrive.App.Themes;
 
 namespace ManagedDrive.Tests;
 
@@ -29,8 +30,8 @@ public sealed class TrayIconControllerTests
     }
 
     /// <summary>
-    /// Verifies that the item margin is 8 px left and right at 96 DPI, nothing above or below, and
-    /// grows with the DPI like the padding does.
+    /// Verifies that the margin of a tray menu item is 8 px left and right at 96 DPI, nothing above or
+    /// below, and grows with the DPI like the item padding does.
     /// </summary>
     [Theory]
     [InlineData(96, 8)]
@@ -40,12 +41,42 @@ public sealed class TrayIconControllerTests
     public void GetItemMargin_DeviceDpi_ScalesLeftAndRightOnly(int deviceDpi, int expected)
     {
         // Act
-        var margin = TrayIconController.GetItemMargin(deviceDpi);
+        var margin = TrayMenuMetrics.GetItemMargin(deviceDpi);
 
         // Assert
         Assert.Equal(expected, margin.Left);
         Assert.Equal(expected, margin.Right);
         Assert.Equal(0, margin.Top);
         Assert.Equal(0, margin.Bottom);
+    }
+
+    /// <summary>
+    /// Verifies that a menu asks for the width of its items plus the indent on both sides.
+    /// </summary>
+    [Theory]
+    [InlineData(100, 96, 116)]
+    [InlineData(100, 144, 124)]
+    public void GetMenuWidth_AddsTheIndentOnBothSides(int baseWidth, int deviceDpi, int expected)
+    {
+        // Act
+        var width = TrayMenuMetrics.GetMenuWidth(baseWidth, deviceDpi);
+
+        // Assert
+        Assert.Equal(expected, width);
+    }
+
+    /// <summary>
+    /// Verifies that the room a leaf submenu gives back is 20 px at 96 DPI and grows with the DPI.
+    /// </summary>
+    [Theory]
+    [InlineData(96, 20)]
+    [InlineData(144, 30)]
+    public void GetLeafArrowTrim_DeviceDpi_ScalesWithDpi(int deviceDpi, int expected)
+    {
+        // Act
+        var trim = TrayMenuMetrics.GetLeafArrowTrim(deviceDpi);
+
+        // Assert
+        Assert.Equal(expected, trim);
     }
 }
