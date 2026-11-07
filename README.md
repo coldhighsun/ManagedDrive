@@ -14,7 +14,7 @@
 [![.NET](https://img.shields.io/badge/.NET-10-512BD4?logo=dotnet)](https://dotnet.microsoft.com/)
 [![Platform: Windows](https://img.shields.io/badge/platform-Windows-0078D6?logo=windows)](https://github.com/coldhighsun/ManagedDrive)
 
-English | [中文](README.zh-CN.md)
+English | [简体中文](README.zh-CN.md) | [繁體中文](README.zh-TW.md)
 
 ---
 
@@ -79,7 +79,7 @@ Create, mount and manage in-memory volumes that appear as normal drive letters i
 - Double-click to open a disk in Explorer; right-click for shortcuts, **View Disk Contents...** or **Space Usage...** (a treemap of what fills the disk, colored by file type, with top folder/file/type lists)
 
 **UI**
-- Bilingual (English / Simplified Chinese) and light/dark themes, auto-detected with manual override
+- English, Simplified Chinese and Traditional Chinese, plus light/dark themes, auto-detected with manual override
 - Disk cards with status badges (read-only, current-TEMP, backing image, password-protected), a usage bar and a live read/write throughput chart
 - Freely resizable window
 - About dialog with version, GitHub link, and an "update available" link

@@ -204,6 +204,7 @@ public sealed class MainViewModelExitSaveTests : IDisposable
     [Theory]
     [InlineData("Strings.en-US.xaml")]
     [InlineData("Strings.zh-CN.xaml")]
+    [InlineData("Strings.zh-TW.xaml")]
     public void SummaryString_ExistsInEveryLanguageWithBothPlaceholders(string file)
     {
         var xaml = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Localization", file));
@@ -221,6 +222,7 @@ public sealed class MainViewModelExitSaveTests : IDisposable
     [Theory]
     [InlineData("Strings.en-US.xaml")]
     [InlineData("Strings.zh-CN.xaml")]
+    [InlineData("Strings.zh-TW.xaml")]
     public void FinishingAndFailureStrings_ExistInEveryLanguage(string file)
     {
         var xaml = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Localization", file));

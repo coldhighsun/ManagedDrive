@@ -33,6 +33,7 @@ public sealed class LanguageManager
     [
         ("en-US", "English"),
         ("zh-CN", "中文（简体）"),
+        ("zh-TW", "中文（繁體）"),
     ];
 
     /// <summary>
@@ -61,10 +62,32 @@ public sealed class LanguageManager
             return saved;
         }
 
-        var iso = CultureInfo.CurrentUICulture.TwoLetterISOLanguageName;
+        return ResolveSystem(CultureInfo.CurrentUICulture.Name);
+    }
+
+    /// <summary>
+    /// Maps a culture name (e.g. "zh-TW", "zh-Hant-HK", "en-GB") to the best-matching supported
+    /// language tag. Chinese is split by script: Traditional (Hant, or TW/HK/MO without Hans)
+    /// goes to "zh-TW", every other Chinese culture to "zh-CN". Anything unsupported is "en-US".
+    /// </summary>
+    internal static string ResolveSystem(string? cultureName)
+    {
+        if (string.IsNullOrEmpty(cultureName))
+        {
+            return "en-US";
+        }
+
+        var parts = cultureName.Split('-', '_');
+        if (parts[0].Equals("zh", StringComparison.OrdinalIgnoreCase))
+        {
+            bool Has(string part) => parts.Skip(1).Any(p => p.Equals(part, StringComparison.OrdinalIgnoreCase));
+            var traditional = Has("Hant") || (!Has("Hans") && (Has("TW") || Has("HK") || Has("MO")));
+            return traditional ? "zh-TW" : "zh-CN";
+        }
+
         foreach (var (tag, _) in SupportedLanguages)
         {
-            if (tag.StartsWith(iso, StringComparison.OrdinalIgnoreCase))
+            if (tag.StartsWith(parts[0] + "-", StringComparison.OrdinalIgnoreCase))
             {
                 return tag;
             }

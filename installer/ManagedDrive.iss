@@ -61,6 +61,7 @@ ChangesEnvironment=yes
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
 Name: "chinesesimplified"; MessagesFile: "compiler:Languages\ChineseSimplified.isl"
+Name: "chinesetraditional"; MessagesFile: "compiler:Languages\ChineseTraditional.isl"
 
 [Tasks]
 Name: "desktopicon"; Description: "Create a &desktop icon"; GroupDescription: "Additional icons:"; Flags: unchecked
@@ -518,12 +519,14 @@ end;
 // MsgBox when a user is present to read it, or a Log(...) entry when running silently (e.g.
 // winget install --silent, /VERYSILENT), where a blocking MsgBox would never be seen/dismissed
 // but the reason should still be diagnosable via Setup's /LOG= output.
-procedure ReportAbortReason(const EnMessage, ZhMessage: string);
+procedure ReportAbortReason(const EnMessage, ZhMessage, ZhTwMessage: string);
 begin
   if WizardSilent() then
     Log('Aborting: ' + EnMessage)
   else if ActiveLanguage() = 'chinesesimplified' then
     MsgBox(ZhMessage, mbError, MB_OK)
+  else if ActiveLanguage() = 'chinesetraditional' then
+    MsgBox(ZhTwMessage, mbError, MB_OK)
   else
     MsgBox(EnMessage, mbError, MB_OK);
 end;
@@ -622,7 +625,11 @@ begin
       '当前 TEMP 目录设置在了 ManagedDrive 内存盘上。现在安装或升级可能会关闭 ManagedDrive 并卸载该' +
       '盘，而安装程序自身仍需要一个可用的 TEMP 目录来存放临时文件，这会导致安装过程中途失败。'#13#10#13#10 +
       '请先打开 ManagedDrive，将 TEMP 还原为系统默认设置（托盘菜单 > 还原环境变量 > 临时目录，或取消该磁盘' +
-      '的 TEMP 设置），然后再次运行本安装程序。');
+      '的 TEMP 设置），然后再次运行本安装程序。',
+      '目前 TEMP 資料夾設定在 ManagedDrive 記憶體磁碟上。現在安裝或升級可能會關閉 ManagedDrive 並卸載該' +
+      '磁碟，而安裝程式本身仍需要一個可用的 TEMP 資料夾來存放暫存檔，這會導致安裝過程中途失敗。'#13#10#13#10 +
+      '請先開啟 ManagedDrive，將 TEMP 還原為系統預設設定（系統匣選單 > 還原環境變數 > 暫存資料夾，或取消該磁碟' +
+      '的 TEMP 設定），然後再次執行本安裝程式。');
     Result := False;
     exit;
   end;
@@ -640,7 +647,9 @@ begin
         'ManagedDrive is still running and could not be closed automatically in time to save its ' +
         'RAM disk contents. Please close it manually (tray icon menu > Exit) and run Setup again.',
         'ManagedDrive 仍在运行，未能在超时时间内自动关闭以保存内存盘内容。请通过托盘图标菜单手动退出' +
-        '后再重新运行安装程序。');
+        '后再重新运行安装程序。',
+        'ManagedDrive 仍在執行，未能在逾時時間內自動關閉以儲存記憶體磁碟內容。請透過系統匣圖示選單手動結束' +
+        '後再重新執行安裝程式。');
       Result := False;
     end;
     exit;
@@ -654,6 +663,11 @@ begin
       'ManagedDrive 当前正在运行，需要先关闭才能继续安装。'#13#10#13#10 +
       '点击"是"让安装程序自动关闭它（会先保存所有已挂载的内存盘）。点击"否"退出安装程序，自行手动关闭' +
       'ManagedDrive 后再重新运行安装程序。'
+  else if ActiveLanguage() = 'chinesetraditional' then
+    ConfirmCloseMessage :=
+      'ManagedDrive 目前正在執行，需要先關閉才能繼續安裝。'#13#10#13#10 +
+      '按一下「是」讓安裝程式自動關閉它（會先儲存所有已掛載的記憶體磁碟）。按一下「否」結束安裝程式，自行手動關閉' +
+      'ManagedDrive 後再重新執行安裝程式。'
   else
     ConfirmCloseMessage :=
       'ManagedDrive is currently running. It needs to be closed before Setup can continue.'#13#10#13#10 +
@@ -672,7 +686,9 @@ begin
       'ManagedDrive is still running and could not be closed automatically in time to save its ' +
       'RAM disk contents. Please close it manually (tray icon menu > Exit) and run Setup again.',
       'ManagedDrive 仍在运行，未能在超时时间内自动关闭以保存内存盘内容。请通过托盘图标菜单手动退出' +
-      '后再重新运行安装程序。');
+      '后再重新运行安装程序。',
+      'ManagedDrive 仍在執行，未能在逾時時間內自動關閉以儲存記憶體磁碟內容。請透過系統匣圖示選單手動結束' +
+      '後再重新執行安裝程式。');
     Result := False;
   end;
 end;
@@ -690,6 +706,9 @@ begin
     if ActiveLanguage() = 'chinesesimplified' then
       WizardForm.PreparingLabel.Caption := WizardForm.PreparingLabel.Caption + #13#10#13#10 +
         'ManagedDrive 将会被自动关闭；关闭前会先将所有已挂载内存盘的内容保存到镜像文件，不会丢失数据。'
+    else if ActiveLanguage() = 'chinesetraditional' then
+      WizardForm.PreparingLabel.Caption := WizardForm.PreparingLabel.Caption + #13#10#13#10 +
+        'ManagedDrive 將會被自動關閉；關閉前會先將所有已掛載記憶體磁碟的內容儲存到映像檔，不會遺失資料。'
     else
       WizardForm.PreparingLabel.Caption := WizardForm.PreparingLabel.Caption + #13#10#13#10 +
         'ManagedDrive will be closed automatically; it saves the contents of every mounted RAM ' +
@@ -708,6 +727,8 @@ begin
     LaunchAppCheckBox.Width := WizardForm.FinishedLabel.Width;
     if ActiveLanguage() = 'chinesesimplified' then
       LaunchAppCheckBox.Caption := '启动 ManagedDrive'
+    else if ActiveLanguage() = 'chinesetraditional' then
+      LaunchAppCheckBox.Caption := '啟動 ManagedDrive'
     else
       LaunchAppCheckBox.Caption := 'Launch ManagedDrive';
     LaunchAppCheckBox.Checked := True;
@@ -727,7 +748,10 @@ begin
       'Environment Variables > Temp directory, or untoggle TEMP on the disk), then run this uninstaller again.',
       '当前 TEMP 目录设置在了 ManagedDrive 内存盘上。现在卸载会导致 TEMP 指向一个不存在的驱动器。'#13#10#13#10 +
       '请先打开 ManagedDrive，将 TEMP 还原为系统默认设置（托盘菜单 > 还原环境变量 > 临时目录，或取消该磁盘' +
-      '的 TEMP 设置），然后再次运行本卸载程序。');
+      '的 TEMP 设置），然后再次运行本卸载程序。',
+      '目前 TEMP 資料夾設定在 ManagedDrive 記憶體磁碟上。現在解除安裝會導致 TEMP 指向一個不存在的磁碟機。'#13#10#13#10 +
+      '請先開啟 ManagedDrive，將 TEMP 還原為系統預設設定（系統匣選單 > 還原環境變數 > 暫存資料夾，或取消該磁碟' +
+      '的 TEMP 設定），然後再次執行本解除安裝程式。');
     Result := False;
   end;
 end;
