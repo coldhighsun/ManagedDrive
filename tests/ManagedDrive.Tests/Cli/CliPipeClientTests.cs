@@ -128,17 +128,21 @@ public sealed class CliPipeClientTests : IDisposable
         CliPipeClient.TestTrace = (stage, timestamp) => trace.Enqueue((stage, timestamp));
 
         var startTimestamp = Stopwatch.GetTimestamp();
-        var stopwatch = Stopwatch.StartNew();
 
         // On a dedicated thread so a regression that blocks the write forever still lets the test
-        // time out instead of hanging the run.
-        var (answered, response) = await Task.Factory.StartNew(
-            () => (CliPipeClient.TrySend(["list"], out var r), r),
+        // time out instead of hanging the run. The clock runs inside the delegate: starting the
+        // thread can itself stall for seconds on a loaded CI runner (seen: 5.4 s before TrySend
+        // began, then 208 ms inside it), and that delay is not TrySend blocking.
+        var (answered, response, elapsed) = await Task.Factory.StartNew(
+            () =>
+            {
+                var sw = Stopwatch.StartNew();
+                var ok = CliPipeClient.TrySend(["list"], out var r);
+                return (ok, r, sw.Elapsed);
+            },
             CancellationToken.None,
             TaskCreationOptions.LongRunning,
             TaskScheduler.Default).WaitAsync(TestContext.Current.CancellationToken);
-
-        stopwatch.Stop();
 
         // The request may still be read and run later, so it must not be reported as undelivered.
         Assert.True(answered);
@@ -146,8 +150,8 @@ public sealed class CliPipeClientTests : IDisposable
         Assert.Equal(1, response.ExitCode);
         Assert.Equal(CliPipeClient.NoResponseMessage, response.Message);
         Assert.True(
-            stopwatch.Elapsed < TimeSpan.FromSeconds(5),
-            $"TrySend blocked for {stopwatch.Elapsed}; the overridden 200ms timeout should have abandoned the write. "
+            elapsed < TimeSpan.FromSeconds(5),
+            $"TrySend blocked for {elapsed}; the overridden 200ms timeout should have abandoned the write. "
             + "Stages (ms since the test started): "
             + string.Join(", ", trace.Select(t =>
                 $"{t.Stage}={Stopwatch.GetElapsedTime(startTimestamp, t.Timestamp).TotalMilliseconds:F0}")));
