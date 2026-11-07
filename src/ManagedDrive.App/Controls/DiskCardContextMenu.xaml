@@ -44,16 +44,8 @@
                                                     RelativeSource={RelativeSource AncestorType=ContextMenu}}"
                                           CommandParameter="{Binding PlacementTarget.DataContext,
                                                     RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
-                                <MenuItem Header="{DynamicResource Btn.CreateSnapshotNow}"
-                                          Visibility="{Binding PlacementTarget.DataContext.SnapshotsEnabled,
-                                                        RelativeSource={RelativeSource AncestorType=ContextMenu},
-                                                        Converter={StaticResource BoolToVis}}"
-                                          Command="{Binding PlacementTarget.Tag.CreateSnapshotNowCommand,
-                                                    RelativeSource={RelativeSource AncestorType=ContextMenu}}"
-                                          CommandParameter="{Binding PlacementTarget.DataContext,
-                                                    RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
                                 <MenuItem Header="{DynamicResource Btn.RestoreSnapshot}"
-                                          Visibility="{Binding PlacementTarget.DataContext.SnapshotsEnabled,
+                                          Visibility="{Binding PlacementTarget.DataContext.HasImagePath,
                                                         RelativeSource={RelativeSource AncestorType=ContextMenu},
                                                         Converter={StaticResource BoolToVis}}"
                                           Command="{Binding PlacementTarget.Tag.RestoreSnapshotCommand,

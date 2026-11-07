@@ -36,6 +36,69 @@ internal static class RamDiskSaveDecisions
         HasFinalSaveTarget(persistImagePath, skipFinalSave) && NeedsExitSave(saveImageOnExit, needsSave);
 
     /// <summary>
+    /// The image files a format deletes: the configured path and, when it differs from the file the
+    /// disk last saved to (the path was changed after the last save), that older file too, because
+    /// it still holds the disk's previous contents. The older file is left alone when another
+    /// mounted disk uses it. Paths are compared by full path, ignoring case.
+    /// </summary>
+    /// <param name="configuredPersistImagePath">The disk's configured image path, if any.</param>
+    /// <param name="lastSavedImagePath">The file the disk last saved to, if any.</param>
+    /// <param name="imagePathsOfOtherDisks">The image paths of the other mounted disks.</param>
+    /// <returns>Empty when the disk has no image path; otherwise the configured path first.</returns>
+    internal static IReadOnlyList<string> ImagePathsToClean(
+        string? configuredPersistImagePath,
+        string? lastSavedImagePath,
+        IEnumerable<string>? imagePathsOfOtherDisks)
+    {
+        if (configuredPersistImagePath is null)
+        {
+            return [];
+        }
+
+        if (lastSavedImagePath is null ||
+            FilePathComparison.AreSame(lastSavedImagePath, configuredPersistImagePath) ||
+            (imagePathsOfOtherDisks?.Any(other => FilePathComparison.AreSame(other, lastSavedImagePath)) ?? false))
+        {
+            return [configuredPersistImagePath];
+        }
+
+        return [configuredPersistImagePath, lastSavedImagePath];
+    }
+
+    /// <summary>
+    /// The image files a format may actually delete: <see cref="ImagePathsToClean"/> limited to
+    /// the ones the caller confirmed. A change since the confirmation (a disk unmounted, the path
+    /// edited) can therefore never get a file deleted that the user was not shown.
+    /// </summary>
+    /// <param name="configuredPersistImagePath">The disk's configured image path, if any.</param>
+    /// <param name="lastSavedImagePath">The file the disk last saved to, if any.</param>
+    /// <param name="imagePathsOfOtherDisks">The image paths that belong to something else.</param>
+    /// <param name="confirmedImagePaths">The files the user was told would be deleted.</param>
+    internal static IReadOnlyList<string> ConfirmedImagePathsToClean(
+        string? configuredPersistImagePath,
+        string? lastSavedImagePath,
+        IEnumerable<string>? imagePathsOfOtherDisks,
+        IReadOnlyCollection<string> confirmedImagePaths) =>
+        [.. ImagePathsToClean(configuredPersistImagePath, lastSavedImagePath, imagePathsOfOtherDisks)
+            .Where(path => confirmedImagePaths.Any(confirmed => FilePathComparison.AreSame(confirmed, path)))];
+
+    /// <summary>
+    /// Whether a format must stop before touching anything: the disk's configured image path has
+    /// a file that the caller did not confirm for deletion (the path was edited after the
+    /// confirmation), and writing the formatted disk there would overwrite it.
+    /// </summary>
+    /// <param name="configuredPersistImagePath">The disk's configured image path, if any.</param>
+    /// <param name="configuredFileExists">Whether a file exists at that path.</param>
+    /// <param name="confirmedImagePaths">The files the user was told would be deleted.</param>
+    internal static bool ConfiguredImageIsUnconfirmed(
+        string? configuredPersistImagePath,
+        bool configuredFileExists,
+        IReadOnlyCollection<string> confirmedImagePaths) =>
+        configuredPersistImagePath is not null &&
+        configuredFileExists &&
+        !confirmedImagePaths.Any(confirmed => FilePathComparison.AreSame(confirmed, configuredPersistImagePath));
+
+    /// <summary>
     /// Whether <see cref="RamDisk.SetPassword"/> should generate a fresh content-encryption key
     /// rather than reuse <paramref name="currentCek"/> to just re-wrap it under a new password.
     /// <see langword="true"/> only when there is no current CEK (the disk is unencrypted, or a

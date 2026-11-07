@@ -109,14 +109,6 @@ public sealed partial class MainViewModel : INotifyPropertyChanged, IDisposable
             p => ExecuteSaveImageAsync(ResolveTarget(p)),
             OnCommandFailed,
             p => !BusyOverlay.IsBusy && ResolveTarget(p) != null);
-        CreateSnapshotNowCommand = RelayCommand.FromAsync(
-            p => ExecuteCreateSnapshotNowAsync(ResolveTarget(p)),
-            OnCommandFailed,
-            p =>
-            {
-                var vm = ResolveTarget(p);
-                return !BusyOverlay.IsBusy && vm is { SnapshotsEnabled: true, HasImagePath: true };
-            });
         FormatDiskCommand = RelayCommand.FromAsync(
             p => ExecuteFormatDiskAsync(ResolveTarget(p)),
             OnCommandFailed,
@@ -497,15 +489,6 @@ public sealed partial class MainViewModel : INotifyPropertyChanged, IDisposable
     /// Gets the command that saves the selected disk's image to file.
     /// </summary>
     public RelayCommand SaveImageCommand
-    {
-        get;
-    }
-
-    /// <summary>
-    /// Gets the command that writes a timestamped snapshot for the selected disk right now,
-    /// independent of whether the user was otherwise about to save the image.
-    /// </summary>
-    public RelayCommand CreateSnapshotNowCommand
     {
         get;
     }

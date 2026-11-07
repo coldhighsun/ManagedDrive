@@ -65,33 +65,16 @@ public sealed partial class MainViewModel
     }
 
     /// <summary>
-    /// Writes a timestamped snapshot for <paramref name="vm"/> right now, via the same
-    /// <see cref="RamDisk.SaveToImageWithSnapshot"/> call the regular "Save Image" action uses —
-    /// snapshot creation always piggybacks on a full image save, there's no lighter-weight path.
-    /// </summary>
-    private async Task ExecuteCreateSnapshotNowAsync(DiskViewModel? vm)
-    {
-        if (vm is not { SnapshotsEnabled: true, HasImagePath: true } || RejectIfBusy())
-        {
-            return;
-        }
-
-        _logger.LogInformation("Create snapshot now requested for {MountPoint}.", vm.MountPoint);
-        await SaveImageWithSnapshotAsync(vm, Loc.Get("Busy.CreatingSnapshot"), "Create snapshot now");
-    }
-
-    /// <summary>
-    /// Shared body for <see cref="ExecuteSaveImageAsync"/> and <see cref="ExecuteCreateSnapshotNowAsync"/>:
-    /// runs <see cref="RamDisk.SaveToImageWithSnapshot"/> under the busy overlay (with
-    /// cancellation), and reports the outcome via <see cref="StatusText"/>/logging.
+    /// Body of <see cref="ExecuteSaveImageAsync"/>: runs <see cref="RamDisk.SaveToImageWithSnapshot"/>
+    /// under the busy overlay (with cancellation), and reports the outcome via
+    /// <see cref="StatusText"/>/logging. A snapshot is written afterwards only when snapshot
+    /// retention is configured; there is no separate manual snapshot action.
     /// </summary>
     /// <param name="vm">The disk to save.</param>
-    /// <param name="busyText">The busy-overlay status text shown while the save runs.</param>
-    /// <param name="logVerb">The action name used in log messages (e.g. <c>"Save image"</c>).</param>
-    private async Task SaveImageWithSnapshotAsync(DiskViewModel vm, string busyText, string logVerb)
+    private async Task SaveImageWithSnapshotAsync(DiskViewModel vm)
     {
         using var cts = new CancellationTokenSource();
-        if (!TryStartBusyOverlay(busyText, totalBytes: vm.Disk.UsedBytes, cancellationSource: cts))
+        if (!TryStartBusyOverlay(Loc.Get("Busy.SavingImage"), totalBytes: vm.Disk.UsedBytes, cancellationSource: cts))
         {
             return;
         }
@@ -102,17 +85,17 @@ public sealed partial class MainViewModel
             var progress = new Progress<double>(BusyOverlay.Report);
             await Task.Run(() => vm.Disk.SaveToImageWithSnapshot(progress, cts.Token));
             StatusText = Loc.Format("Status.ImageSaved", vm.MountPoint);
-            _logger.LogInformation("{Verb} completed for {MountPoint}.", logVerb, vm.MountPoint);
+            _logger.LogInformation("Save image completed for {MountPoint}.", vm.MountPoint);
             vm.NotifySaveCompleted();
         }
         catch (OperationCanceledException)
         {
             StatusText = Loc.Get("Status.OperationCancelled");
-            _logger.LogInformation("{Verb} cancelled for {MountPoint}.", logVerb, vm.MountPoint);
+            _logger.LogInformation("Save image cancelled for {MountPoint}.", vm.MountPoint);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "{Verb} failed for {MountPoint}.", logVerb, vm.MountPoint);
+            _logger.LogError(ex, "Save image failed for {MountPoint}.", vm.MountPoint);
             ShowError(Loc.Format("Msg.SaveImageFailed", ex.Message));
         }
         finally
