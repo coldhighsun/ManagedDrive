@@ -14,7 +14,7 @@
 [![.NET](https://img.shields.io/badge/.NET-10-512BD4?logo=dotnet)](https://dotnet.microsoft.com/)
 [![Platform: Windows](https://img.shields.io/badge/platform-Windows-0078D6?logo=windows)](https://github.com/coldhighsun/ManagedDrive)
 
-[English](README.md) | 中文
+[English](README.md) | 简体中文 | [繁體中文](README.zh-TW.md)
 
 ---
 
@@ -75,7 +75,7 @@
 - 双击在资源管理器中打开磁盘；右键提供快捷方式、**磁盘内容...** 或**空间占用分析...**（以矩形树图显示磁盘空间被什么占用，按文件类型着色，并附带占用最大的文件夹/文件/类型列表）
 
 **界面**
-- 双语（中/英）及浅色/深色主题，均可自动检测或手动切换
+- 支持英文、简体中文和繁体中文，并提供浅色/深色主题，均可自动检测或手动切换
 - 磁盘卡片带状态角标（只读、当前临时目录、绑定镜像、密码保护）、使用率进度条，以及实时读写速度曲线图
 - 窗口可自由拖拽调整大小
 - 关于对话框显示版本、GitHub 链接，有新版本时显示更新链接

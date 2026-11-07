@@ -170,6 +170,7 @@ public sealed partial class FontManagerTests
     [Theory]
     [InlineData("Strings.en-US.xaml")]
     [InlineData("Strings.zh-CN.xaml")]
+    [InlineData("Strings.zh-TW.xaml")]
     public void MissingFontString_ExistsInEveryLanguageWithItsPlaceholder(string file)
     {
         var xaml = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Localization", file));
