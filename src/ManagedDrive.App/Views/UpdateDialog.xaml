@@ -8,69 +8,69 @@
         WindowStartupLocation="CenterOwner"
         ShowInTaskbar="False">
 
-    <Grid Margin="4,0,4,0">
+    <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
-            <RowDefinition Height="20"/>
+            <RowDefinition Height="24"/>
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
         <!-- Header: new version + running version -->
         <StackPanel Grid.Row="0">
-            <TextBlock x:Name="HeaderText" FontSize="16" FontWeight="Medium" TextWrapping="Wrap"/>
-            <TextBlock x:Name="CurrentVersionText" FontSize="12" Margin="0,2,0,0"
+            <TextBlock x:Name="HeaderText" FontSize="{DynamicResource FontSizeTitle}" FontWeight="Medium" TextWrapping="Wrap"/>
+            <TextBlock x:Name="CurrentVersionText" FontSize="{DynamicResource FontSizeCaption}" Margin="0,2,0,0"
                        Foreground="{DynamicResource AppForeground}"/>
         </StackPanel>
 
         <!-- Release notes -->
-        <StackPanel x:Name="NotesPanel" Grid.Row="1" Margin="0,14,0,0" Visibility="Collapsed">
-            <TextBlock Text="{DynamicResource Update.WhatsNew}" FontSize="12"
+        <StackPanel x:Name="NotesPanel" Grid.Row="1" Margin="0,16,0,0" Visibility="Collapsed">
+            <TextBlock Text="{DynamicResource Update.WhatsNew}" FontSize="{DynamicResource FontSizeCaption}"
                        Foreground="{DynamicResource AppForeground}" Margin="0,0,0,4"/>
-            <Border BorderBrush="{DynamicResource AppDivider}" BorderThickness="1" CornerRadius="4">
+            <Border BorderBrush="{DynamicResource AppDivider}" BorderThickness="1" CornerRadius="{DynamicResource SectionCornerRadius}">
                 <ScrollViewer MaxHeight="150" VerticalScrollBarVisibility="Auto">
-                    <TextBlock x:Name="NotesText" TextWrapping="Wrap" Margin="8,6" FontSize="12" LineHeight="18"/>
+                    <TextBlock x:Name="NotesText" TextWrapping="Wrap" Margin="8,6" FontSize="{DynamicResource FontSizeCaption}" LineHeight="18"/>
                 </ScrollViewer>
             </Border>
         </StackPanel>
 
         <!-- What updating does -->
-        <TextBlock x:Name="InfoText" Grid.Row="2" Margin="0,14,0,0"
+        <TextBlock x:Name="InfoText" Grid.Row="2" Margin="0,16,0,0"
                    TextWrapping="Wrap" LineHeight="20"
                    Foreground="{DynamicResource AppForeground}"/>
 
         <!-- Download progress -->
-        <StackPanel x:Name="ProgressPanel" Grid.Row="3" Margin="0,14,0,0" Visibility="Collapsed">
+        <StackPanel x:Name="ProgressPanel" Grid.Row="3" Margin="0,16,0,0" Visibility="Collapsed">
             <ProgressBar x:Name="DownloadProgressBar" Style="{StaticResource SlimProgressBar}"
                          Minimum="0" Maximum="1" IsIndeterminate="True"/>
-            <TextBlock x:Name="ProgressText" FontSize="12" Margin="0,6,0,0"
+            <TextBlock x:Name="ProgressText" FontSize="{DynamicResource FontSizeCaption}" Margin="0,6,0,0"
                        Foreground="{DynamicResource AppForeground}"/>
         </StackPanel>
 
         <!-- Failure / cancellation message -->
-        <TextBlock x:Name="ErrorText" Grid.Row="4" Margin="0,14,0,0"
+        <TextBlock x:Name="ErrorText" Grid.Row="4" Margin="0,16,0,0"
                    TextWrapping="Wrap" LineHeight="20"
                    Foreground="{DynamicResource AppWarning}" Visibility="Collapsed"/>
 
         <!-- Buttons (shown per state by code-behind) -->
         <StackPanel Grid.Row="6" Orientation="Horizontal" HorizontalAlignment="Right">
             <Button x:Name="SkipButton" Content="{DynamicResource Update.SkipVersion}"
-                    Style="{StaticResource FlatButton}" Margin="0,0,8,0"
+                    Style="{StaticResource FlatButton}" Margin="0,0,8,0" MinWidth="88"
                     Click="SkipButton_Click"/>
             <Button x:Name="LaterButton" Content="{DynamicResource Update.RemindLater}"
-                    Style="{StaticResource FlatButton}" Margin="0,0,8,0"
+                    Style="{StaticResource FlatButton}" Margin="0,0,8,0" MinWidth="88"
                     IsCancel="True"/>
             <Button x:Name="ViewReleaseButton" Content="{DynamicResource Update.ViewRelease}"
-                    Style="{StaticResource FlatButton}" Margin="0,0,8,0"
+                    Style="{StaticResource FlatButton}" Margin="0,0,8,0" MinWidth="88"
                     Click="ViewReleaseButton_Click"/>
-            <Button x:Name="CancelDownloadButton" Content="{DynamicResource Btn.Cancel}" Width="80"
+            <Button x:Name="CancelDownloadButton" Content="{DynamicResource Btn.Cancel}" MinWidth="88"
                     Style="{StaticResource FlatButton}" Margin="0,0,8,0"
                     Click="CancelDownloadButton_Click"/>
             <Button x:Name="UpdateButton" Content="{DynamicResource Update.UpdateNow}"
-                    Style="{StaticResource RaisedButton}" MinWidth="100"
+                    Style="{StaticResource RaisedButton}" MinWidth="88"
                     IsDefault="True" Click="UpdateButton_Click"/>
         </StackPanel>
     </Grid>

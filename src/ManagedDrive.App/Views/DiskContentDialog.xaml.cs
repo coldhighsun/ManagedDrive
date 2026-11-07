@@ -472,6 +472,7 @@ public partial class DiskContentDialog
         {
             new ConfirmDialog(Loc.Get("Msg.DeleteNodeConfirmTitle"), Loc.Format("Msg.DeleteNodeFailed", f.Name, f.Message))
             {
+                Kind = ConfirmKind.Error,
                 Owner = this,
             }.ShowDialog();
         }
@@ -599,6 +600,7 @@ public partial class DiskContentDialog
         {
             new ConfirmDialog(Loc.Get("DiskContent.Export"), Loc.Format("Msg.ExportNodeFailed", f.Name, f.Message))
             {
+                Kind = ConfirmKind.Error,
                 Owner = this,
             }.ShowDialog();
         }

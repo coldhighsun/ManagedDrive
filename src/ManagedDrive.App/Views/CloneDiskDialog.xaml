@@ -36,7 +36,7 @@
 
                 <TextBlock Text="{DynamicResource CloneDisk.ToDiskWarning}"
                            Foreground="{DynamicResource AppWarning}"
-                           FontSize="11" TextWrapping="Wrap"/>
+                           FontSize="{DynamicResource FontSizeSmall}" TextWrapping="Wrap"/>
 
                 <Separator Margin="0,16,0,16"/>
 

@@ -49,7 +49,7 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
-                        <Border x:Name="Bd" Background="{TemplateBinding Background}" CornerRadius="16">
+                        <Border x:Name="Bd" Background="{TemplateBinding Background}" CornerRadius="{DynamicResource ButtonCornerRadius}">
                             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Border>
                         <ControlTemplate.Triggers>
@@ -86,7 +86,7 @@
                                 <Setter TargetName="Bd" Property="Background" Value="{DynamicResource AppDivider}"/>
                             </Trigger>
                             <Trigger Property="IsSelected" Value="True">
-                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource AppDivider}"/>
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource AppPrimarySoft}"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -174,7 +174,7 @@
 
         <StackPanel Grid.Row="2" Orientation="Horizontal">
             <Button x:Name="UpButton" Content="{DynamicResource SpaceUsage.Up}"
-                    Style="{StaticResource RaisedButton}" Padding="12,0" IsEnabled="False"
+                    Style="{StaticResource OutlinedButton}" Padding="12,0" IsEnabled="False"
                     Click="UpButton_Click"/>
             <TextBlock x:Name="PathText" Margin="10,0,0,0" VerticalAlignment="Center"
                        Foreground="{DynamicResource AppForeground}" TextTrimming="CharacterEllipsis"/>

@@ -5,7 +5,7 @@
         xmlns:views="clr-namespace:ManagedDrive.App.Views"
         Style="{DynamicResource DialogWindowStyle}"
         Title="{DynamicResource CreateDisk.Title}"
-        Width="440" SizeToContent="Height"
+        Width="480" SizeToContent="Height"
         WindowStartupLocation="CenterOwner">
 
     <Grid>
@@ -39,7 +39,7 @@
                     <!-- Drive Letter -->
                     <Grid Grid.Row="0">
                         <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="64"/>
+                            <ColumnDefinition Width="84"/>
                             <ColumnDefinition Width="8"/>
                             <ColumnDefinition Width="*"/>
                         </Grid.ColumnDefinitions>
@@ -53,7 +53,7 @@
                     <!-- Capacity -->
                     <Grid Grid.Row="2" x:Name="CapacityRow" Style="{StaticResource DimWhenDisabled}">
                         <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="64"/>
+                            <ColumnDefinition Width="84"/>
                             <ColumnDefinition Width="8"/>
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="8"/>
@@ -91,14 +91,14 @@
                                               AutomationProperties.Name="{DynamicResource Tip.CapacityIncrease}"
                                               Style="{StaticResource SpinRepeatButton}"
                                               Click="CapacityUpButton_Click">
-                                    <TextBlock Text="&#xE70E;" FontFamily="Segoe Fluent Icons" FontSize="8"/>
+                                    <TextBlock Text="&#xE70E;" Style="{StaticResource IconText}" FontSize="8"/>
                                 </RepeatButton>
                                 <RepeatButton Grid.Row="1" x:Name="CapacityDownButton" Focusable="False"
                                               ToolTip="{DynamicResource Tip.CapacityDecrease}"
                                               AutomationProperties.Name="{DynamicResource Tip.CapacityDecrease}"
                                               Style="{StaticResource SpinRepeatButton}"
                                               Click="CapacityDownButton_Click">
-                                    <TextBlock Text="&#xE70D;" FontFamily="Segoe Fluent Icons" FontSize="8"/>
+                                    <TextBlock Text="&#xE70D;" Style="{StaticResource IconText}" FontSize="8"/>
                                 </RepeatButton>
                             </Grid>
                         </Grid>
@@ -109,7 +109,7 @@
                     <!-- Volume Label -->
                     <Grid Grid.Row="4">
                         <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="64"/>
+                            <ColumnDefinition Width="84"/>
                             <ColumnDefinition Width="8"/>
                             <ColumnDefinition Width="*"/>
                         </Grid.ColumnDefinitions>
@@ -130,7 +130,7 @@
                     <Grid Grid.Row="8" x:Name="HighUsageWarnPercentPanel" IsEnabled="False"
                           Style="{StaticResource DimWhenDisabled}">
                         <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="64"/>
+                            <ColumnDefinition Width="84"/>
                             <ColumnDefinition Width="8"/>
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="8"/>
@@ -195,20 +195,20 @@
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="12"/>
+                        <RowDefinition Height="16"/>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="0"/>
                         <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="12"/>
+                        <RowDefinition Height="16"/>
                         <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="20"/>
+                        <RowDefinition Height="16"/>
                         <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="10"/>
+                        <RowDefinition Height="8"/>
                         <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="20"/>
+                        <RowDefinition Height="16"/>
                         <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="10"/>
+                        <RowDefinition Height="8"/>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="Auto"/>
                     </Grid.RowDefinitions>
@@ -239,14 +239,14 @@
                     <TextBlock Grid.Row="1" x:Name="ImportNoteText"
                                Text="{DynamicResource CreateDisk.ImportNote}"
                                Foreground="{DynamicResource AppForegroundLight}"
-                               FontSize="11" TextWrapping="Wrap" Margin="92,0,0,0"
+                               FontSize="{DynamicResource FontSizeSmall}" TextWrapping="Wrap" Margin="92,0,0,0"
                                Visibility="Collapsed"/>
 
                     <!-- Archive Import Note -->
                     <TextBlock Grid.Row="2" x:Name="ArchiveImportNoteText"
                                Text="{DynamicResource CreateDisk.ArchiveImportNote}"
                                Foreground="{DynamicResource AppForegroundLight}"
-                               FontSize="11" TextWrapping="Wrap" Margin="92,0,0,0"
+                               FontSize="{DynamicResource FontSizeSmall}" TextWrapping="Wrap" Margin="92,0,0,0"
                                Visibility="Collapsed"/>
 
                     <!-- Compression Level -->
@@ -294,13 +294,13 @@
                         </Grid.ColumnDefinitions>
                         <TextBlock Grid.Row="0" Grid.Column="0" Text="{DynamicResource CreateDisk.Password}"
                                    Foreground="{DynamicResource AppForeground}" VerticalAlignment="Center"/>
-                        <PasswordBox Grid.Row="0" Grid.Column="2" x:Name="PasswordBox1"
+                        <PasswordBox Grid.Row="0" Grid.Column="2" x:Name="PasswordBox1" Style="{StaticResource OutlinedPasswordBox}"
                                      PasswordChanged="PasswordBox1_PasswordChanged"/>
                         <TextBlock Grid.Row="2" Grid.Column="0" Text="{DynamicResource CreateDisk.ConfirmPassword}"
                                    Foreground="{DynamicResource AppForeground}" VerticalAlignment="Center"/>
-                        <PasswordBox Grid.Row="2" Grid.Column="2" x:Name="PasswordBox2"/>
+                        <PasswordBox Grid.Row="2" Grid.Column="2" x:Name="PasswordBox2" Style="{StaticResource OutlinedPasswordBox}"/>
                         <TextBlock Grid.Row="4" Grid.Column="2" x:Name="PasswordStrengthText"
-                                   FontSize="11" Visibility="Collapsed"/>
+                                   FontSize="{DynamicResource FontSizeSmall}" Visibility="Collapsed"/>
                     </Grid>
 
                     <!-- Section divider: image/compression/encryption above, auto-save/snapshots below -->
@@ -367,7 +367,7 @@
                     </Grid>
 
                     <!-- Snapshot Max Size -->
-                    <Grid Grid.Row="18" Margin="16,0,0,0">
+                    <Grid Grid.Row="18" Margin="16,8,0,0">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="8"/>

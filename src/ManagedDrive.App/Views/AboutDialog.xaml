@@ -7,10 +7,10 @@
         Width="460" SizeToContent="Height"
         WindowStartupLocation="CenterOwner">
 
-        <Grid Margin="4,0,4,0">
+        <Grid>
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
-                <RowDefinition Height="20"/>
+                <RowDefinition Height="16"/>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="24"/>
                 <RowDefinition Height="Auto"/>
@@ -24,13 +24,13 @@
                        RenderOptions.BitmapScalingMode="HighQuality"/>
                 <StackPanel Margin="14,0,0,0" VerticalAlignment="Center">
                     <TextBlock Text="ManagedDrive"
-                               FontSize="20" FontWeight="Medium"/>
+                               FontSize="{DynamicResource FontSizeDisplay}" FontWeight="Medium"/>
                     <TextBlock x:Name="VersionText"
-                               FontSize="12"
+                               FontSize="{DynamicResource FontSizeCaption}"
                                Foreground="{DynamicResource AppForeground}"
                                Margin="0,2,0,0"/>
                     <TextBlock x:Name="UpdateStatusText"
-                               FontSize="12"
+                               FontSize="{DynamicResource FontSizeCaption}"
                                Margin="0,4,0,0"
                                Visibility="Collapsed">
                         <Hyperlink x:Name="UpdateLink" Click="UpdateLink_Click">
@@ -48,15 +48,15 @@
                            LineHeight="20"
                            Margin="0,0,0,10"/>
                 <TextBlock Text="{DynamicResource About.Copyright}"
-                           FontSize="12"
+                           FontSize="{DynamicResource FontSizeCaption}"
                            Foreground="{DynamicResource AppForeground}"
                            Margin="0,0,0,6"/>
-                <TextBlock FontSize="12">
+                <TextBlock FontSize="{DynamicResource FontSizeCaption}">
                     <Hyperlink x:Name="GitHubLink" RequestNavigate="Hyperlink_RequestNavigate">
                         <Run Text="{DynamicResource About.ViewOnGitHub}"/>
                     </Hyperlink>
                 </TextBlock>
-                <TextBlock FontSize="12" Margin="0,4,0,0">
+                <TextBlock FontSize="{DynamicResource FontSizeCaption}" Margin="0,4,0,0">
                     <Hyperlink x:Name="ThirdPartyNoticesLink" RequestNavigate="Hyperlink_RequestNavigate">
                         <Run Text="{DynamicResource About.ViewThirdPartyNotices}"/>
                     </Hyperlink>

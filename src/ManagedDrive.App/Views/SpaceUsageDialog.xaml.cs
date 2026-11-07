@@ -558,7 +558,7 @@ public partial class SpaceUsageDialog
 
         if (failure is not null)
         {
-            new ConfirmDialog(Loc.Get("Msg.DeleteNodeConfirmTitle"), Loc.Format("Msg.DeleteNodeFailed", node.Name, failure)) { Owner = this }.ShowDialog();
+            new ConfirmDialog(Loc.Get("Msg.DeleteNodeConfirmTitle"), Loc.Format("Msg.DeleteNodeFailed", node.Name, failure)) { Kind = ConfirmKind.Error, Owner = this }.ShowDialog();
         }
 
         await AnalyzeAsync();

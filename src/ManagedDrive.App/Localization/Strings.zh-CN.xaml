@@ -68,12 +68,11 @@
     <sys:String x:Key="Val.BadFolder">缓存文件夹无效，必须是磁盘内的相对路径。</sys:String>
     <sys:String x:Key="Val.BadEnvRedirect">环境变量重定向无效，或同一个变量出现了多次。</sys:String>
     <sys:String x:Key="CreateDisk.Section.Presets">临时与缓存</sys:String>
-    <sys:String x:Key="CreateDisk.Presets.Hint">勾选一个或多个项目：自动填入容量和卷标，每次挂载时创建对应文件夹，并把相应环境变量指向本盘。只有之后启动的程序才能看到新的环境变量。会修改环境变量的项目只能用于一块磁盘：在这里勾选，会把它从原来使用它的磁盘上取消。</sys:String>
-    <sys:String x:Key="CreateDisk.Presets.ReadOnlyNote">只读磁盘无法使用预设：它不能存放文件夹，也不能作为临时/缓存目录。取消勾选“只读”后即可使用。</sys:String>
+    <sys:String x:Key="CreateDisk.Presets.Hint">勾选后，每次挂载会创建对应文件夹并重定向环境变量。重定向变量的项目只能用于一块磁盘。</sys:String>
+    <sys:String x:Key="CreateDisk.Presets.ReadOnlyNote">只读磁盘不能使用这些项目，取消“只读”后可用。</sys:String>
     <sys:String x:Key="CreateDisk.Presets.ReadOnlyRemovedNote">本盘现有的文件夹、变量和容量警告（预设或手工配置）会在保存时被移除。</sys:String>
-    <sys:String x:Key="CreateDisk.Presets.HintEdit">勾选或取消勾选项目，会为本盘增加或移除对应的文件夹和环境变量；容量、卷标和压缩级别保持不变。取消勾选时会还原环境变量，但保留文件夹及其中的内容。只有之后启动的程序才能看到变化后的环境变量。会修改环境变量的项目只能用于一块磁盘：在这里勾选，会把它从原来使用它的磁盘上取消。</sys:String>
+    <sys:String x:Key="CreateDisk.Presets.HintEdit">勾选或取消勾选来增减对应设置；取消时还原环境变量，保留文件夹。重定向变量的项目只能用于一块磁盘。</sys:String>
     <sys:String x:Key="CreateDisk.Presets.Other">其他（手工配置）</sys:String>
-    <sys:String x:Key="CreateDisk.Presets.Summary">本盘将设置：</sys:String>
     <sys:String x:Key="Msg.ReadOnlyHasPresets">本盘仍设有预设（文件夹或 TEMP/缓存重定向），无法设为只读。请先在“临时与缓存”页取消勾选这些预设。</sys:String>
     <sys:String x:Key="Msg.ReadOnlyHasTempRedirect">TEMP/TMP 仍被重定向到本盘，无法设为只读。请先取消本对话框，用工具栏的“{0}”（或托盘菜单“{1}”）还原后，再重新编辑本盘。</sys:String>
     <sys:String x:Key="Msg.PresetConflict">这些项目把同一个变量指向了不同的文件夹，无法同时使用：{0}</sys:String>
@@ -204,7 +203,7 @@
     <sys:String x:Key="CloneDisk.Title">克隆磁盘</sys:String>
     <sys:String x:Key="CloneDisk.SourceDescription">将 {0}（{1}）的内容复制到：</sys:String>
     <sys:String x:Key="CloneDisk.ToDisk">另一个已挂载的磁盘</sys:String>
-    <sys:String x:Key="CloneDisk.ToDiskWarning">目标磁盘上现有的所有文件和文件夹将被永久替换。</sys:String>
+    <sys:String x:Key="CloneDisk.ToDiskWarning">目标磁盘上的现有文件将被永久替换。</sys:String>
     <sys:String x:Key="CloneDisk.ToFile">一个新文件</sys:String>
     <sys:String x:Key="CloneDisk.ExportFile">导出文件</sys:String>
     <sys:String x:Key="CloneDisk.ExportFormat">导出为</sys:String>
@@ -317,10 +316,10 @@
     <sys:String x:Key="Settings.Theme.System">跟随系统</sys:String>
     <sys:String x:Key="Settings.Theme.Light">浅色</sys:String>
     <sys:String x:Key="Settings.Theme.Dark">深色</sys:String>
-    <sys:String x:Key="Settings.Style">界面风格</sys:String>
+    <sys:String x:Key="Settings.Style">界面风格：</sys:String>
     <sys:String x:Key="Settings.Style.B">仪表盘</sys:String>
     <sys:String x:Key="Settings.Style.C">极简</sys:String>
-    <sys:String x:Key="Settings.Font">界面字体</sys:String>
+    <sys:String x:Key="Settings.Font">界面字体：</sys:String>
     <sys:String x:Key="Settings.Font.Default">默认</sys:String>
     <sys:String x:Key="Settings.Font.Missing">{0}（未安装）</sys:String>
     <sys:String x:Key="Tip.Font">界面文字使用的字体，所选字体缺少的字符会用默认字体显示</sys:String>
@@ -335,8 +334,8 @@
     <sys:String x:Key="Settings.DefaultCompressionLevel">默认压缩级别：</sys:String>
     <sys:String x:Key="Tip.DefaultCompressionLevel">新建磁盘时预选的 Zstd 压缩级别（0=不压缩，1-22）</sys:String>
     <sys:String x:Key="Settings.DefaultImageDirectory">默认镜像目录：</sys:String>
+    <sys:String x:Key="Tip.ClearDefaultImageDirectory">清空默认镜像目录</sys:String>
     <sys:String x:Key="Tip.DefaultImageDirectory">浏览新磁盘镜像文件路径时预选的文件夹</sys:String>
-    <sys:String x:Key="Btn.Browse">浏览...</sys:String>
     <sys:String x:Key="Settings.HelperServiceStatus">Helper 服务：</sys:String>
     <sys:String x:Key="Tip.HelperServiceStatus">可选的 SYSTEM 级 Helper 服务，用于让 RAM 磁盘在跨会话场景（例如以 SYSTEM 身份运行的安装程序）中可见。设置方法请参阅 README。</sys:String>
     <sys:String x:Key="Settings.HelperServiceChecking">检测中…</sys:String>

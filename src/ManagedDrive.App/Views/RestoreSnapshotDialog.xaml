@@ -31,11 +31,12 @@
 
                 <TextBlock x:Name="SnapshotCountText"
                            Foreground="{DynamicResource AppForeground}"
-                           FontSize="11" Margin="0,0,0,4"/>
+                           FontSize="{DynamicResource FontSizeSmall}" Margin="0,0,0,4"/>
 
                 <ListBox x:Name="SnapshotListBox" MaxHeight="260"
                          BorderThickness="0" Background="Transparent"
                          Foreground="{DynamicResource AppForeground}"
+                         ItemContainerStyle="{StaticResource DialogListBoxItem}"
                          ScrollViewer.VerticalScrollBarVisibility="Auto"
                          ScrollViewer.CanContentScroll="True"
                          VirtualizingStackPanel.IsVirtualizing="True"/>
@@ -54,10 +55,11 @@
                         Content="{DynamicResource RestoreSnapshot.ViewChanges}"
                         Style="{StaticResource FlatButton}"
                         Click="ViewChanges_Click"
-                        Margin="0,0,8,0"/>
+                        Margin="0,0,16,0"/>
                 <Button x:Name="DeleteButton"
                         Content="{DynamicResource RestoreSnapshot.Delete}"
                         Style="{StaticResource FlatButton}"
+                        Foreground="{DynamicResource AppWarning}"
                         Click="Delete_Click"/>
             </StackPanel>
 

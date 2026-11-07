@@ -19,14 +19,12 @@
 
         <!-- Icon + title -->
         <StackPanel Grid.Row="0" Orientation="Horizontal">
-            <TextBlock FontFamily="Segoe Fluent Icons" FontSize="24"
-                       Text="&#xE7BA;"
-                       VerticalAlignment="Center"
-                       Foreground="{DynamicResource AppWarning}"/>
+            <!-- Glyph and color come from ConfirmDialog.Kind (see the code-behind). -->
+            <TextBlock x:Name="KindIcon" Style="{StaticResource IconText}" FontSize="24"/>
             <TextBlock x:Name="TitleText"
                        VerticalAlignment="Center"
                        Margin="10,0,0,0"
-                       FontSize="16" FontWeight="Medium"/>
+                       FontSize="{DynamicResource FontSizeTitle}" FontWeight="Medium"/>
         </StackPanel>
 
         <!-- Body text -->

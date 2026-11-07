@@ -860,18 +860,67 @@ public partial class CreateDiskDialog
     {
         foreach (var preset in BuiltInPresets.All)
         {
+            // One row per preset: the name, and under it the variables (or folder) it touches in a muted line. The full
+            // explanation is the tooltip, so the page itself stays short.
+            var name = new TextBlock { Text = PresetName(preset), FontWeight = FontWeights.Medium };
+            name.SetResourceReference(TextBlock.ForegroundProperty, "AppForeground");
+            var detail = new TextBlock
+            {
+                Text = PresetDetail(preset),
+                FontSize = 12,
+                Margin = new(0, 2, 0, 0),
+                TextWrapping = TextWrapping.Wrap,
+            };
+            detail.SetResourceReference(TextBlock.ForegroundProperty, "AppForegroundLight");
+
             var box = new CheckBox
             {
-                Content = PresetName(preset),
+                Content = new StackPanel { Children = { name, detail } },
                 Tag = preset.Id,
-                Margin = new(0, 0, 0, 6),
+                VerticalContentAlignment = VerticalAlignment.Center,
                 ToolTip = PresetDescription(preset),
             };
-            box.SetResourceReference(Control.ForegroundProperty, "AppForeground");
             box.Checked += PresetBox_Toggled;
             box.Unchecked += PresetBox_Toggled;
-            PresetPanel.Children.Add(box);
+
+            // A rounded row whose outline takes the accent color while the preset is ticked.
+            var card = new Border
+            {
+                Child = box,
+                BorderThickness = new(1),
+                Padding = new(12, 8, 12, 8),
+                Margin = new(0, 0, 0, 6),
+            };
+
+            // The brush and the radius are Style setters, not local values: a local value would beat the trigger.
+            var ticked = new DataTrigger { Binding = new System.Windows.Data.Binding(nameof(CheckBox.IsChecked)) { Source = box }, Value = true };
+            ticked.Setters.Add(new Setter(Border.BorderBrushProperty, new DynamicResourceExtension("AppPrimary")));
+            var cardStyle = new Style(typeof(Border));
+            cardStyle.Setters.Add(new Setter(Border.BorderBrushProperty, new DynamicResourceExtension("AppDivider")));
+            cardStyle.Setters.Add(new Setter(Border.CornerRadiusProperty, new DynamicResourceExtension("SectionCornerRadius")));
+            cardStyle.Triggers.Add(ticked);
+            card.Style = cardStyle;
+            PresetPanel.Children.Add(card);
         }
+    }
+
+    /// <summary>
+    /// Gets the boxes of the preset rows.
+    /// </summary>
+    private IEnumerable<CheckBox> PresetBoxes => PresetPanel.Children.OfType<Border>().Select(card => (CheckBox)card.Child);
+
+    /// <summary>
+    /// Gets the muted second line of a preset row: the environment variables it redirects, or, when it has none, the
+    /// folders it creates.
+    /// </summary>
+    /// <param name="preset">The preset.</param>
+    /// <returns>A short, comma-separated list.</returns>
+    private static string PresetDetail(DiskPreset preset)
+    {
+        var variables = preset.EnvRedirects.Select(redirect => redirect.Variable).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        return variables.Count > 0
+            ? string.Join(", ", variables)
+            : string.Join(", ", preset.Folders.Select(folder => folder.Trim('\\') + "\\"));
     }
 
     /// <summary>
@@ -905,7 +954,7 @@ public partial class CreateDiskDialog
             return;
         }
 
-        var selected = PresetPanel.Children.OfType<CheckBox>().Where(box => box.IsChecked == true)
+        var selected = PresetBoxes.Where(box => box.IsChecked == true)
             .Select(box => BuiltInPresets.All.First(p => p.Id == (string)box.Tag)).ToList();
         var result = PresetSelection.Apply(BuiltInPresets.All, selected, _baseFolders, _baseRedirects);
         if (result.Conflicts.Count > 0)
@@ -951,7 +1000,7 @@ public partial class CreateDiskDialog
             readOnly ? [] : _folders,
             readOnly ? [] : _envRedirects);
         _presetsUpdating = true;
-        foreach (var box in PresetPanel.Children.OfType<CheckBox>())
+        foreach (var box in PresetBoxes)
         {
             box.IsChecked = detected.Contains((string)box.Tag);
         }
@@ -972,21 +1021,12 @@ public partial class CreateDiskDialog
             return;
         }
 
-        var ticked = PresetPanel.Children.OfType<CheckBox>()
-            .Where(box => box.IsChecked == true)
-            .Select(box => BuiltInPresets.All.First(p => p.Id == (string)box.Tag))
-            .ToList();
-        var sections = ticked
-            .Select(preset => (Title: PresetName(preset), Lines: PresetSummary.Describe(preset.Folders, preset.EnvRedirects)))
-            .ToList();
+        // The ticked presets describe themselves in their rows; only what no preset owns (set by hand) needs a note.
         var rest = PresetSelection.Apply(BuiltInPresets.All, [], _folders, _envRedirects);
-        sections.Add((Loc.Get("CreateDisk.Presets.Other"), PresetSummary.Describe(rest.Folders, rest.EnvRedirects)));
-
-        var text = string.Join(
-            Environment.NewLine,
-            sections.Where(section => section.Lines.Count > 0)
-                .Select(section => $"• {section.Title}{Environment.NewLine}{string.Join(Environment.NewLine, section.Lines.Select(line => "    " + line))}"));
-        PresetSummaryText.Text = text.Length == 0 ? string.Empty : Loc.Get("CreateDisk.Presets.Summary") + Environment.NewLine + text;
+        var lines = PresetSummary.Describe(rest.Folders, rest.EnvRedirects);
+        PresetSummaryText.Text = lines.Count == 0
+            ? string.Empty
+            : Loc.Get("CreateDisk.Presets.Other") + Environment.NewLine + string.Join(Environment.NewLine, lines.Select(line => "    " + line));
     }
 
     /// <summary>
@@ -1095,7 +1135,7 @@ public partial class CreateDiskDialog
     /// <param name="e">Unused.</param>
     private void ReadOnlyBox_CheckedChanged(object sender, RoutedEventArgs e)
     {
-        var anyPresetTicked = PresetPanel.Children.OfType<CheckBox>().Any(box => box.IsChecked == true);
+        var anyPresetTicked = PresetBoxes.Any(box => box.IsChecked == true);
         var redirectsTemp = _envRedirects.Any(IsTempVariable);
         if (ShouldRefuseReadOnly(IsReadOnlySelected, IsLoaded, anyPresetTicked, redirectsTemp))
         {
