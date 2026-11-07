@@ -1295,6 +1295,13 @@ public partial class CreateDiskDialog
 
     private void RememberRequestedSnapshotSize()
     {
+        // The slider raises ValueChanged while InitializeComponent is still creating the controls
+        // below it, so the unit box may not exist yet; nothing has been requested by then.
+        if (SnapshotSizeUnitBox is null)
+        {
+            return;
+        }
+
         var isGb = SnapshotSizeUnitBox.SelectedItem as string == "GB";
         _requestedSnapshotSizeBytes = ByteUnitConverter.ToBytes(_snapshotSizeValue, isGb);
     }
