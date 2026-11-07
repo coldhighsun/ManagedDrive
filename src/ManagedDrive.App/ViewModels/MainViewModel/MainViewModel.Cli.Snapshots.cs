@@ -9,8 +9,8 @@ public sealed partial class MainViewModel
 {
     /// <summary>
     /// Writes a timestamped snapshot for the disk currently mounted at <paramref name="mountPoint"/>
-    /// right now, for use by the CLI command channel. Mirrors <c>ExecuteCreateSnapshotNowAsync</c>, via
-    /// the same <see cref="RamDisk.SaveToImageWithSnapshot"/> call, but without the busy overlay.
+    /// right now, for use by the CLI command channel. Uses the same
+    /// <see cref="RamDisk.SaveToImageWithSnapshot"/> call as the "Save Image" action, but without the busy overlay.
     /// </summary>
     /// <param name="mountPoint">The mount point to snapshot, e.g. <c>"R:"</c>.</param>
     /// <returns>

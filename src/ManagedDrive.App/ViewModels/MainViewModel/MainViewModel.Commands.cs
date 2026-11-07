@@ -409,9 +409,15 @@ public sealed partial class MainViewModel
             return;
         }
 
-        var confirm = new ConfirmDialog(
-            Loc.Get("Msg.FormatDiskConfirmTitle"),
-            Loc.Format("Msg.FormatDiskConfirmBody", vm.MountPoint, vm.VolumeLabel))
+        // A disk with an image is also wiped on disk: say so, since that part cannot be undone.
+        // That can be two files when the image path was changed after the last save.
+        var imagePaths = GetImagePathsToClean(vm);
+        var confirmBody = vm.IsReadOnly || imagePaths.Count == 0
+            ? Loc.Format("Msg.FormatDiskConfirmBody", vm.MountPoint, vm.VolumeLabel)
+            : Loc.Format(
+                "Msg.FormatDiskConfirmBodyWithImage", vm.MountPoint, vm.VolumeLabel, string.Join("\n", imagePaths));
+
+        var confirm = new ConfirmDialog(Loc.Get("Msg.FormatDiskConfirmTitle"), confirmBody)
         {
             Owner = Application.Current.MainWindow
         };
@@ -424,7 +430,16 @@ public sealed partial class MainViewModel
         _logger.LogInformation("Format disk confirmed for {MountPoint}.", vm.MountPoint);
 
         // Format takes the disk's save lock, which a running auto-save can hold for a long time.
-        var formatted = await Task.Run(vm.Disk.Format);
+        var (result, error) = await FormatDiskAsync(vm, imagePaths);
+        if (error is not null)
+        {
+            if (IsStillMounted(vm))
+            {
+                ShowWarning(error);
+            }
+
+            return;
+        }
 
         // The disk can be unmounted by a CLI command or the tray while the format runs.
         if (!IsStillMounted(vm))
@@ -432,7 +447,7 @@ public sealed partial class MainViewModel
             return;
         }
 
-        if (!formatted)
+        if (!result.Formatted)
         {
             _logger.LogWarning("Format disk failed for {MountPoint}: disk is read-only.", vm.MountPoint);
             ShowWarning(Loc.Get("Msg.FormatDiskReadOnly"));
@@ -831,7 +846,7 @@ public sealed partial class MainViewModel
         }
 
         _logger.LogInformation("Save image requested for {MountPoint}.", vm.MountPoint);
-        await SaveImageWithSnapshotAsync(vm, Loc.Get("Busy.SavingImage"), "Save image");
+        await SaveImageWithSnapshotAsync(vm);
     }
 
     private void ExecuteSettings()

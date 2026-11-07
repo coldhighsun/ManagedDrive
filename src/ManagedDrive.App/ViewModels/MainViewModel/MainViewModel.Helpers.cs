@@ -590,6 +590,60 @@ public sealed partial class MainViewModel
     }
 
     /// <summary>
+    /// Formats <paramref name="vm"/>'s disk on a background thread. Shared by the interactive
+    /// format command and the CLI one so both handle a locked image or snapshot the same way.
+    /// </summary>
+    /// <param name="vm">The disk to format.</param>
+    /// <param name="confirmedImagePaths">
+    /// The image files the user (or the caller's reply) was told would be deleted, from
+    /// <see cref="GetImagePathsToClean"/>. Nothing outside this list is deleted, even if the set
+    /// changed while a dialog was open.
+    /// </param>
+    /// <returns>
+    /// The <see cref="FormatResult"/> and no error; or, with a localized message, an unformatted
+    /// result when the image or a snapshot could not be deleted, or the image path changed since
+    /// the confirmation (the disk was left as it was).
+    /// </returns>
+    private async Task<(FormatResult Result, string? Error)> FormatDiskAsync(
+        DiskViewModel vm, IReadOnlyList<string> confirmedImagePaths)
+    {
+        var otherDiskImagePaths = GetOtherDiskImagePaths(vm);
+        try
+        {
+            return (await Task.Run(() => vm.Disk.Format(otherDiskImagePaths, confirmedImagePaths)), null);
+        }
+        catch (DiskImageCleanupException ex)
+        {
+            _logger.LogWarning(ex, "Format disk failed for {MountPoint}.", vm.MountPoint);
+            return (new(false, []), Loc.Format("Msg.FormatDiskCleanupFailed", vm.MountPoint, ex.ImagePath));
+        }
+        catch (ImagePathChangedException ex)
+        {
+            _logger.LogWarning(ex, "Format disk stopped for {MountPoint}: the image path changed.", vm.MountPoint);
+            return (new(false, []), Loc.Format("Msg.FormatDiskImagePathChanged", vm.MountPoint, ex.ImagePath));
+        }
+    }
+
+    /// <summary>
+    /// The image files a format of <paramref name="vm"/> would delete: its image, plus the file it
+    /// last saved to when the path was changed since — never a file another mounted disk or a
+    /// saved disk profile uses.
+    /// </summary>
+    private IReadOnlyList<string> GetImagePathsToClean(DiskViewModel vm) =>
+        vm.Disk.GetImagePathsToClean(GetOtherDiskImagePaths(vm));
+
+    /// <summary>
+    /// The image paths that belong to something other than <paramref name="vm"/>: every other
+    /// mounted disk, and every saved profile of a disk that is not mounted right now (it will load
+    /// that image the next time it is mounted).
+    /// </summary>
+    private List<string> GetOtherDiskImagePaths(DiskViewModel vm) =>
+    [
+        .. Disks.Where(other => !ReferenceEquals(other, vm)).Select(other => other.Disk.Options.PersistImagePath).OfType<string>(),
+        .. _unmountedProfiles.Select(profile => profile.PersistImagePath).OfType<string>()
+    ];
+
+    /// <summary>
     /// Returns whether <paramref name="vm"/> is still in <see cref="Disks"/> and not being
     /// remounted by an edit (its RamDisk is unmounted/disposed then). A modal dialog keeps
     /// pumping the dispatcher, so a CLI command or tray action can unmount the disk while one is

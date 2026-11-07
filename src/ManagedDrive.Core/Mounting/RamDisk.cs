@@ -809,29 +809,118 @@ public sealed class RamDisk : IDisposable
     }
 
     /// <summary>
-    /// Removes all files and directories from the disk, leaving it empty.
+    /// Removes all files and directories from the disk, leaving it empty. If the disk has an
+    /// image file (<see cref="DiskOptions.PersistImagePath"/>, see <see cref="GetImagePathsToClean"/>
+    /// for the files involved), the image and all of the disk's snapshots are deleted too, so
+    /// nothing of the old contents can be restored or reloaded, and a fresh image of the empty disk
+    /// is written straight away (a failure to write it is logged and reported through
+    /// <see cref="SaveFailed"/>, not thrown; a later save retries).
     /// Does nothing and returns <c>false</c> when the disk is read-only.
     /// </summary>
+    /// <param name="imagePathsOfOtherDisks">
+    /// The image paths that belong to something else (other mounted disks, saved profiles; see
+    /// <see cref="GetImagePathsToClean"/>), so a file one of them uses is never deleted.
+    /// </param>
+    /// <param name="confirmedImagePaths">
+    /// The image files the caller told the user would be deleted. Only files that are in this list
+    /// <em>and</em> still qualify are deleted, so a change since the confirmation (a disk
+    /// unmounted, the path edited) can never delete a file the user was not shown.
+    /// </param>
     /// <returns>
-    /// <c>true</c> if the format succeeded; <c>false</c> if the disk is read-only.
+    /// A result whose <see cref="FormatResult.Formatted"/> is <c>false</c> if the disk is
+    /// read-only, and otherwise lists the image files that were actually cleaned up.
     /// </returns>
-    public bool Format()
+    /// <exception cref="ImagePathChangedException">
+    /// Thrown, before anything is deleted or cleared, when the configured image path has a file
+    /// that is not in <paramref name="confirmedImagePaths"/> (the path was edited after the
+    /// confirmation) and would be overwritten by the empty image.
+    /// </exception>
+    /// <exception cref="DiskImageCleanupException">
+    /// Thrown when a snapshot or the image file could not be deleted (e.g. it is locked). The
+    /// disk's contents are left untouched in that case. Snapshots are deleted before the image, so
+    /// a snapshot that cannot be deleted leaves the image in place; some snapshots may already be
+    /// gone. The disk is marked so the next save rewrites the image in full.
+    /// </exception>
+    public FormatResult Format(
+        IReadOnlyCollection<string> imagePathsOfOtherDisks,
+        IReadOnlyCollection<string> confirmedImagePaths)
     {
         if (Options.ReadOnly)
         {
-            return false;
+            return new(false, []);
         }
 
+        IReadOnlyList<string> cleanedImagePaths;
         lock (_autoSaveLock)
         {
             ThrowIfDisposed();
+
+            // Before the memory is cleared, so a file that cannot be deleted aborts the format
+            // instead of leaving an empty disk whose old image and snapshots still exist.
+            var configuredPath = Options.PersistImagePath;
+            if (RamDiskSaveDecisions.ConfiguredImageIsUnconfirmed(
+                    configuredPath, configuredPath is not null && File.Exists(configuredPath), confirmedImagePaths))
+            {
+                // Checked before anything is deleted: the empty disk is written to this path
+                // below, which would silently replace a file the user never agreed to lose.
+                throw new ImagePathChangedException(
+                    configuredPath!,
+                    $"The image path now points at an existing file that was not part of the confirmation: '{configuredPath}'.");
+            }
+
+            var imagePaths = RamDiskSaveDecisions.ConfirmedImagePathsToClean(
+                configuredPath, _lastSavedImagePath, imagePathsOfOtherDisks, confirmedImagePaths);
+            cleanedImagePaths = imagePaths;
+            if (imagePaths.Count > 0)
+            {
+                try
+                {
+                    DiskImageCleanup.DeleteImagesAndSnapshots(imagePaths);
+                }
+                finally
+                {
+                    // Snapshots (and possibly an image) may be gone while the memory still has
+                    // the data: make the next save write it in full rather than count it as
+                    // already saved.
+                    _lastSavedImagePath = null;
+                }
+            }
+
             _fs.NodeMap.ClearAll();
             _fs.MarkContentChanged();
+
+            // Write the empty disk out right away so the image file exists again, instead of
+            // waiting for the next auto-save or the exit save. The format itself has succeeded by
+            // now, so a failed write is not an error of it: SaveToImageCore already raised
+            // SaveFailed for the UI, and the disk stays dirty so a later save retries.
+            if (Options.PersistImagePath is not null)
+            {
+                try
+                {
+                    SaveToImageCore(null, CancellationToken.None);
+                }
+                catch (Exception ex)
+                {
+                    Logger.LogWarning(ex, "Could not write the image of the formatted disk {MountPoint}.", MountPoint);
+                }
+            }
         }
 
         NotifyVolumeContentsChanged();
-        return true;
+        return new(true, cleanedImagePaths);
     }
+
+    /// <summary>
+    /// Returns the image files <see cref="Format"/> deletes: the configured
+    /// <see cref="DiskOptions.PersistImagePath"/> and, when that path was changed after the last
+    /// save, the file the disk last saved to as well — it still holds the disk's previous
+    /// contents — unless another mounted disk uses that file. Empty when the disk has no image
+    /// path. A snapshot of the state to show in a confirmation; it can change if the options are
+    /// edited meanwhile.
+    /// </summary>
+    /// <param name="imagePathsOfOtherDisks">The image paths of the other mounted disks.</param>
+    public IReadOnlyList<string> GetImagePathsToClean(IEnumerable<string>? imagePathsOfOtherDisks = null) =>
+        RamDiskSaveDecisions.ImagePathsToClean(Options.PersistImagePath, _lastSavedImagePath, imagePathsOfOtherDisks);
 
     /// <summary>
     /// Tells WinFsp the whole tree under the volume root may have changed, so any Explorer window

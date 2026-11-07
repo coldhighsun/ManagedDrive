@@ -14,7 +14,6 @@
     <sys:String x:Key="Btn.EditDisk">Edit Disk Settings…</sys:String>
     <sys:String x:Key="Btn.Unmount">Unmount...</sys:String>
     <sys:String x:Key="Btn.SaveImage">Save Image</sys:String>
-    <sys:String x:Key="Btn.CreateSnapshotNow">Create Snapshot Now</sys:String>
     <sys:String x:Key="Btn.Presets">Temp &amp; Caches</sys:String>
     <sys:String x:Key="Btn.FormatDisk">Format…</sys:String>
     <sys:String x:Key="Btn.CloneDisk">Clone / Export Disk...</sys:String>
@@ -44,6 +43,8 @@
     <sys:String x:Key="CreateDisk.Section.Basic">Basic Info</sys:String>
     <sys:String x:Key="CreateDisk.Section.Access">Access</sys:String>
     <sys:String x:Key="CreateDisk.Section.Persistence">Persistence</sys:String>
+    <sys:String x:Key="CreateDisk.Section.Snapshots">Incremental snapshots</sys:String>
+    <sys:String x:Key="Tip.Snapshots">Setting either limit enables this: after each image save, timestamped snapshots are also kept (identical content is stored once) so you can restore to a point in time; the oldest are deleted once a limit is exceeded. With neither limit checked, no snapshots are made.</sys:String>
     <sys:String x:Key="CreateDisk.DriveLetter">Drive Letter:</sys:String>
     <sys:String x:Key="CreateDisk.VolumeLabel">Volume Label:</sys:String>
     <sys:String x:Key="CreateDisk.Capacity">Capacity:</sys:String>
@@ -101,12 +102,12 @@
     <sys:String x:Key="CreateDisk.AutoSaveInterval">Interval (min)</sys:String>
     <sys:String x:Key="CreateDisk.MinutesValue">{0} min</sys:String>
     <sys:String x:Key="Tip.SaveOnExit">Save this disk's image when the app closes or Windows shuts down. Independent of periodic auto-save.</sys:String>
-    <sys:String x:Key="Tip.AutoSave">Periodically save the disk contents to the image file while mounted. Only the current image is kept (overwritten each save); enable a snapshot limit below to also keep timestamped snapshots you can restore to later.</sys:String>
+    <sys:String x:Key="Tip.AutoSave">While mounted, save the disk contents to the image file at this interval whenever they have changed. There is only one image, updated on each save; to keep earlier versions, use "Incremental snapshots" below.</sys:String>
     <sys:String x:Key="Tip.AutoSaveInterval">How often to auto-save, in minutes</sys:String>
     <sys:String x:Key="CreateDisk.SnapshotMaxCount">Max number of snapshots to keep:</sys:String>
     <sys:String x:Key="CreateDisk.SnapshotMaxSize">Limit total size to</sys:String>
     <sys:String x:Key="Tip.SnapshotMaxCount">Keep at most this many snapshots; the oldest are deleted once the count is exceeded.</sys:String>
-    <sys:String x:Key="Tip.SnapshotMaxSize">Cap the combined size of all snapshots; the oldest are deleted once this size is exceeded.</sys:String>
+    <sys:String x:Key="Tip.SnapshotMaxSize">Cap the combined size of all snapshots; the oldest are deleted once this size is exceeded. Snapshots are stored on the drive holding the image file, so the available range follows that drive's free space, not memory.</sys:String>
     <sys:String x:Key="Card.LastWritePrefix">Last modified: {0}</sys:String>
     <sys:String x:Key="Card.NeverWritten">Not yet modified</sys:String>
     <sys:String x:Key="Card.LastAutoSavePrefix">Last image save: {0}</sys:String>
@@ -126,7 +127,6 @@
     <sys:String x:Key="Msg.ExitSavingFinishing">Finishing up...</sys:String>
     <sys:String x:Key="Msg.ExitSavingFailed">{0} of {1} disk images could not be saved</sys:String>
     <sys:String x:Key="Busy.SavingImage">Saving disk image...</sys:String>
-    <sys:String x:Key="Busy.CreatingSnapshot">Creating snapshot...</sys:String>
     <sys:String x:Key="Busy.LoadingDisks">Loading disk {0} of {1}...</sys:String>
     <sys:String x:Key="Splash.Starting">Starting…</sys:String>
     <sys:String x:Key="Splash.Feature1">Mount several RAM disks at once, each with its own drive letter and capacity</sys:String>
@@ -239,12 +239,16 @@
 
     <!-- SnapshotDiffDialog -->
     <sys:String x:Key="SnapshotDiff.Title">Snapshot Changes</sys:String>
-    <sys:String x:Key="SnapshotDiff.Description">Comparing snapshot "{0}" against the disk's current contents.</sys:String>
-    <sys:String x:Key="SnapshotDiff.Summary">{0} added, {1} removed, {2} modified, {3} unchanged file(s).</sys:String>
+    <sys:String x:Key="SnapshotDiff.Description">Snapshot "{0}" compared with the disk's current contents. After restoring, the disk returns to the state it had in the snapshot.</sys:String>
     <sys:String x:Key="SnapshotDiff.NoChanges">No differences found between this snapshot and the disk's current contents.</sys:String>
-    <sys:String x:Key="SnapshotDiff.Added">Added</sys:String>
-    <sys:String x:Key="SnapshotDiff.Removed">Removed</sys:String>
-    <sys:String x:Key="SnapshotDiff.Modified">Modified</sys:String>
+    <sys:String x:Key="SnapshotDiff.Filter.All">All</sys:String>
+    <sys:String x:Key="SnapshotDiff.Filter.Restored">Restored</sys:String>
+    <sys:String x:Key="SnapshotDiff.Filter.Removed">Removed</sys:String>
+    <sys:String x:Key="SnapshotDiff.Filter.Reverted">Reverted</sys:String>
+    <sys:String x:Key="Tip.SnapshotDiff.Restored">In the snapshot but not on the disk now: it will reappear after restoring.</sys:String>
+    <sys:String x:Key="Tip.SnapshotDiff.Removed">On the disk now but not in the snapshot: it will be deleted by restoring.</sys:String>
+    <sys:String x:Key="Tip.SnapshotDiff.Reverted">In both but with different content: it will go back to the snapshot's content.</sys:String>
+    <sys:String x:Key="SnapshotDiff.Unchanged">{0} more file(s) unchanged</sys:String>
 
     <!-- Disk Content Dialog -->
     <sys:String x:Key="DiskContent.Title">Disk Contents</sys:String>
@@ -431,8 +435,13 @@
     <sys:String x:Key="Msg.ImagePathOverwriteConfirmBody">The file {0} already exists.&#x0a;&#x0a;Its current contents will NOT be loaded — the disk's own data will overwrite this file the next time it saves. Continue?</sys:String>
     <sys:String x:Key="Msg.FormatDiskConfirmTitle">Format Disk</sys:String>
     <sys:String x:Key="Msg.FormatDiskConfirmBody">Format {0} ({1})?&#x0a;&#x0a;All files and folders on this disk will be permanently deleted.</sys:String>
+    <sys:String x:Key="Msg.FormatDiskCleanupFailed">Could not delete the image file or its snapshots for {0}, so the disk was not formatted and its files are unchanged:&#x0a;{1}&#x0a;&#x0a;Note: some or all of its snapshots may already have been deleted before the failure; check "Restore Snapshot" to see what is left. Another program may have these files open. Close it and try again.</sys:String>
+    <sys:String x:Key="Msg.FormatDiskImagePathChanged">The image path of {0} changed after the confirmation and now points at an existing file:&#x0a;{1}&#x0a;&#x0a;The disk was not formatted, to avoid overwriting that file. Please format it again.</sys:String>
+    <sys:String x:Key="Msg.FormatDiskConfirmBodyWithImage">Format {0} ({1})?&#x0a;&#x0a;All files and folders on this disk will be permanently deleted, and so will its image file and all of its snapshots. This cannot be undone:&#x0a;{2}</sys:String>
     <sys:String x:Key="Msg.FormatDiskReadOnly">Cannot format a read-only disk.</sys:String>
     <sys:String x:Key="Msg.FormatDiskSuccess">{0} has been formatted. All files and folders have been deleted.</sys:String>
+    <sys:String x:Key="Status.FormatDiskImageReset">Reset the image and deleted its snapshots: {0}</sys:String>
+    <sys:String x:Key="Status.FormatDiskDeletedImages">Deleted the previous image and its snapshots: {0}</sys:String>
     <sys:String x:Key="Status.FormatDisk">Formatted {0}</sys:String>
     <sys:String x:Key="Msg.UnmountConfirmTitle">Unmount Disk</sys:String>
     <sys:String x:Key="Msg.UnmountConfirmBody">Unmount {0} ({1})?&#x0a;&#x0a;Any data not saved to an image file will be lost.</sys:String>

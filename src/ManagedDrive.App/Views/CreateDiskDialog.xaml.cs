@@ -77,6 +77,30 @@ public partial class CreateDiskDialog
     private uint? _originalMaxSnapshotCount;
 
     /// <summary>
+    /// The edited disk's snapshot total-size limit in bytes, or <c>null</c> outside edit mode (or
+    /// when it had none). Keeps <see cref="SnapshotSizeSlider"/> reachable up to it even when the
+    /// image volume's free space is smaller.
+    /// </summary>
+    private ulong? _originalMaxSnapshotSizeBytes;
+
+    /// <summary>
+    /// The snapshot size limit the user last asked for (or the edited disk's saved one), which can
+    /// be larger than the slider currently allows; <c>null</c> until a value was chosen.
+    /// </summary>
+    private ulong? _requestedSnapshotSizeBytes;
+
+    /// <summary>
+    /// Whether <see cref="RefreshSnapshotSizeRange"/> is moving the slider itself, so the move is
+    /// not mistaken for the user choosing a value.
+    /// </summary>
+    private bool _refreshingSnapshotRange;
+
+    /// <summary>
+    /// Free space per drive root, looked up once (see <see cref="GetImageVolumeFreeBytes"/>).
+    /// </summary>
+    private readonly Dictionary<string, ulong?> _freeSpaceByRoot = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
     /// Upper bound of <see cref="SnapshotCountSlider"/>: 20, or the edited disk's own larger
     /// limit so opening the dialog doesn't silently lower it.
     /// </summary>
@@ -306,8 +330,9 @@ public partial class CreateDiskDialog
                 SnapshotSizePanel.IsEnabled = true;
 
                 var (sizeValue, sizeIsGb) = ByteUnitConverter.SplitToUnit(maxSizeBytes);
+                _originalMaxSnapshotSizeBytes = maxSizeBytes;
                 SnapshotSizeUnitBox.SelectedItem = sizeIsGb ? "GB" : "MB";
-                SnapshotSizeSlider.Maximum = CoverExistingValue(GetMaxSnapshotSizeValue(), (ulong)sizeValue);
+                RefreshSnapshotSizeRange();
                 SnapshotSizeValue = sizeValue;
             }
         }
@@ -750,10 +775,95 @@ public partial class CreateDiskDialog
         return ComputeMaxValueForUnit(isGb);
     }
 
+    /// <summary>
+    /// The largest snapshot size limit to offer for a new value, in the unit currently selected.
+    /// Snapshots take disk space next to the image file, so this follows the image volume's free
+    /// space (see <see cref="SnapshotSizeLimits"/>); it has nothing to do with memory.
+    /// </summary>
     private int GetMaxSnapshotSizeValue()
     {
         var isGb = SnapshotSizeUnitBox.SelectedItem as string == "GB";
-        return ComputeMaxValueForUnit(isGb);
+        var maxBytes = SnapshotSizeLimits.ResolveMaxBytes(GetImageVolumeFreeBytes(ImagePathBox.Text));
+        return ByteUnitConverter.MaxValueForUnit(maxBytes, isGb);
+    }
+
+    /// <summary>
+    /// Returns the free space of the volume holding <paramref name="imagePath"/>, or <c>null</c>
+    /// when it cannot be determined (no path, a network path, an unreadable drive). Looked up once
+    /// per drive root while the dialog is open: the range is refreshed on every image path, unit
+    /// and read-only change, and asking a sleeping or offline drive each time would stall the UI
+    /// thread over and over.
+    /// </summary>
+    private ulong? GetImageVolumeFreeBytes(string? imagePath)
+    {
+        if (string.IsNullOrWhiteSpace(imagePath))
+        {
+            return null;
+        }
+
+        string? root;
+        try
+        {
+            root = Path.GetPathRoot(Path.GetFullPath(imagePath));
+        }
+        catch (Exception ex) when (ex is IOException or ArgumentException or NotSupportedException)
+        {
+            return null;
+        }
+
+        if (string.IsNullOrEmpty(root) || root.StartsWith(@"\\", StringComparison.Ordinal))
+        {
+            return null;
+        }
+
+        if (_freeSpaceByRoot.TryGetValue(root, out var cached))
+        {
+            return cached;
+        }
+
+        ulong? free;
+        try
+        {
+            free = (ulong)new DriveInfo(root).AvailableFreeSpace;
+        }
+        catch (Exception ex) when (ex is IOException or ArgumentException or UnauthorizedAccessException)
+        {
+            free = null;
+        }
+
+        _freeSpaceByRoot[root] = free;
+        return free;
+    }
+
+    /// <summary>
+    /// Recomputes the snapshot size slider's range for the current image path and unit, keeping
+    /// the edited disk's own saved limit reachable, and puts the value the user asked for back
+    /// into it: shrunk to fit a smaller range, and restored when the range grows again (picking a
+    /// small volume and then going back must not leave the smaller value behind).
+    /// </summary>
+    private void RefreshSnapshotSizeRange()
+    {
+        _refreshingSnapshotRange = true;
+        try
+        {
+            var isGb = SnapshotSizeUnitBox.SelectedItem as string == "GB";
+            var unitBytes = ByteUnitConverter.ToBytes(1, isGb);
+
+            var maximum = GetMaxSnapshotSizeValue();
+            if (_originalMaxSnapshotSizeBytes is { } originalBytes)
+            {
+                maximum = CoverExistingValue(maximum, originalBytes / unitBytes);
+            }
+
+            SnapshotSizeSlider.Maximum = maximum;
+            SnapshotSizeValue = _requestedSnapshotSizeBytes is { } requested
+                ? (int)Math.Min(Math.Max(requested / unitBytes, 1UL), (ulong)maximum)
+                : Math.Min(_snapshotSizeValue, maximum);
+        }
+        finally
+        {
+            _refreshingSnapshotRange = false;
+        }
     }
 
     private void HighUsageWarnBox_CheckedChanged(object sender, RoutedEventArgs e)
@@ -1167,15 +1277,26 @@ public partial class CreateDiskDialog
     private void SnapshotSizeSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
     {
         SnapshotSizeValue = (int)e.NewValue;
+
+        // A range refresh moves the slider too, but that is not the user asking for a value.
+        if (!_refreshingSnapshotRange)
+        {
+            RememberRequestedSnapshotSize();
+        }
     }
 
     private void SnapshotSizeUnitBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        SnapshotSizeSlider.Maximum = GetMaxSnapshotSizeValue();
-        if (_snapshotSizeValue > SnapshotSizeSlider.Maximum)
-        {
-            SnapshotSizeValue = (int)SnapshotSizeSlider.Maximum;
-        }
+        // Switching the unit keeps the number on the slider (2 GB becomes 2 MB), so what the user
+        // now asks for is that number in the new unit.
+        RememberRequestedSnapshotSize();
+        RefreshSnapshotSizeRange();
+    }
+
+    private void RememberRequestedSnapshotSize()
+    {
+        var isGb = SnapshotSizeUnitBox.SelectedItem as string == "GB";
+        _requestedSnapshotSizeBytes = ByteUnitConverter.ToBytes(_snapshotSizeValue, isGb);
     }
 
     /// <summary>
@@ -1459,6 +1580,10 @@ public partial class CreateDiskDialog
         }
 
         SnapshotLimit_CheckedChanged(this, new());
+
+        // Runs after every image path change (UpdateAutoSaveEnabledState calls this), so the
+        // size range follows the volume the snapshots will be written to.
+        RefreshSnapshotSizeRange();
     }
 
     private void UpdateSnapshotSizeDisplay()

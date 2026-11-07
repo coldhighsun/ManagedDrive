@@ -368,8 +368,9 @@ public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
     public bool ShowLastAutoSave => Disk.Options.AutoSaveIntervalMinutes is > 0;
 
     /// <summary>
-    /// Gets whether snapshot retention is configured for this disk, controlling visibility
-    /// of the "Restore Snapshot" context-menu entry.
+    /// Gets whether snapshot retention (a maximum snapshot count and/or total size) is configured
+    /// for this disk, i.e. whether saves write snapshots. Existing snapshots can be restored
+    /// regardless; that menu entry only needs an image path (<see cref="HasImagePath"/>).
     /// </summary>
     public bool SnapshotsEnabled =>
         Disk.Options.MaxSnapshotCount is not null || Disk.Options.MaxSnapshotSizeBytes is not null;

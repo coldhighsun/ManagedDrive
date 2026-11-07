@@ -4,15 +4,131 @@
         xmlns:views="clr-namespace:ManagedDrive.App.Views"
         Style="{DynamicResource DialogWindowStyle}"
         Title="{DynamicResource SnapshotDiff.Title}"
-        Width="480" SizeToContent="Height"
+        Width="520" SizeToContent="Height"
         WindowStartupLocation="CenterOwner">
+
+    <views:DialogWindowBase.Resources>
+        <!-- A filter card: coloured by its Background/Foreground, outlined when selected. -->
+        <Style x:Key="DiffFilterCard" TargetType="RadioButton">
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Focusable" Value="True"/>
+            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RadioButton">
+                        <Border x:Name="Card" Background="{TemplateBinding Background}"
+                                BorderBrush="Transparent" BorderThickness="1.5"
+                                CornerRadius="{DynamicResource SectionCornerRadius}" Padding="10,8">
+                            <ContentPresenter HorizontalAlignment="Left"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <!-- Keyboard focus ring (the default focus visual is switched off above);
+                                 listed before IsChecked so the selection outline wins. -->
+                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                <Setter TargetName="Card" Property="BorderBrush" Value="{DynamicResource AppForegroundLight}"/>
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Card" Property="BorderBrush" Value="{DynamicResource AppPrimary}"/>
+                            </Trigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Card" Property="Opacity" Value="0.85"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="Card" Property="Opacity" Value="0.4"/>
+                                <Setter Property="Cursor" Value="Arrow"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="DiffCardNumber" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="20"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+        </Style>
+
+        <Style x:Key="DiffCardLabel" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="{DynamicResource FontSizeSmall}"/>
+            <Setter Property="Foreground" Value="{DynamicResource AppForeground}"/>
+        </Style>
+
+        <!-- Round badge on each row: tinted by the kind of change. -->
+        <Style x:Key="DiffBadge" TargetType="Border">
+            <Setter Property="Width" Value="20"/>
+            <Setter Property="Height" Value="20"/>
+            <Setter Property="CornerRadius" Value="10"/>
+            <Setter Property="Background" Value="{DynamicResource AppHover}"/>
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding Kind}" Value="Restored">
+                    <Setter Property="Background" Value="{DynamicResource AppSuccessSoft}"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Kind}" Value="Removed">
+                    <Setter Property="Background" Value="{DynamicResource AppDangerSoft}"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Kind}" Value="Reverted">
+                    <Setter Property="Background" Value="{DynamicResource AppWarningSoft}"/>
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- The sign is drawn as a stroke in the badge's own 20x20 space, not as a text glyph,
+             so it is centred exactly whatever the font's line metrics are. -->
+        <Style x:Key="DiffBadgeGlyph" TargetType="Path">
+            <Setter Property="Width" Value="20"/>
+            <Setter Property="Height" Value="20"/>
+            <Setter Property="Stretch" Value="None"/>
+            <Setter Property="StrokeThickness" Value="1.8"/>
+            <Setter Property="StrokeStartLineCap" Value="Round"/>
+            <Setter Property="StrokeEndLineCap" Value="Round"/>
+            <Setter Property="StrokeLineJoin" Value="Round"/>
+            <Setter Property="Stroke" Value="{DynamicResource AppForeground}"/>
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding Kind}" Value="Restored">
+                    <Setter Property="Stroke" Value="{DynamicResource AppSuccess}"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Kind}" Value="Removed">
+                    <Setter Property="Stroke" Value="{DynamicResource AppDanger}"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Kind}" Value="Reverted">
+                    <Setter Property="Stroke" Value="{DynamicResource AppWarning}"/>
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <DataTemplate DataType="{x:Type views:DiffRow}">
+            <Grid ToolTip="{Binding FullPath}">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="10"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="6"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="10"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <Border Grid.Column="0" Style="{StaticResource DiffBadge}">
+                    <Path Data="{Binding BadgeData}" Style="{StaticResource DiffBadgeGlyph}"/>
+                </Border>
+                <TextBlock Grid.Column="2" Text="{Binding IconGlyph}" Style="{StaticResource IconText}"
+                           FontSize="14" Foreground="{DynamicResource AppForegroundLight}"/>
+                <TextBlock Grid.Column="4" Text="{Binding Name}" FontWeight="Medium"
+                           Foreground="{DynamicResource AppForeground}"
+                           VerticalAlignment="Center"/>
+                <TextBlock Grid.Column="6" Text="{Binding ParentPath}"
+                           Foreground="{DynamicResource AppForegroundLight}"
+                           FontSize="{DynamicResource FontSizeSmall}"
+                           TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
+            </Grid>
+        </DataTemplate>
+    </views:DialogWindowBase.Resources>
 
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
-            <RowDefinition Height="16"/>
+            <RowDefinition Height="14"/>
             <RowDefinition Height="Auto"/>
-            <RowDefinition Height="16"/>
+            <RowDefinition Height="10"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="24"/>
             <RowDefinition Height="Auto"/>
@@ -23,42 +139,92 @@
                    Foreground="{DynamicResource AppForeground}"
                    TextWrapping="Wrap"/>
 
-        <TextBlock Grid.Row="2"
-                   x:Name="SummaryText"
-                   Foreground="{DynamicResource AppForeground}"
-                   FontSize="{DynamicResource FontSizeSmall}"
-                   TextWrapping="Wrap"/>
+        <!-- Filter cards (double as the summary) -->
+        <Grid Grid.Row="2" x:Name="CardsPanel">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="8"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="8"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="8"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <RadioButton Grid.Column="0" x:Name="AllCard" GroupName="DiffFilter"
+                         Style="{StaticResource DiffFilterCard}"
+                         Background="{DynamicResource AppHover}"
+                         Checked="Filter_Checked">
+                <StackPanel>
+                    <TextBlock x:Name="AllCountText" Style="{StaticResource DiffCardNumber}"
+                               Foreground="{DynamicResource AppForeground}"/>
+                    <TextBlock Text="{DynamicResource SnapshotDiff.Filter.All}" Style="{StaticResource DiffCardLabel}"/>
+                </StackPanel>
+            </RadioButton>
+
+            <RadioButton Grid.Column="2" x:Name="RestoredCard" GroupName="DiffFilter"
+                         Style="{StaticResource DiffFilterCard}"
+                         Background="{DynamicResource AppSuccessSoft}"
+                         ToolTip="{DynamicResource Tip.SnapshotDiff.Restored}"
+                         Checked="Filter_Checked">
+                <StackPanel>
+                    <TextBlock x:Name="RestoredCountText" Style="{StaticResource DiffCardNumber}"
+                               Foreground="{DynamicResource AppSuccess}"/>
+                    <TextBlock Text="{DynamicResource SnapshotDiff.Filter.Restored}" Style="{StaticResource DiffCardLabel}"/>
+                </StackPanel>
+            </RadioButton>
+
+            <RadioButton Grid.Column="4" x:Name="RemovedCard" GroupName="DiffFilter"
+                         Style="{StaticResource DiffFilterCard}"
+                         Background="{DynamicResource AppDangerSoft}"
+                         ToolTip="{DynamicResource Tip.SnapshotDiff.Removed}"
+                         Checked="Filter_Checked">
+                <StackPanel>
+                    <TextBlock x:Name="RemovedCountText" Style="{StaticResource DiffCardNumber}"
+                               Foreground="{DynamicResource AppDanger}"/>
+                    <TextBlock Text="{DynamicResource SnapshotDiff.Filter.Removed}" Style="{StaticResource DiffCardLabel}"/>
+                </StackPanel>
+            </RadioButton>
+
+            <RadioButton Grid.Column="6" x:Name="RevertedCard" GroupName="DiffFilter"
+                         Style="{StaticResource DiffFilterCard}"
+                         Background="{DynamicResource AppWarningSoft}"
+                         ToolTip="{DynamicResource Tip.SnapshotDiff.Reverted}"
+                         Checked="Filter_Checked">
+                <StackPanel>
+                    <TextBlock x:Name="RevertedCountText" Style="{StaticResource DiffCardNumber}"
+                               Foreground="{DynamicResource AppWarning}"/>
+                    <TextBlock Text="{DynamicResource SnapshotDiff.Filter.Reverted}" Style="{StaticResource DiffCardLabel}"/>
+                </StackPanel>
+            </RadioButton>
+        </Grid>
 
         <Border Grid.Row="4" Style="{DynamicResource SectionBorder}">
             <StackPanel>
-                <TextBlock x:Name="NoChangesText"
-                           Text="{DynamicResource SnapshotDiff.NoChanges}"
-                           Foreground="{DynamicResource AppForeground}"
-                           TextWrapping="Wrap"
-                           Visibility="Collapsed"/>
+                <!-- Empty state -->
+                <StackPanel x:Name="NoChangesPanel" HorizontalAlignment="Center" Margin="0,16"
+                            Visibility="Collapsed">
+                    <TextBlock Text="&#xE73E;" Style="{StaticResource IconText}" FontSize="28"
+                               Foreground="{DynamicResource AppSuccess}"/>
+                    <TextBlock x:Name="NoChangesText"
+                               Text="{DynamicResource SnapshotDiff.NoChanges}"
+                               Foreground="{DynamicResource AppForeground}"
+                               TextWrapping="Wrap" TextAlignment="Center" Margin="0,8,0,0"/>
+                </StackPanel>
 
-                <TreeView x:Name="ChangesTree" MaxHeight="320"
-                          BorderThickness="0" Background="Transparent"
-                          ScrollViewer.VerticalScrollBarVisibility="Auto"
-                          ScrollViewer.CanContentScroll="True"
-                          VirtualizingStackPanel.IsVirtualizing="True">
-                    <TreeView.Resources>
-                        <HierarchicalDataTemplate DataType="{x:Type views:DiffGroup}" ItemsSource="{Binding Nodes}">
-                            <TextBlock Text="{Binding Header}" FontWeight="Medium"
-                                       Foreground="{DynamicResource AppForeground}"/>
-                        </HierarchicalDataTemplate>
-                        <HierarchicalDataTemplate DataType="{x:Type views:DiffNode}" ItemsSource="{Binding Children}">
-                            <TextBlock Text="{Binding Name}"
-                                       Foreground="{DynamicResource AppForeground}"/>
-                        </HierarchicalDataTemplate>
-                    </TreeView.Resources>
-                    <TreeView.ItemContainerStyle>
-                        <Style TargetType="TreeViewItem">
-                            <Setter Property="IsExpanded" Value="True"/>
-                            <Setter Property="Foreground" Value="{DynamicResource AppForeground}"/>
-                        </Style>
-                    </TreeView.ItemContainerStyle>
-                </TreeView>
+                <ListBox x:Name="ChangesList"
+                         BorderThickness="0" Background="Transparent"
+                         Foreground="{DynamicResource AppForeground}"
+                         ItemContainerStyle="{StaticResource DialogListBoxItem}"
+                         ScrollViewer.VerticalScrollBarVisibility="Auto"
+                         ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                         ScrollViewer.CanContentScroll="True"
+                         VirtualizingStackPanel.IsVirtualizing="True"/>
+
+                <TextBlock x:Name="UnchangedText"
+                           Foreground="{DynamicResource AppForegroundLight}"
+                           FontSize="{DynamicResource FontSizeSmall}"
+                           Margin="8,8,0,0"/>
             </StackPanel>
         </Border>
 

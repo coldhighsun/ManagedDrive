@@ -15,7 +15,7 @@
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <TabControl Grid.Row="0" x:Name="MainTabControl" Style="{StaticResource AppTabControl}" MinHeight="405">
+        <TabControl Grid.Row="0" x:Name="MainTabControl" Style="{StaticResource AppTabControl}" MinHeight="455">
 
             <!-- Basic Info -->
             <TabItem Header="{DynamicResource CreateDisk.Section.Basic}">
@@ -208,6 +208,8 @@
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="16"/>
                         <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="16"/>
+                        <RowDefinition Height="Auto"/>
                         <RowDefinition Height="8"/>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="Auto"/>
@@ -337,8 +339,17 @@
                         </Grid>
                     </Grid>
 
+                    <!-- Section divider: auto-save above, incremental snapshots below -->
+                    <Border Grid.Row="16" BorderBrush="{DynamicResource AppDivider}" BorderThickness="0,1,0,0"
+                            VerticalAlignment="Center"/>
+
+                    <!-- Incremental Snapshots header -->
+                    <TextBlock Grid.Row="17" Text="{DynamicResource CreateDisk.Section.Snapshots}"
+                               Foreground="{DynamicResource AppForeground}" FontWeight="SemiBold"
+                               ToolTip="{DynamicResource Tip.Snapshots}"/>
+
                     <!-- Snapshot Max Count -->
-                    <Grid Grid.Row="17" Margin="16,0,0,0">
+                    <Grid Grid.Row="19">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="8"/>
@@ -367,7 +378,7 @@
                     </Grid>
 
                     <!-- Snapshot Max Size -->
-                    <Grid Grid.Row="18" Margin="16,8,0,0">
+                    <Grid Grid.Row="20" Margin="0,8,0,0">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="8"/>

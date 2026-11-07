@@ -63,16 +63,14 @@ public sealed partial class MainViewModel
     /// <returns><c>true</c> if <paramref name="candidate"/> should no longer be saved.</returns>
     private static bool Supersedes(DiskProfile kept, DiskProfile candidate)
     {
-        return SamePath(kept.PersistImagePath, candidate.PersistImagePath) ||
-            SamePath(kept.SourceArchivePath, candidate.SourceArchivePath) ||
+        return FilePathComparison.AreSame(kept.PersistImagePath, candidate.PersistImagePath) ||
+            FilePathComparison.AreSame(kept.SourceArchivePath, candidate.SourceArchivePath) ||
             (IsIdentifiedByLetter(candidate) &&
                 string.Equals(kept.MountPoint, candidate.MountPoint, StringComparison.OrdinalIgnoreCase));
 
         static bool IsIdentifiedByLetter(DiskProfile profile) =>
             profile.AutoMount || !HasBackingFile(profile);
 
-        static bool SamePath(string? a, string? b) =>
-            a != null && b != null && string.Equals(a, b, StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>

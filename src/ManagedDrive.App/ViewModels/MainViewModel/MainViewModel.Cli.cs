@@ -27,13 +27,19 @@ public sealed partial class MainViewModel
             return (false, string.Empty);
         }
 
-        var formatted = await Task.Run(vm.Disk.Format);
+        // The files the format may delete; the reply names the ones it actually did.
+        var (result, error) = await FormatDiskAsync(vm, GetImagePathsToClean(vm));
+        if (error is not null)
+        {
+            return (false, error);
+        }
+
         if (!IsStillMounted(vm))
         {
             return (false, Loc.Format("Status.DiskNoLongerMounted", mountPoint));
         }
 
-        if (!formatted)
+        if (!result.Formatted)
         {
             _logger.LogWarning("CLI format failed for {MountPoint}: disk is read-only.", mountPoint);
             return (false, Loc.Get("Msg.FormatDiskReadOnly"));
@@ -42,8 +48,41 @@ public sealed partial class MainViewModel
         vm.Refresh();
         StatusText = Loc.Format("Status.FormatDisk", mountPoint);
         _logger.LogInformation("CLI format completed for {MountPoint}.", mountPoint);
-        return (true, StatusText);
+        return (true, DescribeFormatImageCleanup(StatusText, vm.Disk.Options.PersistImagePath, result));
     }
+
+    /// <summary>
+    /// The reply of a CLI format: <paramref name="status"/> plus what happened to the image files.
+    /// The disk's configured image is deleted and written again, empty, so it is reported as
+    /// reset; only the previously used file (if any) is reported as deleted.
+    /// </summary>
+    internal static string DescribeFormatImageCleanup(string status, string? configuredImagePath, FormatResult result)
+    {
+        var (reset, deleted) = SplitCleanedImagePaths(configuredImagePath, result);
+
+        var message = status;
+        if (reset.Count > 0)
+        {
+            message += " " + Loc.Format("Status.FormatDiskImageReset", string.Join(", ", reset));
+        }
+
+        if (deleted.Count > 0)
+        {
+            message += " " + Loc.Format("Status.FormatDiskDeletedImages", string.Join(", ", deleted));
+        }
+
+        return message;
+    }
+
+    /// <summary>
+    /// Splits the files a format cleaned up into the disk's configured image (which is written
+    /// again, empty, so it was reset) and any other file (the previously used image, which was
+    /// deleted).
+    /// </summary>
+    internal static (IReadOnlyList<string> Reset, IReadOnlyList<string> Deleted) SplitCleanedImagePaths(
+        string? configuredImagePath, FormatResult result) =>
+        ([.. result.CleanedImagePaths.Where(path => FilePathComparison.AreSame(path, configuredImagePath))],
+         [.. result.CleanedImagePaths.Where(path => !FilePathComparison.AreSame(path, configuredImagePath))]);
 
     /// <summary>
     /// Mounts the contents of an archive file as a new read-only disk, for use by the CLI
