@@ -56,7 +56,35 @@ public partial class DiskCardContextMenu
         if (PlacementTarget is FrameworkElement { DataContext: DiskViewModel disk, Tag: MainViewModel main })
         {
             RefreshPresetItems(PresetsItem, disk, main);
+            RefreshRestoreSnapshotItem(disk);
         }
+    }
+
+    /// <summary>
+    /// Greys out "Restore Snapshot" while the disk has no snapshot to restore from, so the user is not
+    /// sent through a command that can only answer with a message box. Set as a local value on top of
+    /// the command's own CanExecute, which still disables the item for a read-only disk.
+    /// </summary>
+    /// <param name="disk">The disk the menu was opened on.</param>
+    private void RefreshRestoreSnapshotItem(DiskViewModel disk)
+    {
+        var hasSnapshots = false;
+        if (disk.Disk.Options.PersistImagePath is { } imagePath)
+        {
+            try
+            {
+                hasSnapshots = SnapshotManager.ListSnapshots(imagePath).Count > 0;
+            }
+            catch (IOException)
+            {
+                // Unreadable directory: treat as no snapshots; the command re-checks when run.
+            }
+            catch (UnauthorizedAccessException)
+            {
+            }
+        }
+
+        RestoreSnapshotItem.IsEnabled = hasSnapshots;
     }
 
     /// <summary>
