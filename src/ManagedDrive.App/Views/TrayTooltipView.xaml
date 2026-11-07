@@ -131,7 +131,7 @@
                     Padding="8,5"
                     Margin="0,8,0,0">
                 <StackPanel Orientation="Horizontal">
-                    <TextBlock FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets"
+                    <TextBlock FontFamily="Segoe Fluent Icons"
                                FontSize="12"
                                Foreground="{DynamicResource AppForegroundLight}"
                                Text="&#xE950;"
