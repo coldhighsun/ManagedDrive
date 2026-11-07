@@ -36,6 +36,7 @@ internal static class ConfirmKindIcons
         ConfirmKind.Question => ("\uE897", "AppPrimary"),
         ConfirmKind.Error => ("\uEA39", "AppDanger"),
         ConfirmKind.Information => ("\uE946", "AppPrimary"),
+        ConfirmKind.None => (string.Empty, "AppForeground"),
         _ => ("\uE7BA", "AppWarning"),
     };
 }
