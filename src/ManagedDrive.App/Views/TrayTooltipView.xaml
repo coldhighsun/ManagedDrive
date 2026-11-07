@@ -125,12 +125,24 @@
                 </TextBlock.Style>
             </TextBlock>
 
-            <Border BorderBrush="{DynamicResource AppDivider}"
-                    BorderThickness="0,1,0,0"
-                    Margin="0,6,0,4" />
-            <TextBlock FontSize="{DynamicResource FontSizeCaption}"
-                       Foreground="{DynamicResource AppForegroundLight}"
-                       Text="{Binding AvailableMemoryFormatted}" />
+            <!-- Footer is a tinted chip with an icon, not a hairline, so it cannot be mistaken for a usage bar. -->
+            <Border Background="{DynamicResource AppHover}"
+                    CornerRadius="4"
+                    Padding="8,5"
+                    Margin="0,8,0,0">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets"
+                               FontSize="12"
+                               Foreground="{DynamicResource AppForegroundLight}"
+                               Text="&#xE950;"
+                               VerticalAlignment="Center"
+                               Margin="0,0,6,0" />
+                    <TextBlock FontSize="{DynamicResource FontSizeCaption}"
+                               Foreground="{DynamicResource AppForegroundLight}"
+                               Text="{Binding AvailableMemoryFormatted}"
+                               VerticalAlignment="Center" />
+                </StackPanel>
+            </Border>
         </StackPanel>
     </Border>
 </UserControl>

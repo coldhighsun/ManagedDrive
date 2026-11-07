@@ -172,7 +172,13 @@ public sealed class TrayIconController : IDisposable, ITrayHoverSource
             Text = "",
             Visible = false,
         };
-        _trayIcon.DoubleClick += (_, _) => dispatcher.Invoke(onShow);
+        _trayIcon.MouseClick += (_, e) =>
+        {
+            if (e.Button == System.Windows.Forms.MouseButtons.Left)
+            {
+                dispatcher.Invoke(onShow);
+            }
+        };
         _trayIcon.BalloonTipClosed += (_, _) => OnBalloonTipClosed();
         _trayIcon.BalloonTipClicked += (_, _) => OnBalloonTipClicked();
         _trayIcon.MouseMove += (_, _) =>
