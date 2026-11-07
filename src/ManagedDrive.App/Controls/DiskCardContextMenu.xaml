@@ -45,6 +45,7 @@
                                           CommandParameter="{Binding PlacementTarget.DataContext,
                                                     RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
                                 <MenuItem Header="{DynamicResource Btn.RestoreSnapshot}"
+                                          x:Name="RestoreSnapshotItem"
                                           Visibility="{Binding PlacementTarget.DataContext.HasImagePath,
                                                         RelativeSource={RelativeSource AncestorType=ContextMenu},
                                                         Converter={StaticResource BoolToVis}}"
