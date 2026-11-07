@@ -4,14 +4,14 @@
     <!-- Style C (minimal), dark: near-black, white accent. Merged after the theme's colors by StyleManager, so these win. -->
 
     <SolidColorBrush x:Key="AppPrimary" Color="#FFF2F2F2"/>
-    <SolidColorBrush x:Key="AppPrimaryDark" Color="#FFFFFFFF"/>
+    <SolidColorBrush x:Key="AppPrimaryDark" Color="#FFC8C8C8"/>
     <SolidColorBrush x:Key="AppPrimarySoft" Color="#1FFFFFFF"/>
     <SolidColorBrush x:Key="AppPrimaryForeground" Color="#FF121212"/>
     <SolidColorBrush x:Key="AppForeground" Color="#FFEDEDED"/>
     <SolidColorBrush x:Key="AppForegroundLight" Color="#FF9A9A94"/>
     <SolidColorBrush x:Key="AppForegroundMuted" Color="#FF9A9A94"/>
     <SolidColorBrush x:Key="AppBackground" Color="#FF121212"/>
-    <SolidColorBrush x:Key="AppSurface" Color="#FF121212"/>
+    <SolidColorBrush x:Key="AppSurface" Color="#FF1A1A1A"/>
     <SolidColorBrush x:Key="AppDivider" Color="#FF2C2C2C"/>
     <SolidColorBrush x:Key="AppProgressTrack" Color="#FF2C2C2C"/>
     <SolidColorBrush x:Key="AppToolBarBackground" Color="#FF121212"/>
@@ -20,5 +20,13 @@
     <SolidColorBrush x:Key="AppPressed" Color="#1FFFFFFF"/>
     <SolidColorBrush x:Key="AppBarBackground" Color="#FF121212"/>
     <SolidColorBrush x:Key="AppBarForeground" Color="#FFEDEDED"/>
+
+    <!-- Toolbar icons: minimal style is monochrome. Without these the icons resolve to nothing and vanish on the dark bar. -->
+    <SolidColorBrush x:Key="ToolIconNew" Color="#FFEDEDED"/>
+    <SolidColorBrush x:Key="ToolIconImport" Color="#FFEDEDED"/>
+    <SolidColorBrush x:Key="ToolIconRestore" Color="#FFEDEDED"/>
+    <SolidColorBrush x:Key="ToolIconSettings" Color="#FFEDEDED"/>
+    <SolidColorBrush x:Key="ToolIconAbout" Color="#FFEDEDED"/>
+    <SolidColorBrush x:Key="ToolIconExit" Color="#FFEDEDED"/>
 
 </ResourceDictionary>

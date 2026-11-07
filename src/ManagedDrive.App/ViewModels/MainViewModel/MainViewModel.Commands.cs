@@ -734,6 +734,7 @@ public sealed partial class MainViewModel
             Loc.Get("Msg.RestoreEnvConfirmTitle"),
             EnvRestoreGroupText.GetConfirmBody(group))
         {
+            Kind = ConfirmKind.Question,
             Owner = Application.Current.MainWindow
         };
 

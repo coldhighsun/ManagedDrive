@@ -11,24 +11,18 @@ namespace ManagedDrive.App.Themes;
 public sealed class TrayColorTable : ProfessionalColorTable
 {
     /// <summary>
-    /// Initializes a new instance of the <see cref="TrayColorTable"/> class using the dark palette when
-    /// <c>isDark</c> is <c>true</c> and the light palette otherwise.
+    /// Initializes a new instance of the <see cref="TrayColorTable"/> class from <paramref name="palette"/>, or from
+    /// the plain dark or light palette (<see cref="TrayMenuPalette.GetDefault"/>) when none is given.
     /// </summary>
-    public TrayColorTable(bool isDark)
+    /// <param name="isDark">Whether the dark palette is the fallback.</param>
+    /// <param name="palette">The colors to use, normally those of the current style and theme.</param>
+    public TrayColorTable(bool isDark, TrayMenuPalette? palette = null)
     {
-        MenuBorder = GetMenuBorder(isDark);
-        if (isDark)
-        {
-            ToolStripDropDownBackground = Color.FromArgb(0xFF, 0x2A, 0x2A, 0x2A);
-            MenuItemSelected = Color.FromArgb(0xFF, 0x3A, 0x3A, 0x50);
-            SeparatorDark = Color.FromArgb(0xFF, 0x44, 0x44, 0x44);
-        }
-        else
-        {
-            ToolStripDropDownBackground = Color.White;
-            MenuItemSelected = Color.FromArgb(0xFF, 0xE8, 0xEA, 0xF6);
-            SeparatorDark = Color.FromArgb(0xFF, 0xE0, 0xE0, 0xE0);
-        }
+        var colors = palette ?? TrayMenuPalette.GetDefault(isDark);
+        MenuBorder = colors.Border;
+        ToolStripDropDownBackground = colors.Background;
+        MenuItemSelected = colors.Hover;
+        SeparatorDark = colors.Separator;
     }
 
     /// <summary>
@@ -104,7 +98,8 @@ public sealed class TrayColorTable : ProfessionalColorTable
 /// selected item regardless of <c>ForeColor</c>, which produces unreadable white-on-white text
 /// when the tray menu is in light mode.
 /// </summary>
-public sealed class TrayMenuRenderer(bool isDark) : ToolStripProfessionalRenderer(new TrayColorTable(isDark))
+public sealed class TrayMenuRenderer(bool isDark, TrayMenuPalette? palette = null)
+    : ToolStripProfessionalRenderer(new TrayColorTable(isDark, palette))
 {
     /// <summary>
     /// The opacity of the submenu arrow (0-255) against the foreground color, which mutes it.
@@ -131,10 +126,11 @@ public sealed class TrayMenuRenderer(bool isDark) : ToolStripProfessionalRendere
     /// </summary>
     private const float ArrowEndOffset = 1.5f;
 
-    private readonly Color _foreground = isDark ? Color.White : Color.Black;
-    private readonly Color _hoverBackground = isDark
-        ? Color.FromArgb(0xFF, 0x3A, 0x3A, 0x50)
-        : Color.FromArgb(0xFF, 0xE8, 0xEA, 0xF6);
+    private readonly TrayMenuPalette _palette = palette ?? TrayMenuPalette.GetDefault(isDark);
+
+    private Color _foreground => _palette.Foreground;
+
+    private Color _hoverBackground => _palette.Hover;
 
     /// <summary>
     /// Renders item text in the theme's foreground color, or the system gray when the item is
@@ -144,7 +140,7 @@ public sealed class TrayMenuRenderer(bool isDark) : ToolStripProfessionalRendere
     /// </summary>
     protected override void OnRenderItemText(ToolStripItemTextRenderEventArgs e)
     {
-        e.TextColor = e.Item.Enabled ? _foreground : System.Drawing.SystemColors.GrayText;
+        e.TextColor = e.Item.Enabled ? _foreground : _palette.Muted;
         if (e.Item is ToolStripMenuItem)
         {
             e.TextRectangle = CenterVertically(e.TextRectangle, e.Item.Height);
@@ -160,7 +156,7 @@ public sealed class TrayMenuRenderer(bool isDark) : ToolStripProfessionalRendere
     /// </summary>
     protected override void OnRenderArrow(ToolStripArrowRenderEventArgs e)
     {
-        var color = e.Item?.Enabled == false ? System.Drawing.SystemColors.GrayText : Color.FromArgb(ArrowAlpha, _foreground);
+        var color = e.Item?.Enabled == false ? _palette.Muted : Color.FromArgb(ArrowAlpha, _foreground);
         var scale = (e.Item?.Owner?.DeviceDpi ?? (int)e.Graphics.DpiY) / 96f;
         using var pen = new Pen(color, ArrowStrokeWidth * scale)
         {
@@ -230,5 +226,75 @@ public sealed class TrayMenuRenderer(bool isDark) : ToolStripProfessionalRendere
         }
 
         base.OnRenderMenuItemBackground(e);
+    }
+}
+
+/// <summary>
+/// The colors of the tray icon's menu: those of the current style and theme when the application's resources can be
+/// read (<see cref="FromResources"/>), otherwise the plain dark or light set (<see cref="GetDefault"/>).
+/// </summary>
+/// <param name="Background">The menu background.</param>
+/// <param name="Hover">The background of the item under the mouse, already blended over the background.</param>
+/// <param name="Separator">The color of separators.</param>
+/// <param name="Border">The border of the menu.</param>
+/// <param name="Foreground">The text color.</param>
+/// <param name="Muted">The text color of a disabled item.</param>
+public readonly record struct TrayMenuPalette(Color Background, Color Hover, Color Separator, Color Border, Color Foreground, Color Muted)
+{
+    /// <summary>
+    /// Gets the plain palette of a theme, used when the application's resources are not available.
+    /// </summary>
+    /// <param name="isDark">Whether the dark palette is wanted.</param>
+    /// <returns>The palette.</returns>
+    public static TrayMenuPalette GetDefault(bool isDark) => isDark
+        ? new(
+            Color.FromArgb(0xFF, 0x2A, 0x2A, 0x2A),
+            Color.FromArgb(0xFF, 0x3A, 0x3A, 0x3A),
+            Color.FromArgb(0xFF, 0x44, 0x44, 0x44),
+            TrayColorTable.GetMenuBorder(true),
+            Color.White,
+            Color.FromArgb(0xFF, 0x8A, 0x8A, 0x8A))
+        : new(
+            Color.White,
+            Color.FromArgb(0xFF, 0xEE, 0xEE, 0xEE),
+            Color.FromArgb(0xFF, 0xE0, 0xE0, 0xE0),
+            TrayColorTable.GetMenuBorder(false),
+            Color.Black,
+            Color.FromArgb(0xFF, 0x7A, 0x7A, 0x7A));
+
+    /// <summary>
+    /// Reads the palette from the application's resources, so the menu follows the visual style and the theme; a
+    /// color whose resource is missing falls back to <see cref="GetDefault"/>. Call it on the UI thread.
+    /// </summary>
+    /// <param name="isDark">Whether the dark palette is the fallback.</param>
+    /// <returns>The palette.</returns>
+    public static TrayMenuPalette FromResources(bool isDark)
+    {
+        var fallback = GetDefault(isDark);
+        var background = Read("AppSurface") ?? fallback.Background;
+        var divider = Read("AppDivider");
+        return new(
+            background,
+            Read("AppHover") is { } tint ? Blend(tint, background) : fallback.Hover,
+            divider is { } line ? Blend(line, background) : fallback.Separator,
+            divider is { } edge ? Blend(edge, background) : fallback.Border,
+            Read("AppForeground") is { } foreground ? Blend(foreground, background) : fallback.Foreground,
+            Read("AppForegroundMuted") is { } muted ? Blend(muted, background) : fallback.Muted);
+    }
+
+    private static Color? Read(string key) =>
+        System.Windows.Application.Current?.TryFindResource(key) is System.Windows.Media.SolidColorBrush brush
+            ? Color.FromArgb(brush.Color.A, brush.Color.R, brush.Color.G, brush.Color.B)
+            : null;
+
+    // GDI+ menus draw opaque rectangles, so a translucent tint (a hover wash, say) is laid over the background here.
+    internal static Color Blend(Color top, Color under)
+    {
+        var alpha = top.A / 255.0;
+        return Color.FromArgb(
+            0xFF,
+            (int)Math.Round((top.R * alpha) + (under.R * (1 - alpha))),
+            (int)Math.Round((top.G * alpha) + (under.G * (1 - alpha))),
+            (int)Math.Round((top.B * alpha) + (under.B * (1 - alpha))));
     }
 }

@@ -26,7 +26,7 @@
         <TextBlock Grid.Row="2"
                    x:Name="SummaryText"
                    Foreground="{DynamicResource AppForeground}"
-                   FontSize="11"
+                   FontSize="{DynamicResource FontSizeSmall}"
                    TextWrapping="Wrap"/>
 
         <Border Grid.Row="4" Style="{DynamicResource SectionBorder}">

@@ -23,7 +23,7 @@
     <SolidColorBrush x:Key="AppBarForeground" Color="#FFE7E9EE"/>
     <SolidColorBrush x:Key="AppSidebarBackground" Color="#FF0D0F14"/>
 
-    <!-- Sidebar tool icons: one colour each. Only style B defines these; elsewhere MainWindow's DynamicResource stays unresolved and the icon keeps the bar foreground it inherits. -->
+    <!-- Sidebar tool icons: one colour each. Every style palette must define these: MainWindow reads them with DynamicResource, and where one is missing the icon renders with no color (style C sets them all to its foreground). -->
     <SolidColorBrush x:Key="ToolIconNew" Color="#FF4F8DF7"/>
     <SolidColorBrush x:Key="ToolIconImport" Color="#FF2DD4BF"/>
     <SolidColorBrush x:Key="ToolIconRestore" Color="#FFB388F5"/>

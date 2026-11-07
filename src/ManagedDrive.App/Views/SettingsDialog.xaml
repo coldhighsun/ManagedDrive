@@ -32,13 +32,11 @@
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="12"/>
             <RowDefinition Height="Auto"/>
-            <RowDefinition Height="24"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="24"/>
+            <RowDefinition Height="12"/>
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
         <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="130"/>
+            <ColumnDefinition Width="Auto" MinWidth="120"/>
             <ColumnDefinition Width="*"/>
             <ColumnDefinition Width="Auto"/>
         </Grid.ColumnDefinitions>
@@ -141,17 +139,25 @@
                    Text="{DynamicResource Settings.DefaultImageDirectory}"
                    ToolTip="{DynamicResource Tip.DefaultImageDirectory}"
                    VerticalAlignment="Center"/>
+        <!-- Read-only: clicking the box (or Enter/Space in it) opens the folder picker, so the path is always one that was picked;
+             the button next to it clears the setting. -->
         <TextBox Grid.Row="17" Grid.Column="1"
                  x:Name="DefaultImageDirectoryBox"
+                 IsReadOnly="True" Cursor="Hand"
                  ToolTip="{DynamicResource Tip.DefaultImageDirectory}"
                  Style="{StaticResource OutlinedTextBox}"
                  VerticalContentAlignment="Center"
-                 Margin="0,0,8,0"/>
+                 Margin="0,0,8,0"
+                 PreviewMouseLeftButtonDown="DefaultImageDirectoryBox_PreviewMouseLeftButtonDown"
+                 PreviewKeyDown="DefaultImageDirectoryBox_PreviewKeyDown"
+                 TextChanged="DefaultImageDirectoryBox_TextChanged"/>
         <Button Grid.Row="17" Grid.Column="2"
-                x:Name="BrowseDefaultImageDirectoryButton"
-                Content="{DynamicResource Btn.Browse}"
-                Click="BrowseDefaultImageDirectory_Click"
-                Style="{StaticResource FlatButton}"/>
+                x:Name="ClearDefaultImageDirectoryButton"
+                Content="&#xD7;" Width="40" IsEnabled="False"
+                ToolTip="{DynamicResource Tip.ClearDefaultImageDirectory}"
+                AutomationProperties.Name="{DynamicResource Tip.ClearDefaultImageDirectory}"
+                Click="ClearDefaultImageDirectory_Click"
+                Style="{StaticResource OutlinedButton}"/>
 
         <!-- Helper service status -->
         <TextBlock Grid.Row="19" Grid.Column="0"
@@ -164,13 +170,13 @@
                    Foreground="{DynamicResource AppForeground}"
                    VerticalAlignment="Center"/>
 
-        <!-- Open log directory / check for updates now -->
+        <!-- Open log directory -->
         <StackPanel Grid.Row="21" Grid.ColumnSpan="3" Grid.Column="0"
                     Orientation="Horizontal">
             <Button x:Name="OpenLogDirectoryButton"
                     Content="{DynamicResource Settings.OpenLogDirectory}"
                     Click="OpenLogDirectory_Click"
-                    Style="{StaticResource FlatButton}"/>
+                    Style="{StaticResource OutlinedButton}"/>
         </StackPanel>
 
         <!-- OK / Cancel -->

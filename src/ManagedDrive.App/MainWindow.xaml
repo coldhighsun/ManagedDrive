@@ -61,7 +61,7 @@
         <Border Style="{DynamicResource AppBarStyle}">
             <TextBlock VerticalAlignment="Center"
                            Margin="12,0,0,0"
-                           FontSize="16" FontWeight="Medium"
+                           FontSize="{DynamicResource FontSizeTitle}" FontWeight="Medium"
                            Foreground="{DynamicResource AppBarForeground}"
                            Text="{DynamicResource Window.Title}"/>
         </Border>
@@ -142,7 +142,7 @@
                             AutomationProperties.Name="{DynamicResource Tip.MaximizeRestore}">
                         <TextBlock x:Name="MaximizeIcon" Style="{StaticResource IconText}" Text="&#xE922;" FontSize="12"/>
                     </Button>
-                    <Button Style="{StaticResource IconButton}"
+                    <Button Style="{StaticResource CloseIconButton}"
                             Click="CloseButton_Click"
                             ToolTip="{DynamicResource Tip.HideToTray}"
                             AutomationProperties.Name="{DynamicResource Tip.HideToTray}">
@@ -159,10 +159,10 @@
             <DockPanel>
                 <TextBlock DockPanel.Dock="Right"
                            Text="{Binding AvailableMemoryFormatted}"
-                           FontSize="11"
+                           FontSize="{DynamicResource FontSizeSmall}"
                            Foreground="{DynamicResource AppForegroundLight}"/>
                 <TextBlock Text="{Binding StatusText}"
-                           FontSize="11"
+                           FontSize="{DynamicResource FontSizeSmall}"
                            TextTrimming="CharacterEllipsis"
                            Margin="0,0,12,0"
                            ToolTip="{Binding StatusText}"
@@ -227,11 +227,11 @@
                            HorizontalAlignment="Center" VerticalAlignment="Center"/>
             </Border>
             <TextBlock Text="{DynamicResource Empty.Title}"
-                       FontSize="16" FontWeight="Medium"
+                       FontSize="{DynamicResource FontSizeTitle}" FontWeight="Medium"
                        Foreground="{DynamicResource AppForeground}"
                        HorizontalAlignment="Center" Margin="0,16,0,0"/>
             <TextBlock Text="{DynamicResource Empty.Subtitle}"
-                       FontSize="12" TextWrapping="Wrap" TextAlignment="Center"
+                       FontSize="{DynamicResource FontSizeCaption}" TextWrapping="Wrap" TextAlignment="Center"
                        Foreground="{DynamicResource AppForegroundLight}"
                        HorizontalAlignment="Center" Margin="0,6,0,0"/>
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,20,0,0">
@@ -285,7 +285,7 @@
                 <TextBlock Text="{Binding ExitSaveStatusText}" FontSize="14" Margin="8,0,0,0"
                            Foreground="{DynamicResource AppForeground}" VerticalAlignment="Center"/>
             </StackPanel>
-            <TextBlock Text="{Binding ExitSaveDetailText}" FontSize="11" Margin="0,0,0,4"
+            <TextBlock Text="{Binding ExitSaveDetailText}" FontSize="{DynamicResource FontSizeSmall}" Margin="0,0,0,4"
                        HorizontalAlignment="Center"
                        Foreground="{DynamicResource AppForeground}" Opacity="0.7"/>
             <ProgressBar Style="{StaticResource SlimProgressBar}"
@@ -303,7 +303,7 @@
             <TextBlock Text="{Binding BusyOverlay.StatusText}" FontSize="14" Margin="0,0,0,8"
                        HorizontalAlignment="Center"
                        Foreground="{DynamicResource AppForeground}"/>
-            <TextBlock Text="{Binding BusyOverlay.DetailText}" FontSize="11" Margin="0,0,0,4"
+            <TextBlock Text="{Binding BusyOverlay.DetailText}" FontSize="{DynamicResource FontSizeSmall}" Margin="0,0,0,4"
                        HorizontalAlignment="Center"
                        Foreground="{DynamicResource AppForeground}" Opacity="0.7"/>
             <ProgressBar Style="{StaticResource SlimProgressBar}"

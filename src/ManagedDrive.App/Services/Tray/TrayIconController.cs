@@ -74,6 +74,18 @@ public sealed class TrayIconController : IDisposable, ITrayHoverSource
     private readonly Func<EnvRestoreGroup?, Task> _onRestoreEnvAsync;
 
     /// <summary>
+    /// The palette (and whether it was the dark theme's) the menu was last styled with; compared with the
+    /// application's resources when the menu opens.
+    /// </summary>
+    private (bool IsDark, TrayMenuPalette Palette)? _appliedMenuTheme;
+
+    /// <summary>
+    /// The handlers on <see cref="ThemeManager"/> and <see cref="StyleManager"/>, kept so that <see cref="Dispose"/>
+    /// can remove them from those longer-lived objects.
+    /// </summary>
+    private readonly EventHandler _onThemeOrStyleChanged;
+
+    /// <summary>
     /// Takes the user where a clicked balloon tip points.
     /// </summary>
     private readonly Action<NotificationClickTarget> _onBalloonClicked;
@@ -144,6 +156,7 @@ public sealed class TrayIconController : IDisposable, ITrayHoverSource
         menu.HandleCreated += (_, _) => ApplyPopupChrome(menu);
         menu.Opening += (_, _) => dispatcher.Invoke(() =>
         {
+            RefreshTrayMenuThemeIfChanged();
             RebuildRestoreEnvItems();
             RebuildDiskMenuItems();
             ContextMenuOpening?.Invoke();
@@ -188,7 +201,9 @@ public sealed class TrayIconController : IDisposable, ITrayHoverSource
 
         LanguageManager.Instance.LanguageChanged += (_, _) => UpdateTrayMenuHeaders();
         ApplyTrayMenuTheme();
-        ThemeManager.Instance.ThemeChanged += (_, _) => dispatcher.Invoke(ApplyTrayMenuTheme);
+        _onThemeOrStyleChanged = (_, _) => dispatcher.Invoke(ApplyTrayMenuTheme);
+        ThemeManager.Instance.ThemeChanged += _onThemeOrStyleChanged;
+        StyleManager.Instance.StyleChanged += _onThemeOrStyleChanged;
     }
 
     /// <summary>
@@ -230,6 +245,8 @@ public sealed class TrayIconController : IDisposable, ITrayHoverSource
     /// </summary>
     public void Dispose()
     {
+        ThemeManager.Instance.ThemeChanged -= _onThemeOrStyleChanged;
+        StyleManager.Instance.StyleChanged -= _onThemeOrStyleChanged;
         _timerActivityFlash.Stop();
         _timerHighUsageBlink.Stop();
         _trayIcon.Dispose();
@@ -418,20 +435,22 @@ public sealed class TrayIconController : IDisposable, ITrayHoverSource
     /// square look.
     /// </summary>
     /// <param name="popup">The popup whose native window is updated.</param>
-    private static void ApplyPopupChrome(System.Windows.Forms.ToolStrip popup)
+    private void ApplyPopupChrome(System.Windows.Forms.ToolStrip popup)
     {
         if (!popup.IsHandleCreated)
         {
             return;
         }
 
+        // The palette the menu was last styled with (see ApplyTrayMenuTheme); the first popup can be created before that.
         var isDark = ThemeManager.Instance.CurrentTheme == "dark";
+        var palette = _appliedMenuTheme?.Palette ?? TrayMenuPalette.FromResources(isDark);
         WindowNativeMethods.SetDwmAttribute(popup.Handle, WindowNativeMethods.DwmwaUseImmersiveDarkMode, isDark ? 1 : 0);
         WindowNativeMethods.SetDwmAttribute(popup.Handle, WindowNativeMethods.DwmwaWindowCornerPreference, WindowNativeMethods.DwmwcpRound);
         WindowNativeMethods.SetDwmAttribute(
             popup.Handle,
             WindowNativeMethods.DwmwaBorderColor,
-            System.Drawing.ColorTranslator.ToWin32(TrayColorTable.GetMenuBorder(isDark)));
+            System.Drawing.ColorTranslator.ToWin32(palette.Border));
     }
 
     /// <summary>
@@ -516,6 +535,20 @@ public sealed class TrayIconController : IDisposable, ITrayHoverSource
     }
 
     /// <summary>
+    /// Styles the menu again if the application's colors are not the ones it was styled with. A theme or style change
+    /// styles the menu too, but it can do so before the style's palette has replaced the old one in the resources;
+    /// looking again right before the menu is shown always sees the final colors, and costs nothing when nothing changed.
+    /// </summary>
+    private void RefreshTrayMenuThemeIfChanged()
+    {
+        var isDark = ThemeManager.Instance.CurrentTheme == "dark";
+        if (_appliedMenuTheme != (isDark, TrayMenuPalette.FromResources(isDark)))
+        {
+            ApplyTrayMenuTheme();
+        }
+    }
+
+    /// <summary>
     /// Applies the current theme to the tray menu: the renderer, the colors, the item styling and
     /// the DWM chrome. Run once at construction and again whenever the theme changes; the items
     /// that are rebuilt each time the menu opens are styled by <see cref="StyleMenuItems"/> instead.
@@ -528,15 +561,13 @@ public sealed class TrayIconController : IDisposable, ITrayHoverSource
         }
 
         var isDark = ThemeManager.Instance.CurrentTheme == "dark";
-        var background = isDark
-            ? Color.FromArgb(0xFF, 0x2A, 0x2A, 0x2A)
-            : Color.White;
-        var foreground = isDark ? Color.White : Color.Black;
+        var palette = TrayMenuPalette.FromResources(isDark);
+        _appliedMenuTheme = (isDark, palette);
 
         menu.ShowImageMargin = false;
-        menu.Renderer = new TrayMenuRenderer(isDark);
-        menu.BackColor = background;
-        menu.ForeColor = foreground;
+        menu.Renderer = new TrayMenuRenderer(isDark, palette);
+        menu.BackColor = palette.Background;
+        menu.ForeColor = palette.Foreground;
         StyleMenuItems(menu.Items);
         ApplyPopupChrome(menu);
     }

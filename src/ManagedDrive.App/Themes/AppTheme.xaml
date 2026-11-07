@@ -1,5 +1,6 @@
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:sys="clr-namespace:System;assembly=mscorlib"
                     xmlns:helpers="clr-namespace:ManagedDrive.App.Helpers"
                     xmlns:infra="clr-namespace:ManagedDrive.App.Infrastructure"
                     xmlns:views="clr-namespace:ManagedDrive.App.Views">
@@ -7,6 +8,13 @@
     <!-- ========== Shape tokens (a style dictionary overrides these) ========== -->
     <CornerRadius x:Key="ButtonCornerRadius">6</CornerRadius>
     <CornerRadius x:Key="SectionCornerRadius">8</CornerRadius>
+    <CornerRadius x:Key="PopupCornerRadius">6</CornerRadius>
+
+    <!-- ========== Type scale (use these instead of literal sizes in windows and dialogs) ========== -->
+    <sys:Double x:Key="FontSizeDisplay">20</sys:Double>
+    <sys:Double x:Key="FontSizeTitle">16</sys:Double>
+    <sys:Double x:Key="FontSizeCaption">12</sys:Double>
+    <sys:Double x:Key="FontSizeSmall">11</sys:Double>
 
     <!-- ========== Icon font style ========== -->
     <Style x:Key="IconText" TargetType="TextBlock">
@@ -70,11 +78,12 @@
                                           VerticalAlignment="{TemplateBinding VerticalContentAlignment}"/>
                     </Border>
                     <ControlTemplate.Triggers>
+                        <!-- Set on the button, not on Bd: a style derived from this one (CloseIconButton) can then change them. -->
                         <Trigger Property="IsMouseOver" Value="True">
-                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource AppHover}"/>
+                            <Setter Property="Background" Value="{DynamicResource AppHover}"/>
                         </Trigger>
                         <Trigger Property="IsPressed" Value="True">
-                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource AppPressed}"/>
+                            <Setter Property="Background" Value="{DynamicResource AppPressed}"/>
                         </Trigger>
                         <Trigger Property="IsEnabled" Value="False">
                             <Setter Property="Opacity" Value="0.4"/>
@@ -83,6 +92,25 @@
                 </ControlTemplate>
             </Setter.Value>
         </Setter>
+    </Style>
+
+    <!-- Close button of a window: like the icon button, but it turns red under the mouse (white glyph, so the reds are the
+         same in every theme and style). -->
+    <SolidColorBrush x:Key="AppCloseHover" Color="#C42B1C"/>
+    <SolidColorBrush x:Key="AppClosePressed" Color="#A02317"/>
+
+    <Style x:Key="CloseIconButton" TargetType="Button" BasedOn="{StaticResource IconButton}">
+        <!-- Style triggers beat the template's, so these replace the grey hover of the base style. -->
+        <Style.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+                <Setter Property="Background" Value="{DynamicResource AppCloseHover}"/>
+                <Setter Property="Foreground" Value="White"/>
+            </Trigger>
+            <Trigger Property="IsPressed" Value="True">
+                <Setter Property="Background" Value="{DynamicResource AppClosePressed}"/>
+                <Setter Property="Foreground" Value="White"/>
+            </Trigger>
+        </Style.Triggers>
     </Style>
 
     <!-- ========== Borderless dialog chrome (title bar + close button) ==========
@@ -109,7 +137,7 @@
                                     Padding="12,0,4,0">
                                 <DockPanel>
                                     <Button DockPanel.Dock="Right"
-                                            Style="{StaticResource IconButton}"
+                                            Style="{StaticResource CloseIconButton}"
                                             Command="{x:Static views:DialogWindowBase.CloseDialogCommand}"
                                             WindowChrome.IsHitTestVisibleInChrome="True"
                                             ToolTip="{DynamicResource Tip.CloseDialog}">
@@ -187,8 +215,10 @@
                         <Trigger Property="IsMouseOver" Value="True">
                             <Setter TargetName="Bd" Property="Background" Value="{DynamicResource AppPrimaryDark}"/>
                         </Trigger>
+                        <!-- Pressed is the hover shade a step fainter, so the two states differ in every palette. -->
                         <Trigger Property="IsPressed" Value="True">
                             <Setter TargetName="Bd" Property="Background" Value="{DynamicResource AppPrimaryDark}"/>
+                            <Setter TargetName="Bd" Property="Opacity" Value="0.8"/>
                         </Trigger>
                         <Trigger Property="IsEnabled" Value="False">
                             <Setter Property="Opacity" Value="0.4"/>
@@ -331,6 +361,35 @@
     </Style>
 
     <!-- ========== TextBox with watermark ========== -->
+    <!-- The password counterpart of OutlinedTextBox: same outline, focus color and padding. -->
+    <Style x:Key="OutlinedPasswordBox" TargetType="PasswordBox">
+        <Setter Property="Padding" Value="8,8"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource AppDivider}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="Foreground" Value="{DynamicResource AppForeground}"/>
+        <Setter Property="CaretBrush" Value="{DynamicResource AppForeground}"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="PasswordBox">
+                    <Border x:Name="Bd" Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="3"
+                            SnapsToDevicePixels="True">
+                        <ScrollViewer x:Name="PART_ContentHost" Focusable="False"/>
+                    </Border>
+                    <!-- No disabled dimming here: the panel that holds the box already dims, and dimming twice made it vanish. -->
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsKeyboardFocused" Value="True">
+                            <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource AppPrimary}"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
     <Style x:Key="OutlinedTextBox" TargetType="TextBox">
         <Setter Property="Padding" Value="8,8"/>
         <Setter Property="BorderBrush" Value="{DynamicResource AppDivider}"/>
@@ -495,10 +554,40 @@
         </Style.Triggers>
     </Style>
 
+    <!-- ========== List rows in dialogs ========== -->
+    <!-- A ListBox row that follows the palette: the default template paints the system's blue selection. -->
+    <Style x:Key="DialogListBoxItem" TargetType="ListBoxItem">
+        <Setter Property="Foreground" Value="{DynamicResource AppForeground}"/>
+        <Setter Property="Padding" Value="8,5"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ListBoxItem">
+                    <Border x:Name="Bd" Background="Transparent" Padding="{TemplateBinding Padding}"
+                            CornerRadius="{DynamicResource ButtonCornerRadius}">
+                        <ContentPresenter/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource AppHover}"/>
+                        </Trigger>
+                        <Trigger Property="IsSelected" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource AppPrimarySoft}"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
     <!-- ========== Tooltip ========== -->
     <!-- A tooltip opens in its own popup and does not inherit the window's font. -->
     <Style TargetType="ToolTip">
         <Setter Property="FontFamily" Value="{DynamicResource AppFontFamily}"/>
+        <Setter Property="Background" Value="{DynamicResource AppSurface}"/>
+        <Setter Property="Foreground" Value="{DynamicResource AppForeground}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource AppDivider}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="Padding" Value="8,4"/>
     </Style>
 
     <!-- ========== Context menu ========== -->
@@ -517,7 +606,8 @@
                             BorderBrush="{TemplateBinding BorderBrush}"
                             BorderThickness="{TemplateBinding BorderThickness}"
                             Padding="{TemplateBinding Padding}"
-                            CornerRadius="4">
+                            Margin="0,0,8,8"
+                            CornerRadius="{DynamicResource PopupCornerRadius}">
                         <Border.Effect>
                             <DropShadowEffect ShadowDepth="1" BlurRadius="8" Opacity="0.25"/>
                         </Border.Effect>
@@ -564,7 +654,7 @@
                                IsOpen="{Binding IsSubmenuOpen, RelativeSource={RelativeSource TemplatedParent}}">
                             <Border Background="{DynamicResource AppSurface}"
                                     BorderBrush="{DynamicResource AppDivider}"
-                                    BorderThickness="1" Padding="4" CornerRadius="4" Margin="0,0,8,8">
+                                    BorderThickness="1" Padding="4" CornerRadius="{DynamicResource PopupCornerRadius}" Margin="0,0,8,8">
                                 <Border.Effect>
                                     <DropShadowEffect ShadowDepth="1" BlurRadius="8" Opacity="0.25"/>
                                 </Border.Effect>

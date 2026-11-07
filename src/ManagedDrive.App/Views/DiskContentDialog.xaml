@@ -274,7 +274,7 @@
                                 <RotateTransform x:Name="BusySpinnerRotate" Angle="0"/>
                             </TextBlock.RenderTransform>
                         </TextBlock>
-                        <TextBlock x:Name="BusyProgressText" FontSize="12" Margin="6,0,0,0"
+                        <TextBlock x:Name="BusyProgressText" FontSize="{DynamicResource FontSizeCaption}" Margin="6,0,0,0"
                                    Foreground="{DynamicResource AppForeground}"/>
                     </StackPanel>
                 </Border>

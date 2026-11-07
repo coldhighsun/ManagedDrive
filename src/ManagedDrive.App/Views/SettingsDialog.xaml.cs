@@ -255,9 +255,43 @@ public partial class SettingsDialog
     };
 
     /// <summary>
+    /// Opens the folder picker when the box is clicked, starting in the folder it holds; the text itself is read-only,
+    /// so the setting is always a folder that was picked.
+    /// </summary>
+    private void DefaultImageDirectoryBox_PreviewMouseLeftButtonDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        e.Handled = true;
+        BrowseDefaultImageDirectory();
+    }
+
+    /// <summary>
+    /// Opens the folder picker on Enter or Space, so the read-only box can be used without a mouse.
+    /// </summary>
+    private void DefaultImageDirectoryBox_PreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+    {
+        if (e.Key is System.Windows.Input.Key.Enter or System.Windows.Input.Key.Space)
+        {
+            e.Handled = true;
+            BrowseDefaultImageDirectory();
+        }
+    }
+
+    /// <summary>
+    /// Keeps the clear button live only while the box holds a folder.
+    /// </summary>
+    private void DefaultImageDirectoryBox_TextChanged(object sender, TextChangedEventArgs e) =>
+        ClearDefaultImageDirectoryButton.IsEnabled = DefaultImageDirectoryBox.Text.Length > 0;
+
+    /// <summary>
+    /// Empties <see cref="AppConfiguration.DefaultImageDirectory"/>.
+    /// </summary>
+    private void ClearDefaultImageDirectory_Click(object sender, RoutedEventArgs e) =>
+        DefaultImageDirectoryBox.Text = string.Empty;
+
+    /// <summary>
     /// Opens a folder picker to choose <see cref="AppConfiguration.DefaultImageDirectory"/>.
     /// </summary>
-    private void BrowseDefaultImageDirectory_Click(object sender, RoutedEventArgs e)
+    private void BrowseDefaultImageDirectory()
     {
         var dlg = new OpenFolderDialog
         {

@@ -12,7 +12,7 @@
                                                            VerticalAlignment="Center" Margin="0,0,4,0"
                                                            ToolTip="{DynamicResource Card.ReadSpeed}"
                                                            AutomationProperties.Name="{DynamicResource Card.ReadSpeed}"/>
-                                                <TextBlock Text="{Binding ReadSpeedFormatted}" FontSize="11" Width="62"
+                                                <TextBlock Text="{Binding ReadSpeedFormatted}" FontSize="{DynamicResource FontSizeSmall}" Width="62"
                                                            TextAlignment="Left"
                                                            Foreground="{DynamicResource AppForegroundLight}"/>
                                                 <TextBlock Text="&#xE896;" FontFamily="Segoe Fluent Icons" FontSize="10"
@@ -20,20 +20,20 @@
                                                            VerticalAlignment="Center" Margin="10,0,4,0"
                                                            ToolTip="{DynamicResource Card.WriteSpeed}"
                                                            AutomationProperties.Name="{DynamicResource Card.WriteSpeed}"/>
-                                                <TextBlock Text="{Binding WriteSpeedFormatted}" FontSize="11" Width="62"
+                                                <TextBlock Text="{Binding WriteSpeedFormatted}" FontSize="{DynamicResource FontSizeSmall}" Width="62"
                                                            TextAlignment="Left"
                                                            Foreground="{DynamicResource AppForegroundLight}"/>
                                                 <Popup x:Name="SpeedPopup" PlacementTarget="{Binding ElementName=SpeedHoverArea}" Placement="Bottom"
                                                        StaysOpen="True" AllowsTransparency="True">
                                                     <Border Background="{DynamicResource AppSurface}"
                                                             BorderBrush="{DynamicResource AppDivider}"
-                                                            BorderThickness="1" CornerRadius="4" Padding="8"
+                                                            BorderThickness="1" CornerRadius="{DynamicResource PopupCornerRadius}" Padding="8"
                                                             x:Name="PopupBorder"
                                                             Tag="{Binding ElementName=SpeedPopup}">
                                                         <StackPanel>
                                                             <controls:SpeedHistoryChart ReadHistory="{Binding ReadSpeedHistory}"
                                                                                          WriteHistory="{Binding WriteSpeedHistory}"/>
-                                                            <TextBlock FontSize="11" Margin="0,6,0,0"
+                                                            <TextBlock FontSize="{DynamicResource FontSizeSmall}" Margin="0,6,0,0"
                                                                        Foreground="{DynamicResource AppForegroundLight}">
                                                                 <Run Text="{DynamicResource Card.TotalReadWritten}"/>
                                                                 <Run Text="{Binding TotalReadFormatted, Mode=OneWay}"/>

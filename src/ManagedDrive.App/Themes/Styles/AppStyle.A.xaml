@@ -8,8 +8,16 @@
          Resources from AppTheme.xaml are referenced with DynamicResource: this dictionary is loaded on its own,
          before it is merged into the application resources, so a StaticResource would not find them. -->
 
+    <!-- Disk card box model: the card's border is 1 px (2 px while the disk is over its usage warning), and the
+         padding gives that px back, so the border plus the padding is the same in both states. The saving/remounting
+         overlays use a negative margin of exactly that sum, so they cover the padding and the border. -->
+    <Thickness x:Key="DiskCardPadding">16</Thickness>
+    <Thickness x:Key="DiskCardWarningPadding">15</Thickness>
+    <Thickness x:Key="DiskCardOverlayMargin">-17</Thickness>
+
     <BooleanToVisibilityConverter x:Key="BoolToVis"/>
     <infra:PercentToGridLengthConverter x:Key="PercentToGridLengthConverter"/>
+    <infra:IsFirstItemConverter x:Key="IsFirstItemConverter"/>
 
     <!-- Main window shell. The window places its sidebar background, app bar and tool buttons through these styles,
          so a style can move the tool buttons from the app bar into a sidebar (see style B). Column 0 is the sidebar. -->
@@ -73,7 +81,7 @@
                     <Border x:Name="Card"
                             Style="{DynamicResource DiskCard}"
                             Margin="12,4"
-                            Padding="16"
+                            Padding="{StaticResource DiskCardPadding}"
                             Cursor="Hand"
                             Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=Window}}">
                         <Border.InputBindings>
@@ -264,7 +272,7 @@
                             </StackPanel>
 
                             <!-- Saving overlay; negative margin cancels the card Padding so it covers the whole card -->
-                            <Border Grid.ColumnSpan="3" Margin="-16"
+                            <Border Grid.ColumnSpan="3" Margin="{StaticResource DiskCardOverlayMargin}"
                                     Background="{DynamicResource AppSurface}"
                                     Opacity="0.85"
                                     CornerRadius="10"
@@ -284,7 +292,7 @@
                             </Border>
 
                             <!-- Remounting overlay -->
-                            <Border Grid.ColumnSpan="3" Margin="-16"
+                            <Border Grid.ColumnSpan="3" Margin="{StaticResource DiskCardOverlayMargin}"
                                     Background="{DynamicResource AppSurface}"
                                     Opacity="0.85"
                                     CornerRadius="10"
@@ -305,6 +313,10 @@
                         </Grid>
                     </Border>
                     <DataTemplate.Triggers>
+                        <!-- The warning border is 1 px thicker (see DiskCard); see DiskCardPadding for why the padding shrinks. -->
+                        <DataTrigger Binding="{Binding IsHighUsage}" Value="True">
+                            <Setter TargetName="Card" Property="Padding" Value="{StaticResource DiskCardWarningPadding}"/>
+                        </DataTrigger>
                         <DataTrigger Value="True">
                             <DataTrigger.Binding>
                                 <Binding Path="IsSelected"
