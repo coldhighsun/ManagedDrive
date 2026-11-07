@@ -342,7 +342,7 @@ public sealed partial class MainViewModel
             if (error != null)
             {
                 _logger.LogWarning("Edit disk failed for {MountPoint}: {Error}", vm.MountPoint, error);
-                MessageBox.Show(
+                AppMessageBox.Show(
                     error,
                     Loc.Get("Msg.EditDiskConfirmTitle"),
                     MessageBoxButton.OK,
@@ -956,7 +956,7 @@ public sealed partial class MainViewModel
             if (error is not null)
             {
                 _logger.LogWarning("Changing preset {PresetId} on {MountPoint} failed: {Error}", presetId, vm.MountPoint, error);
-                MessageBox.Show(error, Loc.Get("Msg.EditDiskConfirmTitle"), MessageBoxButton.OK, MessageBoxImage.Warning);
+                AppMessageBox.Show(error, Loc.Get("Msg.EditDiskConfirmTitle"), MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
 

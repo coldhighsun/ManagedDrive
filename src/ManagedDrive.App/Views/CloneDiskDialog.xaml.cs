@@ -168,7 +168,7 @@ public partial class CloneDiskDialog
     /// export path rejection.
     /// </summary>
     /// <param name="errorKey">The localization key of the message to show.</param>
-    private void ShowExportPathError(string errorKey) => MessageBox.Show(
+    private void ShowExportPathError(string errorKey) => AppMessageBox.Show(
         Loc.Get(errorKey),
         Loc.Get("Val.Title"),
         MessageBoxButton.OK,
@@ -205,7 +205,7 @@ public partial class CloneDiskDialog
         {
             if (TargetDiskBox.SelectedItem is not CloneTargetItem target)
             {
-                MessageBox.Show(
+                AppMessageBox.Show(
                     Loc.Get("Val.NoCloneTarget"),
                     Loc.Get("Val.Title"),
                     MessageBoxButton.OK,
@@ -220,7 +220,7 @@ public partial class CloneDiskDialog
         {
             if (string.IsNullOrWhiteSpace(ExportPathBox.Text))
             {
-                MessageBox.Show(
+                AppMessageBox.Show(
                     Loc.Get("Val.NoExportPath"),
                     Loc.Get("Val.Title"),
                     MessageBoxButton.OK,

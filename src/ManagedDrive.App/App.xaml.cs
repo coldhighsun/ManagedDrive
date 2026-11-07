@@ -192,7 +192,7 @@ public partial class App
             // leave a windowless process behind — one still holding the single-instance mutex, so
             // every later launch would just report "already running".
             _logger.LogCritical(ex, "Startup failed");
-            MessageBox.Show(
+            AppMessageBox.Show(
                 Loc.Format("Msg.StartupFailedBody", ex.Message),
                 Loc.Get("Msg.UnexpectedErrorTitle"),
                 MessageBoxButton.OK,
@@ -230,7 +230,7 @@ public partial class App
                 CliCommandProcessor.ExecuteAsync(e.Args, controller, Environment.CurrentDirectory));
             if (result.ExitCode != 0)
             {
-                MessageBox.Show(result.Message, "ManagedDrive", MessageBoxButton.OK, MessageBoxImage.Warning);
+                AppMessageBox.Show(result.Message, "ManagedDrive", MessageBoxButton.OK, MessageBoxImage.Warning);
             }
         }
     }
@@ -314,7 +314,7 @@ public partial class App
     {
         if (args.Length == 0)
         {
-            MessageBox.Show(
+            AppMessageBox.Show(
                 Loc.Get("Msg.AlreadyRunning"),
                 "ManagedDrive",
                 MessageBoxButton.OK,
@@ -328,11 +328,11 @@ public partial class App
         var response = await CliPipeClient.SendWithRetryAsync(args, HandOffTimeout, HandOffRetryInterval, AppInstance.IsRunning);
         if (response == null)
         {
-            MessageBox.Show(Loc.Get("Msg.CommandNotDelivered"), "ManagedDrive", MessageBoxButton.OK, MessageBoxImage.Warning);
+            AppMessageBox.Show(Loc.Get("Msg.CommandNotDelivered"), "ManagedDrive", MessageBoxButton.OK, MessageBoxImage.Warning);
         }
         else if (response.ExitCode != 0)
         {
-            MessageBox.Show(response.Message, "ManagedDrive", MessageBoxButton.OK, MessageBoxImage.Warning);
+            AppMessageBox.Show(response.Message, "ManagedDrive", MessageBoxButton.OK, MessageBoxImage.Warning);
         }
     }
 
@@ -612,7 +612,7 @@ public partial class App
             ? Loc.Format("Msg.WinFspMissingBody", WinFspPrerequisite.RequiredVersionText)
             : Loc.Format("Msg.WinFspMismatchBody", check.InstalledVersion!, WinFspPrerequisite.RequiredVersionText);
 
-        var answer = MessageBox.Show(
+        var answer = AppMessageBox.Show(
             question,
             Loc.Get(missing ? "Msg.WinFspMissingTitle" : "Msg.WinFspTitle"),
             MessageBoxButton.YesNo,
@@ -653,7 +653,7 @@ public partial class App
             case WinFspInstallResult.Success:
                 return true;
             case WinFspInstallResult.RebootRequired:
-                MessageBox.Show(
+                AppMessageBox.Show(
                     Loc.Format("Msg.WinFspRebootRequired", WinFspPrerequisite.RequiredVersionText),
                     Loc.Get("Msg.WinFspTitle"),
                     MessageBoxButton.OK,
@@ -681,7 +681,7 @@ public partial class App
     /// </summary>
     private static void OfferManualWinFspDownload(string message)
     {
-        if (MessageBox.Show(
+        if (AppMessageBox.Show(
                 message,
                 Loc.Get("Msg.WinFspTitle"),
                 MessageBoxButton.YesNo,
@@ -802,6 +802,7 @@ public partial class App
     private void OnDispatcherUnhandledException(object sender, DispatcherUnhandledExceptionEventArgs e)
     {
         _logger.LogError(e.Exception, "Unhandled exception on the UI thread");
+        // Native box on purpose: a themed dialog failing inside this handler would re-enter it.
         MessageBox.Show(
             Loc.Format("Msg.UnexpectedErrorBody", e.Exception.Message),
             Loc.Get("Msg.UnexpectedErrorTitle"),
@@ -1104,7 +1105,7 @@ public partial class App
 
         if (!saveFailures.IsEmpty)
         {
-            MessageBox.Show(
+            AppMessageBox.Show(
                 string.Join(Environment.NewLine, saveFailures),
                 Loc.Get("Tray.SaveFailedTitle"),
                 MessageBoxButton.OK,

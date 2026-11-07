@@ -323,11 +323,6 @@
                                          RelativeSource="{RelativeSource AncestorType=ListBoxItem}"/>
                             </DataTrigger.Binding>
                             <Setter TargetName="Card" Property="BorderBrush" Value="{DynamicResource AppPrimary}"/>
-                            <Setter TargetName="Card" Property="Effect">
-                                <Setter.Value>
-                                    <DropShadowEffect ShadowDepth="1" BlurRadius="8" Opacity="0.12"/>
-                                </Setter.Value>
-                            </Setter>
                         </DataTrigger>
                         <DataTrigger Binding="{Binding IsSaving}" Value="True">
                             <DataTrigger.EnterActions>

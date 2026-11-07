@@ -941,7 +941,7 @@ public partial class CreateDiskDialog
     {
         if (!TryBuildOptions(out var options, out var error))
         {
-            MessageBox.Show(error, Loc.Get("Val.Title"), MessageBoxButton.OK, MessageBoxImage.Warning);
+            AppMessageBox.Show(error, Loc.Get("Val.Title"), MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
 
@@ -1072,7 +1072,7 @@ public partial class CreateDiskDialog
             _presetsUpdating = true;
             ((CheckBox)sender).IsChecked = false;
             _presetsUpdating = false;
-            MessageBox.Show(Loc.Format("Msg.PresetConflict", string.Join(", ", result.Conflicts)), Loc.Get("Val.Title"), MessageBoxButton.OK, MessageBoxImage.Warning);
+            AppMessageBox.Show(Loc.Format("Msg.PresetConflict", string.Join(", ", result.Conflicts)), Loc.Get("Val.Title"), MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
 
@@ -1173,7 +1173,7 @@ public partial class CreateDiskDialog
             var availability = CreateDiskOptionsBuilder.ValidateImagePathAvailable(dlg.FileName, _otherDisks);
             if (availability != CreateDiskValidationError.None)
             {
-                MessageBox.Show(MapError(availability), Loc.Get("Val.Title"), MessageBoxButton.OK, MessageBoxImage.Warning);
+                AppMessageBox.Show(MapError(availability), Loc.Get("Val.Title"), MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
 
@@ -1253,7 +1253,7 @@ public partial class CreateDiskDialog
             var message = anyPresetTicked
                 ? Loc.Get("Msg.ReadOnlyHasPresets")
                 : Loc.Format("Msg.ReadOnlyHasTempRedirect", Loc.Get("Tip.RestoreEnv"), Loc.Get("Tray.RestoreEnv"));
-            MessageBox.Show(message, Loc.Get("Val.Title"), MessageBoxButton.OK, MessageBoxImage.Warning);
+            AppMessageBox.Show(message, Loc.Get("Val.Title"), MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
 
@@ -1578,6 +1578,7 @@ public partial class CreateDiskDialog
         // AutoSaveBox is enabled exactly for a writable disk with a backing image, which is all
         // snapshot limits need — they don't depend on periodic auto-save being on.
         var snapshotsAllowed = AutoSaveBox.IsEnabled;
+        SnapshotsHeaderText.IsEnabled = snapshotsAllowed;
         SnapshotCountEnabledBox.IsEnabled = snapshotsAllowed;
         SnapshotSizeEnabledBox.IsEnabled = snapshotsAllowed;
         if (!snapshotsAllowed)

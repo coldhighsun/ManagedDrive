@@ -547,6 +547,7 @@
          the default chrome's built-in disabled state is tuned for a light background
          and is barely visible against the app's dark palette. -->
     <Style TargetType="CheckBox">
+        <Setter Property="Foreground" Value="{DynamicResource AppForeground}"/>
         <Style.Triggers>
             <Trigger Property="IsEnabled" Value="False">
                 <Setter Property="Opacity" Value="0.4"/>
@@ -836,6 +837,8 @@
 
     <!-- ========== Tabs ========== -->
     <Style x:Key="AppTabItem" TargetType="TabItem">
+        <!-- The selected tab's content inherits its text color from the TabItem (its logical parent), and a TabItem without its own value gets the black one from the WPF theme style. -->
+        <Setter Property="Foreground" Value="{DynamicResource AppForeground}"/>
         <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
         <Setter Property="Padding" Value="0"/>
         <Setter Property="Template">

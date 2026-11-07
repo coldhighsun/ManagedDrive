@@ -86,7 +86,7 @@ public sealed class TempDirCompatChecker
             // Disk is in profiles but not set to auto-mount — TEMP will be dangling after startup.
             TempDirResetService.Reset();
 
-            MessageBox.Show(
+            AppMessageBox.Show(
                 Loc.Format("Msg.StartupTempReset", expanded),
                 "ManagedDrive",
                 MessageBoxButton.OK,
@@ -98,7 +98,7 @@ public sealed class TempDirCompatChecker
             // cannot access user-session WinFsp drives. Warn once so the user is aware.
             if (!config.TempDirCompatWarningShown)
             {
-                MessageBox.Show(
+                AppMessageBox.Show(
                     Loc.Format("Msg.StartupTempAutoMountWarning", expanded),
                     Loc.Get("Msg.SetTempDirWarningTitle"),
                     MessageBoxButton.OK,
@@ -146,7 +146,7 @@ public sealed class TempDirCompatChecker
 
         TempDirResetService.Reset();
 
-        MessageBox.Show(
+        AppMessageBox.Show(
             Loc.Format("Msg.StartupTempResetDangling", expanded),
             "ManagedDrive",
             MessageBoxButton.OK,
