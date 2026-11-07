@@ -53,7 +53,7 @@ public partial class RestoreSnapshotDialog
     {
         if (SnapshotListBox.SelectedItem is not SnapshotItem item)
         {
-            MessageBox.Show(
+            AppMessageBox.Show(
                 Loc.Get("Val.NoSnapshotSelected"),
                 Loc.Get("Val.Title"),
                 MessageBoxButton.OK,
@@ -82,7 +82,7 @@ public partial class RestoreSnapshotDialog
         }
         catch (Exception ex)
         {
-            MessageBox.Show(
+            AppMessageBox.Show(
                 ex.Message,
                 Loc.Get("Val.Title"),
                 MessageBoxButton.OK,
@@ -100,7 +100,7 @@ public partial class RestoreSnapshotDialog
     {
         if (SnapshotListBox.SelectedItem is not SnapshotItem item)
         {
-            MessageBox.Show(
+            AppMessageBox.Show(
                 Loc.Get("Val.NoSnapshotSelected"),
                 Loc.Get("Val.Title"),
                 MessageBoxButton.OK,
@@ -151,7 +151,7 @@ public partial class RestoreSnapshotDialog
     {
         if (SnapshotListBox.SelectedItem is not SnapshotItem item)
         {
-            MessageBox.Show(
+            AppMessageBox.Show(
                 Loc.Get("Val.NoSnapshotSelected"),
                 Loc.Get("Val.Title"),
                 MessageBoxButton.OK,
@@ -172,7 +172,7 @@ public partial class RestoreSnapshotDialog
         }
         catch (Exception ex)
         {
-            MessageBox.Show(
+            AppMessageBox.Show(
                 ex.Message,
                 Loc.Get("Val.Title"),
                 MessageBoxButton.OK,

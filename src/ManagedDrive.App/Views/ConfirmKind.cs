@@ -13,6 +13,12 @@ public enum ConfirmKind
 
     /// <summary>The report of something that went wrong.</summary>
     Error,
+
+    /// <summary>A plain notice with nothing at risk.</summary>
+    Information,
+
+    /// <summary>No icon at all, like a native message box without an image.</summary>
+    None,
 }
 
 /// <summary>
@@ -29,6 +35,7 @@ internal static class ConfirmKindIcons
     {
         ConfirmKind.Question => ("\uE897", "AppPrimary"),
         ConfirmKind.Error => ("\uEA39", "AppDanger"),
+        ConfirmKind.Information => ("\uE946", "AppPrimary"),
         _ => ("\uE7BA", "AppWarning"),
     };
 }

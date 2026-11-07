@@ -311,6 +311,9 @@
 
     <!-- SettingsDialog -->
     <sys:String x:Key="Settings.Title">设置</sys:String>
+    <sys:String x:Key="Settings.Tab.General">常规</sys:String>
+    <sys:String x:Key="Settings.Tab.Appearance">外观</sys:String>
+    <sys:String x:Key="Settings.Tab.Disk">磁盘与诊断</sys:String>
     <sys:String x:Key="Settings.RunAtStartup">开机自动启动</sys:String>
     <sys:String x:Key="Settings.StartMinimized">启动时最小化到托盘</sys:String>
     <sys:String x:Key="Settings.ContextMenuEnabled">在资源管理器右键菜单中显示"挂载为内存盘"</sys:String>
@@ -350,6 +353,8 @@
     <!-- Shared buttons -->
     <sys:String x:Key="Btn.Ok">确定</sys:String>
     <sys:String x:Key="Btn.Cancel">取消</sys:String>
+    <sys:String x:Key="Btn.Yes">是</sys:String>
+    <sys:String x:Key="Btn.No">否</sys:String>
 
     <!-- Tray menu -->
     <sys:String x:Key="Tray.Show">显示</sys:String>

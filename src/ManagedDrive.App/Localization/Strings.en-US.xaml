@@ -311,6 +311,9 @@
 
     <!-- SettingsDialog -->
     <sys:String x:Key="Settings.Title">Settings</sys:String>
+    <sys:String x:Key="Settings.Tab.General">General</sys:String>
+    <sys:String x:Key="Settings.Tab.Appearance">Appearance</sys:String>
+    <sys:String x:Key="Settings.Tab.Disk">Disks &amp; Diagnostics</sys:String>
     <sys:String x:Key="Settings.RunAtStartup">Run at Windows startup</sys:String>
     <sys:String x:Key="Settings.StartMinimized">Start minimized to tray</sys:String>
     <sys:String x:Key="Settings.ContextMenuEnabled">Show "Mount as RAM disk" in Explorer's right-click menu</sys:String>
@@ -350,6 +353,8 @@
     <!-- Shared buttons -->
     <sys:String x:Key="Btn.Ok">OK</sys:String>
     <sys:String x:Key="Btn.Cancel">Cancel</sys:String>
+    <sys:String x:Key="Btn.Yes">Yes</sys:String>
+    <sys:String x:Key="Btn.No">No</sys:String>
 
     <!-- Tray menu -->
     <sys:String x:Key="Tray.Show">Show</sys:String>

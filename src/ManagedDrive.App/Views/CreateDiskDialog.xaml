@@ -344,8 +344,9 @@
                             VerticalAlignment="Center"/>
 
                     <!-- Incremental Snapshots header -->
-                    <TextBlock Grid.Row="17" Text="{DynamicResource CreateDisk.Section.Snapshots}"
+                    <TextBlock Grid.Row="17" x:Name="SnapshotsHeaderText" Text="{DynamicResource CreateDisk.Section.Snapshots}"
                                Foreground="{DynamicResource AppForeground}" FontWeight="SemiBold"
+                               Style="{StaticResource DimWhenDisabled}"
                                ToolTip="{DynamicResource Tip.Snapshots}"/>
 
                     <!-- Snapshot Max Count -->

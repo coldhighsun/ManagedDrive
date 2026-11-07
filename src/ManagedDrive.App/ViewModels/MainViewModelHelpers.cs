@@ -41,23 +41,23 @@ internal static class MainViewModelHelpers
     }
 
     /// <summary>
-    /// Shows a modal <see cref="MessageBox"/> with the "ManagedDrive" title and an error icon.
+    /// Shows a modal <see cref="AppMessageBox"/> with the "ManagedDrive" title and an error icon.
     /// Shared boilerplate for the many failure paths across <see cref="MainViewModel"/> that don't
     /// need a custom title (contrast <c>ExecuteEditDiskAsync</c>'s inline apply-failure message, which
     /// reuses <c>Msg.EditDiskConfirmTitle</c> as its title instead).
     /// </summary>
     public static void ShowError(string message) =>
-        MessageBox.Show(message, "ManagedDrive", MessageBoxButton.OK, MessageBoxImage.Error);
+        AppMessageBox.Show(message, "ManagedDrive", MessageBoxButton.OK, MessageBoxImage.Error);
 
     /// <summary>
-    /// Shows a modal <see cref="MessageBox"/> with the "ManagedDrive" title and an info icon.
+    /// Shows a modal <see cref="AppMessageBox"/> with the "ManagedDrive" title and an info icon.
     /// </summary>
     public static void ShowInfo(string message) =>
-        MessageBox.Show(message, "ManagedDrive", MessageBoxButton.OK, MessageBoxImage.Information);
+        AppMessageBox.Show(message, "ManagedDrive", MessageBoxButton.OK, MessageBoxImage.Information);
 
     /// <summary>
-    /// Shows a modal <see cref="MessageBox"/> with the "ManagedDrive" title and a warning icon.
+    /// Shows a modal <see cref="AppMessageBox"/> with the "ManagedDrive" title and a warning icon.
     /// </summary>
     public static void ShowWarning(string? message) =>
-        MessageBox.Show(message, "ManagedDrive", MessageBoxButton.OK, MessageBoxImage.Warning);
+        AppMessageBox.Show(message, "ManagedDrive", MessageBoxButton.OK, MessageBoxImage.Warning);
 }
