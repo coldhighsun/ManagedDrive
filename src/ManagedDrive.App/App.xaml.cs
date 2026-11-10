@@ -386,7 +386,7 @@ public partial class App
         var iconStream = GetResourceStream(new("pack://application:,,,/ManagedDrive.ico"))!.Stream;
         _trayIconController = new(
             Dispatcher, iconStream, _mainViewModel, ShowMainWindow, ShowMainWindowAndCreate, RestoreEnvFromTrayAsync,
-            ShowMainWindowAndSettings, ShowAboutDialog, ExitApplication,
+            ShowSettings, ShowAboutDialog, ExitApplication,
             target => _ = RunNotificationClickAsync(target));
         _trayTooltipController = new(_mainViewModel, _trayIconController);
         _tempDirCompatChecker = new(settings);
@@ -731,7 +731,13 @@ public partial class App
 
         if (_mainViewModel is { Disks.Count: > 0 } or { HasPendingUnmounts: true })
         {
-            ShowMainWindow();
+            // A second request (tray Exit clicked twice) brings the open confirmation forward.
+            if (AppDialogs.ExitConfirm.TryBringForward(DialogPlacement.BringForward))
+            {
+                return;
+            }
+
+            AppDialogs.ReleaseSplashTopmost();
 
             var body = Loc.Get("Msg.ExitConfirmBody");
             if (tempOnRamDisk)
@@ -741,12 +747,28 @@ public partial class App
 
             var dialog = new ConfirmDialog(
                 Loc.Get("Msg.ExitConfirmTitle"),
-                body)
-            {
-                Owner = _mainWindow
-            };
+                body);
 
-            if (dialog.ShowDialog() != true)
+            // Exit is never blocked by an open settings/about dialog: it stacks on top of it. With
+            // none open it is owned by the main window, or, with that hidden in the tray, stands on
+            // its own centered on the screen (ConfirmDialog adds the taskbar button without an owner).
+            var openDialog = AppDialogs.Shared.Current;
+            var owner = WindowVisibility.PickOwner<Window>(
+                openDialog,
+                WindowVisibility.IsShownToUser(openDialog),
+                AppDialogs.GetOwner(_mainWindow));
+            if (owner is not null)
+            {
+                dialog.Owner = owner;
+
+                // An owned dialog sits just above its owner, which may itself be buried behind other
+                // applications; the Exit click grants the foreground, so raise it explicitly.
+                dialog.Loaded += (_, _) => dialog.Activate();
+            }
+
+            dialog.WindowStartupLocation = WindowVisibility.GetStartupLocation(owner is not null);
+
+            if (AppDialogs.ExitConfirm.Show(dialog, d => d.ShowDialog()) != true)
             {
                 return;
             }
@@ -910,15 +932,12 @@ public partial class App
         }
     }
 
+    /// <summary>
+    /// Opens the about dialog on its own, without bringing up the main window.
+    /// </summary>
     private void ShowAboutDialog()
     {
-        var dialog = new AboutDialog(_updateCheckService);
-        if (_mainWindow is { IsLoaded: true })
-        {
-            dialog.Owner = _mainWindow;
-        }
-
-        dialog.ShowDialog();
+        AppDialogs.ShowAbout(_updateCheckService, _mainWindow, _isExiting);
     }
 
     private void ShowMainWindow()
@@ -994,9 +1013,11 @@ public partial class App
         _mainViewModel?.CreateDiskCommand.Execute(null);
     }
 
-    private void ShowMainWindowAndSettings()
+    /// <summary>
+    /// Opens the settings dialog on its own, without bringing up the main window.
+    /// </summary>
+    private void ShowSettings()
     {
-        ShowMainWindow();
         _mainViewModel?.SettingsCommand.Execute(null);
     }
 
@@ -1036,9 +1057,14 @@ public partial class App
         _isExiting = true;
         _updateCts.Cancel();
 
+        // An open settings/about dialog must not outlive the exit, whichever path led here: closing
+        // it makes it return without a result, so nothing is saved against the torn-down services.
+        // IsExiting is set first so the closed dialog's continuation already sees the exit.
+        _mainViewModel?.IsExiting = true;
+        AppDialogs.CloseOpenDialog();
+
         if (_mainViewModel != null)
         {
-            _mainViewModel.IsExiting = true;
             ShowMainWindow();
 
             // Before the disks go away: the variables must not be left pointing at them.

@@ -17,6 +17,7 @@ public partial class AboutDialog
     public AboutDialog(UpdateCheckService? updateCheckService = null)
     {
         InitializeComponent();
+        Loaded += (_, _) => DialogPlacement.BringToFrontWhenUnowned(this);
         _updateCheckService = updateCheckService;
 
         VersionText.Text = UpdateCheckService.GetRunningVersion();

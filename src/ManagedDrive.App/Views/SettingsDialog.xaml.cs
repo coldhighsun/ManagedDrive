@@ -22,6 +22,7 @@ public partial class SettingsDialog
     public SettingsDialog(AppConfiguration config)
     {
         InitializeComponent();
+        Loaded += (_, _) => DialogPlacement.BringToFrontWhenUnowned(this);
         RunAtStartupBox.IsChecked = StartupManager.IsEnabled;
         StartMinimizedBox.IsChecked = config.StartMinimized;
         CloseToTrayBox.IsChecked = config.CloseToTray;
