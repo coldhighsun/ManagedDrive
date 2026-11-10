@@ -12,13 +12,7 @@ public sealed partial class MainViewModel
     {
         _logger.LogInformation("About dialog opened.");
 
-        var dialog = new AboutDialog(UpdateCheckService);
-        if (Application.Current.MainWindow is { IsLoaded: true } mainWindow)
-        {
-            dialog.Owner = mainWindow;
-        }
-
-        dialog.ShowDialog();
+        AppDialogs.ShowAbout(UpdateCheckService, Application.Current.MainWindow, IsExiting);
     }
 
     private async Task ExecuteCloneDiskAsync(DiskViewModel? vm)
@@ -849,12 +843,19 @@ public sealed partial class MainViewModel
         await SaveImageWithSnapshotAsync(vm);
     }
 
+    /// <summary>
+    /// Opens the settings dialog, or brings it forward if it is already open.
+    /// </summary>
     private void ExecuteSettings()
     {
-        var config = _settingsStore.Load();
-        var dialog = new SettingsDialog(config) { Owner = Application.Current.MainWindow };
+        // Settings and About share one gate and yield to the exit confirmation; while the disks are
+        // being saved and torn down, settings cannot take effect any more.
+        SettingsDialog? dialog = null;
+        var result = AppDialogs.ShowModal(
+            () => dialog = new SettingsDialog(_settingsStore.Load()), Application.Current.MainWindow, IsExiting);
 
-        if (dialog.ShowDialog() == true)
+        // Exit may have begun while the dialog was open; the settings store is being torn down.
+        if (result == true && !IsExiting && dialog is not null)
         {
             // The dialog is modal but the dispatcher keeps running under it, so CLI commands, the
             // tray menu and update checks may have saved settings since `config` was read.
