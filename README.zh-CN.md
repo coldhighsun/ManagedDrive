@@ -224,6 +224,10 @@ ManagedDrive 会在 TEMP 被设为内存盘时提示一次，此后只要 TEMP �
 
 构建说明、解决方案结构、内部实现和性能基准见 [DEVELOPMENT.md](docs/DEVELOPMENT.md)。
 
+### 支持本项目
+
+如果 ManagedDrive 对你有帮助，欢迎通过 [GitHub Sponsors](https://github.com/sponsors/coldhighsun) 支持项目开发，感谢！
+
 ### 许可证
 
 MIT

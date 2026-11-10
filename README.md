@@ -225,6 +225,10 @@ ManagedDrive warns once when TEMP is set to a RAM disk, and again on every start
 
 Building from source, solution structure, internals, and performance benchmarks live in [DEVELOPMENT.md](docs/DEVELOPMENT.md).
 
+### Support
+
+If ManagedDrive is useful to you, you can support its development through [GitHub Sponsors](https://github.com/sponsors/coldhighsun). Thank you!
+
 ### License
 
 MIT

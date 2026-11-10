@@ -226,6 +226,10 @@ ManagedDrive 會在 TEMP 被設為記憶體磁碟時提示一次，此後只要 
 
 建置說明、方案結構、內部實作和效能基準測試請見 [DEVELOPMENT.md](docs/DEVELOPMENT.md)。
 
+### 支持本專案
+
+如果 ManagedDrive 對你有幫助，歡迎透過 [GitHub Sponsors](https://github.com/sponsors/coldhighsun) 支持專案開發，感謝！
+
 ### 授權條款
 
 MIT
