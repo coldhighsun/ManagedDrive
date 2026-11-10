@@ -490,6 +490,8 @@
     <sys:String x:Key="About.Copyright">© 2026 coldhighsun</sys:String>
     <sys:String x:Key="About.ViewOnGitHub">View on GitHub</sys:String>
     <sys:String x:Key="About.ViewThirdPartyNotices">Third-Party Notices</sys:String>
+    <sys:String x:Key="About.Donate">Support the project (GitHub Sponsors)</sys:String>
+    <sys:String x:Key="About.OpenLinkFailed">The link could not be opened in your browser. You can open it manually:&#10;{0}</sys:String>
     <sys:String x:Key="About.UpdateAvailable">A new version ({0}) is available. Click to update.</sys:String>
 
     <!-- Update available -->

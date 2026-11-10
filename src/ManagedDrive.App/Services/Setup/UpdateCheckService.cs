@@ -34,6 +34,11 @@ public sealed class UpdateCheckService : IUpdatePresenter, IDisposable
     internal const string RepositoryUrl = $"https://github.com/{RepoOwner}/{RepoName}";
 
     /// <summary>
+    /// Web address of the owner's GitHub Sponsors page.
+    /// </summary>
+    internal const string SponsorsUrl = $"https://github.com/sponsors/{RepoOwner}";
+
+    /// <summary>
     /// Releases page, for when a release carries no address of its own.
     /// </summary>
     internal const string ReleasesUrl = RepositoryUrl + "/releases/latest";

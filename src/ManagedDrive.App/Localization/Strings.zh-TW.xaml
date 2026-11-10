@@ -490,6 +490,8 @@
     <sys:String x:Key="About.Copyright">© 2026 coldhighsun</sys:String>
     <sys:String x:Key="About.ViewOnGitHub">在 GitHub 上檢視</sys:String>
     <sys:String x:Key="About.ViewThirdPartyNotices">第三方聲明</sys:String>
+    <sys:String x:Key="About.Donate">支持本專案（GitHub Sponsors）</sys:String>
+    <sys:String x:Key="About.OpenLinkFailed">無法在瀏覽器中開啟該連結，你可以手動開啟：&#10;{0}</sys:String>
     <sys:String x:Key="About.UpdateAvailable">發現新版本 {0}，按一下即可更新。</sys:String>
 
     <!-- Update available -->

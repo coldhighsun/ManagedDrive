@@ -61,6 +61,11 @@
                         <Run Text="{DynamicResource About.ViewThirdPartyNotices}"/>
                     </Hyperlink>
                 </TextBlock>
+                <TextBlock FontSize="{DynamicResource FontSizeCaption}" Margin="0,4,0,0">
+                    <Hyperlink x:Name="DonateLink" RequestNavigate="Hyperlink_RequestNavigate">
+                        <Run Text="{DynamicResource About.Donate}"/>
+                    </Hyperlink>
+                </TextBlock>
             </StackPanel>
 
             <!-- OK button -->

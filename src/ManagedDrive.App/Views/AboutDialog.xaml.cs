@@ -9,6 +9,15 @@ public partial class AboutDialog
 {
     private const string GitHubUrl = UpdateCheckService.RepositoryUrl;
     private const string ThirdPartyNoticesUrl = GitHubUrl + "/blob/main/docs/THIRD-PARTY-NOTICES.md";
+
+    /// <summary>
+    /// The GitHub Sponsors page the "support the project" link opens.
+    /// </summary>
+    private const string DonateUrl = UpdateCheckService.SponsorsUrl;
+
+    /// <summary>
+    /// The update service whose automatic check result this dialog shows.
+    /// </summary>
     private readonly UpdateCheckService? _updateCheckService;
 
     /// <summary>
@@ -23,6 +32,7 @@ public partial class AboutDialog
         VersionText.Text = UpdateCheckService.GetRunningVersion();
         GitHubLink.NavigateUri = new(GitHubUrl);
         ThirdPartyNoticesLink.NavigateUri = new(ThirdPartyNoticesUrl);
+        DonateLink.NavigateUri = new(DonateUrl);
 
         if (updateCheckService != null)
         {
@@ -63,9 +73,23 @@ public partial class AboutDialog
         }
     }
 
+    /// <summary>
+    /// Opens the clicked link in the default browser and tells the user when that is not possible.
+    /// </summary>
+    /// <param name="sender">The clicked hyperlink.</param>
+    /// <param name="e">The navigation request carrying the target address.</param>
     private void Hyperlink_RequestNavigate(object sender, RequestNavigateEventArgs e)
     {
-        Process.Start(new ProcessStartInfo(e.Uri.AbsoluteUri) { UseShellExecute = true });
+        var url = e.Uri.AbsoluteUri;
+        if (!UrlLauncher.TryOpen(url))
+        {
+            AppMessageBox.Show(
+                Loc.Format("About.OpenLinkFailed", url),
+                "ManagedDrive",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+        }
+
         e.Handled = true;
     }
 }
