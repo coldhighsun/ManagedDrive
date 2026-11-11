@@ -31,4 +31,9 @@
     <SolidColorBrush x:Key="ToolIconAbout" Color="#FF0C93B0"/>
     <SolidColorBrush x:Key="ToolIconExit" Color="#FFD93838"/>
 
+    <!-- Window button icons (minimize, maximize/restore, close). Every style palette must define these. -->
+    <SolidColorBrush x:Key="WindowIconMinimize" Color="#FFD99100"/>
+    <SolidColorBrush x:Key="WindowIconMaximize" Color="#FF16A34A"/>
+    <SolidColorBrush x:Key="WindowIconClose" Color="#FFD93838"/>
+
 </ResourceDictionary>

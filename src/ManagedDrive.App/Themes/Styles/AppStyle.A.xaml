@@ -1,5 +1,6 @@
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:sys="clr-namespace:System;assembly=mscorlib"
                     xmlns:infra="clr-namespace:ManagedDrive.App.Infrastructure"
                     xmlns:controls="clr-namespace:ManagedDrive.App.Controls">
 
@@ -14,6 +15,14 @@
     <Thickness x:Key="DiskCardPadding">16</Thickness>
     <Thickness x:Key="DiskCardWarningPadding">15</Thickness>
     <Thickness x:Key="DiskCardOverlayMargin">-17</Thickness>
+
+    <!-- Window button glyphs (Segoe Fluent Icons), read by the MinimizeIconText/MaximizeIconText/CloseIconText styles in
+         AppTheme.xaml. Style A and C use the thin Windows caption glyphs; style B overrides them with the rounder ones
+         that match its tool icons. -->
+    <sys:String x:Key="WindowGlyphMinimize">&#xE921;</sys:String>
+    <sys:String x:Key="WindowGlyphMaximize">&#xE922;</sys:String>
+    <sys:String x:Key="WindowGlyphRestore">&#xE923;</sys:String>
+    <sys:String x:Key="WindowGlyphClose">&#xE8BB;</sys:String>
 
     <BooleanToVisibilityConverter x:Key="BoolToVis"/>
     <infra:PercentToGridLengthConverter x:Key="PercentToGridLengthConverter"/>

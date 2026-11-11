@@ -99,6 +99,38 @@
     <SolidColorBrush x:Key="AppCloseHover" Color="#C42B1C"/>
     <SolidColorBrush x:Key="AppClosePressed" Color="#A02317"/>
 
+    <!-- Window button icons. Glyph and colour come from the current style (WindowGlyph* in AppStyle.{X}.xaml,
+         WindowIcon* in its palette), so each style draws its own set. -->
+    <Style x:Key="MinimizeIconText" TargetType="TextBlock" BasedOn="{StaticResource IconText}">
+        <Setter Property="Text" Value="{DynamicResource WindowGlyphMinimize}"/>
+        <Setter Property="Foreground" Value="{DynamicResource WindowIconMinimize}"/>
+    </Style>
+
+    <!-- The button toggles between maximize and restore, so the glyph follows the window state. -->
+    <Style x:Key="MaximizeIconText" TargetType="TextBlock" BasedOn="{StaticResource IconText}">
+        <Setter Property="Text" Value="{DynamicResource WindowGlyphMaximize}"/>
+        <Setter Property="Foreground" Value="{DynamicResource WindowIconMaximize}"/>
+        <Style.Triggers>
+            <DataTrigger Binding="{Binding WindowState, RelativeSource={RelativeSource AncestorType=Window}}" Value="Maximized">
+                <Setter Property="Text" Value="{DynamicResource WindowGlyphRestore}"/>
+            </DataTrigger>
+        </Style.Triggers>
+    </Style>
+
+    <!-- An explicit Foreground beats the button's own, so the white glyph of CloseIconButton's red hover is set here. -->
+    <Style x:Key="CloseIconText" TargetType="TextBlock" BasedOn="{StaticResource IconText}">
+        <Setter Property="Text" Value="{DynamicResource WindowGlyphClose}"/>
+        <Setter Property="Foreground" Value="{DynamicResource WindowIconClose}"/>
+        <Style.Triggers>
+            <DataTrigger Binding="{Binding IsMouseOver, RelativeSource={RelativeSource AncestorType=Button}}" Value="True">
+                <Setter Property="Foreground" Value="White"/>
+            </DataTrigger>
+            <DataTrigger Binding="{Binding IsPressed, RelativeSource={RelativeSource AncestorType=Button}}" Value="True">
+                <Setter Property="Foreground" Value="White"/>
+            </DataTrigger>
+        </Style.Triggers>
+    </Style>
+
     <Style x:Key="CloseIconButton" TargetType="Button" BasedOn="{StaticResource IconButton}">
         <!-- Style triggers beat the template's, so these replace the grey hover of the base style. -->
         <Style.Triggers>
@@ -133,7 +165,7 @@
                         <DockPanel>
                             <Border DockPanel.Dock="Top"
                                     Background="{DynamicResource AppBarBackground}"
-                                    Height="40"
+                                    Height="48"
                                     Padding="12,0,4,0">
                                 <DockPanel>
                                     <Button DockPanel.Dock="Right"
@@ -141,7 +173,7 @@
                                             Command="{x:Static views:DialogWindowBase.CloseDialogCommand}"
                                             WindowChrome.IsHitTestVisibleInChrome="True"
                                             ToolTip="{DynamicResource Tip.CloseDialog}">
-                                        <TextBlock Style="{StaticResource IconText}" Text="&#xE8BB;"/>
+                                        <TextBlock Style="{StaticResource CloseIconText}"/>
                                     </Button>
                                     <TextBlock VerticalAlignment="Center"
                                                FontSize="13" FontWeight="Medium"

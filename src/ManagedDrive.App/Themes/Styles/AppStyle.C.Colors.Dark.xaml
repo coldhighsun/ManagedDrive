@@ -29,4 +29,9 @@
     <SolidColorBrush x:Key="ToolIconAbout" Color="#FFEDEDED"/>
     <SolidColorBrush x:Key="ToolIconExit" Color="#FFEDEDED"/>
 
+    <!-- Window button icons: monochrome too. -->
+    <SolidColorBrush x:Key="WindowIconMinimize" Color="#FFEDEDED"/>
+    <SolidColorBrush x:Key="WindowIconMaximize" Color="#FFEDEDED"/>
+    <SolidColorBrush x:Key="WindowIconClose" Color="#FFEDEDED"/>
+
 </ResourceDictionary>

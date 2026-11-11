@@ -24,6 +24,18 @@ public sealed class PaletteKeysTests
         { "ToolIconNew", "ToolIconImport", "ToolIconRestore", "ToolIconSettings", "ToolIconAbout", "ToolIconExit" };
 
     /// <summary>
+    /// Brush keys read by the minimize, maximize and close icon styles.
+    /// </summary>
+    private static readonly string[] WindowIconKeys =
+        { "WindowIconMinimize", "WindowIconMaximize", "WindowIconClose" };
+
+    /// <summary>
+    /// Glyph keys read by the minimize, maximize and close icon styles.
+    /// </summary>
+    private static readonly string[] WindowGlyphKeys =
+        { "WindowGlyphMinimize", "WindowGlyphMaximize", "WindowGlyphRestore", "WindowGlyphClose" };
+
+    /// <summary>
     /// Verifies that the keys the cards use exist in the theme palette alone and in the theme palette
     /// with a style palette merged over it, for every style and theme.
     /// </summary>
@@ -63,6 +75,44 @@ public sealed class PaletteKeysTests
 
         // Act
         var missing = SidebarIconKeys.Where(k => !keys.Contains(k)).ToList();
+
+        // Assert
+        Assert.Empty(missing);
+    }
+
+    /// <summary>
+    /// Verifies that styles B and C define a colour for each window button icon in both themes.
+    /// </summary>
+    [Theory]
+    [InlineData("B", "Light")]
+    [InlineData("B", "Dark")]
+    [InlineData("C", "Light")]
+    [InlineData("C", "Dark")]
+    public void StylePalette_DefinesEveryWindowIconKey(string style, string theme)
+    {
+        // Arrange
+        var keys = KeysOf($"Styles/AppStyle.{style}.Colors.{theme}.xaml");
+
+        // Act
+        var missing = WindowIconKeys.Where(k => !keys.Contains(k)).ToList();
+
+        // Assert
+        Assert.Empty(missing);
+    }
+
+    /// <summary>
+    /// Verifies that the base style (inherited by C) and style B each define every window button glyph.
+    /// </summary>
+    [Theory]
+    [InlineData("A")]
+    [InlineData("B")]
+    public void Style_DefinesEveryWindowGlyphKey(string style)
+    {
+        // Arrange
+        var keys = KeysOf($"Styles/AppStyle.{style}.xaml");
+
+        // Act
+        var missing = WindowGlyphKeys.Where(k => !keys.Contains(k)).ToList();
 
         // Assert
         Assert.Empty(missing);
