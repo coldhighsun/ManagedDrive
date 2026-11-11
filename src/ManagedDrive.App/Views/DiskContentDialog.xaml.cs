@@ -51,7 +51,7 @@ public partial class DiskContentDialog
         // fixed-size), so this window alone can be resized by dragging its edges.
         WindowChrome.SetWindowChrome(this, new()
         {
-            CaptionHeight = 40,
+            CaptionHeight = 48,
             ResizeBorderThickness = new(6),
             GlassFrameThickness = new(0),
             NonClientFrameEdges = NonClientFrameEdges.None,

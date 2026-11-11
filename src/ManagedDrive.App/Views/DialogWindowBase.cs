@@ -27,7 +27,7 @@ public class DialogWindowBase : Window
     {
         WindowChrome.SetWindowChrome(this, new()
         {
-            CaptionHeight = 40,
+            CaptionHeight = 48,
             ResizeBorderThickness = new(0),
             GlassFrameThickness = new(0),
             NonClientFrameEdges = NonClientFrameEdges.None,

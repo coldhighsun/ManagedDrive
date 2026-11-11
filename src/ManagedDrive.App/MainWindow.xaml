@@ -134,19 +134,19 @@
                             Click="MinimizeButton_Click"
                             ToolTip="{DynamicResource Tip.Minimize}"
                             AutomationProperties.Name="{DynamicResource Tip.Minimize}">
-                        <TextBlock Style="{StaticResource IconText}" Text="&#xE921;" FontSize="12"/>
+                        <TextBlock Style="{StaticResource MinimizeIconText}"/>
                     </Button>
                     <Button x:Name="MaximizeBtn" Style="{StaticResource IconButton}"
                             Click="MaximizeButton_Click"
                             ToolTip="{DynamicResource Tip.MaximizeRestore}"
                             AutomationProperties.Name="{DynamicResource Tip.MaximizeRestore}">
-                        <TextBlock x:Name="MaximizeIcon" Style="{StaticResource IconText}" Text="&#xE922;" FontSize="12"/>
+                        <TextBlock Style="{StaticResource MaximizeIconText}"/>
                     </Button>
                     <Button Style="{StaticResource CloseIconButton}"
                             Click="CloseButton_Click"
                             ToolTip="{DynamicResource Tip.HideToTray}"
                             AutomationProperties.Name="{DynamicResource Tip.HideToTray}">
-                        <TextBlock Style="{StaticResource IconText}" Text="&#xE8BB;"/>
+                        <TextBlock Style="{StaticResource CloseIconText}"/>
                     </Button>
         </StackPanel>
 

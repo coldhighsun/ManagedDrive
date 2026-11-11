@@ -1,5 +1,6 @@
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:sys="clr-namespace:System;assembly=mscorlib"
                     xmlns:controls="clr-namespace:ManagedDrive.App.Controls">
 
     <!-- Style B (dashboard): starts from style A. The tool buttons move into a left sidebar, cards are raised panels
@@ -19,6 +20,13 @@
     <CornerRadius x:Key="ButtonCornerRadius">8</CornerRadius>
     <CornerRadius x:Key="SectionCornerRadius">10</CornerRadius>
     <CornerRadius x:Key="PopupCornerRadius">8</CornerRadius>
+
+    <!-- Window button glyphs: the rounder Remove / FullScreen / BackToWindow / Cancel icons, the same family as the
+         coloured tool icons (colours: WindowIcon* in the palette). -->
+    <sys:String x:Key="WindowGlyphMinimize">&#xE738;</sys:String>
+    <sys:String x:Key="WindowGlyphMaximize">&#xE740;</sys:String>
+    <sys:String x:Key="WindowGlyphRestore">&#xE73F;</sys:String>
+    <sys:String x:Key="WindowGlyphClose">&#xE711;</sys:String>
 
     <Style x:Key="SidebarStyle" TargetType="Border">
         <Setter Property="Grid.Column" Value="0"/>

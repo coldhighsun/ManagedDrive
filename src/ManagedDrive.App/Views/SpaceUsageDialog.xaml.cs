@@ -91,7 +91,7 @@ public partial class SpaceUsageDialog
         // Same as the disk-content dialog: the one other dialog that can be resized and maximized.
         WindowChrome.SetWindowChrome(this, new()
         {
-            CaptionHeight = 40,
+            CaptionHeight = 48,
             ResizeBorderThickness = new(6),
             GlassFrameThickness = new(0),
             NonClientFrameEdges = NonClientFrameEdges.None,
