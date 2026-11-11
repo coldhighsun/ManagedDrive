@@ -1,0 +1,16 @@
+<Project>
+    <!--
+        Pins the runtime packs resolved for ReadyToRun/RID-specific restores to a patched servicing release,
+        independent of which SDK patch is installed (older SDKs bundle 10.0.14, which has known advisories).
+        Only the downloaded pack version changes; the framework version the apps require at run time does not.
+        Remove once every SDK in use bundles 10.0.15 or later.
+    -->
+    <PropertyGroup>
+        <PatchedNetRuntimeVersion>10.0.15</PatchedNetRuntimeVersion>
+    </PropertyGroup>
+
+    <ItemGroup Condition="$([MSBuild]::VersionLessThan('$(BundledNETCoreAppPackageVersion)', '$(PatchedNetRuntimeVersion)'))">
+        <KnownFrameworkReference Update="@(KnownFrameworkReference->WithMetadataValue('TargetFramework', 'net10.0'))"
+                                 LatestRuntimeFrameworkVersion="$(PatchedNetRuntimeVersion)" />
+    </ItemGroup>
+</Project>
