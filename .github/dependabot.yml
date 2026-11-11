@@ -6,6 +6,12 @@ updates:
       interval: "weekly"
     open-pull-requests-limit: 10
     labels: ["dependencies"]
+    ignore:
+      # Stay on the current 10.x line (minor/patch updates only) for these families.
+      - dependency-name: "Microsoft.Extensions.*"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "Serilog.Extensions.*"
+        update-types: ["version-update:semver-major"]
     groups:
       nuget-minor-patch:
         update-types: ["minor", "patch"]
