@@ -836,8 +836,20 @@ public partial class App
     /// <summary>
     /// Fires whenever the main window is hidden (minimized to tray) or shown again.
     /// </summary>
-    private void OnMainWindowVisibleChanged(object sender, DependencyPropertyChangedEventArgs e) =>
+    private void OnMainWindowVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)
+    {
+        // The disk cards skip their display updates while the window is hidden; bring them up to
+        // date the moment it is shown instead of on the next refresh tick.
+        if (e.NewValue is true && _mainViewModel != null)
+        {
+            foreach (var vm in _mainViewModel.Disks)
+            {
+                vm.RefreshDisplay();
+            }
+        }
+
         UpdateForMainWindowShownState();
+    }
 
     /// <summary>
     /// Runs whenever the main window is hidden, shown, minimized or restored. Toggles each disk's

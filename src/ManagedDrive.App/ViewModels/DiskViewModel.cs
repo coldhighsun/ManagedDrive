@@ -443,6 +443,84 @@ public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
     }
 
     /// <summary>
+    /// Names of the display-only properties <see cref="Refresh"/> skips while the main window is
+    /// hidden, and that <see cref="RefreshDisplay"/> raises together once it is shown again.
+    /// </summary>
+    internal static IReadOnlyList<string> DisplayPropertyNames { get; } =
+    [
+        nameof(UsedFormatted),
+        nameof(FreeFormatted),
+        nameof(FreePercent),
+        nameof(CapacityFormatted),
+        nameof(VolumeLabel),
+        nameof(LastContentWriteFormatted),
+        nameof(LastAutoSaveFormatted),
+        nameof(ShowLastAutoSave),
+        nameof(SnapshotsEnabled),
+        nameof(PersistImagePath),
+        nameof(SourcePath),
+        nameof(HasImagePath),
+        nameof(IsPasswordProtected),
+        nameof(ReadSpeedFormatted),
+        nameof(ReadSpeedHistory),
+        nameof(WriteSpeedFormatted),
+        nameof(WriteSpeedHistory),
+        nameof(TotalReadFormatted),
+        nameof(TotalWrittenFormatted),
+    ];
+
+    /// <summary>
+    /// Brings the card up to date when the main window is shown again: re-reads used and free
+    /// space and raises every display-only property, so an edit made from the tray or the CLI
+    /// while the window was hidden (capacity, label, image path) is shown at once, with capacity
+    /// and free-space figures that agree, instead of after the next refresh tick. Takes no speed
+    /// sample, so the speed history keeps its one-entry-per-tick spacing.
+    /// </summary>
+    public void RefreshDisplay()
+    {
+        _usedBytes = Disk.UsedBytes;
+        _freeBytes = Disk.FreeBytes;
+
+        RaiseDisplayPropertiesChanged();
+        RaiseUsagePropertiesChanged();
+    }
+
+    /// <summary>
+    /// Names of the properties derived from used space that both <see cref="Refresh"/> and
+    /// <see cref="RefreshDisplay"/> raise whatever the window's state, because the tray tooltip
+    /// binds them too. <see cref="ShowUsageWarning"/> derives from <see cref="UsageLevel"/> and
+    /// must change with it, or the warning icon lags behind the bar's colour.
+    /// </summary>
+    internal static IReadOnlyList<string> UsagePropertyNames { get; } =
+    [
+        nameof(UsedPercent),
+        nameof(UsageLevel),
+        nameof(ShowUsageWarning),
+    ];
+
+    /// <summary>
+    /// Raises <see cref="PropertyChanged"/> for each of <see cref="UsagePropertyNames"/>.
+    /// </summary>
+    private void RaiseUsagePropertiesChanged()
+    {
+        foreach (var name in UsagePropertyNames)
+        {
+            OnPropertyChanged(name);
+        }
+    }
+
+    /// <summary>
+    /// Raises <see cref="PropertyChanged"/> for each of <see cref="DisplayPropertyNames"/>.
+    /// </summary>
+    private void RaiseDisplayPropertiesChanged()
+    {
+        foreach (var name in DisplayPropertyNames)
+        {
+            OnPropertyChanged(name);
+        }
+    }
+
+    /// <summary>
     /// Refreshes usage statistics, volume label, and capacity immediately. Always recomputes
     /// usage and re-evaluates the high-usage warning (it drives a tray balloon, so it must keep
     /// working while the main window is hidden), but skips the display-only property-change
@@ -465,25 +543,7 @@ public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
         var isUiVisible = Application.Current?.MainWindow is { IsVisible: true };
         if (isUiVisible)
         {
-            OnPropertyChanged(nameof(UsedFormatted));
-            OnPropertyChanged(nameof(FreeFormatted));
-            OnPropertyChanged(nameof(FreePercent));
-            OnPropertyChanged(nameof(CapacityFormatted));
-            OnPropertyChanged(nameof(VolumeLabel));
-            OnPropertyChanged(nameof(LastContentWriteFormatted));
-            OnPropertyChanged(nameof(LastAutoSaveFormatted));
-            OnPropertyChanged(nameof(ShowLastAutoSave));
-            OnPropertyChanged(nameof(SnapshotsEnabled));
-            OnPropertyChanged(nameof(PersistImagePath));
-            OnPropertyChanged(nameof(SourcePath));
-            OnPropertyChanged(nameof(HasImagePath));
-            OnPropertyChanged(nameof(IsPasswordProtected));
-            OnPropertyChanged(nameof(ReadSpeedFormatted));
-            OnPropertyChanged(nameof(ReadSpeedHistory));
-            OnPropertyChanged(nameof(WriteSpeedFormatted));
-            OnPropertyChanged(nameof(WriteSpeedHistory));
-            OnPropertyChanged(nameof(TotalReadFormatted));
-            OnPropertyChanged(nameof(TotalWrittenFormatted));
+            RaiseDisplayPropertiesChanged();
         }
 
         // Refreshed even while the main window is hidden: the unmount/edit paths, the tray menu
@@ -493,9 +553,7 @@ public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
         UpdateActiveRedirects();
 
         // Bound by the tray tooltip, which can be visible even while the main window is hidden.
-        OnPropertyChanged(nameof(UsedPercent));
-        OnPropertyChanged(nameof(UsageLevel));
-        OnPropertyChanged(nameof(ShowUsageWarning));
+        RaiseUsagePropertiesChanged();
 
         if (Disk.Options.SourceArchivePath != null)
         {
