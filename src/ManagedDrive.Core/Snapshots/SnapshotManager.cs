@@ -535,6 +535,19 @@ public static partial class SnapshotManager
     /// File content is deduplicated across all snapshots of this image via a shared,
     /// content-addressed blob store.
     /// </summary>
+    /// <param name="nodeMap">The nodes to write.</param>
+    /// <param name="capacityBytes">The disk's capacity, written into the header.</param>
+    /// <param name="volumeLabel">The disk's volume label.</param>
+    /// <param name="mainImagePath">The image the snapshot belongs to.</param>
+    /// <param name="timestampUtc">The snapshot's timestamp, which names its index file.</param>
+    /// <param name="level">The compression level.</param>
+    /// <param name="cek">The content encryption key, or <c>null</c> for an unencrypted snapshot.</param>
+    /// <param name="progress">Optional progress reporter, updated with a fraction in [0, 1].</param>
+    /// <param name="finalCapacityBytes">
+    /// When set, read once every node is written; its value replaces
+    /// <paramref name="capacityBytes"/> in the header if it is larger, for a capacity that grew
+    /// while the snapshot was written.
+    /// </param>
     public static void WriteSnapshot(
         FileNodeMap nodeMap,
         ulong capacityBytes,
@@ -543,10 +556,12 @@ public static partial class SnapshotManager
         DateTimeOffset timestampUtc,
         int level,
         byte[]? cek = null,
-        IProgress<double>? progress = null)
+        IProgress<double>? progress = null,
+        Func<ulong>? finalCapacityBytes = null)
     {
         var indexPath = BuildSnapshotPath(mainImagePath, timestampUtc);
-        SnapshotStore.Write(nodeMap, capacityBytes, volumeLabel, indexPath, BlobDirectory(mainImagePath), level, cek, progress);
+        SnapshotStore.Write(
+            nodeMap, capacityBytes, volumeLabel, indexPath, BlobDirectory(mainImagePath), level, cek, progress, finalCapacityBytes);
     }
 
     private static string BlobDirectory(string mainImagePath) => SnapshotStore.ComputeBlobDirectory(mainImagePath);

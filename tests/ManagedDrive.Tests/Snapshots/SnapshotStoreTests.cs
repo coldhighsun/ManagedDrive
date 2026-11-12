@@ -165,6 +165,40 @@ public sealed class SnapshotStoreTests : IDisposable
         Assert.Equal(data, node.FileData!.ToArray(512));
     }
 
+    /// <summary>
+    /// The header's capacity is the larger of the capacity passed in and the one read once every
+    /// node is written, so a capacity that grew during the write is recorded and a smaller one
+    /// read at the end (or none) leaves the starting value.
+    /// </summary>
+    /// <param name="finalCapacity">The capacity read at the end, or <c>0</c> for no provider.</param>
+    /// <param name="expected">The capacity the loaded header must hold.</param>
+    [Theory]
+    [InlineData(4UL << 20, 4UL << 20)]
+    [InlineData(1UL << 19, 1UL << 20)]
+    [InlineData(0UL, 1UL << 20)]
+    public void Write_FinalCapacityProvider_HeaderHoldsLargerCapacity(ulong finalCapacity, ulong expected)
+    {
+        var map = new FileNodeMap();
+        map.Add("\\", new() { FileInfo = { FileAttributes = (uint)FileAttributes.Directory } });
+        var data = Enumerable.Range(0, 512).Select(i => (byte)i).ToArray();
+        map.Add("\\a.bin", new()
+        {
+            FileData = FileContent.FromSpan(data, 512),
+            FileInfo = { FileAttributes = (uint)FileAttributes.Normal, FileSize = 512, AllocationSize = 512 },
+        });
+        var indexPath = Path.Combine(_dir, "snap.mdr");
+        var blobDirectory = Path.Combine(_dir, "blobs");
+        Func<ulong>? provider = finalCapacity == 0 ? null : () => finalCapacity;
+
+        SnapshotStore.Write(map, 1 << 20, "label", indexPath, blobDirectory, 3, cek: null, finalCapacityBytes: provider);
+        var loaded = SnapshotStore.Load(indexPath, blobDirectory, out var capacity, out var label, cek: null);
+
+        Assert.Equal(expected, capacity);
+        Assert.Equal("label", label);
+        Assert.True(loaded.TryGet("\\a.bin", out var node));
+        Assert.Equal(data, node!.FileData!.ToArray(512));
+    }
+
     private static void WriteBytes(FileContent content, long offset, byte[] data)
     {
         var ptr = Marshal.AllocHGlobal(data.Length);
