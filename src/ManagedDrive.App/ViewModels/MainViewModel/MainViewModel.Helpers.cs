@@ -362,22 +362,44 @@ public sealed partial class MainViewModel
             CanLosePresets(d.Disk.Options, newOptions.MountPoint)).ToList())
         {
             var options = other.Disk.Options;
-            var release = PresetSelection.Release(all, options.Folders ?? [], options.EnvRedirects ?? [], claimed);
-            if (release.IsEmpty)
+            if (PresetSelection.Release(all, options.Folders ?? [], options.EnvRedirects ?? [], claimed).IsEmpty)
             {
                 continue;
             }
 
-            var error = await ApplyOptionsAsync(
+            // Computed again from the options current when the apply runs, so folders and redirects
+            // another change set meanwhile are kept rather than replaced by this snapshot's. The
+            // release is a pure function of those options, so it is recomputed from the change.
+            PresetReleaseResult ReleaseFrom(DiskOptions current) =>
+                PresetSelection.Release(all, current.Folders ?? [], current.EnvRedirects ?? [], claimed);
+
+            var result = await ApplyOptionsAsync(
                 other.Disk,
-                WithEffects(options, release.Folders, release.EnvRedirects),
-                () => _envRedirector.RestoreVariables(release.ReleasedVariables, mountPoint: options.MountPoint));
-            if (error is not null)
+                current =>
+                {
+                    var kept = ReleaseFrom(current);
+                    return kept.IsEmpty ? current : WithEffects(current, kept.Folders, kept.EnvRedirects);
+                },
+                change =>
+                {
+                    if (change.Changed)
+                    {
+                        _envRedirector.RestoreVariables(ReleaseFrom(change.Before).ReleasedVariables, mountPoint: options.MountPoint);
+                    }
+                });
+            if (!result.Applied)
             {
-                _logger.LogWarning("Taking presets away from {MountPoint} failed: {Error}", options.MountPoint, error);
+                _logger.LogWarning("Taking presets away from {MountPoint} failed: {Error}", options.MountPoint, result.Error);
                 continue;
             }
 
+            if (!result.Change.Changed)
+            {
+                // The disk no longer has any of the claimed presets.
+                continue;
+            }
+
+            var release = ReleaseFrom(result.Change.Before);
             other.Refresh();
             notes.Add(DescribeMovedPresets(release.ReleasedPresetIds, options.MountPoint, newOptions.MountPoint));
         }
@@ -423,19 +445,26 @@ public sealed partial class MainViewModel
     /// Applies new options to a mounted disk off the UI thread.
     /// </summary>
     /// <param name="disk">The mounted disk.</param>
-    /// <param name="options">The options to apply.</param>
-    /// <param name="afterApplied">Run on the same background thread once the options were applied; skipped when they were refused.</param>
-    /// <returns>The reason the options were refused, or <c>null</c> when they were applied.</returns>
-    private static Task<string?> ApplyOptionsAsync(RamDisk disk, DiskOptions options, Action? afterApplied = null) =>
-        Task.Run<string?>(() =>
+    /// <param name="edit">
+    /// Computes the options to apply from the disk's current ones, when the apply runs, so the
+    /// fields it does not change keep what an edit applied meanwhile set.
+    /// </param>
+    /// <param name="afterApplied">
+    /// Run on the same background thread with what the apply did once the options were applied;
+    /// skipped when they were refused.
+    /// </param>
+    /// <returns>What the apply did, or why it was refused.</returns>
+    private static Task<OptionsApplyResult> ApplyOptionsAsync(
+        RamDisk disk, Func<DiskOptions, DiskOptions> edit, Action<OptionsChange>? afterApplied = null) =>
+        Task.Run(() =>
         {
-            if (!disk.TryApplyOptions(options, out var error))
+            if (!disk.TryApplyOptions(edit, out var change, out var error))
             {
-                return error;
+                return OptionsApplyResult.Refused(error);
             }
 
-            afterApplied?.Invoke();
-            return null;
+            afterApplied?.Invoke(change);
+            return OptionsApplyResult.Succeeded(change);
         });
 
     /// <summary>

@@ -29,9 +29,12 @@ public interface IMountedDisk
     /// <summary>
     /// Applies new options to the disk without remounting it.
     /// </summary>
-    /// <param name="options">The options to apply.</param>
-    /// <returns>The reason they were refused, or <c>null</c> when they were applied.</returns>
-    Task<string?> ApplyOptionsAsync(DiskOptions options);
+    /// <param name="edit">
+    /// Computes the options to apply from the disk's current ones, when the apply runs, so the
+    /// fields it does not change keep what an edit applied meanwhile (from the CLI, say) set.
+    /// </param>
+    /// <returns>What the apply did, or why it was refused.</returns>
+    Task<OptionsApplyResult> ApplyOptionsAsync(Func<DiskOptions, DiskOptions> edit);
 
     /// <summary>
     /// Updates what the user sees of the disk after its options changed.
@@ -189,25 +192,40 @@ public sealed class DiskRestoreCoordinator(UserEnvironmentRedirector redirector,
                     continue;
                 }
 
-                var release = DiskRestorePlanner.Apply(BuiltInPresets.All, options.Folders ?? [], redirects, settled);
-                if (release.Folders.SequenceEqual(options.Folders ?? []) && release.EnvRedirects.SequenceEqual(redirects))
+                if (IsUnchanged(ReleaseFrom(options, settled), options))
                 {
                     // The disk's options changed since the plan and no longer list what was planned.
                     continue;
                 }
 
-                var error = await disk.ApplyOptionsAsync(options with
+                // Computed again from the options current when the apply runs, folders and
+                // redirects included, so nothing another change set meanwhile is replaced by this
+                // snapshot; only what was settled as restored is taken away.
+                var result = await disk.ApplyOptionsAsync(current =>
                 {
-                    Folders = release.Folders.Count == 0 ? null : release.Folders,
-                    EnvRedirects = release.EnvRedirects.Count == 0 ? null : release.EnvRedirects,
+                    var kept = ReleaseFrom(current, settled);
+                    return IsUnchanged(kept, current)
+                        ? current
+                        : current with
+                        {
+                            Folders = kept.Folders.Count == 0 ? null : kept.Folders,
+                            EnvRedirects = kept.EnvRedirects.Count == 0 ? null : kept.EnvRedirects,
+                        };
                 });
-                if (error is not null)
+                if (!result.Applied)
                 {
-                    logger.LogWarning("Updating {MountPoint} after restoring its variables failed: {Error}", options.MountPoint, error);
+                    logger.LogWarning("Updating {MountPoint} after restoring its variables failed: {Error}", options.MountPoint, result.Error);
                     notUpdated.Add(options.MountPoint);
                     continue;
                 }
 
+                if (!result.Change.Changed)
+                {
+                    // The disk's options changed meanwhile and no longer list what was settled.
+                    continue;
+                }
+
+                var release = ReleaseFrom(result.Change.Before, settled);
                 disk.Refresh();
                 var lost = release.ReleasedPresetIds.Select(presetName).Concat(settled.CustomVariables);
                 releasedFrom.Add($"{options.MountPoint} ({string.Join(", ", lost)})");
@@ -221,4 +239,24 @@ public sealed class DiskRestoreCoordinator(UserEnvironmentRedirector redirector,
 
         return new(releasedFrom, notUpdated);
     }
+
+    /// <summary>
+    /// Computes what a disk with <paramref name="options"/> keeps once what was settled as
+    /// restored is taken away. A pure function of its arguments, so the apply's edit and the report
+    /// after it get the same result from the same options.
+    /// </summary>
+    /// <param name="options">The disk's options.</param>
+    /// <param name="settled">What was settled as restored.</param>
+    /// <returns>The release.</returns>
+    private static PresetReleaseResult ReleaseFrom(DiskOptions options, DiskRestoreCandidates settled) =>
+        DiskRestorePlanner.Apply(BuiltInPresets.All, options.Folders ?? [], options.EnvRedirects ?? [], settled);
+
+    /// <summary>
+    /// Returns whether a release leaves a disk's folders and redirects as they are.
+    /// </summary>
+    /// <param name="release">The release computed for the disk.</param>
+    /// <param name="options">The disk's options.</param>
+    /// <returns><c>true</c> when there is nothing to take away.</returns>
+    private static bool IsUnchanged(PresetReleaseResult release, DiskOptions options) =>
+        release.Folders.SequenceEqual(options.Folders ?? []) && release.EnvRedirects.SequenceEqual(options.EnvRedirects ?? []);
 }
