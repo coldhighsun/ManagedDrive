@@ -1495,7 +1495,15 @@ public sealed class MemoryFileSystem : FileSystemBase
         var replacement = adoptNodes
             ? nodes
             : nodes.Select(kvp => KeyValuePair.Create(kvp.Key, kvp.Value.Clone())).ToList();
-        NodeMap.ReplaceAll(replacement);
+
+        // Checked again under the map's write lock: the check above is only an early exit, and a
+        // capacity change (TryUpdateCapacity) does not wait for the caller's locks, so it may have
+        // lowered the ceiling since.
+        if (!NodeMap.TryReplaceAll(replacement, needed, MaxCapacityProvider, out var capacity))
+        {
+            error = $"Source disk uses {needed:N0} bytes, which exceeds the target disk's capacity ({capacity:N0} bytes).";
+            return false;
+        }
 
         MarkContentChanged();
         error = null;

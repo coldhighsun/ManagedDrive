@@ -734,6 +734,58 @@ public sealed class FileNodeMapTests
     }
 
     [Fact]
+    public void TryReplaceAll_FitsCapacity_ReplacesContents()
+    {
+        var map = new FileNodeMap();
+        map.Add("\\", MakeDir());
+        map.Add("\\old.bin", MakeFile());
+        var incoming = MakeFile();
+        incoming.FileInfo.AllocationSize = 1024;
+
+        var replaced = map.TryReplaceAll([KeyValuePair.Create("\\new.bin", incoming)], 1024, () => 1024, out var capacity);
+
+        Assert.True(replaced);
+        Assert.Equal(1024UL, capacity);
+        Assert.False(map.TryGet("\\old.bin", out _));
+        Assert.True(map.TryGet("\\new.bin", out _));
+    }
+
+    [Fact]
+    public void TryReplaceAll_ExceedsCapacity_LeavesContentsAlone()
+    {
+        var map = new FileNodeMap();
+        map.Add("\\", MakeDir());
+        map.Add("\\old.bin", MakeFile());
+        var incoming = MakeFile();
+        incoming.FileInfo.AllocationSize = 2048;
+
+        var replaced = map.TryReplaceAll([KeyValuePair.Create("\\new.bin", incoming)], 2048, () => 1024, out var capacity);
+
+        Assert.False(replaced);
+        Assert.Equal(1024UL, capacity);
+        Assert.True(map.TryGet("\\old.bin", out _));
+        Assert.False(map.TryGet("\\new.bin", out _));
+    }
+
+    [Fact]
+    public void TryReplaceAll_CapacityLoweredAfterEarlierCheck_ReadsCeilingUnderLock()
+    {
+        // Regression: a capacity lowered between the caller's own check and the swap must still
+        // refuse the replacement, so the total can never end up above the ceiling.
+        var map = new FileNodeMap();
+        map.Add("\\", MakeDir());
+        ulong ceiling = 4096;
+        var incoming = MakeFile();
+        incoming.FileInfo.AllocationSize = 3072;
+        Assert.True(map.TryRunIfTotalAllocatedWithin(2048, () => ceiling = 2048));
+
+        var replaced = map.TryReplaceAll([KeyValuePair.Create("\\new.bin", incoming)], 3072, () => ceiling, out _);
+
+        Assert.False(replaced);
+        Assert.Equal(0UL, map.GetTotalAllocated());
+    }
+
+    [Fact]
     public void ReplaceAll_WithoutRoot_KeepsCurrentRoot()
     {
         var map = new FileNodeMap();
