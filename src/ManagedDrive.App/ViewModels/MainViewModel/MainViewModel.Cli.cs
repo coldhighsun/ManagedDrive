@@ -466,24 +466,27 @@ public sealed partial class MainViewModel
             return (false, Loc.Get("Val.CliBadCapacity"));
         }
 
-        var newOptions = vm.Disk.Options with
+        // Computed from the options current when the apply runs, so an edit applied meanwhile
+        // keeps the fields this command leaves alone.
+        var result = await ApplyOptionsAsync(
+            vm.Disk,
+            current => current with
+            {
+                CapacityBytes = capacityBytes ?? current.CapacityBytes,
+                VolumeLabel = string.IsNullOrWhiteSpace(volumeLabel) ? current.VolumeLabel : volumeLabel.Trim(),
+                AutoSaveIntervalMinutes = disableAutoSave ? null : autoSaveIntervalMinutes ?? current.AutoSaveIntervalMinutes,
+            });
+        if (!result.Applied)
         {
-            CapacityBytes = capacityBytes ?? vm.Disk.Options.CapacityBytes,
-            VolumeLabel = string.IsNullOrWhiteSpace(volumeLabel) ? vm.Disk.Options.VolumeLabel : volumeLabel.Trim(),
-            AutoSaveIntervalMinutes = disableAutoSave ? null : autoSaveIntervalMinutes ?? vm.Disk.Options.AutoSaveIntervalMinutes,
-        };
-
-        string? error = null;
-        var success = await Task.Run(() => vm.Disk.TryApplyOptions(newOptions, out error));
-        if (!success)
-        {
-            _logger.LogWarning("CLI edit failed for {MountPoint}: {Error}", mountPoint, error);
-            return (false, error ?? string.Empty);
+            _logger.LogWarning("CLI edit failed for {MountPoint}: {Error}", mountPoint, result.Error);
+            return (false, result.Error);
         }
 
         vm.Refresh();
         SaveSettings();
-        StatusText = Loc.Format("Status.MountedWithCapacity", vm.MountPoint, newOptions.VolumeLabel, newOptions.CapacityBytes / (1024 * 1024));
+        // What this command applied, not a later read of the options.
+        var applied = result.Change.After;
+        StatusText = Loc.Format("Status.MountedWithCapacity", vm.MountPoint, applied.VolumeLabel, applied.CapacityBytes / (1024 * 1024));
         _logger.LogInformation("CLI edit completed for {MountPoint}.", mountPoint);
         return (true, StatusText);
     }

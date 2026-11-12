@@ -165,7 +165,12 @@ public sealed partial class MainViewModel
             return;
         }
 
-        var effectiveOptions = WithEnvironmentPresets(vm.Disk.Options);
+        // What the dialog starts from: an edit is merged onto the options current when it is
+        // applied, field by field (folders and redirects entry by entry), so whatever another
+        // change (the CLI, a preset moved to another disk) set while the dialog was open survives
+        // unless the user changed that field or entry too.
+        var opened = vm.Disk.Options;
+        var effectiveOptions = WithEnvironmentPresets(opened);
         var dialog = new CreateDiskDialog(effectiveOptions, GetOtherDiskOptions(excluding: vm), vm.Disk.CurrentPassword, ConfirmTempDirWarning)
         {
             Owner = Application.Current.MainWindow
@@ -176,8 +181,9 @@ public sealed partial class MainViewModel
             return;
         }
 
-        var newOptions = dialog.Result!;
+        var edited = dialog.Result!;
         var old = vm.Disk.Options;
+        var newOptions = DiskOptionsMerge.MergeEdit(opened, edited, old);
         var needsRemount = newOptions.MountPoint != old.MountPoint || newOptions.ReadOnly != old.ReadOnly;
 
         _logger.LogInformation("Edit disk requested: {MountPoint} (remount: {NeedsRemount}).", vm.MountPoint, needsRemount);
@@ -261,6 +267,14 @@ public sealed partial class MainViewModel
                 // disposing it, so a throw here leaves it just as unmounted as a Mount failure.
                 await Task.Run(() => _mountManager.Unmount(oldMountPoint));
 
+                // Merged again now that the disk is gone: the confirmations above took as long as the
+                // user wanted, and unmounting waited for any apply still in flight, so these are the
+                // disk's final options. The environment-backed view is moved onto them the same way,
+                // so the presets released below only differ by what the user changed.
+                old = vm.Disk.Options;
+                newOptions = DiskOptionsMerge.MergeEdit(opened, edited, old);
+                var effectiveBefore = DiskOptionsMerge.MergeEdit(opened, effectiveOptions, old);
+
                 // A password failure must not escape the lambda: the disk is already mounted by
                 // then, and the catch below would drop it from Disks while it stays mounted.
                 string? passwordError = null;
@@ -276,7 +290,7 @@ public sealed partial class MainViewModel
 
                 // The new mount worked; only now are the presets taken from the other disks, before
                 // AddDiskSorted applies this disk's variables.
-                movedPresets = await ReleaseClaimedPresetsAsync(newOptions, effectiveOptions, vm);
+                movedPresets = await ReleaseClaimedPresetsAsync(newOptions, effectiveBefore, vm);
                 vm.Dispose();
 
                 // Removing the old disk makes OnDisksChangedRestoreEnvRedirects put back every variable
@@ -318,34 +332,38 @@ public sealed partial class MainViewModel
             // Kept apart from the apply error: once the options are applied live they must be
             // refreshed and saved even if the password change then fails.
             string? passwordError = null;
-            var error = await Task.Run(() =>
-            {
-                if (!vm.Disk.TryApplyOptions(newOptions, out var applyError))
+
+            // Merged again when the apply runs: it can wait for a long save, and another change may
+            // land meanwhile.
+            var result = await ApplyOptionsAsync(
+                vm.Disk,
+                current => DiskOptionsMerge.MergeEdit(opened, edited, current),
+                _ =>
                 {
-                    return applyError;
-                }
+                    if (dialog.PasswordChanged)
+                    {
+                        passwordError = TrySetPassword(vm.Disk, dialog.Password);
+                    }
+                });
 
-                if (dialog.PasswordChanged)
-                {
-                    passwordError = TrySetPassword(vm.Disk, dialog.Password);
-                }
-
-                return null;
-            });
-
-            if (error != null)
+            if (!result.Applied)
             {
-                _logger.LogWarning("Edit disk failed for {MountPoint}: {Error}", vm.MountPoint, error);
+                _logger.LogWarning("Edit disk failed for {MountPoint}: {Error}", vm.MountPoint, result.Error);
                 AppMessageBox.Show(
-                    error,
+                    result.Error,
                     Loc.Get("Msg.EditDiskConfirmTitle"),
                     MessageBoxButton.OK,
                     MessageBoxImage.Warning);
                 return;
             }
 
-            movedPresets = await ReleaseClaimedPresetsAsync(newOptions, effectiveOptions, vm);
-            await SyncDiskEffectsAsync(vm.Disk, effectiveOptions, newOptions);
+            // The environment-backed view of the options the edit was merged onto: what the
+            // presets released and the effects synced below are compared with, so a change another
+            // command made meanwhile is in both and is not mistaken for the user's.
+            newOptions = result.Change.After;
+            var effectiveBefore = DiskOptionsMerge.MergeEdit(opened, effectiveOptions, result.Change.Before);
+            movedPresets = await ReleaseClaimedPresetsAsync(newOptions, effectiveBefore, vm);
+            await SyncDiskEffectsAsync(vm.Disk, effectiveBefore, newOptions);
             vm.Refresh();
             SaveSettings();
             StatusText = Loc.Format("Status.MountedWithCapacity", vm.MountPoint, newOptions.VolumeLabel, newOptions.CapacityBytes / (1024 * 1024));
@@ -722,7 +740,7 @@ public sealed partial class MainViewModel
         public DiskOptions Options => vm.Disk.Options;
 
         /// <inheritdoc />
-        public Task<string?> ApplyOptionsAsync(DiskOptions options) => MainViewModel.ApplyOptionsAsync(vm.Disk, options);
+        public Task<OptionsApplyResult> ApplyOptionsAsync(Func<DiskOptions, DiskOptions> edit) => MainViewModel.ApplyOptionsAsync(vm.Disk, edit);
 
         /// <inheritdoc />
         public void Refresh() => vm.Refresh();
@@ -819,20 +837,18 @@ public sealed partial class MainViewModel
                 return;
             }
 
-            var newOptions = vm.Disk.Options with { PersistImagePath = dlg.FileName };
-            string? applyError = null;
-
             // Takes the disk's save lock, which a running auto-save can hold for a long time.
-            var applied = await Task.Run(() => vm.Disk.TryApplyOptions(newOptions, out applyError));
+            // Only the image path is changed, on top of whatever the options are when it runs.
+            var result = await ApplyOptionsAsync(vm.Disk, current => current with { PersistImagePath = dlg.FileName });
             if (!IsStillMounted(vm))
             {
                 return;
             }
 
-            if (!applied)
+            if (!result.Applied)
             {
-                _logger.LogWarning("Save image path could not be applied for {MountPoint}: {Error}", vm.MountPoint, applyError);
-                ShowWarning(applyError);
+                _logger.LogWarning("Save image path could not be applied for {MountPoint}: {Error}", vm.MountPoint, result.Error);
+                ShowWarning(result.Error);
                 return;
             }
 
@@ -909,7 +925,8 @@ public sealed partial class MainViewModel
 
         try
         {
-            var effective = WithEnvironmentPresets(vm.Disk.Options);
+            var snapshot = vm.Disk.Options;
+            var effective = WithEnvironmentPresets(snapshot);
             var active = PresetSelection.Detect(BuiltInPresets.All, effective.Folders ?? [], effective.EnvRedirects ?? []);
             if (active.Contains(presetId) == enabled)
             {
@@ -950,20 +967,28 @@ public sealed partial class MainViewModel
                 return;
             }
 
-            var newOptions = WithEffects(vm.Disk.Options, result.Folders, result.EnvRedirects);
             _logger.LogInformation("Preset {PresetId} {Action} on {MountPoint}.", presetId, enabled ? "turned on" : "turned off", vm.MountPoint);
 
-            var error = await ApplyOptionsAsync(vm.Disk, newOptions);
-            if (error is not null)
+            // Merged entry by entry onto the options current when the apply runs, so a folder or
+            // redirect another change added or took away meanwhile (a preset moved to another disk)
+            // keeps that change.
+            var target = WithEffects(snapshot, result.Folders, result.EnvRedirects);
+            var applied = await ApplyOptionsAsync(vm.Disk, current => DiskOptionsMerge.MergeEdit(snapshot, target, current));
+            if (!applied.Applied)
             {
-                _logger.LogWarning("Changing preset {PresetId} on {MountPoint} failed: {Error}", presetId, vm.MountPoint, error);
-                AppMessageBox.Show(error, Loc.Get("Msg.EditDiskConfirmTitle"), MessageBoxButton.OK, MessageBoxImage.Warning);
+                _logger.LogWarning("Changing preset {PresetId} on {MountPoint} failed: {Error}", presetId, vm.MountPoint, applied.Error);
+                AppMessageBox.Show(applied.Error, Loc.Get("Msg.EditDiskConfirmTitle"), MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
 
+            // The environment-backed view of what the change was applied onto, so a change another
+            // command made meanwhile is in both and is not mistaken for this one.
+            var newOptions = applied.Change.After;
+            var beforeApply = DiskOptionsMerge.MergeEdit(snapshot, effective, applied.Change.Before);
+
             // Only now that this disk has the change are the presets taken from the others.
-            var moved = await ReleaseClaimedPresetsAsync(newOptions, effective, vm);
-            await SyncDiskEffectsAsync(vm.Disk, effective, newOptions);
+            var moved = await ReleaseClaimedPresetsAsync(newOptions, beforeApply, vm);
+            await SyncDiskEffectsAsync(vm.Disk, beforeApply, newOptions);
             vm.Refresh();
             SaveSettings();
             StatusText = Loc.Format(

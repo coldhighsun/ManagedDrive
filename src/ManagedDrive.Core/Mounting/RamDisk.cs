@@ -1,5 +1,6 @@
 using Fsp;
 using Fsp.Interop;
+using System.Diagnostics.CodeAnalysis;
 using System.Runtime.InteropServices;
 using ThrottledLogging;
 
@@ -37,6 +38,21 @@ public sealed class RamDisk : IDisposable
     private static long _nextInstanceId;
 
     private readonly Lock _autoSaveLock = new();
+
+    /// <summary>
+    /// Serializes <see cref="TryApplyOptions(Func{DiskOptions, DiskOptions}, out string?)"/> calls
+    /// with each other, and lets <see cref="Dispose(IProgress{double}?)"/> wait for one in flight
+    /// before its final save. Never held by saves, and always taken before
+    /// <see cref="_autoSaveLock"/>, never after it.
+    /// </summary>
+    private readonly Lock _applyOptionsLock = new();
+
+    /// <summary>
+    /// Tracks the capacity's peak while a snapshot or an export is written: the capacity can grow
+    /// during the write without waiting for it, so the header records the peak instead of the
+    /// capacity read when the write started.
+    /// </summary>
+    private readonly CapacityPeakTracker _capacityPeak = new();
 
     /// <summary>
     /// Read side held by exports and node listings while they read <see cref="MemoryFileSystem.NodeMap"/>;
@@ -102,16 +118,25 @@ public sealed class RamDisk : IDisposable
     /// <summary>
     /// Copies a volume label changed from Explorer into <see cref="Options"/>. Runs on a WinFsp
     /// driver thread and must not wait for <see cref="_autoSaveLock"/> (a save can hold it for a
-    /// long time), so it retries a compare-and-swap: a concurrent <see cref="TryApplyOptions"/>
+    /// long time), so it retries a compare-and-swap: a concurrent <see cref="TryApplyOptions(Func{DiskOptions, DiskOptions}, out string?)"/>
     /// that replaced <see cref="Options"/> in between is never overwritten with stale values.
     /// </summary>
     /// <param name="label">The new volume label.</param>
-    private void OnFileSystemVolumeLabelChanged(string label)
+    private void OnFileSystemVolumeLabelChanged(string label) =>
+        UpdateOptions(current => current with { VolumeLabel = label });
+
+    /// <summary>
+    /// Replaces <see cref="Options"/> with <paramref name="update"/> applied to its current value,
+    /// retrying a compare-and-swap so a concurrent update (a label renamed in Explorer, a capacity
+    /// change) is never overwritten with stale values and no lock is needed.
+    /// </summary>
+    /// <param name="update">Computes the new options from the current ones; may run more than once.</param>
+    private void UpdateOptions(Func<DiskOptions, DiskOptions> update)
     {
         while (true)
         {
             var current = Options;
-            if (ReferenceEquals(Interlocked.CompareExchange(ref _options, current with { VolumeLabel = label }, current), current))
+            if (ReferenceEquals(Interlocked.CompareExchange(ref _options, update(current), current), current))
             {
                 return;
             }
@@ -611,6 +636,12 @@ public sealed class RamDisk : IDisposable
             }
             finally
             {
+                // An apply admitted before _disposed was set publishes its capacity before it
+                // waits for _autoSaveLock, so it must finish entirely before the final save (and
+                // the node map teardown after it); otherwise the save could miss half of it.
+                // Applies arriving now see _disposed and change nothing.
+                WaitForPendingApplyOptions();
+
                 // Runs even if unmounting threw, so a failed unmount doesn't also cost the user
                 // their unsaved changes.
                 SaveOnDispose(progress);
@@ -797,14 +828,20 @@ public sealed class RamDisk : IDisposable
         ReadNodeMap(nodeMap =>
         {
             using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _disposeCts.Token);
+
+            // The header gets the capacity's peak during the export, read once every node is
+            // written: the export holds no lock that a capacity change waits for, and a node a
+            // grown capacity let in would exceed the capacity read at the start and fail to load.
+            using var capacityWatch = _capacityPeak.Start(() => Options.CapacityBytes);
             DiskImageSerializer.Save(
                 nodeMap,
-                Options.CapacityBytes,
+                capacityWatch.Peak,
                 _fs.VolumeLabel,
                 imagePath,
                 level,
                 password is not null ? new ImageEncryptionInfo(password, DiskImageSerializer.GenerateCek()) : null,
-                CancellableProgress.Wrap(progress, linked.Token));
+                CancellableProgress.Wrap(progress, linked.Token),
+                finalCapacityBytes: () => capacityWatch.Peak);
         });
     }
 
@@ -1017,17 +1054,49 @@ public sealed class RamDisk : IDisposable
             return;
         }
 
+        // Saved again right away rather than on the next save when the capacity grew during the
+        // pass and its header could not be patched: the image just written may hold a node larger
+        // than the capacity in its header, which fails to load, and with auto-save or the exit
+        // save turned off nothing else would rewrite it. Each pass writes the capacity current
+        // when it starts, so it only repeats if the capacity grows yet again while it runs.
+        // Every pass reports to the same progress, and ImageSaved is raised once, at the end.
+        SaveCapacityFix.SaveUntilHeaderMatches(
+            () => SaveToImagePass(progress, cancellationToken),
+            () => Logger.LogInformation(
+                "Capacity of {ImagePath} changed during the save and could not be patched in place; saving again.",
+                Options.PersistImagePath));
+
+        ImageSaved?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>
+    /// Writes the image once for <see cref="SaveToImageCore"/>. Callers must hold
+    /// <see cref="_autoSaveLock"/>.
+    /// </summary>
+    /// <param name="progress">Optional progress reporter, updated with a fraction in [0, 1].</param>
+    /// <param name="cancellationToken">Cancels the write.</param>
+    /// <returns>
+    /// <c>true</c> when the image is complete; <c>false</c> when the capacity grew during the
+    /// write, the header could not be patched and the image has to be written again.
+    /// </returns>
+    private bool SaveToImagePass(IProgress<double>? progress, CancellationToken cancellationToken)
+    {
         var versionAtSaveStart = _fs.CaptureMutationVersion();
         var forceFullRewrite = RamDiskSaveDecisions.ShouldForceFullRewrite(
             _cekRotatedSinceLastSave, Options.PersistImagePath, _lastSavedImagePath);
+
+        // Read once: TryApplyOptions changes the capacity without waiting for _autoSaveLock, so it
+        // can differ by the time the save ends (see FixCapacityChangedDuringSave).
+        var savedCapacity = Options.CapacityBytes;
 
         try
         {
             DiskImageSerializer.SaveIncremental(
                 _fs.NodeMap,
-                Options.CapacityBytes,
+                savedCapacity,
                 _fs.VolumeLabel,
-                Options.PersistImagePath,
+                // Checked non-null by SaveToImageCore; only changed under _autoSaveLock, which the caller holds.
+                Options.PersistImagePath!,
                 Options.CompressionLevel,
                 _password is not null && _cek is not null ? new ImageEncryptionInfo(_password, _cek) : null,
                 CancellableProgress.Wrap(progress, cancellationToken),
@@ -1049,10 +1118,32 @@ public sealed class RamDisk : IDisposable
         _cekRotatedSinceLastSave = false;
         LastSaveTime = DateTimeOffset.UtcNow;
         _fs.ClearDirtySince(versionAtSaveStart);
+        var headerMatchesCapacity = FixCapacityChangedDuringSave(savedCapacity);
         _lastSavedImagePath = Options.PersistImagePath;
         Logger.LogInformation("Saved disk image to {ImagePath}.", Options.PersistImagePath);
-        ImageSaved?.Invoke(this, EventArgs.Empty);
+        return headerMatchesCapacity;
     }
+
+    /// <summary>
+    /// Brings the header of the image just written up to a capacity that was raised while the save
+    /// ran. Writes allowed by the raised capacity may already be in that image, under a header that
+    /// still names the old one, and the pending apply that patches it waits for
+    /// <see cref="_autoSaveLock"/>, which the snapshot written right after this save keeps holding.
+    /// A lowered capacity leaves a larger header, which loads fine, so that is left to the apply.
+    /// Callers must hold <see cref="_autoSaveLock"/>.
+    /// </summary>
+    /// <param name="savedCapacity">The capacity written into the image header.</param>
+    /// <returns>
+    /// <c>true</c> when the image's header is fine as it is or was patched; <c>false</c> when it
+    /// could not be patched (the file could not be opened or written), in
+    /// which case the disk is marked dirty and the caller must save again.
+    /// </returns>
+    private bool FixCapacityChangedDuringSave(ulong savedCapacity) =>
+        SaveCapacityFix.TryFixHeader(
+            savedCapacity,
+            Options.CapacityBytes,
+            capacity => DiskImageSerializer.TrySetCapacityInPlace(Options.PersistImagePath!, capacity),
+            _fs.MarkMetadataDirty);
 
     /// <summary>
     /// Saves the disk image while holding <see cref="_autoSaveLock"/>, without unmounting.
@@ -1218,7 +1309,10 @@ public sealed class RamDisk : IDisposable
     }
 
     /// <summary>
-    /// Applies <paramref name="newOptions"/> to the live disk without unmounting.
+    /// Applies the options <paramref name="edit"/> computes from the current ones to the live disk
+    /// without unmounting. <paramref name="edit"/> runs once, after any other apply in flight has
+    /// finished, so the fields it does not change keep whatever that apply set; a volume label
+    /// renamed in Explorer meanwhile is kept too unless the edit changed the label itself.
     /// Only <see cref="DiskOptions.VolumeLabel"/>, <see cref="DiskOptions.CapacityBytes"/>,
     /// <see cref="DiskOptions.AutoMount"/>, <see cref="DiskOptions.PersistImagePath"/>,
     /// <see cref="DiskOptions.AutoSaveIntervalMinutes"/>, <see cref="DiskOptions.CompressionLevel"/>,
@@ -1227,24 +1321,61 @@ public sealed class RamDisk : IDisposable
     /// <see cref="DiskOptions.MountPoint"/> and <see cref="DiskOptions.ReadOnly"/> require a
     /// full unmount/remount.
     /// </summary>
-    /// <param name="newOptions">The updated options to apply.</param>
+    /// <param name="edit">
+    /// Computes the options to apply from the current ones. Returning the instance it was given
+    /// (or equal options) changes nothing and does not wait for a save in progress. Runs at most
+    /// once, and always when the method returns <c>true</c>.
+    /// </param>
+    /// <param name="change">
+    /// Set when the method returns <c>true</c>: the options <paramref name="edit"/> ran on and the
+    /// ones it computed, so callers need not capture them from inside the edit.
+    /// </param>
     /// <param name="error">
     /// Set to a human-readable message when the method returns <c>false</c>.
     /// </param>
     /// <returns>
-    /// <c>true</c> on success; <c>false</c> when the capacity reduction is rejected because
-    /// current usage exceeds <paramref name="newOptions"/>.<see cref="DiskOptions.CapacityBytes"/>.
+    /// <c>true</c> on success; <c>false</c>, with nothing changed, when the disk is already being
+    /// disposed, the options are invalid, or the capacity reduction is rejected because current
+    /// usage exceeds the requested capacity.
     /// </returns>
-    public bool TryApplyOptions(DiskOptions newOptions, out string? error)
+    /// <remarks>
+    /// An exception thrown before the new options are published propagates; the capacity and
+    /// volume label already changed in memory are taken back first, so the disk keeps its
+    /// previous options.
+    /// </remarks>
+    public bool TryApplyOptions(
+        Func<DiskOptions, DiskOptions> edit,
+        [NotNullWhen(true)] out OptionsChange? change,
+        [NotNullWhen(false)] out string? error)
     {
-        lock (_autoSaveLock)
+        ArgumentNullException.ThrowIfNull(edit);
+        change = null;
+
+        // Serializes concurrent applies (saves never take it), so the capacity published in phase 1
+        // and the full options published in phase 2 can't interleave between two callers. Dispose
+        // waits for it before its final save, so an apply admitted below always completes on a
+        // disk whose node map is still alive, and the final save sees all of it.
+        lock (_applyOptionsLock)
         {
             // Without this, a call that lost the race with Dispose would re-arm the auto-save
-            // timer on a disk that is already gone.
+            // timer on a disk that is already gone. Past this point disposal no longer stops the
+            // apply: Dispose waits for it, and failing halfway would leave phase 1 applied.
             if (IsDisposed)
             {
                 error = DisposedError;
                 return false;
+            }
+
+            var oldOptions = Options;
+            var newOptions = edit(oldOptions);
+
+            // Nothing to apply (an edit that found nothing left to change): returned before phase
+            // 2, which would otherwise wait for a save that may take a long time, for no change.
+            if (newOptions == oldOptions)
+            {
+                change = new(oldOptions, newOptions);
+                error = null;
+                return true;
             }
 
             // An archive-sourced disk is read-only and never saved; giving it an image path too
@@ -1255,47 +1386,164 @@ public sealed class RamDisk : IDisposable
                 return false;
             }
 
-            var persistedHeaderChanged = false;
-            var capacityChanged = false;
+            var capacityChanged = newOptions.CapacityBytes != oldOptions.CapacityBytes;
 
-            if (newOptions.CapacityBytes != Options.CapacityBytes)
+            // Phase 1: the in-memory capacity change, deliberately outside _autoSaveLock. A save
+            // can hold that lock for a very long time on a big disk, and the new capacity must
+            // not wait for it: the UI reads it from Options, which is published here.
+            if (capacityChanged && !TryApplyCapacity(newOptions.CapacityBytes, out error))
             {
-                if (!_fs.TryUpdateCapacity(newOptions.CapacityBytes))
+                return false;
+            }
+
+            // Phase 2: everything that touches the image file or the timer, under the save lock.
+            // Not stopped by a Dispose that started meanwhile: its final save waits for this
+            // apply, and a timer re-armed here is disposed again by its teardown.
+            lock (_autoSaveLock)
+            {
+                var labelUpdated = false;
+                var published = false;
+                bool needsHeaderSave;
+                try
                 {
-                    error = $"Cannot reduce capacity: current usage ({UsedBytes:N0} bytes) exceeds the requested capacity ({newOptions.CapacityBytes:N0} bytes).";
-                    return false;
+                    var persistedHeaderChanged = false;
+
+                    if (newOptions.VolumeLabel != oldOptions.VolumeLabel)
+                    {
+                        _fs.UpdateVolumeLabel(newOptions.VolumeLabel);
+                        labelUpdated = true;
+                        persistedHeaderChanged = true;
+                    }
+
+                    if (newOptions.CompressionLevel != oldOptions.CompressionLevel)
+                    {
+                        persistedHeaderChanged = true;
+                    }
+
+                    // A capacity change alone is patched into the existing image's header right
+                    // away, so the exit save does not have to copy the whole image for it. Anything
+                    // else that lives in the header, or a patch that is not possible (the
+                    // serializer turns I/O failures into a refusal), falls back to the dirty mark.
+                    needsHeaderSave = persistedHeaderChanged || (capacityChanged && !TryPatchImageCapacity(oldOptions, newOptions));
+
+                    if (needsHeaderSave)
+                    {
+                        // Capacity and label live in the image header; without a dirty mark the
+                        // next save is skipped and a remount reads the stale header value.
+                        _fs.MarkMetadataDirty();
+                    }
+
+                    // Merged into whatever Options is now instead of replacing it with a snapshot
+                    // taken before the wait for _autoSaveLock: a label renamed in Explorer
+                    // meanwhile survives unless this edit changed the label itself.
+                    UpdateOptions(current => newOptions with
+                    {
+                        VolumeLabel = RamDiskSaveDecisions.MergeVolumeLabel(oldOptions.VolumeLabel, newOptions.VolumeLabel, current.VolumeLabel),
+                    });
+                    published = true;
+                }
+                catch (Exception) when (!published)
+                {
+                    // Not handled here, only undone: the options were not published, so the
+                    // capacity and label changed above are taken back before the exception goes on.
+                    UndoUnpublishedApply(oldOptions, newOptions, capacityChanged, labelUpdated);
+                    throw;
                 }
 
-                capacityChanged = true;
-            }
+                // Re-armed only when the schedule or the snapshot limits changed or a header save
+                // is pending: a restart fires an immediate save, which would otherwise hold the
+                // lock again right after every unrelated edit.
+                if (RamDiskSaveDecisions.AutoSaveTimerNeedsRestart(
+                    RamDiskSaveDecisions.AutoSaveInterval(oldOptions),
+                    oldOptions.PersistImagePath,
+                    RamDiskSaveDecisions.AutoSaveInterval(newOptions),
+                    newOptions.PersistImagePath,
+                    needsHeaderSave,
+                    RamDiskSaveDecisions.SnapshotLimitsChanged(oldOptions, newOptions)))
+                {
+                    ConfigureAutoSaveTimer();
+                }
 
-            if (newOptions.VolumeLabel != Options.VolumeLabel)
+                change = new(oldOptions, newOptions);
+                error = null;
+                return true;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Takes back what phase 2 of <see cref="TryApplyOptions"/> changed before it failed: the
+    /// file system's volume label and the in-memory capacity from phase 1. The disk is marked dirty
+    /// as well, because the image header may already have been patched to the abandoned capacity.
+    /// Callers must hold <see cref="_applyOptionsLock"/> and <see cref="_autoSaveLock"/>.
+    /// </summary>
+    /// <param name="oldOptions">The options before the apply.</param>
+    /// <param name="newOptions">The options the apply was making.</param>
+    /// <param name="capacityChanged">Whether phase 1 changed the capacity.</param>
+    /// <param name="labelUpdated">Whether the file system's volume label was already changed.</param>
+    private void UndoUnpublishedApply(DiskOptions oldOptions, DiskOptions newOptions, bool capacityChanged, bool labelUpdated) =>
+        UnpublishedApplyRollback.Undo(
+            labelUpdated,
+            capacityChanged,
+            () => _fs.UpdateVolumeLabel(oldOptions.VolumeLabel),
+            () => TryApplyCapacity(oldOptions.CapacityBytes, out var revertError) ? null : revertError,
+            // Only a shrink back can be refused (usage grew past the old capacity meanwhile); the
+            // larger capacity then stays, published, which still agrees with the file system.
+            revertError => Logger.LogWarning(
+                "Could not take back the capacity of {MountPoint} from {NewCapacity} to {OldCapacity} bytes: {Error}",
+                oldOptions.MountPoint, newOptions.CapacityBytes, oldOptions.CapacityBytes, revertError),
+            _fs.MarkMetadataDirty);
+
+    /// <summary>
+    /// Changes the in-memory capacity and publishes it in <see cref="Options"/> without waiting for
+    /// <see cref="_autoSaveLock"/>, in the order <see cref="CapacityChangeSequence"/> sets. Callers
+    /// must hold <see cref="_applyOptionsLock"/>, which keeps
+    /// <see cref="Dispose(IProgress{double}?)"/> from tearing down the node map underneath it.
+    /// </summary>
+    /// <param name="capacityBytes">The new capacity in bytes.</param>
+    /// <param name="error">Set to a human-readable message when the method returns <c>false</c>.</param>
+    /// <returns>
+    /// <c>true</c> when the capacity is applied; <c>false</c>, with nothing changed, when current
+    /// usage exceeds it.
+    /// </returns>
+    private bool TryApplyCapacity(ulong capacityBytes, [NotNullWhen(false)] out string? error)
+    {
+        var oldCapacity = Options.CapacityBytes;
+        if (CapacityChangeSequence.TryApply(
+            oldCapacity,
+            capacityBytes,
+            publish: capacity =>
             {
-                _fs.UpdateVolumeLabel(newOptions.VolumeLabel);
-                persistedHeaderChanged = true;
-            }
+                UpdateOptions(current => current with { CapacityBytes = capacity });
 
-            if (newOptions.CompressionLevel != Options.CompressionLevel)
-            {
-                persistedHeaderChanged = true;
-            }
-
-            // A capacity change alone is patched into the existing image's header right away, so
-            // the exit save does not have to copy the whole image for it. Anything else that lives
-            // in the header, or a patch that is not possible, falls back to the dirty mark.
-            var needsHeaderSave = persistedHeaderChanged || (capacityChanged && !TryPatchImageCapacity(newOptions));
-
-            if (needsHeaderSave)
-            {
-                // Capacity and label live in the image header; without a dirty mark the next save
-                // is skipped and a remount reads the stale header value.
-                _fs.MarkMetadataDirty();
-            }
-
-            Options = newOptions;
-            ConfigureAutoSaveTimer();
+                // After publishing and, for growth, before the ceiling is raised (see
+                // CapacityChangeSequence), so a snapshot being written sees every capacity that
+                // could have let data into it.
+                _capacityPeak.Raise(capacity);
+            },
+            setCeiling: _fs.TryUpdateCapacity))
+        {
             error = null;
             return true;
+        }
+
+        error = capacityBytes < oldCapacity
+            ? $"Cannot reduce capacity: current usage ({UsedBytes:N0} bytes) exceeds the requested capacity ({capacityBytes:N0} bytes)."
+            : $"Cannot change capacity to {capacityBytes:N0} bytes.";
+        return false;
+    }
+
+    /// <summary>
+    /// Blocks until an options apply in flight has finished. Called by
+    /// <see cref="Dispose(IProgress{double}?)"/> after it set <see cref="_disposed"/>, so no new
+    /// apply can start afterwards. Must not be called while holding <see cref="_autoSaveLock"/>,
+    /// which such an apply may be waiting for.
+    /// </summary>
+    private void WaitForPendingApplyOptions()
+    {
+        lock (_applyOptionsLock)
+        {
+            // Nothing to do: acquiring the lock is the wait.
         }
     }
 
@@ -1305,15 +1553,16 @@ public sealed class RamDisk : IDisposable
     /// <see cref="RamDiskSaveDecisions.CanPatchImageCapacity"/> and the serializer's own checks
     /// allow. Callers must hold <see cref="_autoSaveLock"/> so no save is writing the file.
     /// </summary>
+    /// <param name="oldOptions">The options in effect before the change being applied.</param>
     /// <param name="newOptions">The options being applied.</param>
     /// <returns>
     /// <see langword="true"/> when the image now records the new capacity; <see langword="false"/>
     /// when the caller must mark the disk dirty so the next save writes it.
     /// </returns>
-    private bool TryPatchImageCapacity(DiskOptions newOptions)
+    private bool TryPatchImageCapacity(DiskOptions oldOptions, DiskOptions newOptions)
     {
         if (!RamDiskSaveDecisions.CanPatchImageCapacity(
-            Options.PersistImagePath,
+            oldOptions.PersistImagePath,
             newOptions.PersistImagePath,
             _lastSavedImagePath,
             newOptions.SaveImageOnExit,
@@ -1323,7 +1572,7 @@ public sealed class RamDisk : IDisposable
         }
 
         return DiskImageSerializer.TrySetCapacityInPlace(
-            Options.PersistImagePath!,
+            oldOptions.PersistImagePath!,
             newOptions.CapacityBytes,
             // A decrease is only safe when the image is exactly the disk: not dirty, and holding as
             // many nodes as memory does (it holds more if the load dropped damaged nodes).
@@ -1707,15 +1956,21 @@ public sealed class RamDisk : IDisposable
 
         try
         {
+            // The header gets the capacity's peak during the write, read once every node is
+            // written: TryApplyOptions can grow the capacity meanwhile without waiting for
+            // _autoSaveLock, and a node the larger capacity let in would exceed the capacity read
+            // at the start and fail to load.
+            using var capacityWatch = _capacityPeak.Start(() => Options.CapacityBytes);
             SnapshotManager.WriteSnapshot(
                 _fs.NodeMap,
-                Options.CapacityBytes,
+                capacityWatch.Peak,
                 _fs.VolumeLabel,
                 path,
                 DateTimeOffset.UtcNow,
                 Options.CompressionLevel,
                 _cek,
-                CancellableProgress.Wrap(progress, cancellationToken));
+                CancellableProgress.Wrap(progress, cancellationToken),
+                finalCapacityBytes: () => capacityWatch.Peak);
 
             SnapshotManager.Prune(path, Options.MaxSnapshotCount, Options.MaxSnapshotSizeBytes);
         }

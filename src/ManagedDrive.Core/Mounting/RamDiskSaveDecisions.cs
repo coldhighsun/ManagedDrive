@@ -16,6 +16,62 @@ internal static class RamDiskSaveDecisions
         isDirty || configuredPersistImagePath != lastSavedImagePath;
 
     /// <summary>
+    /// Whether the periodic auto-save timer must be re-armed after an options change. Re-arming
+    /// fires an immediate save, so it is skipped when neither the interval, the image path nor the
+    /// snapshot limits changed and no header change is waiting to be saved (a changed label,
+    /// compression level or unpatched capacity is written by that immediate save). Changed
+    /// snapshot limits restart it so the first snapshot, or the pruning to the new limits, happens
+    /// right away instead of an interval later.
+    /// </summary>
+    /// <param name="oldInterval">The auto-save interval before the change, or <c>null</c> for none.</param>
+    /// <param name="oldPersistImagePath">The image path before the change.</param>
+    /// <param name="newInterval">The auto-save interval after the change, or <c>null</c> for none.</param>
+    /// <param name="newPersistImagePath">The image path after the change.</param>
+    /// <param name="headerSaveNeeded">Whether the change left the disk marked dirty for the header.</param>
+    /// <param name="snapshotLimitsChanged">Whether the snapshot count or size limit changed.</param>
+    /// <returns><c>true</c> when the timer has to be reconfigured.</returns>
+    internal static bool AutoSaveTimerNeedsRestart(
+        TimeSpan? oldInterval,
+        string? oldPersistImagePath,
+        TimeSpan? newInterval,
+        string? newPersistImagePath,
+        bool headerSaveNeeded,
+        bool snapshotLimitsChanged) =>
+        headerSaveNeeded || snapshotLimitsChanged ||
+        oldInterval != newInterval || oldPersistImagePath != newPersistImagePath;
+
+    /// <summary>
+    /// The auto-save interval <paramref name="options"/> configure, as a <see cref="TimeSpan"/>
+    /// (<see cref="DiskOptions.AutoSaveIntervalMinutes"/> stores whole minutes).
+    /// </summary>
+    /// <param name="options">The disk's options.</param>
+    /// <returns>The interval, or <c>null</c> when auto-save is off.</returns>
+    internal static TimeSpan? AutoSaveInterval(DiskOptions options) =>
+        options.AutoSaveIntervalMinutes is { } minutes ? TimeSpan.FromMinutes(minutes) : null;
+
+    /// <summary>
+    /// Whether an options change changed the snapshot limits (count or total size).
+    /// </summary>
+    /// <param name="oldOptions">The options before the change.</param>
+    /// <param name="newOptions">The options after the change.</param>
+    /// <returns><c>true</c> when either limit differs.</returns>
+    internal static bool SnapshotLimitsChanged(DiskOptions oldOptions, DiskOptions newOptions) =>
+        oldOptions.MaxSnapshotCount != newOptions.MaxSnapshotCount ||
+        oldOptions.MaxSnapshotSizeBytes != newOptions.MaxSnapshotSizeBytes;
+
+    /// <summary>
+    /// The volume label an options edit leaves in place: the edit's own label when it changed the
+    /// label, otherwise the current one, so a rename made in Explorer while the edit waited for the
+    /// save lock is not overwritten with the edit's stale copy.
+    /// </summary>
+    /// <param name="labelBeforeEdit">The label in effect when the edit started.</param>
+    /// <param name="editedLabel">The label the edit asks for.</param>
+    /// <param name="currentLabel">The label in effect now.</param>
+    /// <returns>The label to store.</returns>
+    internal static string MergeVolumeLabel(string labelBeforeEdit, string editedLabel, string currentLabel) =>
+        editedLabel != labelBeforeEdit ? editedLabel : currentLabel;
+
+    /// <summary>
     /// Whether an exit/shutdown save should run: gated by <see cref="DiskOptions.SaveImageOnExit"/>
     /// on top of the shared <see cref="NeedsSave"/> condition.
     /// </summary>

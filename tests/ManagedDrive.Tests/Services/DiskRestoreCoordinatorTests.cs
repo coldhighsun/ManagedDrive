@@ -221,6 +221,83 @@ public sealed class DiskRestoreCoordinatorTests
     }
 
     /// <summary>
+    /// Fields changed on the disk while the trim waited to apply (here a capacity set from the
+    /// CLI) are kept: only the folders and redirects are replaced.
+    /// </summary>
+    [Fact]
+    public async Task TrimAsync_CapacityChangedBeforeApply_KeepsNewCapacity()
+    {
+        var options = NodeDisk();
+        PointIntoDisk(options, "NUGET_PACKAGES");
+        var disk = new FakeDisk(options)
+        {
+            ChangedMeanwhile = current => current with { CapacityBytes = 8 * 1024 * 1024, VolumeLabel = "Edited" },
+        };
+        var coordinator = CreateCoordinator();
+        var planned = coordinator.Plan([disk]);
+        Restore("NUGET_PACKAGES");
+
+        await coordinator.TrimAsync(planned);
+
+        var applied = Assert.Single(disk.Applied);
+        Assert.Equal(8UL * 1024 * 1024, applied.CapacityBytes);
+        Assert.Equal("Edited", applied.VolumeLabel);
+        Assert.Equal(BuiltInPresets.Node.EnvRedirects, applied.EnvRedirects);
+    }
+
+    /// <summary>
+    /// Folders and redirects another change added between the trim's read and its apply are kept:
+    /// the release is computed from the options current when the apply runs.
+    /// </summary>
+    [Fact]
+    public async Task TrimAsync_PresetAddedBeforeApply_KeepsAddedPreset()
+    {
+        var options = NodeDisk();
+        PointIntoDisk(options, "NUGET_PACKAGES");
+        var disk = new FakeDisk(options)
+        {
+            ChangedMeanwhile = current => current with
+            {
+                Folders = [.. current.Folders ?? [], .. BuiltInPresets.Python.Folders],
+                EnvRedirects = [.. current.EnvRedirects ?? [], .. BuiltInPresets.Python.EnvRedirects],
+            },
+        };
+        var coordinator = CreateCoordinator();
+        var planned = coordinator.Plan([disk]);
+        Restore("NUGET_PACKAGES");
+
+        await coordinator.TrimAsync(planned);
+
+        var applied = Assert.Single(disk.Applied);
+        Assert.Equal([.. BuiltInPresets.Node.EnvRedirects, .. BuiltInPresets.Python.EnvRedirects], applied.EnvRedirects);
+        Assert.All(BuiltInPresets.Python.Folders, folder => Assert.Contains(folder, applied.Folders ?? []));
+    }
+
+    /// <summary>
+    /// When another change already dropped what was settled before the apply runs, the disk is
+    /// not reported as changed.
+    /// </summary>
+    [Fact]
+    public async Task TrimAsync_SettledRemovedBeforeApply_ReportsNothing()
+    {
+        var options = NodeDisk();
+        PointIntoDisk(options, "NUGET_PACKAGES");
+        var disk = new FakeDisk(options)
+        {
+            ChangedMeanwhile = current => current with { Folders = null, EnvRedirects = null },
+        };
+        var coordinator = CreateCoordinator();
+        var planned = coordinator.Plan([disk]);
+        Restore("NUGET_PACKAGES");
+
+        var outcome = await coordinator.TrimAsync(planned);
+
+        Assert.Empty(outcome.ReleasedFrom);
+        Assert.Empty(outcome.NotUpdated);
+        Assert.Equal(0, disk.Refreshes);
+    }
+
+    /// <summary>
     /// A disk whose options no longer list what was planned is left alone.
     /// </summary>
     [Fact]
@@ -331,17 +408,31 @@ public sealed class DiskRestoreCoordinatorTests
     /// <param name="options">The options the disk starts with.</param>
     private sealed class FakeDisk(DiskOptions options) : IMountedDisk
     {
-        /// <summary>Gets the options passed to <see cref="ApplyOptionsAsync"/>.</summary>
+        /// <summary>
+        /// Gets the options <see cref="ApplyOptionsAsync"/> computed and applied.
+        /// </summary>
         public List<DiskOptions> Applied { get; } = [];
 
-        /// <summary>Gets the number of refreshes.</summary>
+        /// <summary>
+        /// Gets the number of refreshes.
+        /// </summary>
         public int Refreshes { get; private set; }
 
-        /// <summary>Gets or sets the reason to refuse options, or <c>null</c> to accept them.</summary>
+        /// <summary>
+        /// Gets or sets the reason to refuse options, or <c>null</c> to accept them.
+        /// </summary>
         public string? Error { get; init; }
 
-        /// <summary>Gets a value indicating whether applying throws.</summary>
+        /// <summary>
+        /// Gets a value indicating whether applying throws.
+        /// </summary>
         public bool Throw { get; init; }
+
+        /// <summary>
+        /// Gets a change made to the disk's options after the trim read them but before its edit
+        /// runs, as a concurrent apply would; <c>null</c> for none.
+        /// </summary>
+        public Func<DiskOptions, DiskOptions>? ChangedMeanwhile { get; init; }
 
         /// <inheritdoc />
         public string MountPoint => Options.MountPoint;
@@ -356,19 +447,26 @@ public sealed class DiskRestoreCoordinatorTests
         public DiskOptions Options { get; set; } = options;
 
         /// <inheritdoc />
-        public Task<string?> ApplyOptionsAsync(DiskOptions newOptions)
+        public Task<OptionsApplyResult> ApplyOptionsAsync(Func<DiskOptions, DiskOptions> edit)
         {
             if (Throw)
             {
                 throw new InvalidOperationException("disk is gone");
             }
 
-            if (Error is null)
+            if (ChangedMeanwhile is not null)
             {
-                Applied.Add(newOptions);
+                Options = ChangedMeanwhile(Options);
             }
 
-            return Task.FromResult(Error);
+            if (Error is not null)
+            {
+                return Task.FromResult(OptionsApplyResult.Refused(Error));
+            }
+
+            var after = edit(Options);
+            Applied.Add(after);
+            return Task.FromResult(OptionsApplyResult.Succeeded(new(Options, after)));
         }
 
         /// <inheritdoc />

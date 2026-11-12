@@ -53,6 +53,74 @@ public sealed class RamDiskSaveDecisionsTests : IDisposable
         Assert.True(RamDiskSaveDecisions.NeedsSave(isDirty: false, configuredPersistImagePath: "b.mdr", lastSavedImagePath: "a.mdr"));
     }
 
+    [Theory]
+    [InlineData(5u, "a.mdr", 5u, "a.mdr", false, false)]
+    [InlineData(null, null, null, null, false, false)]
+    [InlineData(5u, "a.mdr", 10u, "a.mdr", false, true)]
+    [InlineData(5u, "a.mdr", null, "a.mdr", false, true)]
+    [InlineData(null, "a.mdr", 5u, "a.mdr", false, true)]
+    [InlineData(5u, "a.mdr", 5u, "b.mdr", false, true)]
+    [InlineData(5u, "a.mdr", 5u, null, false, true)]
+    [InlineData(5u, "a.mdr", 5u, "a.mdr", true, true)]
+    public void AutoSaveTimerNeedsRestart_ScheduleChangeOrPendingHeaderSave_ReturnsExpected(
+        uint? oldInterval, string? oldPath, uint? newInterval, string? newPath, bool headerSaveNeeded, bool expected)
+    {
+        Assert.Equal(
+            expected,
+            RamDiskSaveDecisions.AutoSaveTimerNeedsRestart(
+                Minutes(oldInterval), oldPath, Minutes(newInterval), newPath, headerSaveNeeded, snapshotLimitsChanged: false));
+    }
+
+    [Fact]
+    public void AutoSaveTimerNeedsRestart_OnlySnapshotLimitsChanged_ReturnsTrue()
+    {
+        Assert.True(RamDiskSaveDecisions.AutoSaveTimerNeedsRestart(
+            TimeSpan.FromMinutes(5), "a.mdr", TimeSpan.FromMinutes(5), "a.mdr", headerSaveNeeded: false, snapshotLimitsChanged: true));
+    }
+
+    /// <summary>
+    /// The interval is the configured whole minutes as a <see cref="TimeSpan"/>, and <c>null</c>
+    /// when auto-save is off.
+    /// </summary>
+    /// <param name="minutes">The configured minutes, or <c>null</c> for none.</param>
+    [Theory]
+    [InlineData(null)]
+    [InlineData(5u)]
+    [InlineData(71_000u)]
+    public void AutoSaveInterval_ConfiguredMinutes_ReturnsMatchingTimeSpan(uint? minutes)
+    {
+        var options = new DiskOptions { MountPoint = "R:", CapacityBytes = 1024, AutoSaveIntervalMinutes = minutes };
+
+        Assert.Equal(Minutes(minutes), RamDiskSaveDecisions.AutoSaveInterval(options));
+    }
+
+    [Theory]
+    [InlineData(null, null, null, null, false)]
+    [InlineData(5u, null, 5u, null, false)]
+    [InlineData(null, null, 5u, null, true)]
+    [InlineData(5u, null, 3u, null, true)]
+    [InlineData(null, 1024ul, null, null, true)]
+    [InlineData(null, 1024ul, null, 2048ul, true)]
+    public void SnapshotLimitsChanged_CountOrSizeDiffers_ReturnsExpected(
+        uint? oldCount, ulong? oldSize, uint? newCount, ulong? newSize, bool expected)
+    {
+        var oldOptions = new DiskOptions { MountPoint = "R:", CapacityBytes = 1024, MaxSnapshotCount = oldCount, MaxSnapshotSizeBytes = oldSize };
+        var newOptions = oldOptions with { MaxSnapshotCount = newCount, MaxSnapshotSizeBytes = newSize };
+
+        Assert.Equal(expected, RamDiskSaveDecisions.SnapshotLimitsChanged(oldOptions, newOptions));
+    }
+
+    [Theory]
+    [InlineData("Data", "Data", "Data", "Data")]
+    [InlineData("Data", "Data", "Work", "Work")]
+    [InlineData("Data", "Edited", "Data", "Edited")]
+    [InlineData("Data", "Edited", "Work", "Edited")]
+    public void MergeVolumeLabel_EditChangedLabelOrNot_ReturnsExpected(
+        string labelBeforeEdit, string editedLabel, string currentLabel, string expected)
+    {
+        Assert.Equal(expected, RamDiskSaveDecisions.MergeVolumeLabel(labelBeforeEdit, editedLabel, currentLabel));
+    }
+
     [Fact]
     public void ShouldForceFullRewrite_SamePathNoRotation_ReturnsFalse()
     {
@@ -212,4 +280,11 @@ public sealed class RamDiskSaveDecisionsTests : IDisposable
         nodeMap.Add(path, MakeFile(content));
         return nodeMap;
     }
+
+    /// <summary>
+    /// Converts whole minutes from test data, which cannot hold a <see cref="TimeSpan"/>.
+    /// </summary>
+    /// <param name="minutes">The minutes, or <c>null</c>.</param>
+    /// <returns>The interval, or <c>null</c>.</returns>
+    private static TimeSpan? Minutes(uint? minutes) => minutes is { } m ? TimeSpan.FromMinutes(m) : null;
 }
