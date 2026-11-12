@@ -255,6 +255,19 @@ internal static class SnapshotStore
     /// writing any not-yet-seen file content to <paramref name="blobDirectory"/> as a
     /// content-addressed blob.
     /// </summary>
+    /// <param name="nodeMap">The nodes to write.</param>
+    /// <param name="capacityBytes">The disk's capacity, written into the header.</param>
+    /// <param name="volumeLabel">The disk's volume label.</param>
+    /// <param name="indexPath">The index file to write.</param>
+    /// <param name="blobDirectory">The shared blob directory.</param>
+    /// <param name="level">The compression level.</param>
+    /// <param name="cek">The content encryption key, or <c>null</c> for an unencrypted snapshot.</param>
+    /// <param name="progress">Optional progress reporter, updated with a fraction in [0, 1].</param>
+    /// <param name="finalCapacityBytes">
+    /// When set, read once every node is written; a larger value is written over the header's
+    /// capacity before the index file is moved into place, so the header is never smaller than a
+    /// node a capacity grown during the write let in.
+    /// </param>
     internal static void Write(
         FileNodeMap nodeMap,
         ulong capacityBytes,
@@ -263,7 +276,8 @@ internal static class SnapshotStore
         string blobDirectory,
         int level,
         byte[]? cek,
-        IProgress<double>? progress = null)
+        IProgress<double>? progress = null,
+        Func<ulong>? finalCapacityBytes = null)
     {
         ZstdLevels.ThrowIfInvalid(level);
         Directory.CreateDirectory(blobDirectory);
@@ -280,6 +294,8 @@ internal static class SnapshotStore
                     writer.Write(Version);
                     writer.Write((byte)0); // reserved
 
+                    writer.Flush();
+                    var capacityOffset = stream.Position;
                     writer.Write(capacityBytes);
                     writer.Write(volumeLabel);
 
@@ -299,6 +315,17 @@ internal static class SnapshotStore
                             written++;
                             progress?.Report((double)written / nodes.Count);
                         }
+                    }
+
+                    if (finalCapacityBytes?.Invoke() is { } finalCapacity && finalCapacity > capacityBytes)
+                    {
+                        // The fixed-size capacity field is overwritten in the temp file, which is
+                        // only moved into place below, so no reader sees the smaller value.
+                        writer.Flush();
+                        stream.Position = capacityOffset;
+                        writer.Write(finalCapacity);
+                        writer.Flush();
+                        stream.Seek(0, SeekOrigin.End);
                     }
 
                     writer.Flush();

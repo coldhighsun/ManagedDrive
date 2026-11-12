@@ -154,8 +154,8 @@ public sealed class DiskImageCapacityPatchTests
 
     [Theory]
     [InlineData(4, 6)]
-    [InlineData(10, 0)]
-    public void TrySetCapacityInPlace_ImageWithOtherVersionOrLayout_ReturnsFalseAndLeavesFileUntouched(
+    [InlineData(4, 4)]
+    public void TrySetCapacityInPlace_ImageWithOtherVersion_ReturnsFalseAndLeavesFileUntouched(
         int offset, byte value)
     {
         var path = NewImagePath();
@@ -187,19 +187,67 @@ public sealed class DiskImageCapacityPatchTests
         Assert.False(raised);
     }
 
-    [Fact]
-    public void TrySetCapacityInPlace_NonSegmentedImage_ReturnsFalseAndLeavesFileUntouched()
+    /// <summary>
+    /// A continuous image (version 5, or version 7 continuous for links, either one encrypted or
+    /// not) is raised in place: only the capacity field changes and the image still loads.
+    /// </summary>
+    /// <param name="encrypted">Whether the image is encrypted.</param>
+    /// <param name="withLink">Whether the disk holds a link, which writes version 7 continuous.</param>
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    public void TrySetCapacityInPlace_ContinuousImageRaised_ChangesOnlyTheCapacityField(bool encrypted, bool withLink)
     {
         var path = NewImagePath();
         try
         {
-            var map = NewMap();
-            DiskImageSerializer.Save(map, 4UL * 1024 * 1024, "Label", path, 1);
+            var password = encrypted ? "s3cret" : null;
+            SaveContinuous(path, 4UL * 1024 * 1024, password, withLink);
             var before = File.ReadAllBytes(path);
+            var capacityOffset = withLink ? CapacityOffset : CapacityOffset - 1;
 
             var raised = DiskImageSerializer.TrySetCapacityInPlace(path, 8UL * 1024 * 1024);
 
-            Assert.False(raised);
+            var after = File.ReadAllBytes(path);
+            Assert.True(raised);
+            Assert.Equal(before.Length, after.Length);
+            Assert.Equal(before[..(int)capacityOffset], after[..(int)capacityOffset]);
+            Assert.Equal(
+                before[(int)(capacityOffset + CapacityLength)..],
+                after[(int)(capacityOffset + CapacityLength)..]);
+
+            var loaded = DiskImageSerializer.Load(path, out var capacity, out _, password, out _);
+            Assert.Equal(8UL * 1024 * 1024, capacity);
+            Assert.True(loaded.TryGet("\\File.txt", out _));
+            Assert.Equal(withLink, loaded.TryGet("\\Link", out _));
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    /// <summary>
+    /// A continuous image is never lowered in place, even when the caller vouches for the node
+    /// count: without a segment index that cannot be checked.
+    /// </summary>
+    /// <param name="withLink">Whether the disk holds a link, which writes version 7 continuous.</param>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void TrySetCapacityInPlace_ContinuousImageLowered_ReturnsFalseAndLeavesFileUntouched(bool withLink)
+    {
+        var path = NewImagePath();
+        try
+        {
+            SaveContinuous(path, 4UL * 1024 * 1024, password: null, withLink);
+            var before = File.ReadAllBytes(path);
+
+            var lowered = DiskImageSerializer.TrySetCapacityInPlace(path, 2UL * 1024 * 1024, nodeCountForDecrease: withLink ? 3 : 2);
+
+            Assert.False(lowered);
             Assert.Equal(before, File.ReadAllBytes(path));
         }
         finally
@@ -226,14 +274,79 @@ public sealed class DiskImageCapacityPatchTests
         }
     }
 
+    /// <summary>
+    /// A full save records the larger of the capacity it was given and the one read once every
+    /// node is written, in every layout (version 5, encrypted, version 7 continuous for links), and
+    /// the image still loads with its contents.
+    /// </summary>
+    /// <param name="encrypted">Whether the image is encrypted.</param>
+    /// <param name="withLink">Whether the disk holds a link, which writes version 7 continuous.</param>
+    /// <param name="finalCapacity">The capacity read at the end, or <c>0</c> for no provider.</param>
+    /// <param name="expected">The capacity the loaded header must hold.</param>
+    [Theory]
+    [InlineData(false, false, 8UL << 20, 8UL << 20)]
+    [InlineData(true, false, 8UL << 20, 8UL << 20)]
+    [InlineData(false, true, 8UL << 20, 8UL << 20)]
+    [InlineData(true, true, 8UL << 20, 8UL << 20)]
+    [InlineData(false, false, 2UL << 20, 4UL << 20)]
+    [InlineData(false, false, 0UL, 4UL << 20)]
+    public void Save_FinalCapacityProvider_HeaderHoldsLargerCapacity(bool encrypted, bool withLink, ulong finalCapacity, ulong expected)
+    {
+        var path = NewImagePath();
+        try
+        {
+            var map = NewMap(withLink);
+            var password = encrypted ? "s3cret" : null;
+            ImageEncryptionInfo? encryption = password is null ? null : new(password, DiskImageSerializer.GenerateCek());
+            Func<ulong>? provider = finalCapacity == 0 ? null : () => finalCapacity;
+
+            DiskImageSerializer.Save(map, 4UL << 20, "Label", path, 1, encryption, finalCapacityBytes: provider);
+
+            var loaded = DiskImageSerializer.Load(path, out var capacity, out var label, password, out _);
+            Assert.Equal(expected, capacity);
+            Assert.Equal("Label", label);
+            Assert.True(loaded.TryGet("\\File.txt", out var node));
+            Assert.Equal("hello world"u8.ToArray(), node!.FileData!.ToArray((long)node.FileInfo.FileSize));
+            Assert.Equal(withLink, loaded.TryGet("\\Link", out _));
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
     private static string NewImagePath() => Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid()}.mdr");
 
-    private static FileNodeMap NewMap()
+    private static FileNodeMap NewMap(bool withLink = false)
     {
         var map = new FileNodeMap();
         map.Add("\\", new FileNode { FileInfo = { FileAttributes = (uint)FileAttributes.Directory } });
         map.Add("\\File.txt", NewFileNode("hello world"u8.ToArray()));
+        if (withLink)
+        {
+            // A symbolic-link reparse buffer: tag, data length 4, reserved, data.
+            var link = NewFileNode([]);
+            link.ApplyReparseData([0x0C, 0x00, 0x00, 0xA0, 0x04, 0x00, 0x00, 0x00, 1, 2, 3, 4]);
+            map.Add("\\Link", link);
+        }
+
         return map;
+    }
+
+    /// <summary>
+    /// Writes a continuous image: version 5, or version 7 continuous when the disk holds a link.
+    /// </summary>
+    /// <param name="path">The image path.</param>
+    /// <param name="capacity">The capacity to record.</param>
+    /// <param name="password">The password, or <c>null</c> for an unencrypted image.</param>
+    /// <param name="withLink">Whether the disk holds a link.</param>
+    private static void SaveContinuous(string path, ulong capacity, string? password, bool withLink)
+    {
+        ImageEncryptionInfo? encryption = password is null
+            ? null
+            : new ImageEncryptionInfo(password, DiskImageSerializer.GenerateCek());
+
+        DiskImageSerializer.Save(NewMap(withLink), capacity, "Label", path, 1, encryption);
     }
 
     private static FileNode NewFileNode(byte[] content)

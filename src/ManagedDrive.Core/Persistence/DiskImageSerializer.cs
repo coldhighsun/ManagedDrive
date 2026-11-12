@@ -368,6 +368,13 @@ public static class DiskImageSerializer
     /// The subsequent gzip compression and (when encrypting) AES-256-GCM chunk encryption happen
     /// as nodes stream through and are not individually reported.
     /// </param>
+    /// <param name="finalCapacityBytes">
+    /// When set, read once every node is written; a larger value is written over the header's
+    /// capacity before the temp file replaces <paramref name="imagePath"/>, so the header is never
+    /// smaller than a node a capacity grown during the write let in. The capacity is a plaintext
+    /// field outside the encrypted region and its authentication, as
+    /// <see cref="TrySetCapacityInPlace"/> relies on too.
+    /// </param>
     public static void Save(
         FileNodeMap nodeMap,
         ulong capacityBytes,
@@ -375,7 +382,8 @@ public static class DiskImageSerializer
         string imagePath,
         int level,
         ImageEncryptionInfo? encryption = null,
-        IProgress<double>? progress = null)
+        IProgress<double>? progress = null,
+        Func<ulong>? finalCapacityBytes = null)
     {
         ZstdLevels.ThrowIfInvalid(level);
         var compress = level != ZstdLevels.None;
@@ -415,6 +423,8 @@ public static class DiskImageSerializer
                         writer.Write(LayoutContinuous);
                     }
 
+                    writer.Flush();
+                    var capacityOffset = stream.Position;
                     writer.Write(capacityBytes);
                     writer.Write(volumeLabel);
 
@@ -443,6 +453,17 @@ public static class DiskImageSerializer
                     {
                         writer.Flush();
                         WriteNodeRegion(stream, compress, level, nodeMap, includeReparse, progress);
+                    }
+
+                    if (finalCapacityBytes?.Invoke() is { } finalCapacity && finalCapacity > capacityBytes)
+                    {
+                        // The fixed-size field is overwritten in the temp file, which only replaces
+                        // the image below, so no reader ever sees the smaller value.
+                        writer.Flush();
+                        stream.Position = capacityOffset;
+                        writer.Write(finalCapacity);
+                        writer.Flush();
+                        stream.Seek(0, SeekOrigin.End);
                     }
                 }
 
@@ -473,7 +494,10 @@ public static class DiskImageSerializer
     /// eight bytes is touched; segment payloads, the segment index and the key-wrap fields are
     /// independent of the capacity. A decrease is only done when the caller vouches that the image
     /// holds exactly the disk's nodes: an image that holds more (stale, or nodes the load dropped)
-    /// could contain more than the new capacity and would then fail to load.
+    /// could contain more than the new capacity and would then fail to load. The continuous layouts
+    /// still written (version 5, and version 7 continuous for links) are raised the same way, since
+    /// their capacity is the same plaintext field outside the encrypted region; they are never
+    /// lowered, because without a segment index the node count cannot be checked.
     /// </summary>
     /// <param name="imagePath">Path of the existing image.</param>
     /// <param name="newCapacityBytes">The new capacity in bytes.</param>
@@ -484,8 +508,8 @@ public static class DiskImageSerializer
     /// </param>
     /// <returns>
     /// <see langword="true"/> when the image now records <paramref name="newCapacityBytes"/> (or
-    /// already did); <see langword="false"/> when the file is missing, not a version 7 segmented
-    /// image, would need a disallowed decrease, or could not be written — the caller must then save
+    /// already did); <see langword="false"/> when the file is missing, not a version 5 or 7 image,
+    /// would need a disallowed decrease, or could not be written — the caller must then save
     /// in full.
     /// </returns>
     internal static bool TrySetCapacityInPlace(string imagePath, ulong newCapacityBytes, int? nodeCountForDecrease = null)
@@ -496,9 +520,11 @@ public static class DiskImageSerializer
             using var reader = new BinaryReader(stream, System.Text.Encoding.UTF8, leaveOpen: true);
 
             ReadHeader(reader, out var version, out _, out var isEncrypted, out var segmented);
-            if (version != ReparseVersion || !segmented)
+            var segmentedV7 = version == ReparseVersion && segmented;
+            var continuous = version == Version || (version == ReparseVersion && !segmented);
+            if (!segmentedV7 && !continuous)
             {
-                LogCapacityPatchRefused(imagePath, "it is not a version 7 segmented image");
+                LogCapacityPatchRefused(imagePath, "it is not a version 5 or version 7 image");
                 return false;
             }
 
@@ -508,6 +534,13 @@ public static class DiskImageSerializer
             if (newCapacityBytes == currentCapacity)
             {
                 return true;
+            }
+
+            if (newCapacityBytes < currentCapacity && !segmentedV7)
+            {
+                // Only a segment index tells how many nodes the image holds.
+                LogCapacityPatchRefused(imagePath, "a decrease needs a segmented image, and this one is continuous");
+                return false;
             }
 
             if (newCapacityBytes < currentCapacity && !HoldsExactlyNodes(reader, isEncrypted, nodeCountForDecrease))
