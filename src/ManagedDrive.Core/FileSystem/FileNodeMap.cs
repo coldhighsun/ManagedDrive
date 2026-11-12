@@ -291,15 +291,61 @@ public sealed class FileNodeMap : IDisposable
         _syncRoot.EnterWriteLock();
         try
         {
-            ClearAllCore();
-            foreach (var kvp in nodes)
-            {
-                AddCore(kvp.Key, kvp.Value);
-            }
+            ReplaceAllCore(nodes);
         }
         finally
         {
             _syncRoot.ExitWriteLock();
+        }
+    }
+
+    /// <summary>
+    /// Replaces the map's entire contents as <see cref="ReplaceAll"/> does, but only if
+    /// <paramref name="requiredBytes"/> fits the ceiling <paramref name="capacityProvider"/> reports.
+    /// The ceiling is read under the write lock, so the check is atomic with respect to
+    /// <see cref="TryRunIfTotalAllocatedWithin"/>: a capacity lowered concurrently is either seen
+    /// here, or its own check sees the replaced contents.
+    /// </summary>
+    /// <param name="nodes">The path/node pairs to store; the nodes must not belong to another live map.</param>
+    /// <param name="requiredBytes">The total allocation the replacement needs.</param>
+    /// <param name="capacityProvider">Reads the current capacity ceiling.</param>
+    /// <param name="capacity">Receives the ceiling the check was made against.</param>
+    /// <returns><c>true</c> if the contents were replaced; <c>false</c> if they do not fit.</returns>
+    public bool TryReplaceAll(
+        IEnumerable<KeyValuePair<string, FileNode>> nodes,
+        ulong requiredBytes,
+        Func<ulong> capacityProvider,
+        out ulong capacity)
+    {
+        _syncRoot.EnterWriteLock();
+        try
+        {
+            capacity = capacityProvider();
+            if (requiredBytes > capacity)
+            {
+                return false;
+            }
+
+            ReplaceAllCore(nodes);
+            return true;
+        }
+        finally
+        {
+            _syncRoot.ExitWriteLock();
+        }
+    }
+
+    /// <summary>
+    /// Lock-free core of <see cref="ReplaceAll"/> and <see cref="TryReplaceAll"/>. Caller must
+    /// already hold the write lock.
+    /// </summary>
+    /// <param name="nodes">The path/node pairs to store.</param>
+    private void ReplaceAllCore(IEnumerable<KeyValuePair<string, FileNode>> nodes)
+    {
+        ClearAllCore();
+        foreach (var kvp in nodes)
+        {
+            AddCore(kvp.Key, kvp.Value);
         }
     }
 
