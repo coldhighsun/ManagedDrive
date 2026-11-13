@@ -1,3 +1,5 @@
+using System.Windows.Media;
+using System.Windows.Media.Animation;
 using ManagedDrive.Cli.Core;
 
 namespace ManagedDrive.App.Views;
@@ -75,10 +77,21 @@ public partial class RestoreSnapshotDialog
         ViewChangesButton.IsEnabled = false;
         DeleteButton.IsEnabled = false;
         OkButton.IsEnabled = false;
+        SnapshotListBox.IsEnabled = false;
+        DeletingOverlay.Visibility = Visibility.Visible;
+        DeletingSpinnerRotate.BeginAnimation(
+            RotateTransform.AngleProperty,
+            new DoubleAnimation(0, 360, TimeSpan.FromSeconds(1)) { RepeatBehavior = RepeatBehavior.Forever });
         try
         {
-            await Task.Run(() => _target.Disk.DeleteSnapshot(item.Path));
-            RefreshSnapshotList(SnapshotManager.ListSnapshotsNewestFirst(_mainImagePath));
+            // Deleting also sweeps the shared blob store, which can take a while on a big disk.
+            // The listing is read off the UI thread too.
+            var remaining = await Task.Run(() =>
+            {
+                _target.Disk.DeleteSnapshot(item.Path);
+                return SnapshotManager.ListSnapshotsNewestFirst(_mainImagePath);
+            });
+            RefreshSnapshotList(remaining);
         }
         catch (Exception ex)
         {
@@ -90,6 +103,9 @@ public partial class RestoreSnapshotDialog
         }
         finally
         {
+            DeletingSpinnerRotate.BeginAnimation(RotateTransform.AngleProperty, null);
+            DeletingOverlay.Visibility = Visibility.Collapsed;
+            SnapshotListBox.IsEnabled = true;
             ViewChangesButton.IsEnabled = true;
             DeleteButton.IsEnabled = true;
             OkButton.IsEnabled = true;
@@ -147,7 +163,13 @@ public partial class RestoreSnapshotDialog
         public override string ToString() => Display;
     }
 
-    private async void ViewChanges_Click(object sender, RoutedEventArgs e)
+    /// <summary>
+    /// Opens the snapshot changes dialog for the selected snapshot. The dialog shows at once and
+    /// loads the comparison itself.
+    /// </summary>
+    /// <param name="sender">The button.</param>
+    /// <param name="e">The routed event data.</param>
+    private void ViewChanges_Click(object sender, RoutedEventArgs e)
     {
         if (SnapshotListBox.SelectedItem is not SnapshotItem item)
         {
@@ -159,12 +181,14 @@ public partial class RestoreSnapshotDialog
             return;
         }
 
+        // The dialog opens at once with a loading animation; the comparison runs behind it and its
+        // errors are reported by the dialog itself.
         ViewChangesButton.IsEnabled = false;
         try
         {
-            var diff = await Task.Run(() => _target.Disk.DiffAgainstSnapshot(item.Path));
-
-            var dialog = new SnapshotDiffDialog(item.Display, diff)
+            var snapshotPath = item.Path;
+            var diffTask = Task.Run(() => _target.Disk.DiffAgainstSnapshot(snapshotPath));
+            var dialog = new SnapshotDiffDialog(item.Display, diffTask)
             {
                 Owner = this
             };

@@ -226,6 +226,7 @@
     <sys:String x:Key="RestoreSnapshot.NoneWarning">该磁盘暂无可用快照。</sys:String>
     <sys:String x:Key="RestoreSnapshot.ViewChanges">查看变化...</sys:String>
     <sys:String x:Key="RestoreSnapshot.Delete">删除...</sys:String>
+    <sys:String x:Key="RestoreSnapshot.Deleting">正在删除快照…</sys:String>
     <sys:String x:Key="Val.NoSnapshotSelected">请选择要恢复的快照。</sys:String>
     <sys:String x:Key="Msg.NoSnapshotsAvailable">该磁盘暂无可用快照。</sys:String>
     <sys:String x:Key="Msg.RestoreSnapshotConfirmTitle">恢复快照</sys:String>
@@ -249,6 +250,7 @@
     <sys:String x:Key="Tip.SnapshotDiff.Removed">磁盘上现在有、快照里没有：恢复后会被删除。</sys:String>
     <sys:String x:Key="Tip.SnapshotDiff.Reverted">两边都有但内容不同：恢复后会变回快照里的内容。</sys:String>
     <sys:String x:Key="SnapshotDiff.Unchanged">另有 {0} 个文件未变化</sys:String>
+    <sys:String x:Key="SnapshotDiff.Loading">正在与快照比较…</sys:String>
 
     <!-- Disk Content Dialog -->
     <sys:String x:Key="DiskContent.Title">磁盘内容</sys:String>

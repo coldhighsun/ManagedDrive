@@ -226,6 +226,7 @@
     <sys:String x:Key="RestoreSnapshot.NoneWarning">No snapshots are available for this disk yet.</sys:String>
     <sys:String x:Key="RestoreSnapshot.ViewChanges">View Changes...</sys:String>
     <sys:String x:Key="RestoreSnapshot.Delete">Delete...</sys:String>
+    <sys:String x:Key="RestoreSnapshot.Deleting">Deleting snapshot…</sys:String>
     <sys:String x:Key="Val.NoSnapshotSelected">Select a snapshot to restore.</sys:String>
     <sys:String x:Key="Msg.NoSnapshotsAvailable">No snapshots are available for this disk yet.</sys:String>
     <sys:String x:Key="Msg.RestoreSnapshotConfirmTitle">Restore Snapshot</sys:String>
@@ -249,6 +250,7 @@
     <sys:String x:Key="Tip.SnapshotDiff.Removed">On the disk now but not in the snapshot: it will be deleted by restoring.</sys:String>
     <sys:String x:Key="Tip.SnapshotDiff.Reverted">In both but with different content: it will go back to the snapshot's content.</sys:String>
     <sys:String x:Key="SnapshotDiff.Unchanged">{0} more file(s) unchanged</sys:String>
+    <sys:String x:Key="SnapshotDiff.Loading">Comparing with the snapshot…</sys:String>
 
     <!-- Disk Content Dialog -->
     <sys:String x:Key="DiskContent.Title">Disk Contents</sys:String>

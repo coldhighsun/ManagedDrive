@@ -4,7 +4,9 @@
         xmlns:views="clr-namespace:ManagedDrive.App.Views"
         Style="{DynamicResource DialogWindowStyle}"
         Title="{DynamicResource SnapshotDiff.Title}"
-        Width="520" SizeToContent="Height"
+        Width="560" Height="560"
+        MinWidth="440" MinHeight="420"
+        ResizeMode="CanResize"
         WindowStartupLocation="CenterOwner">
 
     <views:DialogWindowBase.Resources>
@@ -96,30 +98,49 @@
             </Style.Triggers>
         </Style>
 
-        <DataTemplate DataType="{x:Type views:DiffRow}">
-            <Grid ToolTip="{Binding FullPath}">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="10"/>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="6"/>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="10"/>
-                    <ColumnDefinition Width="*"/>
-                </Grid.ColumnDefinitions>
-                <Border Grid.Column="0" Style="{StaticResource DiffBadge}">
+        <views:DepthToIndentConverter x:Key="DepthToIndentConverter"/>
+        <BooleanToVisibilityConverter x:Key="BoolToVis"/>
+
+        <!-- One row of the folder tree: indent by depth, expander (folders with visible children), change badge,
+             icon, name and, for a folder, how many changed files lie below it. -->
+        <DataTemplate DataType="{x:Type views:DiffTreeNode}">
+            <StackPanel Orientation="Horizontal" ToolTip="{Binding FullPath}"
+                        Margin="{Binding Depth, Converter={StaticResource DepthToIndentConverter}}">
+                <Border Width="16" Height="16">
+                    <Button Padding="0"
+                            Visibility="{Binding CanExpand, Converter={StaticResource BoolToVis}}">
+                        <Button.Template>
+                            <ControlTemplate TargetType="Button">
+                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </ControlTemplate>
+                        </Button.Template>
+                        <TextBlock FontSize="10" Foreground="{DynamicResource AppForegroundLight}">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock" BasedOn="{StaticResource IconText}">
+                                    <Setter Property="Text" Value="&#xE76C;"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsExpanded}" Value="True">
+                                            <Setter Property="Text" Value="&#xE70D;"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
+                    </Button>
+                </Border>
+                <Border Style="{StaticResource DiffBadge}" Margin="4,0,0,0">
                     <Path Data="{Binding BadgeData}" Style="{StaticResource DiffBadgeGlyph}"/>
                 </Border>
-                <TextBlock Grid.Column="2" Text="{Binding IconGlyph}" Style="{StaticResource IconText}"
-                           FontSize="14" Foreground="{DynamicResource AppForegroundLight}"/>
-                <TextBlock Grid.Column="4" Text="{Binding Name}" FontWeight="Medium"
+                <TextBlock Text="{Binding IconGlyph}" Style="{StaticResource IconText}"
+                           FontSize="14" Foreground="{DynamicResource AppForegroundLight}" Margin="10,0,6,0"/>
+                <TextBlock Text="{Binding Name}" FontWeight="Medium"
                            Foreground="{DynamicResource AppForeground}"
                            VerticalAlignment="Center"/>
-                <TextBlock Grid.Column="6" Text="{Binding ParentPath}"
+                <TextBlock Text="{Binding CountText}" Margin="8,0,0,0"
                            Foreground="{DynamicResource AppForegroundLight}"
                            FontSize="{DynamicResource FontSizeSmall}"
-                           TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
-            </Grid>
+                           VerticalAlignment="Center"/>
+            </StackPanel>
         </DataTemplate>
     </views:DialogWindowBase.Resources>
 
@@ -129,7 +150,7 @@
             <RowDefinition Height="14"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="10"/>
-            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
             <RowDefinition Height="24"/>
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
@@ -140,7 +161,7 @@
                    TextWrapping="Wrap"/>
 
         <!-- Filter cards (double as the summary) -->
-        <Grid Grid.Row="2" x:Name="CardsPanel">
+        <Grid Grid.Row="2" x:Name="CardsPanel" Visibility="Collapsed">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="8"/>
@@ -199,10 +220,25 @@
             </RadioButton>
         </Grid>
 
-        <Border Grid.Row="4" Style="{DynamicResource SectionBorder}">
-            <StackPanel>
+        <!-- Shown while the comparison runs; the dialog opens before it finishes. -->
+        <StackPanel Grid.Row="2" Grid.RowSpan="3" x:Name="LoadingPanel"
+                    HorizontalAlignment="Center" VerticalAlignment="Center">
+            <TextBlock Text="&#xE895;" Style="{StaticResource IconText}" FontSize="32"
+                       Foreground="{DynamicResource AppPrimary}"
+                       HorizontalAlignment="Center" RenderTransformOrigin="0.5,0.5">
+                <TextBlock.RenderTransform>
+                    <RotateTransform x:Name="SpinnerRotate" Angle="0"/>
+                </TextBlock.RenderTransform>
+            </TextBlock>
+            <TextBlock Text="{DynamicResource SnapshotDiff.Loading}" Margin="0,12,0,0"
+                       Foreground="{DynamicResource AppForegroundLight}"
+                       HorizontalAlignment="Center"/>
+        </StackPanel>
+
+        <Border Grid.Row="4" x:Name="ResultBorder" Visibility="Collapsed" Style="{DynamicResource SectionBorder}">
+            <DockPanel LastChildFill="True">
                 <!-- Empty state -->
-                <StackPanel x:Name="NoChangesPanel" HorizontalAlignment="Center" Margin="0,16"
+                <StackPanel x:Name="NoChangesPanel" DockPanel.Dock="Top" HorizontalAlignment="Center" Margin="0,16"
                             Visibility="Collapsed">
                     <TextBlock Text="&#xE73E;" Style="{StaticResource IconText}" FontSize="28"
                                Foreground="{DynamicResource AppSuccess}"/>
@@ -212,6 +248,12 @@
                                TextWrapping="Wrap" TextAlignment="Center" Margin="0,8,0,0"/>
                 </StackPanel>
 
+                <TextBlock x:Name="UnchangedText"
+                           DockPanel.Dock="Bottom"
+                           Foreground="{DynamicResource AppForegroundLight}"
+                           FontSize="{DynamicResource FontSizeSmall}"
+                           Margin="8,8,0,0"/>
+
                 <ListBox x:Name="ChangesList"
                          BorderThickness="0" Background="Transparent"
                          Foreground="{DynamicResource AppForeground}"
@@ -219,13 +261,10 @@
                          ScrollViewer.VerticalScrollBarVisibility="Auto"
                          ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                          ScrollViewer.CanContentScroll="True"
+                         ButtonBase.Click="Expander_Click"
+                         MouseDoubleClick="ChangesList_MouseDoubleClick"
                          VirtualizingStackPanel.IsVirtualizing="True"/>
-
-                <TextBlock x:Name="UnchangedText"
-                           Foreground="{DynamicResource AppForegroundLight}"
-                           FontSize="{DynamicResource FontSizeSmall}"
-                           Margin="8,8,0,0"/>
-            </StackPanel>
+            </DockPanel>
         </Border>
 
         <!-- Close -->
