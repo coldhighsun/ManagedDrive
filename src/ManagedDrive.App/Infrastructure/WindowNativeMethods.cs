@@ -151,6 +151,54 @@ internal static class WindowNativeMethods
     public static extern bool ShowWindow(nint hWnd, int command);
 
     /// <summary>
+    /// The <c>MONITOR_DEFAULTTONEAREST</c> flag: return the monitor closest to the point.
+    /// </summary>
+    private const uint MonitorDefaultToNearest = 2;
+
+    /// <summary>
+    /// The <c>MDT_EFFECTIVE_DPI</c> value: the DPI the monitor's scale factor produces.
+    /// </summary>
+    private const int MdtEffectiveDpi = 0;
+
+    /// <summary>
+    /// Finds the monitor that contains, or is nearest to, a screen point.
+    /// </summary>
+    /// <param name="point">The point in physical screen pixels.</param>
+    /// <param name="flags">The <c>MONITOR_DEFAULTTO*</c> flag.</param>
+    /// <returns>The monitor handle.</returns>
+    [DllImport("user32.dll")]
+    private static extern nint MonitorFromPoint(Point point, uint flags);
+
+    /// <summary>
+    /// Reads a monitor's DPI.
+    /// </summary>
+    /// <param name="monitor">The monitor handle.</param>
+    /// <param name="dpiType">The <c>MDT_*</c> kind of DPI.</param>
+    /// <param name="dpiX">Receives the horizontal DPI.</param>
+    /// <param name="dpiY">Receives the vertical DPI.</param>
+    /// <returns>An <c>HRESULT</c>; zero on success.</returns>
+    [DllImport("shcore.dll")]
+    private static extern int GetDpiForMonitor(nint monitor, int dpiType, out uint dpiX, out uint dpiY);
+
+    /// <summary>
+    /// Gets the scale factor (1.0 = 96 DPI) of the monitor that contains, or is nearest to, a
+    /// screen point, or 1.0 when it cannot be read.
+    /// </summary>
+    /// <param name="x">The point's X in physical screen pixels.</param>
+    /// <param name="y">The point's Y in physical screen pixels.</param>
+    /// <returns>The monitor's horizontal and vertical scale factors.</returns>
+    public static (double X, double Y) GetMonitorScale(int x, int y)
+    {
+        var monitor = MonitorFromPoint(new Point { X = x, Y = y }, MonitorDefaultToNearest);
+        if (monitor == 0 || GetDpiForMonitor(monitor, MdtEffectiveDpi, out var dpiX, out var dpiY) != 0 || dpiX == 0 || dpiY == 0)
+        {
+            return (1, 1);
+        }
+
+        return (dpiX / 96.0, dpiY / 96.0);
+    }
+
+    /// <summary>
     /// Sets an integer <c>DWMWA_*</c> attribute of a window's DWM-drawn chrome. The return value is
     /// ignored on purpose: it only reports an attribute this Windows version does not know.
     /// </summary>
