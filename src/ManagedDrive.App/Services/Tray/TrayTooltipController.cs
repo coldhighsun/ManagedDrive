@@ -27,7 +27,7 @@ public sealed class TrayTooltipController : IDisposable
     private System.Drawing.Point _iconScreenPoint;
 
     /// <summary>
-    /// The DPI scale in effect when the tooltip was last shown.
+    /// The DPI scale of the monitor the tray icon was on when the tooltip was last placed.
     /// </summary>
     private System.Windows.DpiScale _dpi = new(1, 1);
 
@@ -208,7 +208,6 @@ public sealed class TrayTooltipController : IDisposable
         _refresh();
         DetachSizeHandler();
         ReplaceContent(_trayInfoPopup, () => new TrayTooltipView { DataContext = _dataContext });
-        _dpi = ResolveDpi(_trayInfoPopup.Child);
         PositionTrayPopup();
         if (_trayInfoPopup.Child is FrameworkElement shown)
         {
@@ -274,19 +273,6 @@ public sealed class TrayTooltipController : IDisposable
             : content.DesiredSize;
 
     /// <summary>
-    /// Gets the DPI scale used to convert between physical pixels and device-independent units,
-    /// taken from the main window when there is one and otherwise from <paramref name="fallback"/>,
-    /// which avoids creating a throwaway window just to read the DPI.
-    /// </summary>
-    /// <param name="fallback">An element to take the DPI from when there is no main window.</param>
-    /// <returns>The DPI scale.</returns>
-    internal static System.Windows.DpiScale ResolveDpi(UIElement? fallback)
-    {
-        var source = Application.Current?.MainWindow ?? fallback;
-        return source is null ? new(1, 1) : System.Windows.Media.VisualTreeHelper.GetDpi(source);
-    }
-
-    /// <summary>
     /// Computes the top-left corner of the tooltip: horizontally centered on the icon and kept
     /// inside <paramref name="workArea"/>, above the icon, or pinned to whichever work-area edge
     /// the icon is next to.
@@ -323,6 +309,31 @@ public sealed class TrayTooltipController : IDisposable
         }
 
         return new(left, top);
+    }
+
+    /// <summary>
+    /// Computes the tooltip's top-left corner from physical-pixel inputs taken on one monitor:
+    /// converts the work area and the icon to device-independent units with that monitor's scale,
+    /// then places the tooltip with <see cref="ComputePopupOrigin(Rect, System.Windows.Point, System.Windows.Size)"/>.
+    /// </summary>
+    /// <param name="workAreaPixels">The work area of the icon's monitor in physical screen pixels.</param>
+    /// <param name="iconPixels">The icon position in physical screen pixels.</param>
+    /// <param name="scale">The icon monitor's scale factors (1.0 = 96 DPI).</param>
+    /// <param name="popup">The tooltip size in device-independent units.</param>
+    /// <returns>The tooltip's top-left corner in device-independent units.</returns>
+    internal static System.Windows.Point ComputePopupOrigin(
+        System.Drawing.Rectangle workAreaPixels,
+        System.Drawing.Point iconPixels,
+        (double X, double Y) scale,
+        System.Windows.Size popup)
+    {
+        var workArea = new Rect(
+            workAreaPixels.Left / scale.X,
+            workAreaPixels.Top / scale.Y,
+            workAreaPixels.Width / scale.X,
+            workAreaPixels.Height / scale.Y);
+        var icon = new System.Windows.Point(iconPixels.X / scale.X, iconPixels.Y / scale.Y);
+        return ComputePopupOrigin(workArea, icon, popup);
     }
 
     /// <summary>
@@ -399,10 +410,14 @@ public sealed class TrayTooltipController : IDisposable
             return;
         }
 
-        var popupSize = GetContentSize(child);
-        var icon = new System.Windows.Point(_iconScreenPoint.X / _dpi.DpiScaleX, _iconScreenPoint.Y / _dpi.DpiScaleY);
+        // The icon may sit on any monitor, each with its own scale, and the process is per-monitor
+        // DPI aware: take the scale and the work area of the monitor the icon is on, not the main
+        // window's scale and the primary monitor's work area.
+        var scale = WindowNativeMethods.GetMonitorScale(_iconScreenPoint.X, _iconScreenPoint.Y);
+        _dpi = new(scale.X, scale.Y);
+        var work = System.Windows.Forms.Screen.FromPoint(_iconScreenPoint).WorkingArea;
 
-        var origin = ComputePopupOrigin(SystemParameters.WorkArea, icon, popupSize);
+        var origin = ComputePopupOrigin(work, _iconScreenPoint, scale, GetContentSize(child));
         _trayInfoPopup.HorizontalOffset = origin.X;
         _trayInfoPopup.VerticalOffset = origin.Y;
     }

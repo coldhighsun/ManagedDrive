@@ -2,6 +2,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Media;
+using ManagedDrive.App.Infrastructure;
 using ManagedDrive.App.Localization;
 using ManagedDrive.App.Services;
 using ManagedDrive.App.Views;
@@ -127,6 +128,55 @@ public class TrayTooltipControllerTests
             Assert.Equal(((SolidColorBrush)dark["AppSurface"]).Color, darkSurface);
             Assert.NotEqual(lightSurface, darkSurface);
         });
+    }
+
+    /// <summary>
+    /// Verifies that the monitor scale lookup always yields a usable positive factor, also for a
+    /// point outside every monitor (it falls back to the nearest one).
+    /// </summary>
+    [Theory]
+    [InlineData(0, 0)]
+    [InlineData(-100000, -100000)]
+    public void GetMonitorScale_AnyPoint_ReturnsPositiveScale(int x, int y)
+    {
+        // Act
+        var scale = WindowNativeMethods.GetMonitorScale(x, y);
+
+        // Assert
+        Assert.True(scale.X >= 1);
+        Assert.True(scale.Y >= 1);
+    }
+
+    /// <summary>
+    /// Verifies that an icon on a scaled secondary monitor at negative coordinates is placed
+    /// from that monitor's own work area and scale, not the primary monitor's.
+    /// </summary>
+    [Fact]
+    public void ComputePopupOrigin_IconOnScaledMonitorAtNegativeCoordinates_UsesThatMonitorsWorkArea()
+    {
+        // Arrange: a 125% monitor left of the primary, taskbar at its bottom.
+        var work = new System.Drawing.Rectangle(-1920, 0, 1920, 1160);
+        var icon = new System.Drawing.Point(-100, 1180);
+
+        // Act
+        var origin = TrayTooltipController.ComputePopupOrigin(work, icon, (1.25, 1.25), new(300, 100));
+
+        // Assert: work area is -1536..0 x 0..928 in DIPs, the icon pins to its bottom-right.
+        Assert.Equal(0 - 300 - 4, origin.X);
+        Assert.Equal(928 - 100 - 16, origin.Y);
+    }
+
+    /// <summary>
+    /// Verifies that with a 100% scale the pixel overload matches the device-independent one.
+    /// </summary>
+    [Fact]
+    public void ComputePopupOrigin_UnitScale_MatchesDipOverload()
+    {
+        // Act
+        var fromPixels = TrayTooltipController.ComputePopupOrigin(new(0, 0, 1920, 1080), new(960, 500), (1, 1), new(300, 100));
+
+        // Assert
+        Assert.Equal(new System.Windows.Point(810, 384), fromPixels);
     }
 
     /// <summary>
