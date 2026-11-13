@@ -410,6 +410,15 @@ public partial class App
         // Before the TEMP check, which resets what is left to the Windows defaults.
         _mainViewModel.RestoreDanglingEnvRedirects();
 
+        // Finish off blob directories that a snapshot delete renamed away before the app exited
+        // (their image may be gone by now, so nothing else would ever retry them). Off the UI
+        // thread: the folders may be on a network share or a sleeping disk.
+        if (_settings is not null)
+        {
+            var knownDisks = _settings;
+            _ = Task.Run(() => SnapshotManager.StartPendingBlobDeletes(knownDisks.Load().Disks.Select(p => p.PersistImagePath)));
+        }
+
         // The check may show message boxes. The splash is Topmost and would cover them, so it steps
         // back for the duration; boxes opened meanwhile land above it.
         var coveringSplash = _splashWindow;

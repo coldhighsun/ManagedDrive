@@ -45,8 +45,10 @@ public static partial class SnapshotManager
     /// </summary>
     /// <param name="mainImagePath">The main image whose snapshots are deleted.</param>
     /// <returns>
-    /// <c>true</c> if no snapshot index file or blob directory is left behind; <c>false</c> if
-    /// any of them could not be deleted (the failures are logged).
+    /// <c>true</c> if no snapshot index file is left and the blob directory is gone or has been
+    /// renamed away to be deleted in the background (see <see cref="StartPendingBlobDeletes(string)"/>);
+    /// <c>false</c> if an index file or the blob directory could not be removed (the failures
+    /// are logged).
     /// </returns>
     public static bool DeleteAllSnapshots(string mainImagePath)
     {
@@ -84,26 +86,164 @@ public static partial class SnapshotManager
             }
         }
 
+        if (!DeleteBlobDirectory(mainImagePath))
+        {
+            allDeleted = false;
+        }
+
+        return allDeleted;
+    }
+
+    /// <summary>
+    /// Marks a blob directory that has been renamed away and is waiting to be deleted:
+    /// <c>{baseName}.snapblobs.deleting-{guid}</c>.
+    /// </summary>
+    private const string PendingDeleteMarker = ".deleting-";
+
+    /// <summary>
+    /// The pending blob directories a background delete is already working on, so two sweeps
+    /// never delete the same one at once.
+    /// </summary>
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, byte> InFlightPendingDeletes =
+        new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// The images <see cref="WriteSnapshot"/> has already looked for pending blob deletions of in
+    /// this process, so it does that only on an image's first snapshot.
+    /// </summary>
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, byte> SweptImagePaths =
+        new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Removes the whole blob directory of <paramref name="mainImagePath"/>. Used when no
+    /// snapshot is left, since then every blob is unreferenced. A large store holds a great many
+    /// files and deleting them one by one takes long, so the directory is first renamed (instant,
+    /// and the name is free for new snapshots at once) and then deleted in the background by
+    /// <see cref="StartPendingBlobDeletes"/>. If the rename is not possible the directory is
+    /// deleted in place instead.
+    /// </summary>
+    /// <param name="mainImagePath">The main image whose blob store is removed.</param>
+    /// <returns><see langword="true"/> when the directory is gone or queued for deletion; <see langword="false"/> when it could not be removed.</returns>
+    private static bool DeleteBlobDirectory(string mainImagePath)
+    {
         var blobDirectory = BlobDirectory(mainImagePath);
         try
         {
-            if (Directory.Exists(blobDirectory))
+            if (!Directory.Exists(blobDirectory))
             {
-                Directory.Delete(blobDirectory, recursive: true);
+                return true;
             }
+
+            try
+            {
+                Directory.Move(blobDirectory, blobDirectory + PendingDeleteMarker + Guid.NewGuid().ToString("N"));
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                // E.g. a file inside is still open or the folder is locked: no instant rename, so
+                // delete in place.
+                Logger.LogWarning(ex, "Failed to rename blob directory '{Path}'; deleting it in place", blobDirectory);
+                Directory.Delete(blobDirectory, recursive: true);
+                return true;
+            }
+
+            StartPendingBlobDeletes(mainImagePath);
+            return true;
         }
         catch (IOException ex)
         {
-            allDeleted = false;
             Logger.LogWarning(ex, "Failed to delete blob directory '{Path}'", blobDirectory);
         }
         catch (UnauthorizedAccessException ex)
         {
-            allDeleted = false;
             Logger.LogWarning(ex, "Failed to delete blob directory '{Path}'", blobDirectory);
         }
 
-        return allDeleted;
+        return false;
+    }
+
+    /// <summary>
+    /// Starts deleting, on background threads, every blob directory of <paramref name="mainImagePath"/>
+    /// that was renamed away by <see cref="DeleteBlobDirectory"/>, including ones left behind when
+    /// the app exited before a delete finished. Returns at once; failures are logged and the
+    /// directory is retried by the next call.
+    /// </summary>
+    /// <param name="mainImagePath">The main image whose pending blob directories are deleted.</param>
+    private static void StartPendingBlobDeletes(string mainImagePath)
+    {
+        var blobDirectory = BlobDirectory(mainImagePath);
+        StartPendingBlobDeletesIn(
+            Path.GetDirectoryName(blobDirectory),
+            Path.GetFileName(blobDirectory) + PendingDeleteMarker + "*");
+    }
+
+    /// <summary>
+    /// Starts deleting, on background threads, every renamed-away blob directory of any image in
+    /// the folders of <paramref name="imagePaths"/>. For app startup: a delete that was cut short
+    /// by the app exiting leaves its directory behind, and when its image is gone and never
+    /// snapshots again, nothing else would ever retry it. Returns at once; failures are logged.
+    /// </summary>
+    /// <param name="imagePaths">The image paths of the known disks; <see langword="null"/> entries are ignored.</param>
+    public static void StartPendingBlobDeletes(IEnumerable<string?> imagePaths)
+    {
+        var directories = imagePaths
+            .Select(p => string.IsNullOrEmpty(p) ? null : Path.GetDirectoryName(p))
+            .Where(d => !string.IsNullOrEmpty(d))
+            .Distinct(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var directory in directories)
+        {
+            StartPendingBlobDeletesIn(directory, "*.snapblobs" + PendingDeleteMarker + "*");
+        }
+    }
+
+    /// <summary>
+    /// Starts a background delete of each directory in <paramref name="directory"/> matching
+    /// <paramref name="searchPattern"/> that no delete is already working on.
+    /// </summary>
+    /// <param name="directory">The folder to look in; nothing happens when it does not exist.</param>
+    /// <param name="searchPattern">The pending-directory name pattern.</param>
+    private static void StartPendingBlobDeletesIn(string? directory, string searchPattern)
+    {
+        if (string.IsNullOrEmpty(directory) || !Directory.Exists(directory))
+        {
+            return;
+        }
+
+        string[] pending;
+        try
+        {
+            pending = Directory.GetDirectories(directory, searchPattern);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            Logger.LogWarning(ex, "Failed to look for pending blob deletions in '{Path}'", directory);
+            return;
+        }
+
+        foreach (var path in pending)
+        {
+            if (!InFlightPendingDeletes.TryAdd(path, 0))
+            {
+                continue;
+            }
+
+            _ = Task.Run(() =>
+            {
+                try
+                {
+                    Directory.Delete(path, recursive: true);
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    Logger.LogWarning(ex, "Failed to delete pending blob directory '{Path}'", path);
+                }
+                finally
+                {
+                    InFlightPendingDeletes.TryRemove(path, out _);
+                }
+            });
+        }
     }
 
     /// <summary>
@@ -133,8 +273,41 @@ public static partial class SnapshotManager
             Logger.LogWarning(ex, "Failed to delete snapshot '{Path}'", snapshotPath);
         }
 
+        // An empty listing only means "no snapshots left" when the image's folder was reachable the
+        // whole time: the listing is also empty when the folder is missing or briefly offline (a
+        // network share), and then the blobs of snapshots that still exist must not be removed.
+        var folderReachedBefore = ImageFolderExists(mainImagePath);
         var remaining = ListSnapshotEntries(mainImagePath);
+        if (remaining.Count == 0)
+        {
+            if (folderReachedBefore && ImageFolderExists(mainImagePath))
+            {
+                // The last snapshot: nothing references any blob, so skip the per-blob sweep.
+                DeleteBlobDirectory(mainImagePath);
+            }
+            else
+            {
+                Logger.LogWarningThrottled(
+                    $"blob-delete-skipped:{mainImagePath}", TimeSpan.FromMinutes(10),
+                    "Skipped removing the snapshot blobs of '{Path}': its folder could not be reached", mainImagePath);
+            }
+
+            return;
+        }
+
         GarbageCollectBlobsIfSafe(mainImagePath, remaining);
+    }
+
+    /// <summary>
+    /// Gets whether the folder holding <paramref name="mainImagePath"/> (and so its snapshots and
+    /// blob store) currently exists.
+    /// </summary>
+    /// <param name="mainImagePath">The main image.</param>
+    /// <returns><see langword="true"/> when the folder exists.</returns>
+    private static bool ImageFolderExists(string mainImagePath)
+    {
+        var folder = Path.GetDirectoryName(mainImagePath);
+        return !string.IsNullOrEmpty(folder) && Directory.Exists(folder);
     }
 
     /// <summary>
@@ -559,6 +732,14 @@ public static partial class SnapshotManager
         IProgress<double>? progress = null,
         Func<ulong>? finalCapacityBytes = null)
     {
+        // Finish off any blob directory a delete renamed away and the app exited before removing,
+        // once per image and process: the app also does it at startup and a delete that renames
+        // one starts its own cleanup, so scanning the folder on every auto-save adds nothing.
+        if (SweptImagePaths.TryAdd(mainImagePath, 0))
+        {
+            StartPendingBlobDeletes(mainImagePath);
+        }
+
         var indexPath = BuildSnapshotPath(mainImagePath, timestampUtc);
         SnapshotStore.Write(
             nodeMap, capacityBytes, volumeLabel, indexPath, BlobDirectory(mainImagePath), level, cek, progress, finalCapacityBytes);

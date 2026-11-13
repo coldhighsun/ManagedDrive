@@ -108,6 +108,119 @@ public sealed class SnapshotManagerTests : IDisposable
         Assert.Equal(0, BlobCount);
     }
 
+    /// <summary>
+    /// The directories a delete renamed away and the background delete has not removed yet.
+    /// </summary>
+    private string[] PendingBlobDirectories => Directory.GetDirectories(_dir, "disk.snapblobs.deleting-*");
+
+    /// <summary>
+    /// Waits until the background delete of the renamed blob directories has finished.
+    /// </summary>
+    private void WaitForPendingBlobDeletes() =>
+        Assert.True(
+            SpinWait.SpinUntil(() => PendingBlobDirectories.Length == 0, TimeSpan.FromSeconds(10)),
+            "The renamed blob directory was not deleted in the background.");
+
+    /// <summary>
+    /// Deleting the only snapshot frees the blob directory name at once (renamed away) and the
+    /// renamed directory is then removed in the background.
+    /// </summary>
+    [Fact]
+    public void DeleteSnapshot_LastSnapshot_RenamesBlobDirectoryAndDeletesItInBackground()
+    {
+        WriteSnapshotWithFile(new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), "\\a.txt", [3, 3, 3]);
+        var snapshot = Assert.Single(SnapshotManager.ListSnapshots(_mainImagePath));
+        Assert.True(Directory.Exists(BlobDirectory));
+
+        SnapshotManager.DeleteSnapshot(_mainImagePath, snapshot.Path);
+
+        Assert.False(Directory.Exists(BlobDirectory));
+        WaitForPendingBlobDeletes();
+    }
+
+    /// <summary>
+    /// When the image's folder is not reachable the snapshot listing is empty without meaning
+    /// "no snapshots", so the delete must not touch anything or fail.
+    /// </summary>
+    [Fact]
+    public void DeleteSnapshot_ImageFolderMissing_DoesNothing()
+    {
+        var missingFolder = Path.Combine(_dir, "offline-share");
+        var image = Path.Combine(missingFolder, "disk.mdr");
+        var snapshot = SnapshotManager.BuildSnapshotPath(image, new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero));
+
+        SnapshotManager.DeleteSnapshot(image, snapshot);
+
+        Assert.False(Directory.Exists(missingFolder));
+        Assert.Empty(PendingBlobDirectories);
+    }
+
+    /// <summary>
+    /// Deleting the last snapshot while the image's folder is reachable still removes the blob store.
+    /// </summary>
+    [Fact]
+    public void DeleteSnapshot_LastSnapshotFolderReachable_RemovesBlobStore()
+    {
+        WriteSnapshotWithFile(new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), "\\a.txt", [3, 3, 3]);
+        var snapshot = Assert.Single(SnapshotManager.ListSnapshots(_mainImagePath));
+
+        SnapshotManager.DeleteSnapshot(_mainImagePath, snapshot.Path);
+
+        Assert.False(Directory.Exists(BlobDirectory));
+        WaitForPendingBlobDeletes();
+    }
+
+    /// <summary>
+    /// A new snapshot written right after the last one was deleted gets a fresh blob store while
+    /// the old one is still being removed.
+    /// </summary>
+    [Fact]
+    public void WriteSnapshot_AfterLastSnapshotDeleted_UsesFreshBlobDirectory()
+    {
+        WriteSnapshotWithFile(new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), "\\a.txt", [3, 3, 3]);
+        SnapshotManager.DeleteSnapshot(_mainImagePath, Assert.Single(SnapshotManager.ListSnapshots(_mainImagePath)).Path);
+
+        WriteSnapshotWithFile(new(2026, 1, 2, 0, 0, 0, TimeSpan.Zero), "\\b.txt", [4, 4, 4]);
+
+        Assert.Equal(1, BlobCount);
+        WaitForPendingBlobDeletes();
+    }
+
+    /// <summary>
+    /// The startup sweep removes leftover renamed blob directories of any image in the folders of
+    /// the known disks, including one whose image is gone.
+    /// </summary>
+    [Fact]
+    public void StartPendingBlobDeletes_KnownImageFolder_DeletesLeftoversOfAnyImage()
+    {
+        var leftover = Path.Combine(_dir, "gone-disk.snapblobs.deleting-abc");
+        Directory.CreateDirectory(leftover);
+        File.WriteAllText(Path.Combine(leftover, "x.blob"), "x");
+        var unrelated = Path.Combine(_dir, "photos");
+        Directory.CreateDirectory(unrelated);
+
+        SnapshotManager.StartPendingBlobDeletes([_mainImagePath, null]);
+
+        Assert.True(SpinWait.SpinUntil(() => !Directory.Exists(leftover), TimeSpan.FromSeconds(10)));
+        Assert.True(Directory.Exists(unrelated));
+    }
+
+    /// <summary>
+    /// A renamed blob directory left behind by an app exit is removed by the next snapshot write.
+    /// </summary>
+    [Fact]
+    public void WriteSnapshot_LeftoverPendingBlobDirectory_IsDeleted()
+    {
+        var leftover = BlobDirectory + ".deleting-abc";
+        Directory.CreateDirectory(leftover);
+        File.WriteAllText(Path.Combine(leftover, "x.blob"), "x");
+
+        WriteSnapshotWithFile(new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), "\\a.txt", [3, 3, 3]);
+
+        WaitForPendingBlobDeletes();
+        Assert.Equal(1, BlobCount);
+    }
+
     [Fact]
     public void DeleteSnapshot_RemovesOnlyTargetIndex_LeavesOthersIntact()
     {
@@ -325,11 +438,18 @@ public sealed class SnapshotManagerTests : IDisposable
 
     public void Dispose()
     {
+        // A delete of the last snapshot removes its renamed blob directory in the background;
+        // let that finish so it does not race the cleanup of the test directory below.
+        SpinWait.SpinUntil(() => PendingBlobDirectories.Length == 0, TimeSpan.FromSeconds(10));
+
         try
         {
             Directory.Delete(_dir, recursive: true);
         }
         catch (IOException)
+        {
+        }
+        catch (UnauthorizedAccessException)
         {
         }
     }
