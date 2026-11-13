@@ -175,6 +175,15 @@
                                             ToolTip="{DynamicResource Tip.CloseDialog}">
                                         <TextBlock Style="{StaticResource CloseIconText}"/>
                                     </Button>
+                                    <Button x:Name="MaximizeButton"
+                                            DockPanel.Dock="Right"
+                                            Visibility="Collapsed"
+                                            Style="{StaticResource IconButton}"
+                                            Command="{x:Static views:DialogWindowBase.MaximizeRestoreDialogCommand}"
+                                            WindowChrome.IsHitTestVisibleInChrome="True"
+                                            ToolTip="{DynamicResource Tip.MaximizeRestore}">
+                                        <TextBlock Style="{StaticResource MaximizeIconText}"/>
+                                    </Button>
                                     <TextBlock VerticalAlignment="Center"
                                                FontSize="13" FontWeight="Medium"
                                                Foreground="{DynamicResource AppBarForeground}"
@@ -184,6 +193,12 @@
                             <ContentPresenter Margin="24"/>
                         </DockPanel>
                     </Border>
+                    <ControlTemplate.Triggers>
+                        <!-- Only resizable dialogs get a maximize button. -->
+                        <Trigger Property="ResizeMode" Value="CanResize">
+                            <Setter TargetName="MaximizeButton" Property="Visibility" Value="Visible"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
                 </ControlTemplate>
             </Setter.Value>
         </Setter>

@@ -20,6 +20,12 @@ public class DialogWindowBase : Window
     public static readonly RoutedCommand CloseDialogCommand = new();
 
     /// <summary>
+    /// Command bound to the title bar's maximize/restore button, which only shows on dialogs
+    /// whose <see cref="Window.ResizeMode"/> is <see cref="ResizeMode.CanResize"/>.
+    /// </summary>
+    public static readonly RoutedCommand MaximizeRestoreDialogCommand = new();
+
+    /// <summary>
     /// Initializes the borderless window chrome and wires up <see cref="CloseDialogCommand"/>. The
     /// rounded corners come from <c>DialogWindowStyle</c>, through <c>BorderlessWindowStyle</c>.
     /// </summary>
@@ -34,7 +40,16 @@ public class DialogWindowBase : Window
         });
 
         CommandBindings.Add(new(CloseDialogCommand, CloseButton_Click));
+        CommandBindings.Add(new(MaximizeRestoreDialogCommand, MaximizeRestoreButton_Click));
     }
+
+    /// <summary>
+    /// Toggles the dialog between the maximized and normal window state.
+    /// </summary>
+    /// <param name="sender">The command source.</param>
+    /// <param name="e">The command event data.</param>
+    private void MaximizeRestoreButton_Click(object sender, RoutedEventArgs e) =>
+        WindowState = WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized;
 
     /// <summary>
     /// Subscribes so this dialog closes itself if <paramref name="target"/> is disposed while the

@@ -5,7 +5,7 @@
         xmlns:helpers="clr-namespace:ManagedDrive.App.Helpers"
         Style="{DynamicResource DialogWindowStyle}"
         Title="{DynamicResource DiskContent.Title}"
-        Width="480" Height="488"
+        Width="640" Height="600"
         MinWidth="360" MinHeight="320"
         ResizeMode="CanResize"
         WindowStartupLocation="CenterOwner">
