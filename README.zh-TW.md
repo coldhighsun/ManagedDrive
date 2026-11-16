@@ -31,12 +31,12 @@
   <img src="docs/screenshots/main_window_light_tw.png" alt="主視窗（淺色佈景主題）" width="400">
 </p>
 <p align="center">
-  <img src="docs/screenshots/right_menu_ch.png" alt="磁碟右鍵選單與暫存與快取預設" width="400">
+  <img src="docs/screenshots/right_menu_tw.png" alt="磁碟右鍵選單與暫存與快取預設" width="400">
   <img src="docs/screenshots/space_usage_tw.png" alt="空間使用分析：依檔案類型著色的樹狀圖" width="400">
 </p>
 <p align="center">
-  <img src="docs/screenshots/snapshot_restore_ch.png" alt="還原快照對話方塊" width="300">
-  <img src="docs/screenshots/snapshot_diff_ch.png" alt="快照變更：與目前磁碟比較後新增、刪除和修改的檔案" width="250">
+  <img src="docs/screenshots/snapshot_restore_tw.png" alt="還原快照對話方塊" width="300">
+  <img src="docs/screenshots/snapshot_diff_tw.png" alt="快照變更：與目前磁碟比較後新增、刪除和修改的檔案" width="250">
 </p>
 <p align="center">
   <img src="docs/screenshots/settings_window_tw.png" alt="設定視窗" width="200">
