@@ -89,8 +89,23 @@ public partial class MainWindow
     /// </summary>
     private void Window_DragEnter(object sender, DragEventArgs e)
     {
-        e.Effects = CanAcceptDrop() && TryGetSingleDroppedFilePath(e) is not null ? DragDropEffects.Copy : DragDropEffects.None;
+        var accepted = CanAcceptDrop() && TryGetSingleDroppedFilePath(e) is not null;
+        e.Effects = accepted ? DragDropEffects.Copy : DragDropEffects.None;
+        DropOverlay.Visibility = accepted ? Visibility.Visible : Visibility.Collapsed;
         e.Handled = true;
+    }
+
+    /// <summary>
+    /// Hides the drop hint when the pointer of a drag leaves the window. The event also bubbles up from child
+    /// elements when the pointer only moves between them, so the pointer position decides.
+    /// </summary>
+    private void Window_DragLeave(object sender, DragEventArgs e)
+    {
+        var position = e.GetPosition(this);
+        if (DragPositionRules.IsOutside(position.X, position.Y, ActualWidth, ActualHeight))
+        {
+            DropOverlay.Visibility = Visibility.Collapsed;
+        }
     }
 
     /// <summary>
@@ -101,6 +116,7 @@ public partial class MainWindow
     /// </summary>
     private async void Window_Drop(object sender, DragEventArgs e)
     {
+        DropOverlay.Visibility = Visibility.Collapsed;
         if (TryGetSingleDroppedFilePath(e) is not { } path || DataContext is not MainViewModel viewModel || !CanAcceptDrop())
         {
             return;
