@@ -127,6 +127,15 @@
                                                    Foreground="{DynamicResource AppForeground}"
                                                    TextTrimming="CharacterEllipsis"/>
                                     </DockPanel>
+                                    <!-- Read-only disk: the size of its content instead of used / capacity -->
+                                    <StackPanel Grid.Column="1" Orientation="Horizontal"
+                                                HorizontalAlignment="Right" Margin="8,0,0,0"
+                                                Visibility="{Binding IsReadOnly, Converter={StaticResource BoolToVis}}">
+                                        <TextBlock Text="{Binding UsedFormatted}" FontSize="12" FontWeight="Medium"
+                                                   Foreground="{DynamicResource AppForeground}"/>
+                                        <TextBlock Text="{DynamicResource Card.ReadOnlyContent}" FontSize="12" Margin="6,0,0,0"
+                                                   Foreground="{DynamicResource AppForegroundLight}"/>
+                                    </StackPanel>
                                     <StackPanel Grid.Column="1" Orientation="Horizontal"
                                                 HorizontalAlignment="Right" Margin="8,0,0,0"
                                                 Visibility="{Binding IsNotReadOnly, Converter={StaticResource BoolToVis}}">
@@ -196,15 +205,8 @@
 
                                         <controls:DiskSpeedRow/>
                                     </StackPanel>
-                                    <StackPanel VerticalAlignment="Top" Visibility="{Binding IsReadOnly, Converter={StaticResource BoolToVis}}">
-                                        <TextBlock FontSize="12"
-                                                   Foreground="{DynamicResource AppForegroundLight}"
-                                                   TextTrimming="CharacterEllipsis">
-                                            <Run Text="{DynamicResource Card.ReadOnly}"/>
-                                            <Run Text=" · "/>
-                                            <Run Text="{Binding SourcePath, Mode=OneWay}"/>
-                                        </TextBlock>
-                                    </StackPanel>
+                                    <controls:DiskReadOnlyInfo VerticalAlignment="Top"
+                                                               Visibility="{Binding IsReadOnly, Converter={StaticResource BoolToVis}}"/>
                                 </Grid>
                             </StackPanel>
 
@@ -229,6 +231,10 @@
                                            Foreground="{DynamicResource AppForegroundLight}"
                                            HorizontalAlignment="Right"/>
                             </StackPanel>
+
+                            <!-- Read-only disk: a lock badge where the free space would be -->
+                            <controls:DiskReadOnlyBadge Grid.Column="2"
+                                                        Visibility="{Binding IsReadOnly, Converter={StaticResource BoolToVis}}"/>
 
                             <!-- Quick actions, shown on hover; bottom right, where only the speed row's far side is free -->
                             <controls:DiskCardActions Grid.Column="1" Grid.ColumnSpan="2"

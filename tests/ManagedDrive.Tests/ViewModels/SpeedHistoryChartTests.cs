@@ -77,6 +77,15 @@ public sealed class SpeedHistoryChartTests
     }
 
     [Fact]
+    public void NormalizeUpwardPoints_ZeroAndMax_SpanBottomToTop()
+    {
+        var points = SpeedHistoryChart.NormalizeUpwardPoints([0, 100], width: 100, height: 50, scaleMax: 100);
+
+        Assert.Equal(50, points[0].Y);
+        Assert.Equal(0, points[1].Y);
+    }
+
+    [Fact]
     public void ToAreaPoints_EmptyLine_ReturnsEmptyArea()
     {
         var area = SpeedHistoryChart.ToAreaPoints([], baseline: 25);

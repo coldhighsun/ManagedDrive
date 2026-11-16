@@ -13,6 +13,35 @@ public sealed class FileNodeMapTests
     }
 
     [Fact]
+    public void ItemCount_EmptyMap_IsZero()
+    {
+        var map = new FileNodeMap();
+
+        Assert.Equal(0, map.ItemCount);
+    }
+
+    [Fact]
+    public void ItemCount_RootOnly_IsZero()
+    {
+        var map = new FileNodeMap();
+        map.Add("\\", MakeDir());
+
+        Assert.Equal(0, map.ItemCount);
+    }
+
+    [Fact]
+    public void ItemCount_RootFoldersAndFiles_CountsEverythingButRoot()
+    {
+        var map = new FileNodeMap();
+        map.Add("\\", MakeDir());
+        map.Add("\\Folder", MakeDir());
+        map.Add("\\Folder\\file.txt", MakeFile());
+        map.Add("\\other.txt", MakeFile());
+
+        Assert.Equal(3, map.ItemCount);
+    }
+
+    [Fact]
     public void Add_SetsLeafName()
     {
         var map = new FileNodeMap();
