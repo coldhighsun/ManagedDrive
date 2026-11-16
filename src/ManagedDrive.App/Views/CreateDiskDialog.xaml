@@ -147,17 +147,28 @@
                     </Grid>
 
                     <!-- Auto Mount -->
-                    <CheckBox Grid.Row="10" x:Name="AutoMountBox" IsChecked="True"
-                              Content="{DynamicResource CreateDisk.AutoMount}"
-                              Foreground="{DynamicResource AppForeground}"
-                              ToolTip="{DynamicResource Tip.AutoMount}"/>
+                    <!-- The caption under a check box repeats its tooltip text, so what the option does is visible without hovering. -->
+                    <StackPanel Grid.Row="10">
+                        <CheckBox x:Name="AutoMountBox" IsChecked="True"
+                                  Content="{DynamicResource CreateDisk.AutoMount}"
+                                  Foreground="{DynamicResource AppForeground}"
+                                  ToolTip="{DynamicResource Tip.AutoMount}"/>
+                        <TextBlock Text="{DynamicResource Tip.AutoMount}" Margin="22,2,0,0" TextWrapping="Wrap"
+                                   FontSize="{DynamicResource FontSizeCaption}"
+                                   Foreground="{DynamicResource AppForegroundLight}"/>
+                    </StackPanel>
 
                     <!-- Read Only -->
-                    <CheckBox Grid.Row="12" x:Name="ReadOnlyBox"
-                              Content="{DynamicResource CreateDisk.ReadOnly}"
-                              Foreground="{DynamicResource AppForeground}"
-                              ToolTip="{DynamicResource Tip.ReadOnly}"
-                              Checked="ReadOnlyBox_CheckedChanged" Unchecked="ReadOnlyBox_CheckedChanged"/>
+                    <StackPanel Grid.Row="12">
+                        <CheckBox x:Name="ReadOnlyBox"
+                                  Content="{DynamicResource CreateDisk.ReadOnly}"
+                                  Foreground="{DynamicResource AppForeground}"
+                                  ToolTip="{DynamicResource Tip.ReadOnly}"
+                                  Checked="ReadOnlyBox_CheckedChanged" Unchecked="ReadOnlyBox_CheckedChanged"/>
+                        <TextBlock Text="{DynamicResource Tip.ReadOnly}" Margin="22,2,0,0" TextWrapping="Wrap"
+                                   FontSize="{DynamicResource FontSizeCaption}"
+                                   Foreground="{DynamicResource AppForegroundLight}"/>
+                    </StackPanel>
                 </Grid>
             </TabItem>
 
