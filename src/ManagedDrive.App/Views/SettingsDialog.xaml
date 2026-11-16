@@ -8,6 +8,69 @@
         Width="420" SizeToContent="Height"
         WindowStartupLocation="CenterOwner">
 
+    <views:DialogWindowBase.Resources>
+
+        <!-- A row of choice cards: each item is a ListBoxItem whose content is its caption and whose Tag is the value;
+             the picker's own Tag says what the miniature shows ("theme" or "style", see StylePreview). -->
+        <Style x:Key="ChoiceCardList" TargetType="ListBox">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled"/>
+            <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Disabled"/>
+            <Setter Property="ItemsPanel">
+                <Setter.Value>
+                    <ItemsPanelTemplate>
+                        <WrapPanel Orientation="Horizontal"/>
+                    </ItemsPanelTemplate>
+                </Setter.Value>
+            </Setter>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ListBox">
+                        <ItemsPresenter/>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Setter Property="ItemContainerStyle">
+                <Setter.Value>
+                    <Style TargetType="ListBoxItem">
+                        <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+                        <Setter Property="Cursor" Value="Hand"/>
+                        <Setter Property="Template">
+                            <Setter.Value>
+                                <ControlTemplate TargetType="ListBoxItem">
+                                    <StackPanel Margin="0,0,10,0" Background="Transparent">
+                                        <Border x:Name="Frame" Width="104" Height="68" CornerRadius="8"
+                                                BorderThickness="2" ClipToBounds="True"
+                                                BorderBrush="{DynamicResource AppDivider}">
+                                            <controls:StylePreview Margin="-0.5"
+                                                                   Mode="{Binding Tag, RelativeSource={RelativeSource AncestorType=ListBox}}"
+                                                                   Value="{Binding Tag, RelativeSource={RelativeSource TemplatedParent}}"/>
+                                        </Border>
+                                        <ContentPresenter x:Name="Caption" Margin="0,5,0,0" HorizontalAlignment="Center"
+                                                          TextElement.FontSize="12"
+                                                          TextElement.Foreground="{DynamicResource AppForegroundLight}"/>
+                                    </StackPanel>
+                                    <ControlTemplate.Triggers>
+                                        <Trigger Property="IsMouseOver" Value="True">
+                                            <Setter TargetName="Frame" Property="BorderBrush" Value="{DynamicResource AppForegroundLight}"/>
+                                        </Trigger>
+                                        <Trigger Property="IsSelected" Value="True">
+                                            <Setter TargetName="Frame" Property="BorderBrush" Value="{DynamicResource AppPrimary}"/>
+                                            <Setter TargetName="Caption" Property="TextElement.Foreground" Value="{DynamicResource AppForeground}"/>
+                                            <Setter TargetName="Caption" Property="TextElement.FontWeight" Value="SemiBold"/>
+                                        </Trigger>
+                                    </ControlTemplate.Triggers>
+                                </ControlTemplate>
+                            </Setter.Value>
+                        </Setter>
+                    </Style>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </views:DialogWindowBase.Resources>
+
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
@@ -16,7 +79,7 @@
         </Grid.RowDefinitions>
 
         <!-- Fixed MinHeight (tallest tab) so the dialog does not resize when switching tabs; bump it if a tab grows. -->
-        <TabControl Grid.Row="0" Style="{StaticResource AppTabControl}" MinHeight="250">
+        <TabControl Grid.Row="0" Style="{StaticResource AppTabControl}" MinHeight="340">
 
             <!-- General -->
             <TabItem Header="{DynamicResource Settings.Tab.General}">
@@ -50,9 +113,13 @@
                 <Grid>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="12"/>
+                        <RowDefinition Height="14"/>
                         <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="12"/>
+                        <RowDefinition Height="6"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="10"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="6"/>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="12"/>
                         <RowDefinition Height="Auto"/>
@@ -69,25 +136,24 @@
                               x:Name="LanguageBox"
                               Style="{StaticResource OutlinedComboBox}"/>
 
-                    <TextBlock Grid.Row="2" Grid.Column="0"
-                               Text="{DynamicResource Settings.Theme}"
-                               VerticalAlignment="Center"/>
-                    <ComboBox Grid.Row="2" Grid.Column="1"
-                              x:Name="ThemeBox"
-                              Style="{StaticResource OutlinedComboBox}"/>
+                    <!-- Theme and style are picked from cards with a miniature of the window, below their label. -->
+                    <TextBlock Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="2"
+                               Text="{DynamicResource Settings.Theme}"/>
+                    <ListBox Grid.Row="4" Grid.Column="0" Grid.ColumnSpan="2"
+                             x:Name="ThemeBox" Tag="theme"
+                             Style="{StaticResource ChoiceCardList}"/>
 
-                    <TextBlock Grid.Row="4" Grid.Column="0"
-                               Text="{DynamicResource Settings.Style}"
-                               VerticalAlignment="Center"/>
-                    <ComboBox Grid.Row="4" Grid.Column="1"
-                              x:Name="StyleBox"
-                              Style="{StaticResource OutlinedComboBox}"/>
+                    <TextBlock Grid.Row="6" Grid.Column="0" Grid.ColumnSpan="2"
+                               Text="{DynamicResource Settings.Style}"/>
+                    <ListBox Grid.Row="8" Grid.Column="0" Grid.ColumnSpan="2"
+                             x:Name="StyleBox" Tag="style"
+                             Style="{StaticResource ChoiceCardList}"/>
 
-                    <TextBlock Grid.Row="6" Grid.Column="0"
+                    <TextBlock Grid.Row="10" Grid.Column="0"
                                Text="{DynamicResource Settings.Font}"
                                ToolTip="{DynamicResource Tip.Font}"
                                VerticalAlignment="Center"/>
-                    <ComboBox Grid.Row="6" Grid.Column="1"
+                    <ComboBox Grid.Row="10" Grid.Column="1"
                               x:Name="FontBox"
                               ToolTip="{DynamicResource Tip.Font}"
                               Style="{StaticResource OutlinedComboBox}"
