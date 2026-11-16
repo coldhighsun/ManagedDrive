@@ -11,7 +11,6 @@
     <NoWarn>$(NoWarn);WFO0003</NoWarn>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <PublishReadyToRun>true</PublishReadyToRun>
-    <PublishSingleFile>true</PublishSingleFile>
   </PropertyGroup>
 
   <ItemGroup>

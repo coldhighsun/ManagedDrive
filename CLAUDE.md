@@ -109,13 +109,15 @@ Integrity/hardening notes: a v6 segment's plaintext is verified against its inde
 
 ### SingleFile publish caveat
 
-`ManagedDrive.App.csproj` has `PublishSingleFile=true`. `winfsp-msil.dll` is mixed-mode (C++/CLI) and excluded via `ExcludeWinFspMsilFromSingleFile` target — do not remove it or the app throws at startup. This DLL (from NuGet, next to the exe) is distinct from the system-installed one at `C:\Program Files (x86)\WinFsp\bin\`.
+No csproj sets `PublishSingleFile`; single-file is opt-in per publish via `-p:PublishSingleFile=true` (CI does this for the portable ZIP only; the installer payload is a plain multi-file publish, where the exclusion target below is moot because every DLL is on disk). `winfsp-msil.dll` is mixed-mode (C++/CLI) and excluded via `ExcludeWinFspMsilFromSingleFile` target — do not remove it or the app throws at startup. This DLL (from NuGet, next to the exe) is distinct from the system-installed one at `C:\Program Files (x86)\WinFsp\bin\`.
 
 ### Release pipeline
 
 `.github/workflows/ci.yml`: build + test on every push. `v*` tag → framework-dependent publish (`win-x64`, not self-contained) → GitHub Release with portable ZIP + Inno Setup installer. Installer bundles WinFsp MSI and auto-downloads .NET 10 Desktop Runtime if missing.
 
-Local installer test: publish App/Cli into `installer/publish-fx/`, then `iscc.exe /DAppVersion=0.0.0-test installer/ManagedDrive.iss`.
+The Inno Setup installer does **not** use single-file builds: CI publishes App/Cli/Service/wingetx into `publish-installer/` (copied to `installer/publish-fx/`) without the flag, while the portable ZIP is built from `publish-fx/` with `-p:PublishSingleFile=true`.
+
+Local installer test: publish App/Cli/Service (no single-file flag) into `installer/publish-fx/`, then `iscc.exe /DAppVersion=0.0.0-test installer/ManagedDrive.iss`.
 
 ### Benchmarks
 

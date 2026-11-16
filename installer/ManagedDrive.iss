@@ -1,7 +1,7 @@
 ; ManagedDrive Inno Setup script.
 ;
-; Build (from repo root, after publishing framework-dependent output into
-; installer\publish-fx and dropping the WinFsp MSI into installer\):
+; Build (from repo root, after publishing framework-dependent, non-single-file
+; output (the csproj default; no PublishSingleFile) into installer\publish-fx and dropping the WinFsp MSI into installer\):
 ;   iscc.exe /DAppVersion=1.2.3 installer\ManagedDrive.iss
 ;
 ; AppVersion defaults to a placeholder so the script can still be compiled

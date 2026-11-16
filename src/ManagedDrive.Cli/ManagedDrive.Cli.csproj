@@ -4,7 +4,6 @@
     <OutputType>Exe</OutputType>
     <AssemblyName>mdrive</AssemblyName>
     <PublishReadyToRun>true</PublishReadyToRun>
-    <PublishSingleFile>true</PublishSingleFile>
   </PropertyGroup>
 
   <ItemGroup>

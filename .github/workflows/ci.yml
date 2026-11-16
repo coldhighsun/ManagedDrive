@@ -88,40 +88,58 @@ jobs:
         with:
           dotnet-version: '10.0.x'
 
-      - name: Restore & Publish app (win-x64, framework-dependent)
+      - name: Restore & Publish app (win-x64, framework-dependent, single-file)
         run: |
           dotnet publish src/ManagedDrive.App/ManagedDrive.App.csproj `
             -c Release `
             -r win-x64 `
             --no-self-contained `
+            -p:PublishSingleFile=true `
             -o publish-fx/
         shell: pwsh
 
-      - name: Publish CLI (win-x64, framework-dependent)
+      - name: Publish CLI (win-x64, framework-dependent, single-file)
         run: |
           dotnet publish src/ManagedDrive.Cli/ManagedDrive.Cli.csproj `
             -c Release `
             -r win-x64 `
             --no-self-contained `
+            -p:PublishSingleFile=true `
             -o publish-fx/
         shell: pwsh
 
-      - name: Publish helper service (win-x64, framework-dependent)
+      - name: Publish helper service (win-x64, framework-dependent, single-file)
         run: |
           dotnet publish src/ManagedDrive.Service/ManagedDrive.Service.csproj `
             -c Release `
             -r win-x64 `
             --no-self-contained `
+            -p:PublishSingleFile=true `
             -o publish-fx/
         shell: pwsh
 
-      - name: Publish wingetx (win-x64, framework-dependent)
+      - name: Publish wingetx (win-x64, framework-dependent, single-file)
         run: |
           dotnet publish src/ManagedDrive.WingetExtension/ManagedDrive.WingetExtension.csproj `
             -c Release `
             -r win-x64 `
             --no-self-contained `
+            -p:PublishSingleFile=true `
             -o publish-fx/
+        shell: pwsh
+
+      - name: Publish installer payload (win-x64, framework-dependent, NOT single-file)
+        # The Setup installer ships plain multi-file output (exe + dlls); single-file is opt-in
+        # via -p:PublishSingleFile=true and only the portable ZIP (publish-fx/) uses it.
+        run: |
+          foreach ($proj in 'ManagedDrive.App', 'ManagedDrive.Cli', 'ManagedDrive.Service', 'ManagedDrive.WingetExtension') {
+            dotnet publish "src/$proj/$proj.csproj" `
+              -c Release `
+              -r win-x64 `
+              --no-self-contained `
+                -o publish-installer/
+            if ($LASTEXITCODE -ne 0) { throw "Publish of $proj failed" }
+          }
         shell: pwsh
 
       - name: Resolve version from tag
@@ -177,7 +195,7 @@ jobs:
 
       - name: Prepare installer inputs
         run: |
-          Copy-Item -Path publish-fx -Destination installer\publish-fx -Recurse
+          Copy-Item -Path publish-installer -Destination installer\publish-fx -Recurse
           Copy-Item $env:WINFSP_MSI installer\
         shell: pwsh
 

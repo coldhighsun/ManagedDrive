@@ -4,7 +4,6 @@
     <OutputType>Exe</OutputType>
     <AssemblyName>wingetx</AssemblyName>
     <PublishReadyToRun>true</PublishReadyToRun>
-    <PublishSingleFile>true</PublishSingleFile>
   </PropertyGroup>
 
   <ItemGroup>
