@@ -57,8 +57,22 @@
 
     <!-- ========== Button styles ========== -->
 
+    <!-- Keyboard focus of an icon button: a round ring that follows the button's shape, instead of the default dotted
+         rectangle. -->
+    <Style x:Key="IconButtonFocusVisual">
+        <Setter Property="Control.Template">
+            <Setter.Value>
+                <ControlTemplate>
+                    <Ellipse Margin="1" Stroke="{DynamicResource AppPrimary}" StrokeThickness="2"
+                             IsHitTestVisible="False"/>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
     <!-- Icon button (toolbar) -->
     <Style x:Key="IconButton" TargetType="Button">
+        <Setter Property="FocusVisualStyle" Value="{StaticResource IconButtonFocusVisual}"/>
         <Setter Property="Width" Value="40"/>
         <Setter Property="Height" Value="40"/>
         <Setter Property="Background" Value="Transparent"/>
@@ -92,6 +106,31 @@
                 </ControlTemplate>
             </Setter.Value>
         </Setter>
+    </Style>
+
+    <!-- A quick-action button on a disk card: a small round icon button that darkens its glyph under the mouse. -->
+    <Style x:Key="CardActionButton" TargetType="Button" BasedOn="{StaticResource IconButton}">
+        <Setter Property="Width" Value="28"/>
+        <Setter Property="Height" Value="28"/>
+        <Setter Property="Focusable" Value="False"/>
+        <Setter Property="Foreground" Value="{DynamicResource AppForegroundLight}"/>
+        <Setter Property="RenderTransformOrigin" Value="0.5,0.5"/>
+        <Style.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+                <Setter Property="Foreground" Value="{DynamicResource AppForeground}"/>
+            </Trigger>
+            <!-- Pressed: the button shrinks a little, takes the primary colour and a stronger background, so the click
+                 is seen even when the action itself takes a moment. -->
+            <Trigger Property="IsPressed" Value="True">
+                <Setter Property="Foreground" Value="{DynamicResource AppPrimary}"/>
+                <Setter Property="Background" Value="{DynamicResource AppPressed}"/>
+                <Setter Property="RenderTransform">
+                    <Setter.Value>
+                        <ScaleTransform ScaleX="0.85" ScaleY="0.85"/>
+                    </Setter.Value>
+                </Setter>
+            </Trigger>
+        </Style.Triggers>
     </Style>
 
     <!-- Close button of a window: like the icon button, but it turns red under the mouse (white glyph, so the reds are the
@@ -896,17 +935,20 @@
                             <ContentPresenter x:Name="Header" ContentSource="Header"
                                               Margin="12,8,12,10"
                                               HorizontalAlignment="Center"
-                                              TextElement.Foreground="{DynamicResource AppForegroundLight}"/>
+                                              Opacity="0.72"
+                                              TextElement.Foreground="{DynamicResource AppForeground}"/>
                             <Border x:Name="Indicator" Height="2" Background="Transparent"/>
                         </StackPanel>
                     </Border>
                     <ControlTemplate.Triggers>
+                        <!-- An unselected title is the normal text colour at 72 %, which reads clearer than the muted grey. -->
                         <Trigger Property="IsSelected" Value="True">
                             <Setter TargetName="Indicator" Property="Background" Value="{DynamicResource AppPrimary}"/>
-                            <Setter TargetName="Header" Property="TextElement.Foreground" Value="{DynamicResource AppForeground}"/>
+                            <Setter TargetName="Header" Property="Opacity" Value="1"/>
                             <Setter TargetName="Header" Property="TextElement.FontWeight" Value="SemiBold"/>
                         </Trigger>
                         <Trigger SourceName="Bd" Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Header" Property="Opacity" Value="1"/>
                             <Setter TargetName="Bd" Property="Background" Value="{DynamicResource AppHover}"/>
                             <Setter TargetName="Bd" Property="CornerRadius" Value="3,3,0,0"/>
                         </Trigger>

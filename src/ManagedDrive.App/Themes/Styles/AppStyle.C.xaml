@@ -163,24 +163,18 @@
                                         </StackPanel.Style>
                                         <Border Height="3" Margin="0,10,0,9" CornerRadius="0" ClipToBounds="True"
                                                 Background="{DynamicResource AppProgressTrack}">
-                                            <Grid>
-                                                <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="{Binding UsedPercent, Converter={StaticResource PercentToGridLengthConverter}, ConverterParameter=Fill}"/>
-                                                    <ColumnDefinition Width="{Binding UsedPercent, Converter={StaticResource PercentToGridLengthConverter}, ConverterParameter=Remainder}"/>
-                                                </Grid.ColumnDefinitions>
-                                                <Border Grid.Column="0" CornerRadius="0">
-                                                    <Border.Style>
-                                                        <Style TargetType="Border">
-                                                            <Setter Property="Background" Value="{DynamicResource AppPrimary}"/>
-                                                            <Style.Triggers>
-                                                                <DataTrigger Binding="{Binding IsHighUsage}" Value="True">
-                                                                    <Setter Property="Background" Value="{DynamicResource AppWarning}"/>
-                                                                </DataTrigger>
-                                                            </Style.Triggers>
-                                                        </Style>
-                                                    </Border.Style>
-                                                </Border>
-                                            </Grid>
+                                            <controls:UsageBar CornerRadius="0" Percent="{Binding UsedPercent}">
+                                                <controls:UsageBar.Style>
+                                                    <Style TargetType="controls:UsageBar">
+                                                        <Setter Property="Background" Value="{DynamicResource AppPrimary}"/>
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding IsHighUsage}" Value="True">
+                                                                <Setter Property="Background" Value="{DynamicResource AppWarning}"/>
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </controls:UsageBar.Style>
+                                            </controls:UsageBar>
                                         </Border>
 
                                         <StackPanel Orientation="Horizontal">
@@ -235,6 +229,11 @@
                                            Foreground="{DynamicResource AppForegroundLight}"
                                            HorizontalAlignment="Right"/>
                             </StackPanel>
+
+                            <!-- Quick actions, shown on hover; bottom right, where only the speed row's far side is free -->
+                            <controls:DiskCardActions Grid.Column="1" Grid.ColumnSpan="2"
+                                                      HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                                                      Margin="0,0,0,-4"/>
 
                             <!-- Saving overlay; negative margin cancels the card Padding and its 1.5 px border so it covers the whole card -->
                             <Border Grid.ColumnSpan="3" Margin="-15.5,-12.5"

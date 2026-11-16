@@ -1,0 +1,65 @@
+<UserControl x:Class="ManagedDrive.App.Controls.DiskCardActions"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!-- Quick actions of a disk card: open, edit, save and unmount. They fade in while the mouse is over the card's
+         list item and cannot be hit while hidden, so they never swallow a click meant for the card. The buttons are not
+         focusable: the same commands are in the context menu and on the window's shortcuts. Window-level commands are
+         read from the window's DataContext, with the disk as the parameter, like the context menu does. -->
+    <StackPanel Orientation="Horizontal">
+        <StackPanel.Style>
+            <Style TargetType="StackPanel">
+                <!-- Defaults live in the style, not on the element: a local value would beat the trigger below,
+                     so the buttons could never be hit. -->
+                <Setter Property="IsHitTestVisible" Value="False"/>
+                <Setter Property="Opacity" Value="0"/>
+                <Style.Triggers>
+                    <DataTrigger Binding="{Binding IsMouseOver, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True">
+                        <Setter Property="IsHitTestVisible" Value="True"/>
+                        <DataTrigger.EnterActions>
+                            <BeginStoryboard>
+                                <Storyboard>
+                                    <DoubleAnimation Storyboard.TargetProperty="Opacity" To="1" Duration="0:0:0.12"/>
+                                </Storyboard>
+                            </BeginStoryboard>
+                        </DataTrigger.EnterActions>
+                        <DataTrigger.ExitActions>
+                            <BeginStoryboard>
+                                <Storyboard>
+                                    <DoubleAnimation Storyboard.TargetProperty="Opacity" To="0" Duration="0:0:0.12"/>
+                                </Storyboard>
+                            </BeginStoryboard>
+                        </DataTrigger.ExitActions>
+                    </DataTrigger>
+                </Style.Triggers>
+            </Style>
+        </StackPanel.Style>
+
+        <Button Style="{DynamicResource CardActionButton}"
+                Command="{Binding OpenInExplorerCommand}"
+                ToolTip="{DynamicResource Btn.OpenInExplorer}"
+                AutomationProperties.Name="{DynamicResource Btn.OpenInExplorer}">
+            <TextBlock Style="{DynamicResource IconText}" FontSize="13" Text="&#xE838;"/>
+        </Button>
+        <Button Style="{DynamicResource CardActionButton}"
+                Command="{Binding DataContext.EditDiskCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                CommandParameter="{Binding}"
+                ToolTip="{DynamicResource Btn.EditDisk}"
+                AutomationProperties.Name="{DynamicResource Btn.EditDisk}">
+            <TextBlock Style="{DynamicResource IconText}" FontSize="13" Text="&#xE70F;"/>
+        </Button>
+        <Button Style="{DynamicResource CardActionButton}"
+                Command="{Binding DataContext.SaveImageCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                CommandParameter="{Binding}"
+                ToolTip="{DynamicResource Btn.SaveImage}"
+                AutomationProperties.Name="{DynamicResource Btn.SaveImage}">
+            <TextBlock Style="{DynamicResource IconText}" FontSize="13" Text="&#xE74E;"/>
+        </Button>
+        <Button Style="{DynamicResource CardActionButton}"
+                Command="{Binding DataContext.UnmountCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                CommandParameter="{Binding}"
+                ToolTip="{DynamicResource Btn.Unmount}"
+                AutomationProperties.Name="{DynamicResource Btn.Unmount}">
+            <TextBlock Style="{DynamicResource IconText}" FontSize="13" Text="&#xE711;"/>
+        </Button>
+    </StackPanel>
+</UserControl>
