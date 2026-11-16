@@ -55,12 +55,12 @@ public partial class SettingsDialog
             LanguageBox.SelectedIndex = 0;
         }
 
-        ThemeBox.Items.Add(new ComboBoxItem { Content = Loc.Get("Settings.Theme.System"), Tag = "" });
-        ThemeBox.Items.Add(new ComboBoxItem { Content = Loc.Get("Settings.Theme.Light"), Tag = "light" });
-        ThemeBox.Items.Add(new ComboBoxItem { Content = Loc.Get("Settings.Theme.Dark"), Tag = "dark" });
+        ThemeBox.Items.Add(new ListBoxItem { Content = Loc.Get("Settings.Theme.System"), Tag = "" });
+        ThemeBox.Items.Add(new ListBoxItem { Content = Loc.Get("Settings.Theme.Light"), Tag = "light" });
+        ThemeBox.Items.Add(new ListBoxItem { Content = Loc.Get("Settings.Theme.Dark"), Tag = "dark" });
 
         var savedTheme = config.Theme ?? "";
-        foreach (ComboBoxItem item in ThemeBox.Items)
+        foreach (ListBoxItem item in ThemeBox.Items)
         {
             if ((string)item.Tag == savedTheme)
             {
@@ -76,11 +76,11 @@ public partial class SettingsDialog
 
         foreach (var style in StyleManager.SupportedStyles)
         {
-            StyleBox.Items.Add(new ComboBoxItem { Content = Loc.Get($"Settings.Style.{style.ToUpperInvariant()}"), Tag = style });
+            StyleBox.Items.Add(new ListBoxItem { Content = Loc.Get($"Settings.Style.{style.ToUpperInvariant()}"), Tag = style });
         }
 
         var savedStyle = StyleManager.Resolve(config.UiStyle);
-        foreach (ComboBoxItem item in StyleBox.Items)
+        foreach (ListBoxItem item in StyleBox.Items)
         {
             if ((string)item.Tag == savedStyle)
             {
@@ -204,10 +204,10 @@ public partial class SettingsDialog
         var selectedTag = LanguageBox.SelectedItem is ComboBoxItem { Tag: string t } && !string.IsNullOrEmpty(t) ? t : null;
         LanguageManager.Instance.Apply(selectedTag);
 
-        var selectedTheme = ThemeBox.SelectedItem is ComboBoxItem { Tag: string th } && !string.IsNullOrEmpty(th) ? th : null;
+        var selectedTheme = ThemeBox.SelectedItem is ListBoxItem { Tag: string th } && !string.IsNullOrEmpty(th) ? th : null;
         ThemeManager.Instance.Apply(selectedTheme);
 
-        var selectedStyle = StyleBox.SelectedItem is ComboBoxItem { Tag: string st } && st != StyleManager.DefaultStyle ? st : null;
+        var selectedStyle = StyleBox.SelectedItem is ListBoxItem { Tag: string st } && st != StyleManager.DefaultStyle ? st : null;
         StyleManager.Instance.Apply(selectedStyle);
 
         var selectedFont = FontManager.Normalize(FontBox.SelectedItem is ComboBoxItem { Tag: string f } ? f : null);
