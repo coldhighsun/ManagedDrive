@@ -49,6 +49,15 @@
         <Setter Property="WindowChrome.IsHitTestVisibleInChrome" Value="True"/>
     </Style>
 
+    <!-- Hairline between two groups of tool buttons: a horizontal line here, as the buttons stand in a column. -->
+    <Style x:Key="ToolSeparatorStyle" TargetType="Border">
+        <Setter Property="Width" Value="24"/>
+        <Setter Property="Height" Value="1"/>
+        <Setter Property="Margin" Value="0,8"/>
+        <Setter Property="Background" Value="{DynamicResource AppDivider}"/>
+        <Setter Property="IsHitTestVisible" Value="False"/>
+    </Style>
+
     <!-- Disk card: a raised dark (or white) panel with a hairline border. -->
     <Style x:Key="DiskCard" TargetType="Border">
         <Setter Property="Background" Value="{DynamicResource AppSurface}"/>
@@ -233,27 +242,21 @@
                                         </StackPanel.Style>
                                         <Border Height="6" Margin="0,8,0,8" CornerRadius="3" ClipToBounds="True"
                                                 Background="{DynamicResource AppProgressTrack}">
-                                            <Grid>
-                                                <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="{Binding UsedPercent, Converter={StaticResource PercentToGridLengthConverter}, ConverterParameter=Fill}"/>
-                                                    <ColumnDefinition Width="{Binding UsedPercent, Converter={StaticResource PercentToGridLengthConverter}, ConverterParameter=Remainder}"/>
-                                                </Grid.ColumnDefinitions>
-                                                <Border Grid.Column="0" CornerRadius="3">
-                                                    <Border.Style>
-                                                        <Style TargetType="Border">
-                                                            <Setter Property="Background" Value="{DynamicResource AppSuccess}"/>
-                                                            <Style.Triggers>
-                                                                <DataTrigger Binding="{Binding UsageLevel}" Value="High">
-                                                                    <Setter Property="Background" Value="{DynamicResource AppWarning}"/>
-                                                                </DataTrigger>
-                                                                <DataTrigger Binding="{Binding UsageLevel}" Value="Critical">
-                                                                    <Setter Property="Background" Value="{DynamicResource AppDanger}"/>
-                                                                </DataTrigger>
-                                                            </Style.Triggers>
-                                                        </Style>
-                                                    </Border.Style>
-                                                </Border>
-                                            </Grid>
+                                            <controls:UsageBar CornerRadius="3" Percent="{Binding UsedPercent}">
+                                                <controls:UsageBar.Style>
+                                                    <Style TargetType="controls:UsageBar">
+                                                        <Setter Property="Background" Value="{DynamicResource AppSuccess}"/>
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding UsageLevel}" Value="High">
+                                                                <Setter Property="Background" Value="{DynamicResource AppWarning}"/>
+                                                            </DataTrigger>
+                                                            <DataTrigger Binding="{Binding UsageLevel}" Value="Critical">
+                                                                <Setter Property="Background" Value="{DynamicResource AppDanger}"/>
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </controls:UsageBar.Style>
+                                            </controls:UsageBar>
                                         </Border>
 
                                         <StackPanel Orientation="Horizontal">
@@ -308,6 +311,11 @@
                                            Foreground="{DynamicResource AppForegroundLight}"
                                            HorizontalAlignment="Right"/>
                             </StackPanel>
+
+                            <!-- Quick actions, shown on hover; bottom right, where only the speed row's far side is free -->
+                            <controls:DiskCardActions Grid.Column="1" Grid.ColumnSpan="2"
+                                                      HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                                                      Margin="0,0,0,-4"/>
 
                             <!-- Saving overlay; negative margin cancels the card Padding so it covers the whole card -->
                             <Border Grid.ColumnSpan="3" Margin="{StaticResource DiskCardOverlayMargin}"
