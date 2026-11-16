@@ -151,6 +151,7 @@
     <sys:String x:Key="Card.HighUsage">剩餘空間不足</sys:String>
     <sys:String x:Key="Empty.Title">尚未掛載磁碟</sys:String>
     <sys:String x:Key="Empty.Subtitle">新增一個 RAM 磁碟，或匯入現有的映像檔/壓縮檔即可開始。</sys:String>
+    <sys:String x:Key="Drop.Hint">放開以匯入磁碟映像檔或壓縮檔</sys:String>
     <sys:String x:Key="Val.AutoSaveNoImage">開啟自動儲存前，請先選擇映像檔。</sys:String>
     <sys:String x:Key="Val.ImagePathOnRamDisk">映像檔不能位於記憶體磁碟上。</sys:String>
     <sys:String x:Key="Val.ImagePathInUse">此映像檔已被其他記憶體磁碟使用。</sys:String>
