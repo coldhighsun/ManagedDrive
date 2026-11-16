@@ -10,10 +10,10 @@ namespace ManagedDrive.App.ViewModels;
 public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
 {
     /// <summary>
-    /// Gap between the high-usage warning threshold and the reset threshold that re-arms the
-    /// warning, providing hysteresis without exposing a second setting to the user.
+    /// Whether the one-shot <see cref="HighUsageWarning"/> may be raised on the next rise above the threshold; see
+    /// <see cref="HighUsageRules"/>. The warning state itself (<see cref="IsHighUsage"/>) is not held back by it.
     /// </summary>
-    private const double HighUsageResetGap = 5.0;
+    private bool _highUsageArmed = true;
 
     /// <summary>
     /// Number of speed samples retained for the read/write history popup: 30 minutes at the
@@ -560,35 +560,20 @@ public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
             return;
         }
 
-        var used = UsedPercent;
-        if (Disk.Options.GetEffectiveHighUsageWarnPercent() is not { } threshold)
-        {
-            if (IsHighUsage)
-            {
-                IsHighUsage = false;
-                OnPropertyChanged(nameof(IsHighUsage));
-                OnPropertyChanged(nameof(UsageLevel));
-                OnPropertyChanged(nameof(ShowUsageWarning));
-            }
+        var state = HighUsageRules.Evaluate(UsedPercent, Disk.Options.GetEffectiveHighUsageWarnPercent(), _highUsageArmed);
+        _highUsageArmed = state.IsArmed;
 
-            return;
-        }
-
-        var resetThreshold = Math.Max(1.0, threshold - HighUsageResetGap);
-        if (!IsHighUsage && used >= threshold)
+        if (state.IsHigh != IsHighUsage)
         {
-            IsHighUsage = true;
+            IsHighUsage = state.IsHigh;
             OnPropertyChanged(nameof(IsHighUsage));
             OnPropertyChanged(nameof(UsageLevel));
             OnPropertyChanged(nameof(ShowUsageWarning));
+        }
+
+        if (state.RaiseWarning)
+        {
             HighUsageWarning?.Invoke(this, EventArgs.Empty);
-        }
-        else if (IsHighUsage && used < resetThreshold)
-        {
-            IsHighUsage = false;
-            OnPropertyChanged(nameof(IsHighUsage));
-            OnPropertyChanged(nameof(UsageLevel));
-            OnPropertyChanged(nameof(ShowUsageWarning));
         }
     }
 
