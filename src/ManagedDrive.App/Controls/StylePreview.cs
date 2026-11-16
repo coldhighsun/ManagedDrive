@@ -54,6 +54,18 @@ public sealed class StylePreview : FrameworkElement
             return;
         }
 
+        // Rounded to follow the card's frame: the frame's own ClipToBounds only clips to a rectangle, so the square
+        // corners of the drawing would otherwise show outside its rounded border.
+        dc.PushClip(new RectangleGeometry(bounds, 6, 6));
+        DrawPreview(dc, bounds);
+        dc.Pop();
+    }
+
+    /// <summary>
+    /// Draws the preview for the current <see cref="Mode"/> and <see cref="Value"/> into <paramref name="bounds"/>.
+    /// </summary>
+    private void DrawPreview(DrawingContext dc, Rect bounds)
+    {
         var currentStyle = StyleManager.Instance.CurrentStyle;
         var currentDark = ThemeManager.Instance.CurrentTheme == "dark";
 
