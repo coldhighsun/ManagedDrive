@@ -207,8 +207,32 @@
                     <Setter Property="Margin" Value="0"/>
                     <Setter Property="Template">
                         <Setter.Value>
+                            <!-- A card fades in and slides up a little when its item is created (a disk was mounted, or the
+                                 list was built), the same for every style because the animation lives here, not in the card
+                                 templates. The shift is a transform of the template's own presenter, so every item has its
+                                 own instance to animate. -->
                             <ControlTemplate TargetType="ListBoxItem">
-                                <ContentPresenter/>
+                                <ContentPresenter x:Name="Presenter">
+                                    <ContentPresenter.RenderTransform>
+                                        <TranslateTransform x:Name="Shift"/>
+                                    </ContentPresenter.RenderTransform>
+                                </ContentPresenter>
+                                <ControlTemplate.Triggers>
+                                    <EventTrigger RoutedEvent="FrameworkElement.Loaded">
+                                        <BeginStoryboard>
+                                            <Storyboard>
+                                                <DoubleAnimation Storyboard.TargetName="Presenter" Storyboard.TargetProperty="Opacity"
+                                                                 From="0" To="1" Duration="0:0:0.22"/>
+                                                <DoubleAnimation Storyboard.TargetName="Shift" Storyboard.TargetProperty="Y"
+                                                                 From="10" To="0" Duration="0:0:0.22">
+                                                    <DoubleAnimation.EasingFunction>
+                                                        <CubicEase EasingMode="EaseOut"/>
+                                                    </DoubleAnimation.EasingFunction>
+                                                </DoubleAnimation>
+                                            </Storyboard>
+                                        </BeginStoryboard>
+                                    </EventTrigger>
+                                </ControlTemplate.Triggers>
                             </ControlTemplate>
                         </Setter.Value>
                     </Setter>
