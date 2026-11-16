@@ -293,7 +293,7 @@
                             </StackPanel>
 
                             <!-- Free space -->
-                            <StackPanel Grid.Column="2" VerticalAlignment="Center" HorizontalAlignment="Right"
+                            <StackPanel Grid.Column="2" VerticalAlignment="Top" HorizontalAlignment="Right"
                                         Visibility="{Binding IsNotReadOnly, Converter={StaticResource BoolToVis}}">
                                 <TextBlock Text="{Binding FreeFormatted}"
                                            FontSize="14" FontWeight="Medium"
