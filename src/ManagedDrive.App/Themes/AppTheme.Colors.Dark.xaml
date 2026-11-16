@@ -42,15 +42,17 @@
     <SolidColorBrush x:Key="AppAccentSoft6" Color="#338B8BFF"/>
 
     <!-- Space usage treemap: one colour per file category, plus folders and the merged small-items block. -->
-    <SolidColorBrush x:Key="AppSpaceImage" Color="#388E3C"/>
-    <SolidColorBrush x:Key="AppSpaceVideo" Color="#7B1FA2"/>
-    <SolidColorBrush x:Key="AppSpaceAudio" Color="#00796B"/>
-    <SolidColorBrush x:Key="AppSpaceArchive" Color="#D84315"/>
-    <SolidColorBrush x:Key="AppSpaceDocument" Color="#1976D2"/>
-    <SolidColorBrush x:Key="AppSpaceCode" Color="#303F9F"/>
-    <SolidColorBrush x:Key="AppSpaceExecutable" Color="#B71C1C"/>
+    <!-- Muted, colour-blind-friendly hues (after the Okabe-Ito set), each dark enough for the white cell labels. Archive
+         (amber) and executable (deep crimson) differ in lightness as well as hue, so they stay apart without red-green vision. -->
+    <SolidColorBrush x:Key="AppSpaceImage" Color="#357A2B"/>
+    <SolidColorBrush x:Key="AppSpaceVideo" Color="#A8527F"/>
+    <SolidColorBrush x:Key="AppSpaceAudio" Color="#1F7F8E"/>
+    <SolidColorBrush x:Key="AppSpaceArchive" Color="#A66300"/>
+    <SolidColorBrush x:Key="AppSpaceDocument" Color="#0072B2"/>
+    <SolidColorBrush x:Key="AppSpaceCode" Color="#3B3F7A"/>
+    <SolidColorBrush x:Key="AppSpaceExecutable" Color="#8E1B2E"/>
     <SolidColorBrush x:Key="AppSpaceCache" Color="#616161"/>
-    <SolidColorBrush x:Key="AppSpaceOther" Color="#607D8B"/>
+    <SolidColorBrush x:Key="AppSpaceOther" Color="#5E7480"/>
     <SolidColorBrush x:Key="AppSpaceFolder" Color="#37474F"/>
     <SolidColorBrush x:Key="AppSpaceMerged" Color="#FF424242"/>
 

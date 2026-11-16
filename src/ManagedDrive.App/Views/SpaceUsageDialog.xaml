@@ -23,7 +23,7 @@
                 <Setter.Value>
                     <ControlTemplate TargetType="GridViewColumnHeader">
                         <Grid>
-                            <Border Background="{TemplateBinding Background}"
+                            <Border x:Name="HeaderBorder" Background="{TemplateBinding Background}"
                                     BorderThickness="0,0,1,1"
                                     BorderBrush="{DynamicResource AppDivider}"
                                     Padding="{TemplateBinding Padding}">
@@ -37,6 +37,15 @@
                                 </Thumb.Template>
                             </Thumb>
                         </Grid>
+                        <ControlTemplate.Triggers>
+                            <!-- The empty header the list adds after the last column to fill the width: only the line
+                                 under the headers, no vertical separator or resize grip, so it does not look like a
+                                 blank column. -->
+                            <Trigger Property="Role" Value="Padding">
+                                <Setter TargetName="HeaderBorder" Property="BorderThickness" Value="0,0,0,1"/>
+                                <Setter TargetName="PART_HeaderGripper" Property="Visibility" Value="Collapsed"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
