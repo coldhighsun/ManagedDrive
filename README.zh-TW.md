@@ -27,22 +27,22 @@
 以下截圖為簡體中文介面。
 
 <p align="center">
-  <img src="docs/screenshots/main_window_ch.png" alt="主視窗（深色佈景主題）與即時讀寫速度圖表" width="400">
-  <img src="docs/screenshots/main_window_light_ch.png" alt="主視窗（淺色佈景主題）" width="400">
+  <img src="docs/screenshots/main_window_tw.png" alt="主視窗（深色佈景主題）與即時讀寫速度圖表" width="400">
+  <img src="docs/screenshots/main_window_light_tw.png" alt="主視窗（淺色佈景主題）" width="400">
 </p>
 <p align="center">
   <img src="docs/screenshots/right_menu_ch.png" alt="磁碟右鍵選單與暫存與快取預設" width="400">
-  <img src="docs/screenshots/space_usage_ch.png" alt="空間使用分析：依檔案類型著色的樹狀圖" width="400">
+  <img src="docs/screenshots/space_usage_tw.png" alt="空間使用分析：依檔案類型著色的樹狀圖" width="400">
 </p>
 <p align="center">
   <img src="docs/screenshots/snapshot_restore_ch.png" alt="還原快照對話方塊" width="300">
   <img src="docs/screenshots/snapshot_diff_ch.png" alt="快照變更：與目前磁碟比較後新增、刪除和修改的檔案" width="250">
 </p>
 <p align="center">
-  <img src="docs/screenshots/settings_window_ch.png" alt="設定視窗" width="200">
-  <img src="docs/screenshots/ram_settings_1_ch.png" alt="記憶體磁碟設定（一）" width="200">
-  <img src="docs/screenshots/ram_settings_presets_ch.png" alt="記憶體磁碟設定：暫存與快取" width="200">
-  <img src="docs/screenshots/ram_settings_2_ch.png" alt="記憶體磁碟設定（二）" width="200">
+  <img src="docs/screenshots/settings_window_tw.png" alt="設定視窗" width="200">
+  <img src="docs/screenshots/ram_settings_1_tw.png" alt="記憶體磁碟設定（一）" width="200">
+  <img src="docs/screenshots/ram_settings_presets_tw.png" alt="記憶體磁碟設定：暫存與快取" width="200">
+  <img src="docs/screenshots/ram_settings_2_tw.png" alt="記憶體磁碟設定（二）" width="200">
 </p>
 
 ### 功能特色
