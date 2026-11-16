@@ -196,6 +196,10 @@ public sealed class DiskNotificationService
         if (vm.IsHighUsage)
         {
             _highUsageDisks.Add(vm);
+
+            // The one-shot warning (balloon) is rate-limited and may not fire for this rise, but the status bar must
+            // still say the disk is nearly full while the card shows the warning.
+            ShowHighUsageStatus(vm);
         }
         else
         {
