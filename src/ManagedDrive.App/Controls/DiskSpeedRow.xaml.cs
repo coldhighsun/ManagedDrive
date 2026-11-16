@@ -60,6 +60,7 @@ public partial class DiskSpeedRow
         _openTimer.Tick += (_, _) =>
         {
             _openTimer?.Stop();
+            popup.Placement = ChoosePlacement(popup);
             popup.IsOpen = true;
         };
         _openTimer.Start();
@@ -97,7 +98,35 @@ public partial class DiskSpeedRow
         _closeTimer.Start();
     }
 
+    /// <summary>
+    /// Closes the given speed-history popup.
+    /// </summary>
     private static void CloseSpeedPopup(Popup popup) => popup.IsOpen = false;
+
+    /// <summary>
+    /// Picks the side of the speed row the popup opens on, from the room left in the owning window above and
+    /// below the row, so the popup does not cover the cards under the hovered one when there is no room below.
+    /// Falls back to below when the row or window cannot be measured.
+    /// </summary>
+    private static PlacementMode ChoosePlacement(Popup popup)
+    {
+        if (popup.PlacementTarget is not FrameworkElement target
+            || popup.Child is not FrameworkElement content
+            || Window.GetWindow(target) is not { } window
+            || window.Content is not FrameworkElement windowContent
+            || !windowContent.IsAncestorOf(target))
+        {
+            return PlacementMode.Bottom;
+        }
+
+        content.Measure(new(double.PositiveInfinity, double.PositiveInfinity));
+        var rowBounds = target.TransformToAncestor(windowContent)
+            .TransformBounds(new Rect(0, 0, target.ActualWidth, target.ActualHeight));
+        var spaceBelow = windowContent.ActualHeight - rowBounds.Bottom;
+        var spaceAbove = rowBounds.Top;
+
+        return SpeedPopupPlacement.Choose(spaceBelow, spaceAbove, content.DesiredSize.Height);
+    }
 
     /// <summary>
     /// Resolves the speed-history <see cref="Popup"/> for a mouse event raised either by the

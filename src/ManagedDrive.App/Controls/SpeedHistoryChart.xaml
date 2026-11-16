@@ -2,6 +2,8 @@
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              Width="380">
+    <!-- One mirrored chart: the read speed rises above the zero line in the middle and the write speed falls below it,
+         both on the same scale, so the two series never overlap. Each series has a translucent area under its line. -->
     <Grid>
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="Auto"/>
@@ -11,59 +13,41 @@
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="120"/>
             <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="120"/>
-            <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <StackPanel Grid.Row="0" Grid.Column="1" Orientation="Horizontal" Margin="0,0,0,2">
+        <!-- Legend: read is above the zero line, write below it -->
+        <StackPanel Grid.Row="0" Grid.Column="1" Orientation="Horizontal" Margin="0,0,0,4">
             <Rectangle Width="10" Height="10" Fill="{DynamicResource AppPrimary}" Margin="0,0,4,0"/>
             <TextBlock Text="{DynamicResource Card.ReadSpeed}" FontSize="{DynamicResource FontSizeSmall}"
                        Foreground="{DynamicResource AppForegroundLight}"/>
-        </StackPanel>
-
-        <Grid Grid.Row="1" Grid.Column="0" Margin="0,0,4,0">
-            <TextBlock x:Name="ReadAxisMaxLabel" FontSize="10" HorizontalAlignment="Right" VerticalAlignment="Top"
-                       Foreground="{DynamicResource AppForegroundLight}"/>
-            <TextBlock x:Name="ReadAxisMidLabel" FontSize="10" HorizontalAlignment="Right" VerticalAlignment="Center"
-                       Foreground="{DynamicResource AppForegroundLight}"/>
-            <TextBlock x:Name="ReadAxisZeroLabel" FontSize="10" HorizontalAlignment="Right" VerticalAlignment="Bottom"
-                       Foreground="{DynamicResource AppForegroundLight}"/>
-        </Grid>
-        <Grid x:Name="ReadChartArea" Grid.Row="1" Grid.Column="1" ClipToBounds="True"
-              SizeChanged="ChartArea_SizeChanged">
-            <Line x:Name="ReadTopGridLine" Stroke="{DynamicResource AppDivider}" StrokeThickness="1" StrokeDashArray="2,2"/>
-            <Line x:Name="ReadMidGridLine" Stroke="{DynamicResource AppDivider}" StrokeThickness="1" StrokeDashArray="2,2"/>
-            <Line x:Name="ReadBottomGridLine" Stroke="{DynamicResource AppDivider}" StrokeThickness="1"/>
-            <Polyline x:Name="ReadLine" Stroke="{DynamicResource AppPrimary}" StrokeThickness="2"/>
-        </Grid>
-
-        <Border Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="2" Height="1"
-                Background="{DynamicResource AppDivider}" Margin="0,8,0,8"/>
-
-        <StackPanel Grid.Row="3" Grid.Column="1" Orientation="Horizontal" Margin="0,0,0,2">
-            <Rectangle Width="10" Height="10" Fill="{DynamicResource AppChartWrite}" Margin="0,0,4,0"/>
+            <Rectangle Width="10" Height="10" Fill="{DynamicResource AppChartWrite}" Margin="16,0,4,0"/>
             <TextBlock Text="{DynamicResource Card.WriteSpeed}" FontSize="{DynamicResource FontSizeSmall}"
                        Foreground="{DynamicResource AppForegroundLight}"/>
         </StackPanel>
 
-        <Grid Grid.Row="4" Grid.Column="0" Margin="0,0,4,0">
-            <TextBlock x:Name="WriteAxisMaxLabel" FontSize="10" HorizontalAlignment="Right" VerticalAlignment="Top"
+        <Grid Grid.Row="1" Grid.Column="0" Margin="0,0,4,0">
+            <TextBlock x:Name="AxisTopLabel" FontSize="10" HorizontalAlignment="Right" VerticalAlignment="Top"
                        Foreground="{DynamicResource AppForegroundLight}"/>
-            <TextBlock x:Name="WriteAxisMidLabel" FontSize="10" HorizontalAlignment="Right" VerticalAlignment="Center"
+            <TextBlock x:Name="AxisZeroLabel" FontSize="10" HorizontalAlignment="Right" VerticalAlignment="Center"
                        Foreground="{DynamicResource AppForegroundLight}"/>
-            <TextBlock x:Name="WriteAxisZeroLabel" FontSize="10" HorizontalAlignment="Right" VerticalAlignment="Bottom"
+            <TextBlock x:Name="AxisBottomLabel" FontSize="10" HorizontalAlignment="Right" VerticalAlignment="Bottom"
                        Foreground="{DynamicResource AppForegroundLight}"/>
         </Grid>
-        <Grid x:Name="WriteChartArea" Grid.Row="4" Grid.Column="1" ClipToBounds="True"
+        <Grid x:Name="ChartArea" Grid.Row="1" Grid.Column="1" ClipToBounds="True"
               SizeChanged="ChartArea_SizeChanged">
-            <Line x:Name="WriteTopGridLine" Stroke="{DynamicResource AppDivider}" StrokeThickness="1" StrokeDashArray="2,2"/>
-            <Line x:Name="WriteMidGridLine" Stroke="{DynamicResource AppDivider}" StrokeThickness="1" StrokeDashArray="2,2"/>
-            <Line x:Name="WriteBottomGridLine" Stroke="{DynamicResource AppDivider}" StrokeThickness="1"/>
-            <Polyline x:Name="WriteLine" Stroke="{DynamicResource AppChartWrite}" StrokeThickness="2"/>
+            <Line x:Name="TopGridLine" Stroke="{DynamicResource AppDivider}" StrokeThickness="1" StrokeDashArray="2,2"/>
+            <Line x:Name="BottomGridLine" Stroke="{DynamicResource AppDivider}" StrokeThickness="1" StrokeDashArray="2,2"/>
+            <Polygon x:Name="ReadArea" Fill="{DynamicResource AppPrimary}" Opacity="0.25"/>
+            <Polygon x:Name="WriteArea" Fill="{DynamicResource AppChartWrite}" Opacity="0.25"/>
+            <!-- The zero line, on top of the areas -->
+            <Line x:Name="MidGridLine" Stroke="{DynamicResource AppForegroundLight}" StrokeThickness="1" Opacity="0.5"/>
+            <Polyline x:Name="ReadLine" Stroke="{DynamicResource AppPrimary}" StrokeThickness="2"
+                      StrokeLineJoin="Round"/>
+            <Polyline x:Name="WriteLine" Stroke="{DynamicResource AppChartWrite}" StrokeThickness="2"
+                      StrokeLineJoin="Round"/>
         </Grid>
 
-        <Grid Grid.Row="5" Grid.Column="1" Margin="0,2,0,0">
+        <Grid Grid.Row="2" Grid.Column="1" Margin="0,2,0,0">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="*"/>

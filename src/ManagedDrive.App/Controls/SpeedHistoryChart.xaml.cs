@@ -6,7 +6,8 @@ using ManagedDrive.Cli.Core;
 namespace ManagedDrive.App.Controls;
 
 /// <summary>
-/// Renders a fixed-size read/write speed history as two overlaid polylines. Intended for use
+/// Renders a fixed-size read/write speed history as one mirrored plot (read above the zero line, write below it, each
+/// with a translucent area under its line). Intended for use
 /// inside a hover-triggered <see cref="System.Windows.Controls.Primitives.Popup"/> — it is not
 /// rendered while off-screen, so no visibility/throttling logic lives here.
 /// </summary>
@@ -49,13 +50,12 @@ public partial class SpeedHistoryChart
     }
 
     /// <summary>
-    /// Maps a sequence of values onto polyline points that fit within
-    /// <paramref name="width"/> x <paramref name="height"/>, scaled by the largest value across
-    /// both series (<paramref name="scaleMax"/>) so the read and write lines share one scale.
-    /// A flat, near-baseline line is returned when every value is zero, rather than an empty
-    /// point list, so the chart never looks unloaded.
+    /// Maps a sequence of values onto polyline points of a mirrored chart: the zero line is the middle of
+    /// <paramref name="height"/>, an upward series rises above it and a downward one falls below it, and
+    /// <paramref name="scaleMax"/> reaches the top or bottom edge. With a scale of zero every point lies on the zero line.
     /// </summary>
-    public static PointCollection NormalizePoints(IReadOnlyList<double> values, double width, double height, double scaleMax)
+    public static PointCollection NormalizeMirroredPoints(
+        IReadOnlyList<double> values, double width, double height, double scaleMax, bool upward)
     {
         var points = new PointCollection();
         if (values.Count == 0)
@@ -63,17 +63,33 @@ public partial class SpeedHistoryChart
             return points;
         }
 
+        var baseline = height / 2;
+        var sign = upward ? -1.0 : 1.0;
         var stepX = values.Count > 1 ? width / (values.Count - 1) : 0;
         for (var i = 0; i < values.Count; i++)
         {
-            var x = i * stepX;
-            var y = scaleMax > 0
-                ? height - (values[i] / scaleMax * height)
-                : height;
-            points.Add(new(x, y));
+            var offset = scaleMax > 0 ? Math.Min(values[i] / scaleMax, 1.0) * baseline : 0;
+            points.Add(new(i * stepX, baseline + sign * offset));
         }
 
         return points;
+    }
+
+    /// <summary>
+    /// Closes a line's points into a polygon that reaches down (or up) to the zero line, for the translucent area
+    /// under a series. An empty line gives an empty polygon.
+    /// </summary>
+    public static PointCollection ToAreaPoints(PointCollection linePoints, double baseline)
+    {
+        var area = new PointCollection(linePoints);
+        if (linePoints.Count == 0)
+        {
+            return area;
+        }
+
+        area.Add(new(linePoints[^1].X, baseline));
+        area.Add(new(linePoints[0].X, baseline));
+        return area;
     }
 
     /// <summary>
@@ -133,17 +149,46 @@ public partial class SpeedHistoryChart
         var read = ReadHistory ?? Array.Empty<double>();
         var write = WriteHistory ?? Array.Empty<double>();
 
-        // Both charts share one Y-axis scale (derived from the larger of the two series) so
-        // their heights are directly comparable at a glance, rather than each auto-scaling to
-        // its own max independently.
+        // Both lines share the plot area and one Y-axis scale (derived from the larger of the two
+        // series), so their heights are directly comparable at a glance.
         var scaleMax = RoundUpToNiceMax(Math.Max(
             read.Count > 0 ? read.Max() : 0.0,
             write.Count > 0 ? write.Max() : 0.0));
 
-        RedrawSeries(read, scaleMax, ReadChartArea, ReadLine, ReadTopGridLine, ReadMidGridLine, ReadBottomGridLine,
-            ReadAxisMaxLabel, ReadAxisMidLabel, ReadAxisZeroLabel);
-        RedrawSeries(write, scaleMax, WriteChartArea, WriteLine, WriteTopGridLine, WriteMidGridLine, WriteBottomGridLine,
-            WriteAxisMaxLabel, WriteAxisMidLabel, WriteAxisZeroLabel);
+        var width = ChartArea.ActualWidth;
+        var height = ChartArea.ActualHeight;
+        if (width <= 0 || height <= 0)
+        {
+            return;
+        }
+
+        var baseline = height / 2;
+        var readPoints = NormalizeMirroredPoints(read, width, height, scaleMax, upward: true);
+        var writePoints = NormalizeMirroredPoints(write, width, height, scaleMax, upward: false);
+        ReadLine.Points = readPoints;
+        WriteLine.Points = writePoints;
+        ReadArea.Points = ToAreaPoints(readPoints, baseline);
+        WriteArea.Points = ToAreaPoints(writePoints, baseline);
+
+        TopGridLine.X1 = 0;
+        TopGridLine.Y1 = 0;
+        TopGridLine.X2 = width;
+        TopGridLine.Y2 = 0;
+
+        MidGridLine.X1 = 0;
+        MidGridLine.Y1 = baseline;
+        MidGridLine.X2 = width;
+        MidGridLine.Y2 = baseline;
+
+        BottomGridLine.X1 = 0;
+        BottomGridLine.Y1 = height;
+        BottomGridLine.X2 = width;
+        BottomGridLine.Y2 = height;
+
+        var maxText = scaleMax > 0 ? ByteFormatter.FormatRate(scaleMax) : string.Empty;
+        AxisTopLabel.Text = maxText;
+        AxisZeroLabel.Text = "0 B/s";
+        AxisBottomLabel.Text = maxText;
 
         var pointCount = read.Count > 0 ? read.Count : write.Count;
         var timeLabels = BuildTimeAxisLabels(pointCount);
@@ -153,44 +198,4 @@ public partial class SpeedHistoryChart
         TimeAxisLabel3.Text = timeLabels[3];
     }
 
-    private static void RedrawSeries(
-        IReadOnlyList<double> values,
-        double scaleMax,
-        Grid chartArea,
-        Polyline line,
-        Line topGridLine,
-        Line midGridLine,
-        Line bottomGridLine,
-        TextBlock axisMaxLabel,
-        TextBlock axisMidLabel,
-        TextBlock axisZeroLabel)
-    {
-        var width = chartArea.ActualWidth;
-        var height = chartArea.ActualHeight;
-        if (width <= 0 || height <= 0)
-        {
-            return;
-        }
-
-        line.Points = NormalizePoints(values, width, height, scaleMax);
-
-        topGridLine.X1 = 0;
-        topGridLine.Y1 = 0;
-        topGridLine.X2 = width;
-        topGridLine.Y2 = 0;
-
-        midGridLine.X1 = 0;
-        midGridLine.Y1 = height / 2;
-        midGridLine.X2 = width;
-        midGridLine.Y2 = height / 2;
-
-        bottomGridLine.X1 = 0;
-        bottomGridLine.Y1 = height;
-        bottomGridLine.X2 = width;
-        bottomGridLine.Y2 = height;
-
-        axisMaxLabel.Text = scaleMax > 0 ? ByteFormatter.FormatRate(scaleMax) : string.Empty;
-        axisMidLabel.Text = scaleMax > 0 ? ByteFormatter.FormatRate(scaleMax / 2) : string.Empty;
-        axisZeroLabel.Text = "0 B/s";
-    }
 }
