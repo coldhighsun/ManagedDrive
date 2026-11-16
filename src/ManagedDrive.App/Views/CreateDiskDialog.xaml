@@ -121,11 +121,27 @@
                     </Grid>
 
                     <!-- High Usage Warning -->
-                    <CheckBox Grid.Row="6" x:Name="HighUsageWarnBox" IsChecked="True"
-                              Content="{DynamicResource CreateDisk.HighUsageWarn}"
-                              Foreground="{DynamicResource AppForeground}"
-                              ToolTip="{DynamicResource Tip.HighUsageWarn}"
-                              Checked="HighUsageWarnBox_CheckedChanged" Unchecked="HighUsageWarnBox_CheckedChanged"/>
+                    <StackPanel Grid.Row="6">
+                        <CheckBox x:Name="HighUsageWarnBox" IsChecked="True"
+                                  Content="{DynamicResource CreateDisk.HighUsageWarn}"
+                                  Foreground="{DynamicResource AppForeground}"
+                                  ToolTip="{DynamicResource Tip.HighUsageWarn}"
+                                  Checked="HighUsageWarnBox_CheckedChanged" Unchecked="HighUsageWarnBox_CheckedChanged"/>
+                        <!-- Like the captions below: dimmed together with its check box when that is disabled. -->
+                        <TextBlock Text="{DynamicResource Tip.HighUsageWarn}" Margin="22,2,0,0" TextWrapping="Wrap"
+                                   FontSize="{DynamicResource FontSizeCaption}"
+                                   Foreground="{DynamicResource AppForegroundLight}">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsEnabled, ElementName=HighUsageWarnBox}" Value="False">
+                                            <Setter Property="Opacity" Value="0.4"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
+                    </StackPanel>
 
                     <Grid Grid.Row="8" x:Name="HighUsageWarnPercentPanel" IsEnabled="False"
                           Style="{StaticResource DimWhenDisabled}">
@@ -155,7 +171,17 @@
                                   ToolTip="{DynamicResource Tip.AutoMount}"/>
                         <TextBlock Text="{DynamicResource Tip.AutoMount}" Margin="22,2,0,0" TextWrapping="Wrap"
                                    FontSize="{DynamicResource FontSizeCaption}"
-                                   Foreground="{DynamicResource AppForegroundLight}"/>
+                                   Foreground="{DynamicResource AppForegroundLight}">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsEnabled, ElementName=AutoMountBox}" Value="False">
+                                            <Setter Property="Opacity" Value="0.4"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
                     </StackPanel>
 
                     <!-- Read Only -->
@@ -167,7 +193,17 @@
                                   Checked="ReadOnlyBox_CheckedChanged" Unchecked="ReadOnlyBox_CheckedChanged"/>
                         <TextBlock Text="{DynamicResource Tip.ReadOnly}" Margin="22,2,0,0" TextWrapping="Wrap"
                                    FontSize="{DynamicResource FontSizeCaption}"
-                                   Foreground="{DynamicResource AppForegroundLight}"/>
+                                   Foreground="{DynamicResource AppForegroundLight}">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsEnabled, ElementName=ReadOnlyBox}" Value="False">
+                                            <Setter Property="Opacity" Value="0.4"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
                     </StackPanel>
                 </Grid>
             </TabItem>
