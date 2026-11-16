@@ -3,7 +3,7 @@
                     xmlns:sys="clr-namespace:System;assembly=mscorlib">
 
     <!-- MainWindow -->
-    <sys:String x:Key="Window.Title">ManagedDrive – RAM 虛擬磁碟管理員</sys:String>
+    <sys:String x:Key="Window.Title">ManagedDrive</sys:String>
     <sys:String x:Key="Menu.Exit">結束</sys:String>
     <sys:String x:Key="Menu.About">關於</sys:String>
     <sys:String x:Key="Btn.NewDisk">新增磁碟...</sys:String>

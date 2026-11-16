@@ -3,7 +3,7 @@
                     xmlns:sys="clr-namespace:System;assembly=mscorlib">
 
     <!-- MainWindow -->
-    <sys:String x:Key="Window.Title">ManagedDrive – RAM Disk Manager</sys:String>
+    <sys:String x:Key="Window.Title">ManagedDrive</sys:String>
     <sys:String x:Key="Menu.Exit">Exit</sys:String>
     <sys:String x:Key="Menu.About">About</sys:String>
     <sys:String x:Key="Btn.NewDisk">New Disk...</sys:String>
