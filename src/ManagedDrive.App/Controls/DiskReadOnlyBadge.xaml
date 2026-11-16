@@ -1,0 +1,18 @@
+<UserControl x:Class="ManagedDrive.App.Controls.DiskReadOnlyBadge"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!-- The right side of a read-only disk's card, where a normal disk shows its free space: a lock in a tinted circle
+         with the word "read-only", so the state is clear at a glance. -->
+    <!-- Top-aligned, not centred: the quick-action buttons that fade in on hover sit in the bottom right corner, and
+         a centred badge would run into them. -->
+    <StackPanel VerticalAlignment="Top" HorizontalAlignment="Right">
+        <Border Width="32" Height="32" CornerRadius="16" HorizontalAlignment="Center"
+                Background="{DynamicResource AppWarningSoft}">
+            <TextBlock Style="{DynamicResource IconText}" Text="&#xE72E;" FontSize="15"
+                       Foreground="{DynamicResource AppWarning}"/>
+        </Border>
+        <TextBlock Text="{DynamicResource Card.ReadOnly}" FontSize="11" Margin="0,3,0,0"
+                   HorizontalAlignment="Center"
+                   Foreground="{DynamicResource AppForegroundLight}"/>
+    </StackPanel>
+</UserControl>

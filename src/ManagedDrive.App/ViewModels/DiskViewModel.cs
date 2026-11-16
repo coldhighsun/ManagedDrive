@@ -1,3 +1,4 @@
+using System.Globalization;
 using ManagedDrive.Cli.Core;
 
 namespace ManagedDrive.App.ViewModels;
@@ -382,6 +383,31 @@ public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
     public string? SourcePath => Disk.Options.SourceArchivePath ?? Disk.Options.PersistImagePath;
 
     /// <summary>
+    /// Gets the file name of <see cref="SourcePath"/> for the read-only card, or an empty string without a source.
+    /// </summary>
+    public string SourceFileName => SourcePathParts.Split(SourcePath).FileName;
+
+    /// <summary>
+    /// Gets the folder of <see cref="SourcePath"/> for the read-only card, or an empty string without a source.
+    /// </summary>
+    public string SourceDirectory => SourcePathParts.Split(SourcePath).Directory;
+
+    /// <summary>
+    /// Gets whether the content comes from a source archive (as opposed to a disk image).
+    /// </summary>
+    public bool IsArchiveSource => Disk.Options.SourceArchivePath is not null;
+
+    /// <summary>
+    /// Gets the name of the source kind (archive or image) for the read-only card.
+    /// </summary>
+    public string SourceKindText => Loc.Get(IsArchiveSource ? "Card.SourceArchive" : "Card.SourceImage");
+
+    /// <summary>
+    /// Gets the number of items on the disk, such as <c>1 284 items</c>, for the read-only card.
+    /// </summary>
+    public string ItemCountText => Loc.Format("Card.ReadOnlyItems", Disk.ItemCount.ToString("N0", CultureInfo.CurrentCulture));
+
+    /// <summary>
     /// Gets the amount of used space formatted as a human-readable string.
     /// </summary>
     public string UsedFormatted => ByteFormatter.Format(_usedBytes);
@@ -459,6 +485,10 @@ public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
         nameof(SnapshotsEnabled),
         nameof(PersistImagePath),
         nameof(SourcePath),
+        nameof(SourceFileName),
+        nameof(SourceDirectory),
+        nameof(SourceKindText),
+        nameof(ItemCountText),
         nameof(HasImagePath),
         nameof(IsPasswordProtected),
         nameof(ReadSpeedFormatted),

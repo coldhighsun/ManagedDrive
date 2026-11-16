@@ -20,9 +20,11 @@
             <Rectangle Width="10" Height="10" Fill="{DynamicResource AppPrimary}" Margin="0,0,4,0"/>
             <TextBlock Text="{DynamicResource Card.ReadSpeed}" FontSize="{DynamicResource FontSizeSmall}"
                        Foreground="{DynamicResource AppForegroundLight}"/>
-            <Rectangle Width="10" Height="10" Fill="{DynamicResource AppChartWrite}" Margin="16,0,4,0"/>
-            <TextBlock Text="{DynamicResource Card.WriteSpeed}" FontSize="{DynamicResource FontSizeSmall}"
-                       Foreground="{DynamicResource AppForegroundLight}"/>
+            <StackPanel x:Name="WriteLegend" Orientation="Horizontal">
+                <Rectangle Width="10" Height="10" Fill="{DynamicResource AppChartWrite}" Margin="16,0,4,0"/>
+                <TextBlock Text="{DynamicResource Card.WriteSpeed}" FontSize="{DynamicResource FontSizeSmall}"
+                           Foreground="{DynamicResource AppForegroundLight}"/>
+            </StackPanel>
         </StackPanel>
 
         <Grid Grid.Row="1" Grid.Column="0" Margin="0,0,4,0">

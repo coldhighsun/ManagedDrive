@@ -23,12 +23,27 @@ public partial class SpeedHistoryChart
         nameof(WriteHistory), typeof(IReadOnlyList<double>), typeof(SpeedHistoryChart),
         new(null, OnHistoryChanged));
 
+    /// <summary>Identifies the <see cref="ShowWrite"/> dependency property.</summary>
+    public static readonly DependencyProperty ShowWriteProperty = DependencyProperty.Register(
+        nameof(ShowWrite), typeof(bool), typeof(SpeedHistoryChart),
+        new(true, OnHistoryChanged));
+
     /// <summary>
     /// Initializes a new instance of <see cref="SpeedHistoryChart"/>.
     /// </summary>
     public SpeedHistoryChart()
     {
         InitializeComponent();
+    }
+
+    /// <summary>
+    /// Gets or sets whether the write series is drawn. When it is not (a read-only disk never writes), the read series
+    /// uses the whole height of the plot instead of the upper half of the mirrored one.
+    /// </summary>
+    public bool ShowWrite
+    {
+        get => (bool)GetValue(ShowWriteProperty);
+        set => SetValue(ShowWriteProperty, value);
     }
 
     /// <summary>
@@ -74,6 +89,14 @@ public partial class SpeedHistoryChart
 
         return points;
     }
+
+    /// <summary>
+    /// Maps a sequence of values onto polyline points of a single-series chart: the zero line is the bottom of
+    /// <paramref name="height"/> and <paramref name="scaleMax"/> reaches the top edge.
+    /// </summary>
+    public static PointCollection NormalizeUpwardPoints(
+        IReadOnlyList<double> values, double width, double height, double scaleMax) =>
+        NormalizeMirroredPoints(values, width, height * 2, scaleMax, upward: true);
 
     /// <summary>
     /// Closes a line's points into a polygon that reaches down (or up) to the zero line, for the translucent area
@@ -162,13 +185,24 @@ public partial class SpeedHistoryChart
             return;
         }
 
-        var baseline = height / 2;
-        var readPoints = NormalizeMirroredPoints(read, width, height, scaleMax, upward: true);
-        var writePoints = NormalizeMirroredPoints(write, width, height, scaleMax, upward: false);
+        var showWrite = ShowWrite;
+        var baseline = showWrite ? height / 2 : height;
+        var readPoints = showWrite
+            ? NormalizeMirroredPoints(read, width, height, scaleMax, upward: true)
+            : NormalizeUpwardPoints(read, width, height, scaleMax);
+        var writePoints = showWrite
+            ? NormalizeMirroredPoints(write, width, height, scaleMax, upward: false)
+            : new PointCollection();
         ReadLine.Points = readPoints;
         WriteLine.Points = writePoints;
         ReadArea.Points = ToAreaPoints(readPoints, baseline);
         WriteArea.Points = ToAreaPoints(writePoints, baseline);
+
+        var writeVisibility = showWrite ? Visibility.Visible : Visibility.Collapsed;
+        WriteLegend.Visibility = writeVisibility;
+        AxisBottomLabel.Visibility = writeVisibility;
+        BottomGridLine.Visibility = writeVisibility;
+        AxisZeroLabel.VerticalAlignment = showWrite ? VerticalAlignment.Center : VerticalAlignment.Bottom;
 
         TopGridLine.X1 = 0;
         TopGridLine.Y1 = 0;

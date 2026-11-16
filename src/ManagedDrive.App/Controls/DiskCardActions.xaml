@@ -6,6 +6,9 @@
          focusable: the same commands are in the context menu and on the window's shortcuts. Window-level commands are
          read from the window's DataContext, with the disk as the parameter, like the context menu does. -->
     <StackPanel Orientation="Horizontal">
+        <StackPanel.Resources>
+            <BooleanToVisibilityConverter x:Key="BoolToVis"/>
+        </StackPanel.Resources>
         <StackPanel.Style>
             <Style TargetType="StackPanel">
                 <!-- Defaults live in the style, not on the element: a local value would beat the trigger below,
@@ -51,7 +54,8 @@
                 Command="{Binding DataContext.SaveImageCommand, RelativeSource={RelativeSource AncestorType=Window}}"
                 CommandParameter="{Binding}"
                 ToolTip="{DynamicResource Btn.SaveImage}"
-                AutomationProperties.Name="{DynamicResource Btn.SaveImage}">
+                AutomationProperties.Name="{DynamicResource Btn.SaveImage}"
+                Visibility="{Binding IsNotReadOnly, Converter={StaticResource BoolToVis}}">
             <TextBlock Style="{DynamicResource IconText}" FontSize="13" Text="&#xE74E;"/>
         </Button>
         <Button Style="{DynamicResource CardActionButton}"

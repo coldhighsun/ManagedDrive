@@ -1,7 +1,10 @@
-<UserControl x:Class="ManagedDrive.App.Controls.DiskSpeedRow"
+<UserControl x:Class="ManagedDrive.App.Controls.DiskSpeedRow" x:Name="Root"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:controls="clr-namespace:ManagedDrive.App.Controls">
+    <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVis"/>
+    </UserControl.Resources>
     <!-- Read/write throughput of a disk card; hovering opens a history-chart popup. The Border enlarges the
          hover hit-test area beyond the tight text/icon bounds. -->
     <Border x:Name="SpeedHoverArea" Background="Transparent" Padding="0,4,0,4" Margin="0,-2,0,-4"
@@ -19,10 +22,12 @@
                                                            Foreground="{DynamicResource AppForegroundLight}"
                                                            VerticalAlignment="Center" Margin="10,0,4,0"
                                                            ToolTip="{DynamicResource Card.WriteSpeed}"
-                                                           AutomationProperties.Name="{DynamicResource Card.WriteSpeed}"/>
+                                                           AutomationProperties.Name="{DynamicResource Card.WriteSpeed}"
+                                                           Visibility="{Binding ShowWrite, ElementName=Root, Converter={StaticResource BoolToVis}}"/>
                                                 <TextBlock Text="{Binding WriteSpeedFormatted}" FontSize="{DynamicResource FontSizeSmall}" Width="62"
                                                            TextAlignment="Left"
-                                                           Foreground="{DynamicResource AppForegroundLight}"/>
+                                                           Foreground="{DynamicResource AppForegroundLight}"
+                                                           Visibility="{Binding ShowWrite, ElementName=Root, Converter={StaticResource BoolToVis}}"/>
                                                 <Popup x:Name="SpeedPopup" PlacementTarget="{Binding ElementName=SpeedHoverArea}" Placement="Bottom"
                                                        StaysOpen="True" AllowsTransparency="True">
                                                     <Border Background="{DynamicResource AppSurface}"
@@ -32,7 +37,8 @@
                                                             Tag="{Binding ElementName=SpeedPopup}">
                                                         <StackPanel>
                                                             <controls:SpeedHistoryChart ReadHistory="{Binding ReadSpeedHistory}"
-                                                                                         WriteHistory="{Binding WriteSpeedHistory}"/>
+                                                                                         WriteHistory="{Binding WriteSpeedHistory}"
+                                                                                         ShowWrite="{Binding ShowWrite, ElementName=Root}"/>
                                                             <TextBlock FontSize="{DynamicResource FontSizeSmall}" Margin="0,6,0,0"
                                                                        Foreground="{DynamicResource AppForegroundLight}">
                                                                 <Run Text="{DynamicResource Card.TotalReadWritten}"/>

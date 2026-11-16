@@ -145,6 +145,10 @@
     <sys:String x:Key="Busy.ByteProgress">{0} / {1}</sys:String>
     <sys:String x:Key="Card.ReadOnly">唯讀</sys:String>
     <sys:String x:Key="Card.ReadOnlyNoImage">唯讀 · 無映像檔</sys:String>
+    <sys:String x:Key="Card.ReadOnlyItems">{0} 項</sys:String>
+    <sys:String x:Key="Card.ReadOnlyContent">內容</sys:String>
+    <sys:String x:Key="Card.SourceArchive">壓縮檔</sys:String>
+    <sys:String x:Key="Card.SourceImage">磁碟映像檔</sys:String>
     <sys:String x:Key="Card.Encrypted">已加密</sys:String>
     <sys:String x:Key="Card.RedirectsHeader">已重新導向到此磁碟：</sys:String>
     <sys:String x:Key="Card.RedirectsCustom">變數 {0}</sys:String>

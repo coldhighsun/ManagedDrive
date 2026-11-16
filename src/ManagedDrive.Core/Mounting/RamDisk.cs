@@ -295,6 +295,11 @@ public sealed class RamDisk : IDisposable
     public ulong UsedBytes => _fs.NodeMap.GetTotalAllocated();
 
     /// <summary>
+    /// Gets the number of items (files, folders and streams, not the root) on this RAM disk.
+    /// </summary>
+    public int ItemCount => _fs.NodeMap.ItemCount;
+
+    /// <summary>
     /// Creates and mounts a new RAM disk according to the supplied options.
     /// If <see cref="DiskOptions.SourceArchivePath"/> points to an existing archive file, it is
     /// extracted into the new disk (read-only). Otherwise, if

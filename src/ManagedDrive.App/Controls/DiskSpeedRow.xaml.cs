@@ -12,6 +12,12 @@ public partial class DiskSpeedRow
     private static readonly TimeSpan PopupOpenDelay = TimeSpan.FromSeconds(1);
     private static readonly TimeSpan PopupCloseDelay = TimeSpan.FromMilliseconds(150);
 
+    /// <summary>
+    /// Identifies the <see cref="ShowWrite"/> dependency property.
+    /// </summary>
+    public static readonly DependencyProperty ShowWriteProperty = DependencyProperty.Register(
+        nameof(ShowWrite), typeof(bool), typeof(DiskSpeedRow), new(true));
+
     // Shared by all rows: only one popup is pending or open at a time.
     private static DispatcherTimer? _openTimer;
     private static DispatcherTimer? _closeTimer;
@@ -27,6 +33,16 @@ public partial class DiskSpeedRow
         SpeedHoverArea.MouseLeave += OnMouseLeave;
         PopupBorder.MouseEnter += OnMouseEnter;
         PopupBorder.MouseLeave += OnMouseLeave;
+    }
+
+    /// <summary>
+    /// Gets or sets whether the write speed (and its history) is shown. A read-only disk never writes, so its card
+    /// turns this off and shows the read speed only.
+    /// </summary>
+    public bool ShowWrite
+    {
+        get => (bool)GetValue(ShowWriteProperty);
+        set => SetValue(ShowWriteProperty, value);
     }
 
     /// <summary>

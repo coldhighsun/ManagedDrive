@@ -70,6 +70,26 @@ public sealed class FileNodeMap : IDisposable
     }
 
     /// <summary>
+    /// Gets the number of items on the disk: every node except the root directory (<c>\</c>), so files, folders and
+    /// alternate data streams count, and an empty disk has none.
+    /// </summary>
+    public int ItemCount
+    {
+        get
+        {
+            _syncRoot.EnterReadLock();
+            try
+            {
+                return _map.ContainsKey("\\") ? _map.Count - 1 : _map.Count;
+            }
+            finally
+            {
+                _syncRoot.ExitReadLock();
+            }
+        }
+    }
+
+    /// <summary>
     /// Inserts or replaces the node at <paramref name="filePath"/> and updates
     /// <see cref="FileNode.FilePath"/> on the node to match.
     /// </summary>

@@ -145,6 +145,10 @@
     <sys:String x:Key="Busy.ByteProgress">{0} / {1}</sys:String>
     <sys:String x:Key="Card.ReadOnly">Read-only</sys:String>
     <sys:String x:Key="Card.ReadOnlyNoImage">Read-only · No image</sys:String>
+    <sys:String x:Key="Card.ReadOnlyItems">{0} items</sys:String>
+    <sys:String x:Key="Card.ReadOnlyContent">Content</sys:String>
+    <sys:String x:Key="Card.SourceArchive">Archive</sys:String>
+    <sys:String x:Key="Card.SourceImage">Disk image</sys:String>
     <sys:String x:Key="Card.Encrypted">Password-protected</sys:String>
     <sys:String x:Key="Card.RedirectsHeader">Redirected to this disk:</sys:String>
     <sys:String x:Key="Card.RedirectsCustom">Variable {0}</sys:String>
