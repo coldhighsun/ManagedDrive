@@ -1,3 +1,7 @@
+<div align="center">
+
+<img src="docs/icon.png" alt="ManagedDrive 图标" width="128">
+
 # ManagedDrive
 
 [![CI / Release](https://github.com/coldhighsun/ManagedDrive/actions/workflows/ci.yml/badge.svg)](https://github.com/coldhighsun/ManagedDrive/actions/workflows/ci.yml)
@@ -16,6 +20,8 @@
 [![Platform: Windows](https://img.shields.io/badge/platform-Windows-0078D6?logo=windows)](https://github.com/coldhighsun/ManagedDrive)
 
 [English](README.md) | 简体中文 | [繁體中文](README.zh-TW.md)
+
+</div>
 
 ---
 
