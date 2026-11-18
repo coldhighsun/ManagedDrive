@@ -339,10 +339,14 @@
     </Border>
 
     <!-- Busy/progress overlay for save/import/export operations -->
+    <!-- The outer layer only swallows mouse input while an operation runs; what is drawn (dimming, text,
+         progress) is shown after a short delay (BusyOverlayPolicy), so a quick operation does not flash. -->
+    <Border Background="Transparent"
+            Visibility="{Binding BusyOverlay.IsInputBlocked, Converter={StaticResource BoolToVis}}"
+            Panel.ZIndex="90">
     <Border Background="{DynamicResource AppSurface}"
             Opacity="0.92"
-            Visibility="{Binding BusyOverlay.IsBusy, Converter={StaticResource BoolToVis}}"
-            Panel.ZIndex="90">
+            Visibility="{Binding BusyOverlay.IsOverlayVisible, Converter={StaticResource BoolToVis}}">
         <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Width="280">
             <TextBlock Text="{Binding BusyOverlay.StatusText}" FontSize="14" Margin="0,0,0,8"
                        HorizontalAlignment="Center"
@@ -361,6 +365,7 @@
                     Command="{Binding BusyOverlay.CancelCommand}"
                     Visibility="{Binding BusyOverlay.CanCancel, Converter={StaticResource BoolToVis}}"/>
         </StackPanel>
+    </Border>
     </Border>
     </Grid>
 </Window>

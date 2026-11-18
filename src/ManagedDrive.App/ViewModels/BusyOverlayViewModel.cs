@@ -19,15 +19,69 @@ public sealed class BusyOverlayViewModel : INotifyPropertyChanged
     private CancellationTokenSource? _cancellationSource;
 
     /// <summary>
-    /// Initializes the overlay's <see cref="CancelCommand"/>.
+    /// How long an operation has to run before the overlay is shown.
     /// </summary>
-    public BusyOverlayViewModel() => CancelCommand = new(_ => Cancel(), _ => CanCancel && !IsCancellationRequested);
+    private readonly TimeSpan _showDelay;
+
+    /// <summary>
+    /// How long the overlay stays up at least once it is shown.
+    /// </summary>
+    private readonly TimeSpan _minimumVisible;
+
+    /// <summary>
+    /// Waits for a delay; replaced in tests so they control when the delay ends.
+    /// </summary>
+    private readonly Func<TimeSpan, Task> _delay;
+
+    /// <summary>
+    /// Clock used to measure how long the overlay has been visible.
+    /// </summary>
+    private readonly TimeProvider _timeProvider;
+
+    /// <summary>
+    /// Counts <see cref="Start"/> and <see cref="Stop"/> calls. A pending show or hide only acts if
+    /// no call has happened since it was scheduled, so a stale delay can never change a newer state.
+    /// </summary>
+    private int _generation;
+
+    /// <summary>
+    /// Timestamp (see <see cref="TimeProvider.GetTimestamp"/>) at which the overlay became visible.
+    /// </summary>
+    private long _shownAtTimestamp;
+
+    /// <summary>
+    /// Initializes the overlay's <see cref="CancelCommand"/> and its show/hide timing.
+    /// </summary>
+    /// <param name="showDelay">
+    /// How long an operation has to run before the overlay is shown, or <see langword="null"/> for
+    /// <see cref="BusyOverlayPolicy.ShowDelay"/>.
+    /// </param>
+    /// <param name="minimumVisible">
+    /// How long the overlay stays up at least once shown, or <see langword="null"/> for
+    /// <see cref="BusyOverlayPolicy.MinimumVisible"/>.
+    /// </param>
+    /// <param name="delay">Waits for a delay, or <see langword="null"/> for <see cref="Task.Delay(TimeSpan)"/>.</param>
+    /// <param name="timeProvider">The clock, or <see langword="null"/> for <see cref="TimeProvider.System"/>.</param>
+    internal BusyOverlayViewModel(
+        TimeSpan? showDelay = null,
+        TimeSpan? minimumVisible = null,
+        Func<TimeSpan, Task>? delay = null,
+        TimeProvider? timeProvider = null)
+    {
+        _showDelay = showDelay ?? BusyOverlayPolicy.ShowDelay;
+        _minimumVisible = minimumVisible ?? BusyOverlayPolicy.MinimumVisible;
+        _delay = delay ?? (static timeout => Task.Delay(timeout));
+        _timeProvider = timeProvider ?? TimeProvider.System;
+        CancelCommand = new(_ => Cancel(), _ => CanCancel && !IsCancellationRequested);
+    }
 
     /// <inheritdoc />
     public event PropertyChangedEventHandler? PropertyChanged;
 
     /// <summary>
-    /// Gets whether the overlay should be visible.
+    /// Gets whether an operation is running. This is the logical state, which blocks other
+    /// operations at once; the overlay itself follows it through <see cref="IsOverlayVisible"/>,
+    /// after a short delay.
     /// </summary>
     public bool IsBusy
     {
@@ -41,11 +95,41 @@ public sealed class BusyOverlayViewModel : INotifyPropertyChanged
 
             field = value;
             OnPropertyChanged(nameof(IsBusy));
+            OnPropertyChanged(nameof(IsInputBlocked));
 
             // Commands that start an operation of their own are disabled while one runs.
             CommandManager.InvalidateRequerySuggested();
         }
     }
+
+    /// <summary>
+    /// Gets whether the overlay is on screen. It follows <see cref="IsBusy"/> with a delay: it
+    /// appears only once an operation has run for <see cref="BusyOverlayPolicy.ShowDelay"/> (a quick
+    /// one never shows it), and stays at least <see cref="BusyOverlayPolicy.MinimumVisible"/>, so
+    /// the screen does not flash.
+    /// </summary>
+    public bool IsOverlayVisible
+    {
+        get;
+        private set
+        {
+            if (field == value)
+            {
+                return;
+            }
+
+            field = value;
+            OnPropertyChanged(nameof(IsOverlayVisible));
+            OnPropertyChanged(nameof(IsInputBlocked));
+        }
+    }
+
+    /// <summary>
+    /// Gets whether the window must ignore mouse input: while an operation runs (even before the
+    /// overlay is shown, so a click cannot slip through in the first moments) and while the overlay
+    /// is still up.
+    /// </summary>
+    public bool IsInputBlocked => IsBusy || IsOverlayVisible;
 
     /// <summary>
     /// Gets whether the operation currently shown by the overlay can be cancelled, i.e.
@@ -205,7 +289,17 @@ public sealed class BusyOverlayViewModel : INotifyPropertyChanged
     /// <see langword="null"/> when that operation doesn't support cancellation — the overlay then
     /// shows no Cancel button for it. Owned by the caller: <see cref="Stop"/> does not dispose it.
     /// </param>
-    public void Start(string statusText, bool indeterminate = false, ulong? totalBytes = null, CancellationTokenSource? cancellationSource = null)
+    /// <param name="showImmediately">
+    /// Whether to draw the overlay at once instead of after <see cref="BusyOverlayPolicy.ShowDelay"/>,
+    /// for an operation that always takes a while and whose window would otherwise show uncovered
+    /// (the startup auto-mount).
+    /// </param>
+    public void Start(
+        string statusText,
+        bool indeterminate = false,
+        ulong? totalBytes = null,
+        CancellationTokenSource? cancellationSource = null,
+        bool showImmediately = false)
     {
         StatusText = statusText;
         IsIndeterminate = indeterminate;
@@ -216,6 +310,7 @@ public sealed class BusyOverlayViewModel : INotifyPropertyChanged
         CanCancel = cancellationSource is not null;
         IsCancellationRequested = false;
         IsBusy = true;
+        ScheduleShow(showImmediately);
     }
 
     /// <summary>
@@ -260,6 +355,90 @@ public sealed class BusyOverlayViewModel : INotifyPropertyChanged
         IsBusy = false;
         _cancellationSource = null;
         CanCancel = false;
+        ScheduleHide();
+    }
+
+    /// <summary>
+    /// Shows the overlay once the operation has run for the show delay, unless it has stopped (or a
+    /// newer operation has started) by then. When the overlay is still up from the previous
+    /// operation, it simply stays.
+    /// </summary>
+    /// <param name="showImmediately">Whether to skip the show delay.</param>
+    private void ScheduleShow(bool showImmediately)
+    {
+        var generation = ++_generation;
+        if (IsOverlayVisible)
+        {
+            return;
+        }
+
+        if (showImmediately || _showDelay <= TimeSpan.Zero)
+        {
+            ShowOverlay();
+            return;
+        }
+
+        _ = ShowAfterDelayAsync(generation);
+    }
+
+    /// <summary>
+    /// Waits for the show delay and shows the overlay if nothing has started or stopped since.
+    /// </summary>
+    /// <param name="generation">The <see cref="_generation"/> this show was scheduled in.</param>
+    private async Task ShowAfterDelayAsync(int generation)
+    {
+        await _delay(_showDelay);
+        if (generation == _generation && IsBusy)
+        {
+            ShowOverlay();
+        }
+    }
+
+    /// <summary>
+    /// Hides the overlay, but not before it has been up for the minimum visible time. An operation
+    /// that stopped before the overlay was shown leaves it hidden.
+    /// </summary>
+    private void ScheduleHide()
+    {
+        var generation = ++_generation;
+        if (!IsOverlayVisible)
+        {
+            return;
+        }
+
+        var remaining = BusyOverlayPolicy.RemainingVisible(
+            _timeProvider.GetElapsedTime(_shownAtTimestamp), _minimumVisible);
+        if (remaining <= TimeSpan.Zero)
+        {
+            IsOverlayVisible = false;
+            return;
+        }
+
+        _ = HideAfterDelayAsync(generation, remaining);
+    }
+
+    /// <summary>
+    /// Waits out the rest of the minimum visible time and hides the overlay if nothing has started
+    /// or stopped since.
+    /// </summary>
+    /// <param name="generation">The <see cref="_generation"/> this hide was scheduled in.</param>
+    /// <param name="remaining">How long the overlay still has to stay up.</param>
+    private async Task HideAfterDelayAsync(int generation, TimeSpan remaining)
+    {
+        await _delay(remaining);
+        if (generation == _generation)
+        {
+            IsOverlayVisible = false;
+        }
+    }
+
+    /// <summary>
+    /// Makes the overlay visible and notes when, for the minimum visible time.
+    /// </summary>
+    private void ShowOverlay()
+    {
+        _shownAtTimestamp = _timeProvider.GetTimestamp();
+        IsOverlayVisible = true;
     }
 
     /// <summary>
