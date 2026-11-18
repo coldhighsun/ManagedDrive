@@ -10,7 +10,7 @@
         MouseMove="Window_MouseMove"
         MouseLeftButtonUp="Window_MouseLeftButtonUp"
         LostMouseCapture="Window_LostMouseCapture"
-        WindowStartupLocation="CenterScreen"
+        WindowStartupLocation="Manual"
         Icon="pack://application:,,,/ManagedDrive.ico">
 
     <Grid Margin="12">
