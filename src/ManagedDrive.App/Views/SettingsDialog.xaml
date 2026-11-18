@@ -6,7 +6,7 @@
         xmlns:views="clr-namespace:ManagedDrive.App.Views"
         Style="{DynamicResource DialogWindowStyle}"
         Title="{DynamicResource Settings.Title}"
-        Width="420" SizeToContent="Height"
+        Width="480" SizeToContent="Height"
         WindowStartupLocation="CenterOwner">
 
     <views:DialogWindowBase.Resources>
@@ -81,168 +81,184 @@
         </Grid.RowDefinitions>
 
         <!-- Fixed MinHeight (tallest tab) so the dialog does not resize when switching tabs; bump it if a tab grows. -->
-        <TabControl Grid.Row="0" Style="{StaticResource AppTabControl}" MinHeight="340">
+        <TabControl Grid.Row="0" Style="{StaticResource AppTabControl}" MinHeight="440">
 
             <!-- General -->
             <TabItem Header="{DynamicResource Settings.Tab.General}">
-                <StackPanel>
-                    <CheckBox x:Name="RunAtStartupBox"
-                              Content="{DynamicResource Settings.RunAtStartup}"
-                              ToolTip="{DynamicResource Tip.RunAtStartup}"
-                              Margin="0,0,0,12"/>
-                    <CheckBox x:Name="StartMinimizedBox"
-                              Content="{DynamicResource Settings.StartMinimized}"
-                              ToolTip="{DynamicResource Tip.StartMinimized}"
-                              Margin="0,0,0,12"/>
-                    <CheckBox x:Name="CloseToTrayBox"
-                              Content="{DynamicResource Settings.CloseToTray}"
-                              ToolTip="{DynamicResource Tip.CloseToTray}"
-                              Margin="0,0,0,12"/>
-                    <CheckBox x:Name="ContextMenuEnabledBox"
-                              ToolTip="{DynamicResource Tip.ContextMenuEnabled}"
-                              Margin="0,0,0,12">
-                        <TextBlock Text="{DynamicResource Settings.ContextMenuEnabled}"
-                                   TextWrapping="Wrap"/>
-                    </CheckBox>
-                    <CheckBox x:Name="AutoCheckForUpdatesBox"
-                              Content="{DynamicResource Settings.AutoCheckForUpdates}"
-                              ToolTip="{DynamicResource Tip.AutoCheckForUpdates}"/>
-                </StackPanel>
+                <Border Style="{StaticResource SettingsGroupStyle}" Margin="0" VerticalAlignment="Top">
+                    <StackPanel>
+                        <CheckBox x:Name="RunAtStartupBox"
+                                  Content="{DynamicResource Settings.RunAtStartup}"
+                                  ToolTip="{DynamicResource Tip.RunAtStartup}"/>
+                        <CheckBox x:Name="StartMinimizedBox" Margin="0,10,0,0"
+                                  Content="{DynamicResource Settings.StartMinimized}"
+                                  ToolTip="{DynamicResource Tip.StartMinimized}"/>
+                        <CheckBox x:Name="CloseToTrayBox" Margin="0,10,0,0"
+                                  Content="{DynamicResource Settings.CloseToTray}"
+                                  ToolTip="{DynamicResource Tip.CloseToTray}"/>
+                        <CheckBox x:Name="ContextMenuEnabledBox" Margin="0,10,0,0"
+                                  ToolTip="{DynamicResource Tip.ContextMenuEnabled}">
+                            <TextBlock Text="{DynamicResource Settings.ContextMenuEnabled}"
+                                       TextWrapping="Wrap"/>
+                        </CheckBox>
+                        <CheckBox x:Name="AutoCheckForUpdatesBox" Margin="0,10,0,0"
+                                  Content="{DynamicResource Settings.AutoCheckForUpdates}"
+                                  ToolTip="{DynamicResource Tip.AutoCheckForUpdates}"/>
+                    </StackPanel>
+                </Border>
             </TabItem>
 
             <!-- Appearance -->
             <TabItem Header="{DynamicResource Settings.Tab.Appearance}">
-                <Grid>
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="14"/>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="6"/>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="10"/>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="6"/>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="12"/>
-                        <RowDefinition Height="Auto"/>
-                    </Grid.RowDefinitions>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto" MinWidth="120"/>
-                        <ColumnDefinition Width="*"/>
-                    </Grid.ColumnDefinitions>
+                <StackPanel>
 
-                    <TextBlock Grid.Row="0" Grid.Column="0"
-                               Text="{DynamicResource Settings.Language}"
-                               VerticalAlignment="Center"/>
-                    <ComboBox Grid.Row="0" Grid.Column="1"
-                              x:Name="LanguageBox"
-                              Style="{StaticResource OutlinedComboBox}"/>
+                    <!-- Language and font -->
+                    <Border Style="{StaticResource SettingsGroupStyle}">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="8"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="96"/>
+                                <ColumnDefinition Width="8"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
 
-                    <!-- Theme and style are picked from cards with a miniature of the window, below their label. -->
-                    <TextBlock Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="2"
-                               Text="{DynamicResource Settings.Theme}"/>
-                    <ListBox Grid.Row="4" Grid.Column="0" Grid.ColumnSpan="2"
-                             x:Name="ThemeBox" Tag="theme"
-                             Style="{StaticResource ChoiceCardList}"/>
+                            <TextBlock Grid.Row="0" Grid.Column="0"
+                                       Text="{DynamicResource Settings.Language}"
+                                       Style="{StaticResource FieldLabelStyle}"/>
+                            <ComboBox Grid.Row="0" Grid.Column="2"
+                                      x:Name="LanguageBox"
+                                      Style="{StaticResource OutlinedComboBox}"/>
 
-                    <TextBlock Grid.Row="6" Grid.Column="0" Grid.ColumnSpan="2"
-                               Text="{DynamicResource Settings.Style}"/>
-                    <ListBox Grid.Row="8" Grid.Column="0" Grid.ColumnSpan="2"
-                             x:Name="StyleBox" Tag="style"
-                             Style="{StaticResource ChoiceCardList}"/>
+                            <TextBlock Grid.Row="2" Grid.Column="0"
+                                       Text="{DynamicResource Settings.Font}"
+                                       ToolTip="{DynamicResource Tip.Font}"
+                                       Style="{StaticResource FieldLabelStyle}"/>
+                            <ComboBox Grid.Row="2" Grid.Column="2"
+                                      x:Name="FontBox"
+                                      ToolTip="{DynamicResource Tip.Font}"
+                                      Style="{StaticResource OutlinedComboBox}"
+                                      ScrollViewer.CanContentScroll="True">
+                                <!-- Hundreds of fonts: lay out only the rows in view. The fixed width keeps the popup from
+                                     resizing with the rows that happen to be in view. The popup (see OutlinedComboBox) adds a
+                                     1 px border on each side and an 8 px scroll bar to the list, so those 10 px come off the
+                                     combo box's width and the drop-down ends up exactly as wide as the box. -->
+                                <ComboBox.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <VirtualizingStackPanel Width="{Binding ActualWidth, RelativeSource={RelativeSource AncestorType=ComboBox}, Converter={StaticResource SubtractConverter}, ConverterParameter=10}"/>
+                                    </ItemsPanelTemplate>
+                                </ComboBox.ItemsPanel>
+                            </ComboBox>
+                        </Grid>
+                    </Border>
 
-                    <TextBlock Grid.Row="10" Grid.Column="0"
-                               Text="{DynamicResource Settings.Font}"
-                               ToolTip="{DynamicResource Tip.Font}"
-                               VerticalAlignment="Center"/>
-                    <ComboBox Grid.Row="10" Grid.Column="1"
-                              x:Name="FontBox"
-                              ToolTip="{DynamicResource Tip.Font}"
-                              Style="{StaticResource OutlinedComboBox}"
-                              ScrollViewer.CanContentScroll="True">
-                        <!-- Hundreds of fonts: lay out only the rows in view. The fixed width keeps the popup from
-                             resizing with the rows that happen to be in view. The popup (see OutlinedComboBox) adds a
-                             1 px border on each side and an 8 px scroll bar to the list, so those 10 px come off the
-                             combo box's width and the drop-down ends up exactly as wide as the box. -->
-                        <ComboBox.ItemsPanel>
-                            <ItemsPanelTemplate>
-                                <VirtualizingStackPanel Width="{Binding ActualWidth, RelativeSource={RelativeSource AncestorType=ComboBox}, Converter={StaticResource SubtractConverter}, ConverterParameter=10}"/>
-                            </ItemsPanelTemplate>
-                        </ComboBox.ItemsPanel>
-                    </ComboBox>
-                </Grid>
+                    <!-- Theme and style are picked from cards with a miniature of the window, below their heading. -->
+                    <Border Style="{StaticResource SettingsGroupStyle}" Margin="0">
+                        <StackPanel>
+                            <TextBlock Text="{DynamicResource Settings.Theme}" Style="{StaticResource GroupHeaderStyle}"/>
+                            <ListBox x:Name="ThemeBox" Tag="theme"
+                                     Style="{StaticResource ChoiceCardList}"/>
+
+                            <TextBlock Text="{DynamicResource Settings.Style}" Margin="0,10,0,8"
+                                       Style="{StaticResource GroupHeaderStyle}"/>
+                            <ListBox x:Name="StyleBox" Tag="style"
+                                     Style="{StaticResource ChoiceCardList}"/>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
             </TabItem>
 
             <!-- Disks and diagnostics -->
             <TabItem Header="{DynamicResource Settings.Tab.Disk}">
-                <Grid>
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="12"/>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="12"/>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="16"/>
-                        <RowDefinition Height="Auto"/>
-                    </Grid.RowDefinitions>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto" MinWidth="120"/>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="Auto"/>
-                    </Grid.ColumnDefinitions>
+                <StackPanel>
 
-                    <!-- Default compression level for new disks -->
-                    <TextBlock Grid.Row="0" Grid.Column="0"
-                               Text="{DynamicResource Settings.DefaultCompressionLevel}"
-                               ToolTip="{DynamicResource Tip.DefaultCompressionLevel}"
-                               VerticalAlignment="Center"/>
-                    <controls:CompressionLevelPicker Grid.Row="0" Grid.Column="1" Grid.ColumnSpan="2"
-                                                     x:Name="DefaultCompressionLevelBox"
-                                                     ToolTip="{DynamicResource Tip.DefaultCompressionLevel}"/>
+                    <!-- Defaults for new disks -->
+                    <Border Style="{StaticResource SettingsGroupStyle}">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="8"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="96"/>
+                                <ColumnDefinition Width="8"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
 
-                    <!-- Default directory for new disk image files -->
-                    <TextBlock Grid.Row="2" Grid.Column="0"
-                               Text="{DynamicResource Settings.DefaultImageDirectory}"
-                               ToolTip="{DynamicResource Tip.DefaultImageDirectory}"
-                               VerticalAlignment="Center"/>
-                    <!-- Read-only: clicking the box (or Enter/Space in it) opens the folder picker, so the path is always one that was picked;
-                         the button next to it clears the setting. -->
-                    <TextBox Grid.Row="2" Grid.Column="1"
-                             x:Name="DefaultImageDirectoryBox"
-                             IsReadOnly="True" Cursor="Hand"
-                             ToolTip="{DynamicResource Tip.DefaultImageDirectory}"
-                             Style="{StaticResource OutlinedTextBox}"
-                             VerticalContentAlignment="Center"
-                             Margin="0,0,8,0"
-                             PreviewMouseLeftButtonDown="DefaultImageDirectoryBox_PreviewMouseLeftButtonDown"
-                             PreviewKeyDown="DefaultImageDirectoryBox_PreviewKeyDown"
-                             TextChanged="DefaultImageDirectoryBox_TextChanged"/>
-                    <Button Grid.Row="2" Grid.Column="2"
-                            x:Name="ClearDefaultImageDirectoryButton"
-                            Content="&#xD7;" Width="40" IsEnabled="False"
-                            ToolTip="{DynamicResource Tip.ClearDefaultImageDirectory}"
-                            AutomationProperties.Name="{DynamicResource Tip.ClearDefaultImageDirectory}"
-                            Click="ClearDefaultImageDirectory_Click"
-                            Style="{StaticResource OutlinedButton}"/>
+                            <!-- Default compression level for new disks -->
+                            <TextBlock Grid.Row="0" Grid.Column="0"
+                                       Text="{DynamicResource Settings.DefaultCompressionLevel}"
+                                       ToolTip="{DynamicResource Tip.DefaultCompressionLevel}"
+                                       Style="{StaticResource FieldLabelStyle}"/>
+                            <controls:CompressionLevelPicker Grid.Row="0" Grid.Column="2" Grid.ColumnSpan="2"
+                                                             x:Name="DefaultCompressionLevelBox"
+                                                             ToolTip="{DynamicResource Tip.DefaultCompressionLevel}"/>
 
-                    <!-- Helper service status -->
-                    <TextBlock Grid.Row="4" Grid.Column="0"
-                               Text="{DynamicResource Settings.HelperServiceStatus}"
-                               ToolTip="{DynamicResource Tip.HelperServiceStatus}"
-                               VerticalAlignment="Center"/>
-                    <TextBlock Grid.Row="4" Grid.Column="1" Grid.ColumnSpan="2"
-                               x:Name="HelperServiceStatusText"
-                               ToolTip="{DynamicResource Tip.HelperServiceStatus}"
-                               VerticalAlignment="Center"/>
+                            <!-- Default directory for new disk image files -->
+                            <TextBlock Grid.Row="2" Grid.Column="0"
+                                       Text="{DynamicResource Settings.DefaultImageDirectory}"
+                                       ToolTip="{DynamicResource Tip.DefaultImageDirectory}"
+                                       Style="{StaticResource FieldLabelStyle}"/>
+                            <!-- Read-only: clicking the box (or Enter/Space in it) opens the folder picker, so the path is always one that was picked;
+                                 the button next to it clears the setting. -->
+                            <TextBox Grid.Row="2" Grid.Column="2"
+                                     x:Name="DefaultImageDirectoryBox"
+                                     IsReadOnly="True" Cursor="Hand"
+                                     ToolTip="{DynamicResource Tip.DefaultImageDirectory}"
+                                     Style="{StaticResource OutlinedTextBox}"
+                                     VerticalContentAlignment="Center"
+                                     Margin="0,0,8,0"
+                                     PreviewMouseLeftButtonDown="DefaultImageDirectoryBox_PreviewMouseLeftButtonDown"
+                                     PreviewKeyDown="DefaultImageDirectoryBox_PreviewKeyDown"
+                                     TextChanged="DefaultImageDirectoryBox_TextChanged"/>
+                            <Button Grid.Row="2" Grid.Column="3"
+                                    x:Name="ClearDefaultImageDirectoryButton"
+                                    Content="&#xD7;" Width="40" IsEnabled="False"
+                                    ToolTip="{DynamicResource Tip.ClearDefaultImageDirectory}"
+                                    AutomationProperties.Name="{DynamicResource Tip.ClearDefaultImageDirectory}"
+                                    Click="ClearDefaultImageDirectory_Click"
+                                    Style="{StaticResource OutlinedButton}"/>
+                        </Grid>
+                    </Border>
 
-                    <!-- Open log directory -->
-                    <StackPanel Grid.Row="6" Grid.ColumnSpan="3" Orientation="Horizontal">
-                        <Button x:Name="OpenLogDirectoryButton"
-                                Content="{DynamicResource Settings.OpenLogDirectory}"
-                                Click="OpenLogDirectory_Click"
-                                Style="{StaticResource OutlinedButton}"/>
-                    </StackPanel>
-                </Grid>
+                    <!-- Diagnostics -->
+                    <Border Style="{StaticResource SettingsGroupStyle}" Margin="0">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="10"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="96"/>
+                                <ColumnDefinition Width="8"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+
+                            <!-- Helper service status -->
+                            <TextBlock Grid.Row="0" Grid.Column="0"
+                                       Text="{DynamicResource Settings.HelperServiceStatus}"
+                                       ToolTip="{DynamicResource Tip.HelperServiceStatus}"
+                                       Style="{StaticResource FieldLabelStyle}"/>
+                            <TextBlock Grid.Row="0" Grid.Column="2"
+                                       x:Name="HelperServiceStatusText"
+                                       ToolTip="{DynamicResource Tip.HelperServiceStatus}"
+                                       VerticalAlignment="Center"/>
+
+                            <!-- Open log directory -->
+                            <Button Grid.Row="2" Grid.ColumnSpan="3" HorizontalAlignment="Left"
+                                    x:Name="OpenLogDirectoryButton"
+                                    Content="{DynamicResource Settings.OpenLogDirectory}"
+                                    Click="OpenLogDirectory_Click"
+                                    Style="{StaticResource OutlinedButton}"/>
+                        </Grid>
+                    </Border>
+                </StackPanel>
             </TabItem>
         </TabControl>
 
