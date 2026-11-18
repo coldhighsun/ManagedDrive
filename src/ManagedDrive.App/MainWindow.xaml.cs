@@ -14,6 +14,7 @@ public partial class MainWindow
     public MainWindow(MainViewModel viewModel)
     {
         InitializeComponent();
+        PrimaryMonitorPlacement.CenterOnPrimaryMonitor(this);
         DataContext = viewModel;
         WindowMaximizeHelper.HookMaximizeBehavior(this);
     }

@@ -1,3 +1,4 @@
+using ManagedDrive.App.Infrastructure;
 using ManagedDrive.App.Views;
 
 namespace ManagedDrive.Tests;
@@ -8,6 +9,25 @@ namespace ManagedDrive.Tests;
 /// </summary>
 public sealed class SplashWindowTests
 {
+    /// <summary>
+    /// A window is centered in the primary monitor's work area, including one whose origin is not (0, 0)
+    /// because the taskbar sits at the top or left.
+    /// </summary>
+    [Theory]
+    [InlineData(0, 0, 1920, 1040, 680, 340)]
+    [InlineData(0, 48, 1920, 1032, 680, 384)]
+    [InlineData(64, 0, 1856, 1080, 712, 360)]
+    [InlineData(0, 0, 500, 300, 0, 0)]
+    [InlineData(10, 20, 560, 200, 10, 20)]
+    public void CenterInWorkArea_ForWorkArea_CentersTheWindow(
+        double left, double top, double width, double height, double expectedLeft, double expectedTop)
+    {
+        var (resultLeft, resultTop) = PrimaryMonitorPlacement.CenterInWorkArea(new(left, top, width, height), 560, 360);
+
+        Assert.Equal(expectedLeft, resultLeft);
+        Assert.Equal(expectedTop, resultTop);
+    }
+
     /// <summary>
     /// A mouse activation request is answered with "do not activate" and marked handled.
     /// </summary>

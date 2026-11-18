@@ -12,7 +12,7 @@
         Height="480" Width="760"
         MinHeight="360" MinWidth="720"
         ResizeMode="CanResize"
-        WindowStartupLocation="CenterScreen"
+        WindowStartupLocation="Manual"
         TextElement.Foreground="{DynamicResource AppForeground}"
         TextElement.FontWeight="Regular"
         TextElement.FontSize="13"

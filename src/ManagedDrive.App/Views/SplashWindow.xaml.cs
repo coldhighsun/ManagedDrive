@@ -28,6 +28,8 @@ public partial class SplashWindow
     {
         InitializeComponent();
         ShowInTaskbar = showInTaskbar;
+
+        PrimaryMonitorPlacement.CenterOnPrimaryMonitor(this);
         SourceInitialized += (_, _) =>
         {
             var source = (HwndSource)PresentationSource.FromVisual(this)!;
