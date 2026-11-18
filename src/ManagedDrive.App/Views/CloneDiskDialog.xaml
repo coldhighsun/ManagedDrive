@@ -6,7 +6,7 @@
         xmlns:views="clr-namespace:ManagedDrive.App.Views"
         Style="{DynamicResource DialogWindowStyle}"
         Title="{DynamicResource CloneDisk.Title}"
-        Width="440" SizeToContent="Height"
+        Width="480" SizeToContent="Height"
         WindowStartupLocation="CenterOwner">
 
     <Grid>
@@ -24,64 +24,58 @@
                    TextWrapping="Wrap"/>
 
         <!-- Clone to another mounted disk -->
-        <Border Grid.Row="2" Style="{DynamicResource SectionBorder}">
-            <StackPanel Grid.IsSharedSizeScope="True">
-                <RadioButton x:Name="CloneToDiskOption" GroupName="CloneMode"
-                             Content="{DynamicResource CloneDisk.ToDisk}"
-                             Foreground="{DynamicResource AppForeground}"
-                             Checked="ModeOption_CheckedChanged"/>
+        <StackPanel Grid.Row="2">
+            <Border Style="{StaticResource SettingsGroupStyle}">
+                <StackPanel>
+                    <RadioButton x:Name="CloneToDiskOption" GroupName="CloneMode"
+                                 Content="{DynamicResource CloneDisk.ToDisk}"
+                                 Foreground="{DynamicResource AppForeground}"
+                                 Checked="ModeOption_CheckedChanged"/>
 
-                <ComboBox x:Name="TargetDiskBox" IsEditable="False" Margin="0,8,0,8"
-                          Style="{StaticResource OutlinedComboBox}"/>
-
-                <TextBlock Text="{DynamicResource CloneDisk.ToDiskWarning}"
-                           Foreground="{DynamicResource AppWarning}"
-                           FontSize="{DynamicResource FontSizeSmall}" TextWrapping="Wrap"/>
-
-                <Separator Margin="0,16,0,16"/>
-
-                <!-- Export as a new .mdr image file -->
-                <RadioButton x:Name="ExportToFileOption" GroupName="CloneMode"
-                             Content="{DynamicResource CloneDisk.ToFile}"
-                             Foreground="{DynamicResource AppForeground}"
-                             Checked="ModeOption_CheckedChanged"/>
-
-                <Grid Margin="0,8,0,8">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto" SharedSizeGroup="CloneExportLabel"/>
-                        <ColumnDefinition Width="8"/>
-                        <ColumnDefinition Width="200"/>
-                    </Grid.ColumnDefinitions>
-                    <TextBlock Grid.Column="0" Text="{DynamicResource CloneDisk.ExportFormat}"
-                               Foreground="{DynamicResource AppForeground}"
-                               VerticalAlignment="Center"/>
-                    <ComboBox Grid.Column="2" x:Name="ExportFormatBox" IsEditable="False"
+                    <ComboBox x:Name="TargetDiskBox" IsEditable="False" Margin="0,8,0,8"
                               Style="{StaticResource OutlinedComboBox}"/>
-                </Grid>
 
-                <Grid Margin="0,0,0,8">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto" SharedSizeGroup="CloneExportLabel"/>
-                        <ColumnDefinition Width="8"/>
-                        <ColumnDefinition Width="*"/>
-                    </Grid.ColumnDefinitions>
-                    <TextBlock Grid.Column="0" Text="{DynamicResource CreateDisk.CompressionLevel}"
-                               Foreground="{DynamicResource AppForeground}"
-                               VerticalAlignment="Center"/>
-                    <controls:CompressionLevelPicker Grid.Column="2" x:Name="CompressionLevelBox"/>
-                </Grid>
+                    <TextBlock Text="{DynamicResource CloneDisk.ToDiskWarning}"
+                               Foreground="{DynamicResource AppWarning}"
+                               FontSize="{DynamicResource FontSizeCaption}" TextWrapping="Wrap"/>
+                </StackPanel>
+            </Border>
 
-                <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*"/>
-                    </Grid.ColumnDefinitions>
-                    <TextBox Grid.Column="0" x:Name="ExportPathBox" IsReadOnly="True" Cursor="Hand"
+            <!-- Export as a new .mdr image file -->
+            <Border Style="{StaticResource SettingsGroupStyle}" Margin="0">
+                <StackPanel>
+                    <RadioButton x:Name="ExportToFileOption" GroupName="CloneMode"
+                                 Content="{DynamicResource CloneDisk.ToFile}"
+                                 Foreground="{DynamicResource AppForeground}"
+                                 Checked="ModeOption_CheckedChanged"/>
+
+                    <Grid Margin="0,10,0,0">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="8"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="96"/>
+                            <ColumnDefinition Width="8"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Row="0" Grid.Column="0" Text="{DynamicResource CloneDisk.ExportFormat}"
+                                   Style="{StaticResource FieldLabelStyle}"/>
+                        <ComboBox Grid.Row="0" Grid.Column="2" x:Name="ExportFormatBox" IsEditable="False"
+                                  Style="{StaticResource OutlinedComboBox}"/>
+                        <TextBlock Grid.Row="2" Grid.Column="0" Text="{DynamicResource CreateDisk.CompressionLevel}"
+                                   Style="{StaticResource FieldLabelStyle}"/>
+                        <controls:CompressionLevelPicker Grid.Row="2" Grid.Column="2" x:Name="CompressionLevelBox"/>
+                    </Grid>
+
+                    <TextBox Margin="0,8,0,0" x:Name="ExportPathBox" IsReadOnly="True" Cursor="Hand"
                              helpers:HintHelper.Text="{DynamicResource CloneDisk.ExportFile}"
                              Style="{StaticResource OutlinedTextBox}"
                              PreviewMouseLeftButtonDown="ExportPathBox_PreviewMouseLeftButtonDown"/>
-                </Grid>
-            </StackPanel>
-        </Border>
+                </StackPanel>
+            </Border>
+        </StackPanel>
 
         <!-- OK / Cancel -->
         <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Right">

@@ -27,15 +27,15 @@
         </StackPanel>
 
         <!-- Release notes -->
-        <StackPanel x:Name="NotesPanel" Grid.Row="1" Margin="0,16,0,0" Visibility="Collapsed">
-            <TextBlock Text="{DynamicResource Update.WhatsNew}" FontSize="{DynamicResource FontSizeCaption}"
-                       Foreground="{DynamicResource AppForeground}" Margin="0,0,0,4"/>
-            <Border BorderBrush="{DynamicResource AppDivider}" BorderThickness="1" CornerRadius="{DynamicResource SectionCornerRadius}">
+        <Border x:Name="NotesPanel" Grid.Row="1" Margin="0,16,0,0" Visibility="Collapsed"
+                Style="{StaticResource SettingsGroupStyle}">
+            <StackPanel>
+                <TextBlock Text="{DynamicResource Update.WhatsNew}" Style="{StaticResource GroupHeaderStyle}"/>
                 <ScrollViewer MaxHeight="150" VerticalScrollBarVisibility="Auto">
-                    <TextBlock x:Name="NotesText" TextWrapping="Wrap" Margin="8,6" FontSize="{DynamicResource FontSizeCaption}" LineHeight="18"/>
+                    <TextBlock x:Name="NotesText" TextWrapping="Wrap" FontSize="{DynamicResource FontSizeCaption}" LineHeight="18"/>
                 </ScrollViewer>
-            </Border>
-        </StackPanel>
+            </StackPanel>
+        </Border>
 
         <!-- What updating does -->
         <TextBlock x:Name="InfoText" Grid.Row="2" Margin="0,16,0,0"

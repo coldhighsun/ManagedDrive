@@ -161,8 +161,7 @@
             <TextBlock x:Name="SummaryText" Foreground="{DynamicResource AppForegroundLight}"
                        TextWrapping="Wrap" VerticalAlignment="Center"/>
             <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-                <TextBlock Text="{DynamicResource SpaceUsage.ListSize}" VerticalAlignment="Center"
-                           Foreground="{DynamicResource AppForeground}"/>
+                <TextBlock Text="{DynamicResource SpaceUsage.ListSize}" Style="{StaticResource FieldLabelStyle}"/>
                 <TextBox x:Name="TopCountBox" Width="56" Margin="6,0,0,0" VerticalAlignment="Center"
                          Style="{StaticResource OutlinedTextBox}" Padding="6,4"
                          MaxLength="4" TextAlignment="Right"

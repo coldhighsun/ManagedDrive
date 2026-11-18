@@ -394,6 +394,44 @@
         </Style.Triggers>
     </Style>
 
+    <!-- ========== Settings dialog building blocks ========== -->
+    <!-- A bordered group of related fields; the next group sits 12 below it. -->
+    <Style x:Key="SettingsGroupStyle" TargetType="Border">
+        <Setter Property="BorderBrush" Value="{DynamicResource AppDivider}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="CornerRadius" Value="{DynamicResource SectionCornerRadius}"/>
+        <Setter Property="Padding" Value="12,10,12,12"/>
+        <Setter Property="Margin" Value="0,0,0,12"/>
+    </Style>
+
+    <!-- Small heading on the first line of a group. -->
+    <Style x:Key="GroupHeaderStyle" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="{DynamicResource FontSizeCaption}"/>
+        <Setter Property="FontWeight" Value="SemiBold"/>
+        <Setter Property="Foreground" Value="{DynamicResource AppForegroundLight}"/>
+        <Setter Property="Margin" Value="0,0,0,8"/>
+    </Style>
+
+    <!-- Label in the label column of a field row. -->
+    <Style x:Key="FieldLabelStyle" TargetType="TextBlock">
+        <Setter Property="Foreground" Value="{DynamicResource AppForeground}"/>
+        <Setter Property="VerticalAlignment" Value="Center"/>
+        <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+    </Style>
+
+    <!-- Explanation under a check box; set Tag to the check box's IsEnabled so it dims with it. -->
+    <Style x:Key="CheckCaptionStyle" TargetType="TextBlock">
+        <Setter Property="Margin" Value="22,2,0,0"/>
+        <Setter Property="TextWrapping" Value="Wrap"/>
+        <Setter Property="FontSize" Value="{DynamicResource FontSizeCaption}"/>
+        <Setter Property="Foreground" Value="{DynamicResource AppForegroundLight}"/>
+        <Style.Triggers>
+            <DataTrigger Binding="{Binding Tag, RelativeSource={RelativeSource Self}}" Value="False">
+                <Setter Property="Opacity" Value="0.4"/>
+            </DataTrigger>
+        </Style.Triggers>
+    </Style>
+
     <!-- ========== Slider (capacity/interval/snapshot limits) ========== -->
     <Style x:Key="AppSlider" TargetType="Slider">
         <Setter Property="Height" Value="20"/>
@@ -907,18 +945,9 @@
     </Style>
 
     <!-- ========== Dialog field grouping ========== -->
-    <Style x:Key="SectionBorder" TargetType="Border">
-        <Setter Property="BorderBrush" Value="{DynamicResource AppDivider}"/>
-        <Setter Property="BorderThickness" Value="1"/>
-        <Setter Property="CornerRadius" Value="{DynamicResource SectionCornerRadius}"/>
-        <Setter Property="Padding" Value="14,12"/>
-    </Style>
-
-    <Style x:Key="SectionHeaderText" TargetType="TextBlock">
-        <Setter Property="FontSize" Value="12"/>
-        <Setter Property="FontWeight" Value="SemiBold"/>
-        <Setter Property="Foreground" Value="{DynamicResource AppForegroundLight}"/>
-        <Setter Property="Margin" Value="0,0,0,10"/>
+    <!-- The same card as SettingsGroupStyle, without the gap below it: the list dialogs hold one card on their own. -->
+    <Style x:Key="SectionBorder" TargetType="Border" BasedOn="{StaticResource SettingsGroupStyle}">
+        <Setter Property="Margin" Value="0"/>
     </Style>
 
     <!-- ========== Tabs ========== -->
