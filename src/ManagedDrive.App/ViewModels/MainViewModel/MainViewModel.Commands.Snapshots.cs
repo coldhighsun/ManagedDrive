@@ -79,7 +79,6 @@ public sealed partial class MainViewModel
             return;
         }
 
-        vm.IsSaving = true;
         try
         {
             var progress = new Progress<double>(BusyOverlay.Report);
@@ -100,7 +99,6 @@ public sealed partial class MainViewModel
         }
         finally
         {
-            vm.IsSaving = false;
             BusyOverlay.Stop();
         }
     }

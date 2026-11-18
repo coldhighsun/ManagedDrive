@@ -323,26 +323,6 @@
                                                       HorizontalAlignment="Right" VerticalAlignment="Bottom"
                                                       Margin="0,0,0,-4"/>
 
-                            <!-- Saving overlay; negative margin cancels the card Padding so it covers the whole card -->
-                            <Border Grid.ColumnSpan="3" Margin="{StaticResource DiskCardOverlayMargin}"
-                                    Background="{DynamicResource AppSurface}"
-                                    Opacity="0.85"
-                                    CornerRadius="14"
-                                    Visibility="{Binding IsSaving, Converter={StaticResource BoolToVis}}">
-                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
-                                    <TextBlock x:Name="SavingSpinner"
-                                               Text="&#xE895;" FontFamily="Segoe Fluent Icons" FontSize="16"
-                                               Foreground="{DynamicResource AppPrimary}"
-                                               RenderTransformOrigin="0.5,0.5">
-                                        <TextBlock.RenderTransform>
-                                            <RotateTransform x:Name="SpinnerRotate" Angle="0"/>
-                                        </TextBlock.RenderTransform>
-                                    </TextBlock>
-                                    <TextBlock Text="{DynamicResource Card.Saving}" FontSize="12" Margin="6,0,0,0"
-                                               Foreground="{DynamicResource AppForeground}"/>
-                                </StackPanel>
-                            </Border>
-
                             <!-- Remounting overlay -->
                             <Border Grid.ColumnSpan="3" Margin="{StaticResource DiskCardOverlayMargin}"
                                     Background="{DynamicResource AppSurface}"
@@ -375,21 +355,6 @@
                                          RelativeSource="{RelativeSource AncestorType=ListBoxItem}"/>
                             </DataTrigger.Binding>
                             <Setter TargetName="Card" Property="BorderBrush" Value="{DynamicResource AppPrimary}"/>
-                        </DataTrigger>
-                        <DataTrigger Binding="{Binding IsSaving}" Value="True">
-                            <DataTrigger.EnterActions>
-                                <BeginStoryboard x:Name="SpinStoryboard">
-                                    <Storyboard>
-                                        <DoubleAnimation Storyboard.TargetName="SpinnerRotate"
-                                                          Storyboard.TargetProperty="Angle"
-                                                          From="0" To="360" Duration="0:0:1"
-                                                          RepeatBehavior="Forever"/>
-                                    </Storyboard>
-                                </BeginStoryboard>
-                            </DataTrigger.EnterActions>
-                            <DataTrigger.ExitActions>
-                                <StopStoryboard BeginStoryboardName="SpinStoryboard"/>
-                            </DataTrigger.ExitActions>
                         </DataTrigger>
                         <DataTrigger Binding="{Binding IsRemounting}" Value="True">
                             <DataTrigger.EnterActions>
