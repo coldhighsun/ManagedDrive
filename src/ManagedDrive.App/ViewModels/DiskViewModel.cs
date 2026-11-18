@@ -274,25 +274,6 @@ public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
     }
 
     /// <summary>
-    /// Gets or sets whether this disk's image is currently being saved, driving the
-    /// "saving" overlay on the disk card.
-    /// </summary>
-    public bool IsSaving
-    {
-        get;
-        set
-        {
-            if (field == value)
-            {
-                return;
-            }
-
-            field = value;
-            OnPropertyChanged(nameof(IsSaving));
-        }
-    }
-
-    /// <summary>
     /// Gets the timestamp of the most recent image save, formatted for display.
     /// </summary>
     public string LastAutoSaveFormatted => Disk.LastSaveTime is { } t

@@ -119,7 +119,6 @@
     <sys:String x:Key="Time.MinutesAgo">{0} 分钟前</sys:String>
     <sys:String x:Key="Time.HoursAgo">{0} 小时前</sys:String>
     <sys:String x:Key="Time.DaysAgo">{0} 天前</sys:String>
-    <sys:String x:Key="Card.Saving">正在保存...</sys:String>
     <sys:String x:Key="Card.ApplyingChanges">正在应用更改...</sys:String>
     <sys:String x:Key="Msg.ExitSaving">正在保存磁盘镜像，请稍候...</sys:String>
     <sys:String x:Key="Msg.ExitSavingDisk">正在保存 "{0}"...</sys:String>

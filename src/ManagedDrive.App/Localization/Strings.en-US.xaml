@@ -119,7 +119,6 @@
     <sys:String x:Key="Time.MinutesAgo">{0} min ago</sys:String>
     <sys:String x:Key="Time.HoursAgo">{0} hours ago</sys:String>
     <sys:String x:Key="Time.DaysAgo">{0} days ago</sys:String>
-    <sys:String x:Key="Card.Saving">Saving...</sys:String>
     <sys:String x:Key="Card.ApplyingChanges">Applying changes...</sys:String>
     <sys:String x:Key="Msg.ExitSaving">Saving disk images, please wait...</sys:String>
     <sys:String x:Key="Msg.ExitSavingDisk">Saving "{0}"...</sys:String>
