@@ -514,7 +514,7 @@ public partial class App
         }
         else
         {
-            overlay.Start(firstStatus, totalBytes: totalBytes);
+            overlay.Start(firstStatus, totalBytes: totalBytes, showImmediately: true);
         }
 
         try
@@ -540,7 +540,8 @@ public partial class App
                             await CloseSplashAndShowMainWindowAsync();
                             overlay.Start(
                                 Loc.Format("Busy.LoadingDisks", Math.Min(viewModel.AutoMountCompleted + 1, profiles.Count), profiles.Count),
-                                totalBytes: totalBytes);
+                                totalBytes: totalBytes,
+                                showImmediately: true);
 
                             // Start() resets the bar; carry over what the splash had reached.
                             overlay.Report(aggregate.Combined);
