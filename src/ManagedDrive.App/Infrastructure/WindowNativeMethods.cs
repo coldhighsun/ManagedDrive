@@ -199,6 +199,45 @@ internal static class WindowNativeMethods
     }
 
     /// <summary>
+    /// <c>SM_CXSMICON</c>: the width of a small icon, the size the notification area shows.
+    /// </summary>
+    private const int SmCxSmIcon = 49;
+
+    /// <summary>
+    /// Reads a system metric scaled for a DPI.
+    /// </summary>
+    /// <param name="index">The <c>SM_*</c> metric.</param>
+    /// <param name="dpi">The DPI to scale it for.</param>
+    /// <returns>The metric in pixels; zero on failure.</returns>
+    [DllImport("user32.dll")]
+    private static extern int GetSystemMetricsForDpi(int index, uint dpi);
+
+    /// <summary>
+    /// Gets the size, in pixels, of an icon in the notification area at the current DPI of the primary
+    /// monitor, which holds the taskbar's notification area: 16 at 100%, 20 at 125%, 24 at 150%, 32 at
+    /// 200%. Not the system DPI, which stays at its sign-in value when the scaling is changed later.
+    /// Falls back to 16 when it cannot be read.
+    /// </summary>
+    /// <returns>The edge length of the square icon.</returns>
+    public static int GetTrayIconSize()
+    {
+        // (0, 0) is always the top-left corner of the primary monitor.
+        var (scaleX, _) = GetMonitorScale(0, 0);
+        var size = GetSystemMetricsForDpi(SmCxSmIcon, (uint)Math.Round(96 * scaleX));
+        return size > 0 ? size : 16;
+    }
+
+    /// <summary>
+    /// Releases an icon handle, such as one made by <see cref="System.Drawing.Bitmap.GetHicon"/>, which
+    /// <see cref="System.Drawing.Icon.Dispose"/> of an icon made from it does not release.
+    /// </summary>
+    /// <param name="hIcon">The handle.</param>
+    /// <returns>Whether it was released.</returns>
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool DestroyIcon(nint hIcon);
+
+    /// <summary>
     /// Sets an integer <c>DWMWA_*</c> attribute of a window's DWM-drawn chrome. The return value is
     /// ignored on purpose: it only reports an attribute this Windows version does not know.
     /// </summary>

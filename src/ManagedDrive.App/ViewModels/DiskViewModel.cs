@@ -240,6 +240,43 @@ public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
     }
 
     /// <summary>
+    /// Gets why this disk shows an alert on the tray icon; set by <see cref="DiskNotificationService"/>.
+    /// </summary>
+    public TrayAlertReasons AlertReasons
+    {
+        get; private set;
+    }
+
+    /// <summary>
+    /// Gets the failures behind <see cref="AlertReasons"/> for the tray tooltip, such as
+    /// "Full, writes refused"; empty when there is none. High usage is left out: the usage bar
+    /// already shows it.
+    /// </summary>
+    public string AlertText => TrayAlertText.Build(AlertReasons, Loc.Get);
+
+    /// <summary>
+    /// Gets whether <see cref="AlertText"/> has anything to show.
+    /// </summary>
+    public bool HasAlertText => (AlertReasons & TrayAlertRules.CriticalReasons) != 0;
+
+    /// <summary>
+    /// Records why this disk shows an alert on the tray icon.
+    /// </summary>
+    /// <param name="reasons">The disk's current reasons.</param>
+    public void SetAlertReasons(TrayAlertReasons reasons)
+    {
+        if (reasons == AlertReasons)
+        {
+            return;
+        }
+
+        AlertReasons = reasons;
+        OnPropertyChanged(nameof(AlertReasons));
+        OnPropertyChanged(nameof(AlertText));
+        OnPropertyChanged(nameof(HasAlertText));
+    }
+
+    /// <summary>
     /// Gets the inverse of <see cref="IsReadOnly"/> for visibility binding.
     /// </summary>
     public bool IsNotReadOnly => !Disk.Options.ReadOnly;
@@ -654,11 +691,15 @@ public sealed class DiskViewModel : INotifyPropertyChanged, IDisposable
     }
 
     /// <summary>
-    /// Refreshes the redirect badge's tooltip when the UI language changes.
+    /// Refreshes the redirect badge's tooltip and the alert text when the UI language changes.
     /// </summary>
     /// <param name="sender">The language manager.</param>
     /// <param name="e">The event data.</param>
-    private void OnLanguageChanged(object? sender, EventArgs e) => OnPropertyChanged(nameof(ActiveRedirectsTooltip));
+    private void OnLanguageChanged(object? sender, EventArgs e)
+    {
+        OnPropertyChanged(nameof(ActiveRedirectsTooltip));
+        OnPropertyChanged(nameof(AlertText));
+    }
 
     /// <summary>
     /// Runs on the UI thread, either dispatched by the first access of a burst or from each

@@ -5,8 +5,8 @@ namespace ManagedDrive.App.Services;
 
 /// <summary>
 /// Wires each <see cref="DiskViewModel"/>'s usage/save/activity/write-rejection events, and the
-/// system's available memory, to tray balloon tips and status-bar text as disks are added to and
-/// removed from <see cref="MainViewModel.Disks"/>.
+/// system's available memory, to tray balloon tips, the tray icon's alert badge and status-bar text
+/// as disks are added to and removed from <see cref="MainViewModel.Disks"/>.
 /// Extracted from <see cref="App"/>'s <c>SetupUsageWarnings</c>.
 /// </summary>
 public sealed class DiskNotificationService
@@ -35,7 +35,16 @@ public sealed class DiskNotificationService
     /// </summary>
     private const string LowMemoryStatusKey = "system-memory";
 
+    /// <summary>
+    /// The disks over their high-usage threshold, kept to show another one's report in the status
+    /// bar once one of them recovers.
+    /// </summary>
     private readonly HashSet<DiskViewModel> _highUsageDisks = [];
+
+    /// <summary>
+    /// Decides when each disk's tray alert reasons start and end, and the badge level they add up to.
+    /// </summary>
+    private readonly TrayAlertTracker _alerts = new();
     private readonly DispatcherTimer _lowMemoryTimer;
     private readonly LowMemoryMonitor _lowMemoryMonitor = new();
     private readonly NotificationCooldown _writeRejectedCooldown = new(WriteRejectedCooldown);
@@ -94,7 +103,7 @@ public sealed class DiskNotificationService
                     if (vm.IsHighUsage)
                     {
                         _highUsageDisks.Add(vm);
-                        _trayIconController.SetHighUsageWarningActive(true);
+                        ApplyAlerts(_alerts.SetHighUsage(vm, true));
                     }
                 }
             }
@@ -111,10 +120,8 @@ public sealed class DiskNotificationService
                     vm.ActivityObserved -= OnDiskActivityObserved;
                     vm.PropertyChanged -= OnDiskPropertyChanged;
 
-                    if (_highUsageDisks.Remove(vm))
-                    {
-                        _trayIconController.SetHighUsageWarningActive(_highUsageDisks.Count > 0);
-                    }
+                    _highUsageDisks.Remove(vm);
+                    ApplyAlerts(_alerts.RemoveDisk(vm, _mainViewModel.Disks.Count));
 
                     if (_mainViewModel.ClearStickyStatus(vm.MountPoint))
                     {
@@ -179,13 +186,13 @@ public sealed class DiskNotificationService
     }
 
     /// <summary>
-    /// Tracks every disk currently in the <see cref="DiskViewModel.IsHighUsage"/> state (which
-    /// fires on both the rising and falling edge, unlike the one-shot <see cref="DiskViewModel.HighUsageWarning"/>
-    /// event used for the balloon tip below) and reduces it to a single tray blink call: the tray
-    /// icon has no per-disk concept, so it only needs to know whether any disk is currently over
-    /// its threshold. The falling edge also clears the disk's high-usage report from the status bar,
-    /// falling back to the report of another disk that is still over its threshold.
+    /// Follows a change of <see cref="DiskViewModel.IsHighUsage"/> (both edges, unlike the one-shot
+    /// <see cref="DiskViewModel.HighUsageWarning"/> event used for the balloon tip): sets or clears the
+    /// disk's high-usage tray warning, and on the falling edge clears the disk's high-usage report from
+    /// the status bar, falling back to the report of another disk that is still over its threshold.
     /// </summary>
+    /// <param name="sender">The disk.</param>
+    /// <param name="e">The changed property.</param>
     private void OnDiskPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (e.PropertyName != nameof(DiskViewModel.IsHighUsage) || sender is not DiskViewModel vm)
@@ -210,7 +217,31 @@ public sealed class DiskNotificationService
             }
         }
 
-        _trayIconController.SetHighUsageWarningActive(_highUsageDisks.Count > 0);
+        ApplyAlerts(_alerts.SetHighUsage(vm, vm.IsHighUsage));
+    }
+
+    /// <summary>
+    /// Applies what <see cref="_alerts"/> changed: mirrors each changed disk's reasons on its view
+    /// model for the tooltip, and passes the badge level to the tray icon, asking it to pulse again
+    /// for a new failure.
+    /// </summary>
+    /// <param name="update">The change to apply.</param>
+    private void ApplyAlerts(TrayAlertUpdate update)
+    {
+        if (!update.HasChanges)
+        {
+            return;
+        }
+
+        foreach (var key in update.ChangedKeys)
+        {
+            if (key is DiskViewModel vm)
+            {
+                vm.SetAlertReasons(_alerts.Get(vm));
+            }
+        }
+
+        _trayIconController.SetAlertLevel(_alerts.Level, update.NewCritical);
     }
 
     /// <summary>
@@ -267,6 +298,7 @@ public sealed class DiskNotificationService
             return;
         }
 
+        ApplyAlerts(_alerts.OnSaveFailed(vm));
         _mainViewModel.ShowStickyStatus(
             Loc.Format("Status.SaveFailed", vm.MountPoint, ex.Message),
             vm.MountPoint,
@@ -290,6 +322,7 @@ public sealed class DiskNotificationService
             return;
         }
 
+        ApplyAlerts(_alerts.OnSaveRecovered(vm));
         if (_mainViewModel.ClearStickyStatus(vm.MountPoint, nameof(DiskViewModel.SaveFailed)))
         {
             ShowRemainingHighUsageStatus();
@@ -305,6 +338,7 @@ public sealed class DiskNotificationService
     /// <summary>
     /// Tells the user why a write was refused. The application that issued it only gets an error
     /// code, so without this a failed copy gives no hint that the disk is full or memory is low.
+    /// Raises a critical tray alert for <see cref="TrayAlertTracker.RefusalHold"/> after the last refusal.
     /// A low-memory refusal stays in the status bar until memory recovers; a full disk is already
     /// visible in the usage bar, so it only replaces the status text. The balloon tip is limited to
     /// one per disk and reason per <see cref="WriteRejectedCooldown"/>, and is only spent when it
@@ -318,6 +352,8 @@ public sealed class DiskNotificationService
         }
 
         var isLowMemory = reason == WriteRejectionReason.LowMemory;
+        ApplyAlerts(_alerts.OnWriteRejected(vm, isLowMemory, DateTimeOffset.UtcNow));
+
         var status = Loc.Format(isLowMemory ? "Status.WriteRejectedMemory" : "Status.WriteRejectedFull", vm.MountPoint);
         if (isLowMemory)
         {
@@ -371,6 +407,10 @@ public sealed class DiskNotificationService
                 cleared = _mainViewModel.ClearStickyStatus(LowMemoryStatusKey);
                 break;
         }
+
+        // The tray warning follows the reading itself, not the monitor's transitions, which its
+        // cooldown holds back; the same poll ends refusal alerts whose hold has passed.
+        ApplyAlerts(_alerts.OnMemoryReading(available, _mainViewModel.Disks.Count, DateTimeOffset.UtcNow));
 
         // Independent of the monitor's state: a refusal can come and go between two polls, so the
         // monitor never saw memory low and reports no recovery.

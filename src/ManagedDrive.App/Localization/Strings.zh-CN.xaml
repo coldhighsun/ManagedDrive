@@ -388,6 +388,9 @@
     <sys:String x:Key="Tray.WriteRejectedMemoryBody">写入 {0}（{1}）被拒绝：系统可用内存已接近耗尽。</sys:String>
     <sys:String x:Key="Tray.LowMemoryTitle">系统内存偏低</sys:String>
     <sys:String x:Key="Tray.LowMemoryBody">可用内存只剩 {0}，用尽后 RAM 磁盘将拒绝写入。</sys:String>
+    <sys:String x:Key="TrayTip.AlertDiskFull">磁盘已满，写入被拒</sys:String>
+    <sys:String x:Key="TrayTip.AlertMemoryRejected">内存不足，写入被拒</sys:String>
+    <sys:String x:Key="TrayTip.AlertSaveFailed">映像保存失败</sys:String>
     <sys:String x:Key="Tray.SaveCompletedTitle">保存完成</sys:String>
     <sys:String x:Key="Tray.SaveCompletedBody">{0}（{1}）镜像已保存。</sys:String>
     <sys:String x:Key="Tray.CapacityAdjustedTitle">容量已自动调整</sys:String>

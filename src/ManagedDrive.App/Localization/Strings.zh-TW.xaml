@@ -388,6 +388,9 @@
     <sys:String x:Key="Tray.WriteRejectedMemoryBody">寫入 {0}（{1}）被拒絕：系統可用記憶體已接近耗盡。</sys:String>
     <sys:String x:Key="Tray.LowMemoryTitle">系統記憶體偏低</sys:String>
     <sys:String x:Key="Tray.LowMemoryBody">可用記憶體只剩 {0}，用盡後 RAM 磁碟將拒絕寫入。</sys:String>
+    <sys:String x:Key="TrayTip.AlertDiskFull">磁碟已滿，寫入被拒</sys:String>
+    <sys:String x:Key="TrayTip.AlertMemoryRejected">記憶體不足，寫入被拒</sys:String>
+    <sys:String x:Key="TrayTip.AlertSaveFailed">映像儲存失敗</sys:String>
     <sys:String x:Key="Tray.SaveCompletedTitle">儲存完成</sys:String>
     <sys:String x:Key="Tray.SaveCompletedBody">{0}（{1}）的映像檔已儲存。</sys:String>
     <sys:String x:Key="Tray.CapacityAdjustedTitle">容量已自動調整</sys:String>

@@ -85,6 +85,31 @@
                                     </Border>
                                 </Grid>
                             </Border>
+                            <!-- Why the tray icon shows a red badge for this disk; hidden while there is nothing to say. -->
+                            <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                                <StackPanel.Style>
+                                    <Style TargetType="StackPanel">
+                                        <Setter Property="Visibility" Value="Collapsed" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding HasAlertText}" Value="True">
+                                                <Setter Property="Visibility" Value="Visible" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </StackPanel.Style>
+                                <TextBlock FontFamily="Segoe Fluent Icons"
+                                           FontSize="12"
+                                           Foreground="{DynamicResource AppDanger}"
+                                           Text="&#xE7BA;"
+                                           VerticalAlignment="Center"
+                                           Margin="0,0,5,0" />
+                                <TextBlock FontSize="{DynamicResource FontSizeCaption}"
+                                           Foreground="{DynamicResource AppDanger}"
+                                           Text="{Binding AlertText}"
+                                           TextWrapping="Wrap"
+                                           MaxWidth="260"
+                                           VerticalAlignment="Center" />
+                            </StackPanel>
                         </StackPanel>
                     </DataTemplate>
                 </ItemsControl.ItemTemplate>
