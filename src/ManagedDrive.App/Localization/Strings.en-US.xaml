@@ -388,6 +388,9 @@
     <sys:String x:Key="Tray.WriteRejectedMemoryBody">A write to {0} ({1}) was refused because the system is nearly out of free memory.</sys:String>
     <sys:String x:Key="Tray.LowMemoryTitle">System Memory Is Low</sys:String>
     <sys:String x:Key="Tray.LowMemoryBody">Only {0} of memory is available. RAM disks refuse writes when it runs out.</sys:String>
+    <sys:String x:Key="TrayTip.AlertDiskFull">Full, writes refused</sys:String>
+    <sys:String x:Key="TrayTip.AlertMemoryRejected">Writes refused: low memory</sys:String>
+    <sys:String x:Key="TrayTip.AlertSaveFailed">Saving the image failed</sys:String>
     <sys:String x:Key="Tray.SaveCompletedTitle">Save Complete</sys:String>
     <sys:String x:Key="Tray.SaveCompletedBody">{0} ({1}) image has been saved.</sys:String>
     <sys:String x:Key="Tray.CapacityAdjustedTitle">Capacity Adjusted</sys:String>

@@ -65,11 +65,11 @@ public sealed class MountManager : IDisposable
 
     /// <summary>
     /// Raised at most once per <see cref="ActivityPollInterval"/> when any mounted disk's content
-    /// was read or written since the last tick, with <c>true</c> if any of those accesses was a
-    /// write and <c>false</c> if all were reads. Raised from a timer thread, never from a WinFsp
+    /// was read or written since the last tick, with whether anything was read and whether anything
+    /// was written (both can be <c>true</c>). Raised from a timer thread, never from a WinFsp
     /// driver thread.
     /// </summary>
-    public event Action<bool>? ActivityDetected;
+    public event Action<bool, bool>? ActivityDetected;
 
     /// <summary>
     /// Raised on the thread that called <see cref="Mount"/> after a disk is successfully mounted.
@@ -384,7 +384,7 @@ public sealed class MountManager : IDisposable
     /// <summary>
     /// Timer callback for <see cref="_activityPollTimer"/>: drains
     /// <see cref="_pendingRead"/>/<see cref="_pendingWrite"/> and raises
-    /// <see cref="ActivityDetected"/> at most once per tick if either was set, preferring write.
+    /// <see cref="ActivityDetected"/> at most once per tick if either was set, reporting both.
     /// A subscriber exception is caught and logged rather than left to propagate out of this
     /// <see cref="Timer"/> callback, where it would otherwise be unhandled and crash the process.
     /// </summary>
@@ -400,7 +400,7 @@ public sealed class MountManager : IDisposable
 
         try
         {
-            ActivityDetected?.Invoke(hadWrite);
+            ActivityDetected?.Invoke(hadRead, hadWrite);
         }
         catch (Exception ex)
         {
