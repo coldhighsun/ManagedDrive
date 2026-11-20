@@ -170,4 +170,36 @@ public sealed class MemoryFileSystemCloneTests
         Assert.False(ok);
         Assert.NotNull(error);
     }
+
+    [Fact]
+    public void TryReplaceContents_CaseSensitiveSourceWithCollidingNamesIntoCaseInsensitiveTarget_ReturnsFalseAndLeavesTargetUnchanged()
+    {
+        var source = new MemoryFileSystem(1024 * 1024, "Source", caseSensitive: true);
+        source.Create("\\A.txt", 0, 0, (uint)FileAttributes.Normal, [], 0, out _, out _, out _, out _);
+        source.Create("\\a.txt", 0, 0, (uint)FileAttributes.Normal, [], 0, out _, out _, out _, out _);
+
+        var target = new MemoryFileSystem(1024 * 1024, "Target");
+        target.Create("\\keep.txt", 0, 0, (uint)FileAttributes.Normal, [], 0, out _, out _, out _, out _);
+
+        var ok = target.TryReplaceContents(source.NodeMap, out var error);
+
+        Assert.False(ok);
+        Assert.Contains("differ only by case", error);
+        Assert.True(target.NodeMap.TryGet("\\keep.txt", out _));
+        Assert.False(target.NodeMap.TryGet("\\A.txt", out _));
+    }
+
+    [Fact]
+    public void TryReplaceContents_CaseSensitiveSourceWithoutCollisionsIntoCaseInsensitiveTarget_Succeeds()
+    {
+        var source = new MemoryFileSystem(1024 * 1024, "Source", caseSensitive: true);
+        source.Create("\\A.txt", 0, 0, (uint)FileAttributes.Normal, [], 0, out _, out _, out _, out _);
+        source.Create("\\b.txt", 0, 0, (uint)FileAttributes.Normal, [], 0, out _, out _, out _, out _);
+
+        var target = new MemoryFileSystem(1024 * 1024, "Target");
+
+        Assert.True(target.TryReplaceContents(source.NodeMap, out var error));
+        Assert.Null(error);
+        Assert.True(target.NodeMap.TryGet("\\a.txt", out _));
+    }
 }

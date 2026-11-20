@@ -150,6 +150,28 @@ public sealed class MountOptionsFactoryTests
         Assert.Equal(5U, options.MaxSnapshotCount);
     }
 
+    [Theory]
+    [InlineData(true, null, true)]
+    [InlineData(false, true, true)]
+    [InlineData(true, false, false)]
+    public void BuildImageOptions_CaseSensitiveOverride_WinsOverProfileOtherwiseKeepsIt(
+        bool profileValue, bool? overrideValue, bool expected)
+    {
+        var profile = new DiskOptions
+        {
+            MountPoint = "OLD:",
+            CapacityBytes = 1,
+            VolumeLabel = "L",
+            PersistImagePath = Image,
+            CaseSensitive = profileValue,
+        };
+
+        var options = MountOptionsFactory.BuildImageOptions(
+            profile, "R:", Image, 4UL * 1024 * 1024, "L", new() { CaseSensitive = overrideValue });
+
+        Assert.Equal(expected, options.CaseSensitive);
+    }
+
     [Fact]
     public void BuildImageOptions_CompressionOverrideWinsOverProfile()
     {
@@ -231,5 +253,29 @@ public sealed class MountOptionsFactoryTests
 
         Assert.True(options.ReadOnly);
         Assert.True(options.AutoMount);
+    }
+
+    [Fact]
+    public void BuildArchiveOptions_CaseSensitiveOverrideApplies()
+    {
+        var options = MountOptionsFactory.BuildArchiveOptions(
+            savedProfile: null, mountPoint: "R:", archivePath: Archive,
+            capacityBytes: 1, volumeLabel: "A", autoMountOverride: null, caseSensitiveOverride: true);
+
+        Assert.True(options.CaseSensitive);
+    }
+
+    [Fact]
+    public void BuildArchiveOptions_NoOverride_KeepsSavedProfileCaseSensitivity()
+    {
+        var profile = new DiskOptions { MountPoint = "OLD:", CapacityBytes = 1, CaseSensitive = true };
+
+        var kept = MountOptionsFactory.BuildArchiveOptions(
+            profile, "R:", Archive, 1, "L", autoMountOverride: null);
+        var overridden = MountOptionsFactory.BuildArchiveOptions(
+            profile, "R:", Archive, 1, "L", autoMountOverride: null, caseSensitiveOverride: false);
+
+        Assert.True(kept.CaseSensitive);
+        Assert.False(overridden.CaseSensitive);
     }
 }

@@ -106,6 +106,12 @@ public sealed record DiskProfile
     public bool SaveImageOnExit { get; init; } = true;
 
     /// <summary>
+    /// Gets or sets a value indicating whether names that differ only by case are different
+    /// files. Defaults to <c>false</c>, which is what a profile saved before this option reads as.
+    /// </summary>
+    public bool CaseSensitive { get; init; }
+
+    /// <summary>
     /// Gets or sets the ids of the presets that redirect environment variables into the disk. Only
     /// the ids are saved for these: their folders and variables are known from the preset, and
     /// whether one is in effect is read from the environment. <c>null</c> for none.

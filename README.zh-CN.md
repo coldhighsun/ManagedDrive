@@ -6,7 +6,7 @@
 
 [![CI / Release](https://github.com/coldhighsun/ManagedDrive/actions/workflows/ci.yml/badge.svg)](https://github.com/coldhighsun/ManagedDrive/actions/workflows/ci.yml)
 [![Coverage](https://codecov.io/gh/coldhighsun/ManagedDrive/branch/main/graph/badge.svg)](https://codecov.io/gh/coldhighsun/ManagedDrive)
-[![Tests](https://img.shields.io/badge/tests-2605-brightgreen?logo=xunit)](tests/ManagedDrive.Tests)
+[![Tests](https://img.shields.io/badge/tests-2686-brightgreen?logo=xunit)](tests/ManagedDrive.Tests)
 [![Latest Release](https://img.shields.io/github/v/release/coldhighsun/ManagedDrive)](https://github.com/coldhighsun/ManagedDrive/releases/latest)
 [![Latest Pre-release](https://img.shields.io/github/v/release/coldhighsun/ManagedDrive?include_prereleases&label=pre-release)](https://github.com/coldhighsun/ManagedDrive/releases)
 [![WinGet](https://img.shields.io/winget/v/coldhighsun.ManagedDrive?logo=windowsterminal&label=winget)](https://github.com/microsoft/winget-pkgs/tree/master/manifests/c/coldhighsun/ManagedDrive)
@@ -54,7 +54,7 @@
 **核心功能**
 - 同时挂载多个 RAM 磁盘，各自拥有独立的驱动器号、容量、卷标和只读标志
 - 动态内存分配——容量为上限而非预分配；当真正需要分配内存的操作（写入数据、挂载时加载镜像或压缩包、恢复快照、克隆磁盘）会导致宿主机物理内存严重不足时，即使磁盘自身配置的容量还有余量，也会被拒绝
-- 实时编辑已挂载磁盘（卷标、容量、自动挂载、镜像路径）；更改盘符或只读标志会自动重挂
+- 实时编辑已挂载磁盘（卷标、容量、自动挂载、镜像路径）；更改盘符、只读标志或文件名大小写敏感会自动重挂
 - NTFS 兼容，可作为需要 NTFS 卷的工具（WinGet、Windows Update 暂存、BITS）的目标路径
 - 支持符号链接和目录联接（pnpm、`git worktree`、构建缓存会用到）以及 `Zone.Identifier` 这类备用数据流；二者都会随镜像和快照保存。不支持硬链接（WinFsp 没有对应的回调）
 - 启动时自动挂载已保存的磁盘配置
@@ -152,11 +152,11 @@ mdrive exit
 
 | 命令 | 说明 |
 |---|---|
-| `create <盘符> [--capacity-mb <数值>] [--preset <id>]... [选项]` | 新建一块全新的空白 RAM 盘。未指定任何 `--preset` 时必须给出 `--capacity-mb`；重复 `--preset` 可在同一块盘上叠加多个预设（容量相加，文件夹和环境变量合并，显式的 `--capacity-mb`/`--label` 优先）。可选项：`--label`（默认 "RAM Disk"）、`--image`（持久化镜像路径；省略则为仅内存磁盘，卸载后即丢弃）、`--password`、`--password-file`（为 `--image` 加密；需配合 `--image` 使用；二者互斥）。`temp` 预设还会把你的用户 TEMP/TMP 指向该磁盘的 `Temp` 文件夹；会修改环境变量的预设会从原来使用它的磁盘上取消。 |
+| `create <盘符> [--capacity-mb <数值>] [--preset <id>]... [选项]` | 新建一块全新的空白 RAM 盘。未指定任何 `--preset` 时必须给出 `--capacity-mb`；重复 `--preset` 可在同一块盘上叠加多个预设（容量相加，文件夹和环境变量合并，显式的 `--capacity-mb`/`--label` 优先）。可选项：`--label`（默认 "RAM Disk"）、`--case-sensitive`（将仅大小写不同的文件名视为不同文件）、`--image`（持久化镜像路径；省略则为仅内存磁盘，卸载后即丢弃）、`--password`、`--password-file`（为 `--image` 加密；需配合 `--image` 使用；二者互斥）。`temp` 预设还会把你的用户 TEMP/TMP 指向该磁盘的 `Temp` 文件夹；会修改环境变量的预设会从原来使用它的磁盘上取消。 |
 | `preset list` | 列出 `create --preset` 可用的预设：id、名称、容量以及各自设置的环境变量。支持 `--json`。 |
 | `clone <源盘符> <目标盘符>` | 用源磁盘的当前内容替换目标磁盘的内容。目标磁盘必须已挂载且可写，容量须不小于源磁盘已用字节数。若宿主机可用内存不足以容纳复制的数据，克隆会失败，目标磁盘保持不变。 |
-| `edit <盘符> [选项]` | 对已挂载磁盘应用非破坏性更改。可选项：`--capacity-mb`、`--label`、`--auto-save-minutes`、`--disable-auto-save`（与 `--auto-save-minutes` 互斥）。至少须指定一项。盘符或只读标志的更改需要完整重挂，本命令不支持。 |
-| `mount <镜像路径> <盘符> [选项]` | 将已有的 `.mdr` 镜像挂载。`盘符`可以是一个盘符（`R:`），也可以是一个已存在的空目录路径。可选项：`--read-only`、`--auto-mount`、`--auto-save-minutes`、`--compression <0-22>`（Zstd 级别，`0` 为不压缩，`1` 最快、`22` 最小，默认 `1`）、`--max-snapshot-count`、`--max-snapshot-size-mb`、`--high-usage-warn-percent`、`--password`、`--password-file`（二者互斥；仅当镜像已加密时需要——推荐使用 `--password-file`（读取文件首行作为密码）而非 `--password`，以避免密码出现在 shell 历史或进程列表中）。未指定的选项沿用该镜像已保存的配置值（或其默认值）。 |
+| `edit <盘符> [选项]` | 对已挂载磁盘应用非破坏性更改。可选项：`--capacity-mb`、`--label`、`--auto-save-minutes`、`--disable-auto-save`（与 `--auto-save-minutes` 互斥）。至少须指定一项。盘符、只读标志或大小写敏感的更改需要完整重挂，本命令不支持。 |
+| `mount <镜像路径> <盘符> [选项]` | 将已有的 `.mdr` 镜像挂载。`盘符`可以是一个盘符（`R:`），也可以是一个已存在的空目录路径。可选项：`--read-only`、`--case-sensitive [true|false]`、`--auto-mount`、`--auto-save-minutes`、`--compression <0-22>`（Zstd 级别，`0` 为不压缩，`1` 最快、`22` 最小，默认 `1`）、`--max-snapshot-count`、`--max-snapshot-size-mb`、`--high-usage-warn-percent`、`--password`、`--password-file`（二者互斥；仅当镜像已加密时需要——推荐使用 `--password-file`（读取文件首行作为密码）而非 `--password`，以避免密码出现在 shell 历史或进程列表中）。未指定的选项沿用该镜像已保存的配置值（或其默认值）。 |
 | `mount-archive <压缩包路径> [盘符]` | 将压缩包（zip/7z/rar/tar 等）作为只读磁盘导入挂载，挂载完成后会自动在资源管理器中打开该盘符。`盘符`可以是一个盘符，也可以是一个已存在的空目录路径；完全省略时自动从 `Z:` 向下查找第一个可用盘符。资源管理器右键菜单项内部即调用此命令。 |
 | `unmount <盘符>` | 卸载已挂载的磁盘。 |
 | `format <盘符> --yes` | 清空已挂载磁盘上的所有文件，并删除其镜像文件和全部快照（若镜像路径在上次保存后改过，也会删除上次保存的镜像，除非另一个已挂载的磁盘或已保存的磁盘配置正在使用它），输出中会说明哪些镜像文件被重置或删除，须加 `--yes`/`-y` 确认。 |
@@ -165,7 +165,7 @@ mdrive exit
 | `export <盘符> <输出路径> [选项]` | 将已挂载磁盘导出为独立的 `.mdr` 镜像或压缩包文件，不影响该磁盘自身的持久化配置。可选项：`--format <Zip\|SevenZip>`（导出为压缩包而非 `.mdr` 镜像）、`--compression <级别>`（`0` 为不压缩；`.mdr` 为 Zstd `1`-`22`，`--format` 压缩包为 `1`-`9`；默认 `1`）、`--password`、`--password-file`（为导出的 `.mdr` 镜像加密；与 `--format` 互斥，因为压缩包格式不支持加密）、`--force`/`-f`（覆盖已存在的输出文件；不加时目标文件已存在会报错）。输出路径不能是已挂载磁盘自身的镜像、快照文件名，也不能位于 RAM 盘上。 |
 | `list` | 列出当前已挂载的磁盘及其用量与容量。 |
 | `ls <盘符> [路径]` | 列出已挂载磁盘上某目录的直接子项（名称、类型、大小）。`路径`（如 `\Folder`）省略时列出根目录。 |
-| `info <盘符>` | 显示已挂载磁盘的配置与状态：用量、是否只读、镜像路径、是否加密、自动保存间隔、压缩级别、快照上限与数量、上次保存时间。 |
+| `info <盘符>` | 显示已挂载磁盘的配置与状态：用量、是否只读、文件名是否区分大小写、镜像路径、是否加密、自动保存间隔、压缩级别、快照上限与数量、上次保存时间。 |
 | `usage <盘符> [--top N] [--by dir\|file\|ext]` | 显示已挂载磁盘的内存都用在了哪里：占用最大的目录（含其下全部内容）、最大的文件（备用数据流计入所属文件）和占用最大的扩展名，并给出各自占已用内存的比例。`--top`（1-1000，默认 10）设置列表长度；`--by` 只输出其中一个列表；加 `--json` 时输出全部三个列表。 |
 | `watch` | 实时输出磁盘事件——`mounted`、`unmounted`、`save-completed`、`save-failed`、`high-usage`——直到按 Ctrl+C 中断。不会阻塞其他 `mdrive` 命令；同时最多运行两个 watch。加 `--json` 时每行输出一个 JSON 对象。 |
 | `snapshot create <盘符>` | 立即为已挂载磁盘写入一个带时间戳的快照，独立于常规保存。需要该磁盘已配置镜像路径及快照保留策略（`--max-snapshot-count`/`--max-snapshot-size-mb`）。 |
@@ -220,6 +220,10 @@ WinFsp 把盘符挂载在**当前登录会话（logon session）**的设备命�
 **MSI 安装的解决办法：** 安装 MSI 类软件前，先点工具栏的**还原环境变量**按钮并选择**临时目录**来恢复 TEMP（或在该磁盘右键菜单的**临时与缓存**里取消勾选**临时目录**）再重试；或直接前往官网下载安装包手动安装；也可以用 [`wingetx`](#wingetx-wrapper-zh) 代替 `winget`——它无需重置 TEMP 即可绕开上述两种失败模式。
 
 ManagedDrive 会在 TEMP 被设为内存盘时提示一次，此后只要 TEMP 仍指向内存盘，每次启动都会再次提示——恢复默认值即可停止。
+
+#### 文件名区分大小写可能让假定不区分的程序出错
+
+每个磁盘的**文件名区分大小写**选项（`--case-sensitive`）允许 `A.txt` 和 `a.txt` 同时存在。Windows 程序和 WSL 都会把它们当作两个文件，但假定文件名不区分大小写的程序可能会被这类同名文件搞混。如果镜像中含有仅大小写不同的文件名，再把该选项关闭，磁盘会挂载失败（镜像本身不会被改动），而不是悄悄丢掉其中一个文件。
 
 ### 配置与持久化
 

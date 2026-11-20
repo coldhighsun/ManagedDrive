@@ -1,13 +1,28 @@
 namespace ManagedDrive.Core.FileSystem;
 
 /// <summary>
-/// Thread-safe, case-insensitive path-to-<see cref="FileNode"/> map that models the directory
-/// tree of the in-memory file system. Keys are absolute paths using <c>\</c> as the separator
-/// (e.g., <c>\Folder\File.txt</c>). The root directory is stored under the key <c>\</c>.
+/// Thread-safe path-to-<see cref="FileNode"/> map that models the directory tree of the in-memory
+/// file system. Names are compared case-insensitively unless the map was created case-sensitive.
+/// Keys are absolute paths using <c>\</c> as the separator (e.g., <c>\Folder\File.txt</c>). The
+/// root directory is stored under the key <c>\</c>.
 /// </summary>
 public sealed class FileNodeMap : IDisposable
 {
-    private readonly Dictionary<string, FileNode> _map = new(StringComparer.OrdinalIgnoreCase);
+    /// <summary>
+    /// Whether two names that differ only by case are different entries.
+    /// </summary>
+    private readonly bool _caseSensitive;
+
+    /// <summary>
+    /// The comparer shared by <see cref="_map"/>, <see cref="_sortedKeys"/> and the directory scan,
+    /// so a lookup and an ordered range query always agree on what "equal" means.
+    /// </summary>
+    private readonly StringComparer _comparer;
+
+    /// <summary>
+    /// The path-to-node dictionary.
+    /// </summary>
+    private readonly Dictionary<string, FileNode> _map;
 
     /// <summary>
     /// Parallel key index so directory enumeration (GetChildren) can seek directly to a path
@@ -15,7 +30,31 @@ public sealed class FileNodeMap : IDisposable
     /// from the start looking for where the prefix run begins. _map itself is a plain Dictionary
     /// (O(1) lookup/insert/remove) precisely because it no longer needs to maintain order.
     /// </summary>
-    private readonly SortedSet<string> _sortedKeys = new(StringComparer.OrdinalIgnoreCase);
+    private readonly SortedSet<string> _sortedKeys;
+
+    /// <summary>
+    /// Creates an empty map.
+    /// </summary>
+    /// <param name="caseSensitive">
+    /// <c>true</c> to treat names that differ only by case as different entries.
+    /// </param>
+    public FileNodeMap(bool caseSensitive = false)
+    {
+        _caseSensitive = caseSensitive;
+        _comparer = caseSensitive ? StringComparer.Ordinal : StringComparer.OrdinalIgnoreCase;
+        _map = new(_comparer);
+        _sortedKeys = new(_comparer);
+    }
+
+    /// <summary>
+    /// Gets whether names that differ only by case are different entries.
+    /// </summary>
+    public bool CaseSensitive => _caseSensitive;
+
+    /// <summary>
+    /// Gets the string comparison matching this map's name comparison.
+    /// </summary>
+    public StringComparison Comparison => _caseSensitive ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;
 
     /// <summary>
     /// Read/write lock instead of a mutual-exclusion lock: lookups and directory enumerations
@@ -106,6 +145,64 @@ public sealed class FileNodeMap : IDisposable
         {
             _syncRoot.ExitWriteLock();
         }
+    }
+
+    /// <summary>
+    /// Adds a node read from an image or snapshot. Behaves like <see cref="Add"/>, except that on a
+    /// case-insensitive map a path differing only by case from one already loaded is reported
+    /// instead of silently replacing it, which would drop that file's data.
+    /// </summary>
+    /// <param name="filePath">Absolute file-system path (e.g. <c>\Folder\File.txt</c>).</param>
+    /// <param name="node">The file node to store.</param>
+    /// <exception cref="InvalidDataException">
+    /// Two paths fold to the same name and this map is case-insensitive.
+    /// </exception>
+    public void AddLoaded(string filePath, FileNode node)
+    {
+        _syncRoot.EnterWriteLock();
+        try
+        {
+            AddCore(filePath, node, rejectCaseCollision: !_caseSensitive);
+        }
+        finally
+        {
+            _syncRoot.ExitWriteLock();
+        }
+    }
+
+    /// <summary>
+    /// Finds pairs of paths that differ only by case, i.e. the ones that would be merged (and make
+    /// loading or replacing contents into a case-insensitive map throw) if this map were converted.
+    /// Always empty for a case-insensitive map. The keys are copied under the read lock, which
+    /// takes milliseconds even for millions of nodes, and compared after it is released, so file
+    /// system callbacks are not held up by the scan itself.
+    /// </summary>
+    /// <param name="maxExamples">
+    /// The most pairs to return; the scan stops once it has found that many. Zero or less returns none.
+    /// </param>
+    /// <returns>
+    /// Up to <paramref name="maxExamples"/> (first, second) path pairs, in path order of the second
+    /// path; empty when no two paths collide.
+    /// </returns>
+    public IReadOnlyList<(string First, string Second)> FindCaseCollisions(int maxExamples)
+    {
+        if (!_caseSensitive || maxExamples <= 0)
+        {
+            return [];
+        }
+
+        string[] keys;
+        _syncRoot.EnterReadLock();
+        try
+        {
+            keys = [.. _sortedKeys];
+        }
+        finally
+        {
+            _syncRoot.ExitReadLock();
+        }
+
+        return ScanCaseCollisions(keys, maxExamples);
     }
 
     /// <summary>
@@ -257,8 +354,20 @@ public sealed class FileNodeMap : IDisposable
     /// </summary>
     /// <param name="filePath">Absolute file-system path (e.g. <c>\Folder\File.txt</c>).</param>
     /// <param name="node">The file node to store.</param>
-    private void AddCore(string filePath, FileNode node)
+    /// <param name="rejectCaseCollision">
+    /// <c>true</c> to throw <see cref="InvalidDataException"/> when a node already stored under a
+    /// path that differs from <paramref name="filePath"/> only by case would be replaced.
+    /// </param>
+    private void AddCore(string filePath, FileNode node, bool rejectCaseCollision = false)
     {
+        if (rejectCaseCollision &&
+            _map.TryGetValue(filePath, out var colliding) &&
+            !string.Equals(colliding.FilePath, filePath, StringComparison.Ordinal))
+        {
+            throw CaseCollision.CreateException(
+                $"Names '{colliding.FilePath}' and '{filePath}' differ only by case and cannot both exist on a case-insensitive disk.");
+        }
+
         FileNode.ReserveIndexNumber(node.FileInfo.IndexNumber);
 
         if (_map.TryGetValue(filePath, out var existing))
@@ -306,12 +415,18 @@ public sealed class FileNodeMap : IDisposable
     /// current root is kept unless <paramref name="nodes"/> supplies its own.
     /// </summary>
     /// <param name="nodes">The path/node pairs to store; the nodes must not belong to another live map.</param>
+    /// <exception cref="InvalidDataException">
+    /// Two paths differ only by case and this map is case-insensitive; the map is left untouched.
+    /// </exception>
     public void ReplaceAll(IEnumerable<KeyValuePair<string, FileNode>> nodes)
     {
+        // Materialized and checked before the write lock is taken, so the scan never holds up the
+        // file-system callbacks.
+        var replacement = Materialize(nodes, checkCaseCollisions: true);
         _syncRoot.EnterWriteLock();
         try
         {
-            ReplaceAllCore(nodes);
+            ReplaceAllCore(replacement);
         }
         finally
         {
@@ -330,13 +445,24 @@ public sealed class FileNodeMap : IDisposable
     /// <param name="requiredBytes">The total allocation the replacement needs.</param>
     /// <param name="capacityProvider">Reads the current capacity ceiling.</param>
     /// <param name="capacity">Receives the ceiling the check was made against.</param>
+    /// <param name="checkCaseCollisions">
+    /// <c>true</c> (the default) to refuse, with <see cref="InvalidDataException"/>, paths that a
+    /// case-insensitive map would merge. A caller that has already checked the very same nodes
+    /// passes <c>false</c> to skip the second scan.
+    /// </param>
     /// <returns><c>true</c> if the contents were replaced; <c>false</c> if they do not fit.</returns>
+    /// <exception cref="InvalidDataException">
+    /// <paramref name="checkCaseCollisions"/> is set, two paths differ only by case and this map is
+    /// case-insensitive; the map is left untouched.
+    /// </exception>
     public bool TryReplaceAll(
         IEnumerable<KeyValuePair<string, FileNode>> nodes,
         ulong requiredBytes,
         Func<ulong> capacityProvider,
-        out ulong capacity)
+        out ulong capacity,
+        bool checkCaseCollisions = true)
     {
+        var replacement = Materialize(nodes, checkCaseCollisions);
         _syncRoot.EnterWriteLock();
         try
         {
@@ -346,7 +472,7 @@ public sealed class FileNodeMap : IDisposable
                 return false;
             }
 
-            ReplaceAllCore(nodes);
+            ReplaceAllCore(replacement);
             return true;
         }
         finally
@@ -359,14 +485,85 @@ public sealed class FileNodeMap : IDisposable
     /// Lock-free core of <see cref="ReplaceAll"/> and <see cref="TryReplaceAll"/>. Caller must
     /// already hold the write lock.
     /// </summary>
-    /// <param name="nodes">The path/node pairs to store.</param>
-    private void ReplaceAllCore(IEnumerable<KeyValuePair<string, FileNode>> nodes)
+    /// <param name="replacement">The path/node pairs to store, already checked by <see cref="Materialize"/>.</param>
+    private void ReplaceAllCore(IReadOnlyList<KeyValuePair<string, FileNode>> replacement)
     {
         ClearAllCore();
-        foreach (var kvp in nodes)
+        foreach (var kvp in replacement)
         {
             AddCore(kvp.Key, kvp.Value);
         }
+    }
+
+    /// <summary>
+    /// Turns <paramref name="nodes"/> into a list and, on a case-insensitive map, checks it for
+    /// names that would merge. Done before anything is cleared, because a collision found halfway
+    /// through adding would leave the live map holding only part of the old and the new contents.
+    /// </summary>
+    /// <param name="nodes">The path/node pairs about to be stored.</param>
+    /// <param name="checkCaseCollisions">Whether to run the collision check.</param>
+    /// <returns>The pairs as a list.</returns>
+    /// <exception cref="InvalidDataException">The check is on and two paths fold to the same name.</exception>
+    private IReadOnlyList<KeyValuePair<string, FileNode>> Materialize(
+        IEnumerable<KeyValuePair<string, FileNode>> nodes, bool checkCaseCollisions)
+    {
+        var replacement = nodes as IReadOnlyList<KeyValuePair<string, FileNode>> ?? [.. nodes];
+        if (checkCaseCollisions && !_caseSensitive)
+        {
+            ThrowIfCaseCollision(replacement);
+        }
+
+        return replacement;
+    }
+
+    /// <summary>
+    /// Throws when two of <paramref name="nodes"/>' paths differ only by case, which a
+    /// case-insensitive map cannot hold at once. Identical paths are not a collision: the later
+    /// one simply replaces the earlier, as <see cref="Add"/> does.
+    /// </summary>
+    /// <param name="nodes">The path/node pairs about to be stored.</param>
+    /// <exception cref="InvalidDataException">Two paths fold to the same name.</exception>
+    internal static void ThrowIfCaseCollision(IReadOnlyList<KeyValuePair<string, FileNode>> nodes)
+    {
+        var found = ScanCaseCollisions(nodes.Select(kvp => kvp.Key), maxExamples: 1);
+        if (found.Count > 0)
+        {
+            throw CaseCollision.CreateException(
+                $"Names '{found[0].First}' and '{found[0].Second}' differ only by case and cannot both exist on a case-insensitive disk.");
+        }
+    }
+
+    /// <summary>
+    /// The one scan behind <see cref="FindCaseCollisions"/> and <see cref="ThrowIfCaseCollision"/>:
+    /// pairs of paths that are equal ignoring case but not exactly. Identical paths are skipped,
+    /// since the later one simply replaces the earlier, as <see cref="Add"/> does.
+    /// </summary>
+    /// <param name="paths">The paths to check.</param>
+    /// <param name="maxExamples">The most pairs to return; the scan stops once it has that many.</param>
+    /// <returns>The colliding (first, second) pairs, in the order the second paths were seen.</returns>
+    private static List<(string First, string Second)> ScanCaseCollisions(IEnumerable<string> paths, int maxExamples)
+    {
+        var seen = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var collisions = new List<(string First, string Second)>();
+        foreach (var path in paths)
+        {
+            if (!seen.TryGetValue(path, out var first))
+            {
+                seen.Add(path, path);
+                continue;
+            }
+
+            if (!string.Equals(first, path, StringComparison.Ordinal))
+            {
+                collisions.Add((first, path));
+                if (collisions.Count >= maxExamples)
+                {
+                    break;
+                }
+            }
+        }
+
+        return collisions;
     }
 
     /// <summary>
@@ -513,12 +710,13 @@ public sealed class FileNodeMap : IDisposable
         // For root "\" (length 1) the prefix equals dirPath itself; for others append "\"
         var prefix = dirPath.Length == 1 ? dirPath : (dirPath + "\\");
 
-        // All keys sharing this prefix form a contiguous run in _sortedKeys (OrdinalIgnoreCase
-        // order); the upper bound uses '￿', greater than any character in a real path. With a
-        // marker, the scan seeks straight to it instead of walking every earlier child.
+        // All keys sharing this prefix form a contiguous run in _sortedKeys (in the order of the
+        // map's _comparer, ordinal or ignoring case); the upper bound uses '￿', greater than
+        // any character in a real path. With a marker, the scan seeks straight to it instead of
+        // walking every earlier child.
         var upperBound = prefix + '￿';
         var lowerBound = marker == null ? prefix : prefix + marker;
-        var comparer = StringComparer.OrdinalIgnoreCase;
+        var comparer = _comparer;
         var found = false;
 
         while (comparer.Compare(lowerBound, upperBound) <= 0)
@@ -526,7 +724,7 @@ public sealed class FileNodeMap : IDisposable
             string? resumeAt = null;
             foreach (var path in _sortedKeys.GetViewBetween(lowerBound, upperBound))
             {
-                if (string.Equals(path, dirPath, StringComparison.OrdinalIgnoreCase))
+                if (string.Equals(path, dirPath, Comparison))
                 {
                     continue;
                 }
@@ -558,7 +756,7 @@ public sealed class FileNodeMap : IDisposable
                 }
 
                 if (marker != null &&
-                    childSpan.CompareTo(marker, StringComparison.OrdinalIgnoreCase) <= 0)
+                    childSpan.CompareTo(marker, Comparison) <= 0)
                 {
                     continue;
                 }

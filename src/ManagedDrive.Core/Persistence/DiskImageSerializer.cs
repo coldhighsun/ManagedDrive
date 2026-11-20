@@ -273,13 +273,19 @@ public static class DiskImageSerializer
     /// monotonic and reflects real I/O progress. The total decompressed content size isn't known
     /// up front (no such field in the header), so this is the best available signal.
     /// </param>
+    /// <param name="caseSensitive">
+    /// <c>true</c> to build the node map so names that differ only by case are different entries.
+    /// When <c>false</c> (the default) the map is case-insensitive and an image holding two such
+    /// names is refused with <see cref="InvalidDataException"/> instead of silently dropping one.
+    /// </param>
     public static FileNodeMap Load(
         string imagePath,
         out ulong capacityBytes,
         out string volumeLabel,
         string? password,
         out byte[]? cek,
-        IProgress<double>? progress = null)
+        IProgress<double>? progress = null,
+        bool caseSensitive = false)
     {
         using var stream = new FileStream(imagePath, new FileStreamOptions
         {
@@ -299,8 +305,8 @@ public static class DiskImageSerializer
             : () => progress.Report(stream.Length > 0 ? (double)stream.Position / stream.Length : 1.0);
 
         return version <= 2
-            ? LoadLegacy(stream, reader, version, level, out capacityBytes, out volumeLabel, reportTick)
-            : LoadCurrent(stream, reader, version, segmented, level, isEncrypted, password, out capacityBytes, out volumeLabel, out cek, reportTick);
+            ? LoadLegacy(stream, reader, version, level, out capacityBytes, out volumeLabel, caseSensitive, reportTick)
+            : LoadCurrent(stream, reader, version, segmented, level, isEncrypted, password, out capacityBytes, out volumeLabel, out cek, caseSensitive, reportTick);
     }
 
     /// <summary>
@@ -903,6 +909,7 @@ public static class DiskImageSerializer
         bool useZstd,
         ulong maxNodeBytes,
         bool hasReparse,
+        bool caseSensitive,
         Action? reportTick = null)
     {
         var baseNonce = ReadFixedBytes(reader, NonceSize);
@@ -910,7 +917,7 @@ public static class DiskImageSerializer
         try
         {
             using var chunkedStream = new ChunkedGcm.ReadStream(stream, cek, baseNonce);
-            return ReadNodeRegion(chunkedStream, compressed, useZstd, maxNodeBytes, hasReparse, reportTick);
+            return ReadNodeRegion(chunkedStream, compressed, useZstd, maxNodeBytes, hasReparse, caseSensitive, reportTick);
         }
         catch (CryptographicException ex)
         {
@@ -939,6 +946,7 @@ public static class DiskImageSerializer
         out ulong capacityBytes,
         out string volumeLabel,
         out byte[]? cek,
+        bool caseSensitive,
         Action? reportTick = null)
     {
         capacityBytes = reader.ReadUInt64();
@@ -949,7 +957,7 @@ public static class DiskImageSerializer
 
         if (segmented)
         {
-            return LoadSegmented(reader, compressed, isEncrypted, password, maxNodeBytes, version >= ReparseVersion, out cek, reportTick);
+            return LoadSegmented(reader, compressed, isEncrypted, password, maxNodeBytes, version >= ReparseVersion, out cek, caseSensitive, reportTick);
         }
 
         var useZstd = version >= 5;
@@ -960,7 +968,7 @@ public static class DiskImageSerializer
             // The node region is the last thing in the file for an unencrypted image, so
             // decompressing straight off the file stream (rather than buffering it) is safe —
             // the decompression stream simply reads until end of file.
-            return ReadNodeRegion(stream, compressed, useZstd, maxNodeBytes, hasReparse, reportTick);
+            return ReadNodeRegion(stream, compressed, useZstd, maxNodeBytes, hasReparse, caseSensitive, reportTick);
         }
 
         if (password is null)
@@ -979,8 +987,8 @@ public static class DiskImageSerializer
 
         return version switch
         {
-            3 => LoadLegacyEncryptedBlob(stream, reader, resolvedCek, compressed, maxNodeBytes, reportTick),
-            4 or 5 or ReparseVersion => LoadChunkedEncrypted(stream, reader, resolvedCek, compressed, useZstd, maxNodeBytes, hasReparse, reportTick),
+            3 => LoadLegacyEncryptedBlob(stream, reader, resolvedCek, compressed, maxNodeBytes, caseSensitive, reportTick),
+            4 or 5 or ReparseVersion => LoadChunkedEncrypted(stream, reader, resolvedCek, compressed, useZstd, maxNodeBytes, hasReparse, caseSensitive, reportTick),
             _ => throw new InvalidDataException($"Unsupported image version: {version}."),
         };
     }
@@ -996,13 +1004,14 @@ public static class DiskImageSerializer
         int level,
         out ulong capacityBytes,
         out string volumeLabel,
+        bool caseSensitive,
         Action? reportTick = null)
     {
         using var payloadReader = OpenLegacyPayloadReader(stream, reader, version, level);
         capacityBytes = payloadReader.ReadUInt64();
         volumeLabel = payloadReader.ReadString();
 
-        return ReadNodes(payloadReader, MaxNodeBytesFor(capacityBytes), hasReparse: false, reportTick);
+        return ReadNodes(payloadReader, MaxNodeBytesFor(capacityBytes), hasReparse: false, caseSensitive, reportTick);
     }
 
     /// <summary>
@@ -1017,6 +1026,7 @@ public static class DiskImageSerializer
         byte[] cek,
         bool compressed,
         ulong maxNodeBytes,
+        bool caseSensitive,
         Action? reportTick = null)
     {
         var dataNonce = ReadFixedBytes(reader, NonceSize);
@@ -1041,7 +1051,7 @@ public static class DiskImageSerializer
             // already at (or near) end-of-file here — reportTick will jump close to 1.0 on the
             // first node and stay there for the rest of this legacy (version 3) path.
             using var nodeRegionStream = new MemoryStream(plaintext, writable: false);
-            return ReadNodeRegion(nodeRegionStream, compressed, useZstd: false, maxNodeBytes, hasReparse: false, reportTick);
+            return ReadNodeRegion(nodeRegionStream, compressed, useZstd: false, maxNodeBytes, hasReparse: false, caseSensitive, reportTick);
         }
         finally
         {
@@ -1068,6 +1078,7 @@ public static class DiskImageSerializer
         ulong maxNodeBytes,
         bool hasReparse,
         out byte[]? cek,
+        bool caseSensitive,
         Action? reportTick)
     {
         cek = null;
@@ -1099,7 +1110,7 @@ public static class DiskImageSerializer
         // bounding the extra memory to that many raw payloads rather than the whole image.
         var window = Math.Max(1, Environment.ProcessorCount);
         var pending = new Queue<Task<List<(string Path, FileNode Node)>>>();
-        var nodeMap = new FileNodeMap();
+        var nodeMap = new FileNodeMap(caseSensitive);
         var nextSegmentToAdd = 0;
 
         void AddDecodedSegment(List<(string Path, FileNode Node)> nodes)
@@ -1114,7 +1125,7 @@ public static class DiskImageSerializer
                 node.SavedMetadataVersion = node.MetadataVersion;
                 node.SavedSegmentIndex = nextSegmentToAdd;
 
-                nodeMap.Add(path, node);
+                nodeMap.AddLoaded(path, node);
                 reportTick?.Invoke();
             }
 
@@ -1381,7 +1392,7 @@ public static class DiskImageSerializer
     /// <paramref name="useZstd"/> is set (version 5, current), otherwise via gzip (versions 1-4,
     /// read-only). Mirrors <see cref="WriteNodeRegion"/>.
     /// </summary>
-    private static FileNodeMap ReadNodeRegion(Stream source, bool compressed, bool useZstd, ulong maxNodeBytes, bool hasReparse, Action? reportTick = null)
+    private static FileNodeMap ReadNodeRegion(Stream source, bool compressed, bool useZstd, ulong maxNodeBytes, bool hasReparse, bool caseSensitive, Action? reportTick = null)
     {
         // leaveOpen is false for the compressed branches so disposing payloadReader disposes the
         // locally-constructed decompressing wrapper too — it owns no other references, and
@@ -1393,12 +1404,12 @@ public static class DiskImageSerializer
                 : new BinaryReader(new GZipStream(source, CompressionMode.Decompress, leaveOpen: true), System.Text.Encoding.UTF8, leaveOpen: false)
             : new BinaryReader(source, System.Text.Encoding.UTF8, leaveOpen: true);
 
-        return ReadNodes(payloadReader, maxNodeBytes, hasReparse, reportTick);
+        return ReadNodes(payloadReader, maxNodeBytes, hasReparse, caseSensitive, reportTick);
     }
 
-    private static FileNodeMap ReadNodes(BinaryReader payloadReader, ulong maxNodeBytes, bool hasReparse, Action? reportTick = null)
+    private static FileNodeMap ReadNodes(BinaryReader payloadReader, ulong maxNodeBytes, bool hasReparse, bool caseSensitive, Action? reportTick = null)
     {
-        var nodeMap = new FileNodeMap();
+        var nodeMap = new FileNodeMap(caseSensitive);
         var count = payloadReader.ReadInt32();
 
         // A negative count would make the loop below a silent no-op, loading a corrupt image as an
@@ -1411,7 +1422,7 @@ public static class DiskImageSerializer
         for (var i = 0; i < count; i++)
         {
             var (path, node) = ReadNode(payloadReader, maxNodeBytes, hasReparse);
-            nodeMap.Add(path, node);
+            nodeMap.AddLoaded(path, node);
             reportTick?.Invoke();
         }
 

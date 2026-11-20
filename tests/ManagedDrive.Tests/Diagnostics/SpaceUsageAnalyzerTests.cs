@@ -152,6 +152,39 @@ public sealed class SpaceUsageAnalyzerTests
     }
 
     [Fact]
+    public void BuildTree_CaseSensitiveDisk_KeepsCaseVariantDirectoriesApart()
+    {
+        var map = new FileNodeMap(caseSensitive: true);
+        map.Add("\\", MakeDir());
+        map.Add("\\Dir", MakeDir());
+        map.Add("\\dir", MakeDir());
+        map.Add("\\Dir\\a.bin", MakeFile(512));
+        map.Add("\\dir\\b.bin", MakeFile(1024));
+
+        var root = SpaceUsageAnalyzer.BuildTree(map.GetAllNodes(), caseSensitive: true);
+
+        var upper = Assert.Single(root.Children, child => child.Path == "\\Dir");
+        var lower = Assert.Single(root.Children, child => child.Path == "\\dir");
+        Assert.Equal(["a.bin"], upper.Children.Select(child => child.Name));
+        Assert.Equal(["b.bin"], lower.Children.Select(child => child.Name));
+        Assert.Equal(map.GetTotalAllocated(), root.Allocated);
+    }
+
+    [Fact]
+    public void Analyze_CaseSensitiveDisk_OrdersEqualSizedCaseVariantsDeterministically()
+    {
+        var map = new FileNodeMap(caseSensitive: true);
+        map.Add("\\", MakeDir());
+        map.Add("\\a.bin", MakeFile(4096));
+        map.Add("\\A.bin", MakeFile(4096));
+
+        var report = SpaceUsageAnalyzer.Analyze(map.GetAllNodes(), 5, out var root, caseSensitive: true);
+
+        Assert.Equal(["\\A.bin", "\\a.bin"], report.TopFiles.Select(entry => entry.Path));
+        Assert.Equal(["A.bin", "a.bin"], root.Children.Select(child => child.Name));
+    }
+
+    [Fact]
     public void BuildTree_OrphanStream_IsChargedToTheRoot()
     {
         var map = new FileNodeMap();

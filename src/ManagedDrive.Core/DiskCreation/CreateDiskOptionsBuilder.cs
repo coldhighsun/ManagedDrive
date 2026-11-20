@@ -217,6 +217,11 @@ public sealed record CreateDiskInput
     /// <summary>Whether to save the image on exit.</summary>
     public bool SaveImageOnExit { get; init; }
 
+    /// <summary>
+    /// Whether names that differ only by case are different files.
+    /// </summary>
+    public bool CaseSensitive { get; init; }
+
     /// <summary>Folders to create on every mount, relative to the disk's root.</summary>
     public IReadOnlyList<string> Folders { get; init; } = [];
 
@@ -456,6 +461,7 @@ public static class CreateDiskOptionsBuilder
             MaxSnapshotSizeBytes = maxSnapshotSizeBytes,
             HighUsageWarnPercent = highUsageWarnPercent,
             SaveImageOnExit = input.SaveImageOnExit,
+            CaseSensitive = input.CaseSensitive,
             Folders = input.Folders.Count == 0 ? null : input.Folders,
             EnvRedirects = input.EnvRedirects.Count == 0 ? null : input.EnvRedirects,
         }.WithoutReadOnlyExtras();
@@ -618,6 +624,7 @@ public static class CreateDiskOptionsBuilder
             ReadOnly = true,
             AutoMount = input.AutoMount,
             SourceArchivePath = input.ImportArchivePath,
+            CaseSensitive = input.CaseSensitive,
         };
 
         return new() { Options = options };

@@ -45,6 +45,11 @@ internal abstract class StubCliDiskController : ICliDiskController
         Task.FromResult((false, "Presets are not supported."));
 
     /// <inheritdoc />
+    public virtual Task<(bool Success, string Message)> CreateCaseSensitiveAsync(
+        string mountPoint, ulong? capacityBytes, string? volumeLabel, string? imagePath, string? password, IReadOnlyList<string> presets) =>
+        Task.FromResult((false, "Case-sensitive disks are not supported."));
+
+    /// <inheritdoc />
     public virtual Task<IReadOnlyList<CliPreset>> GetPresetsAsync() => Task.FromResult<IReadOnlyList<CliPreset>>([]);
 
     /// <inheritdoc />

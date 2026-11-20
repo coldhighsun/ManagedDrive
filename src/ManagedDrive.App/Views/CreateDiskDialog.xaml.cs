@@ -288,6 +288,7 @@ public partial class CreateDiskDialog
         UpdateCapacityDisplay();
 
         ReadOnlyBox.IsChecked = existing.ReadOnly;
+        CaseSensitiveBox.IsChecked = existing.CaseSensitive;
         AutoMountBox.IsChecked = existing.AutoMount;
         ImagePathBox.Text = existing.PersistImagePath ?? string.Empty;
         CompressionLevelBox.Level = existing.CompressionLevel;
@@ -637,6 +638,7 @@ public partial class CreateDiskDialog
             OriginalHighUsageWarnPercent = _originalHighUsageWarnPercent,
             CompressionLevel = CompressionLevelBox.Level,
             SaveImageOnExit = SaveOnExitBox.IsChecked == true,
+            CaseSensitive = CaseSensitiveBox.IsChecked == true,
             Folders = _folders,
             EnvRedirects = _envRedirects,
             EncryptChecked = EncryptImageBox.IsChecked == true,

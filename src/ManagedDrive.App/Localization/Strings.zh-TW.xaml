@@ -48,6 +48,7 @@
     <sys:String x:Key="CreateDisk.DriveLetter">磁碟機代號：</sys:String>
     <sys:String x:Key="CreateDisk.VolumeLabel">磁碟區標籤：</sys:String>
     <sys:String x:Key="CreateDisk.Capacity">容量：</sys:String>
+    <sys:String x:Key="CreateDisk.CaseSensitive">檔名區分大小寫</sys:String>
     <sys:String x:Key="CreateDisk.ReadOnly">唯讀</sys:String>
     <sys:String x:Key="CreateDisk.AutoMount">自動掛載</sys:String>
     <sys:String x:Key="CreateDisk.ImageFile">映像檔</sys:String>
@@ -56,6 +57,7 @@
     <sys:String x:Key="Tip.Capacity">磁碟大小（可選單位：MB 或 GB）</sys:String>
     <sys:String x:Key="Tip.CapacityIncrease">增加（按住 Shift：每次 10；也可使用向上鍵或滑鼠滾輪）</sys:String>
     <sys:String x:Key="Tip.CapacityDecrease">減少（按住 Shift：每次 10；也可使用向下鍵或滑鼠滾輪）</sys:String>
+    <sys:String x:Key="Tip.CaseSensitive">將僅大小寫不同的檔名（A.txt 與 a.txt）視為不同檔案，符合 WSL、git 的預期。假設檔名不區分大小寫的程式可能會被這類同名檔案搞混。之後變更會重新掛載磁碟。</sys:String>
     <sys:String x:Key="Tip.ReadOnly">禁止對此磁碟的所有寫入操作（同時會停用自動儲存，因為唯讀磁碟的內容不會變動）</sys:String>
     <sys:String x:Key="Tip.AutoMount">下次啟動時自動重新掛載此磁碟</sys:String>
     <sys:String x:Key="CreateDisk.HighUsageWarn">使用率達到此百分比時警告：</sys:String>
@@ -404,6 +406,7 @@
     <sys:String x:Key="Status.AvailableMemory">系統記憶體可用 {0}</sys:String>
     <sys:String x:Key="Status.Mounted">已掛載 {0}（{1}）</sys:String>
     <sys:String x:Key="Status.MountedWithCapacity">已掛載 {0}（{1}，{2} MB）</sys:String>
+    <sys:String x:Key="Status.ArchiveCaseMerged">{0} 個封存項目因名稱僅大小寫不同而被合併（如 {1} 與 {2}）；開啟區分大小寫後掛載可保留它們。</sys:String>
     <sys:String x:Key="Status.AutoMountFailed">自動掛載「{0}」失敗：{1}</sys:String>
     <sys:String x:Key="Status.MountFailed">掛載失敗</sys:String>
     <sys:String x:Key="Status.ImageSaved">已儲存 {0} 的映像檔</sys:String>
@@ -471,6 +474,8 @@
     <sys:String x:Key="Msg.ExportNodeFailed">匯出「{0}」失敗：&#x0a;{1}</sys:String>
     <sys:String x:Key="Msg.EditDiskConfirmTitle">編輯磁碟</sys:String>
     <sys:String x:Key="Msg.EditDiskConfirmBody">確定要編輯 {0}（{1}）嗎？&#x0a;&#x0a;磁碟將以新參數重新掛載，記憶體中的所有資料都將遺失。</sys:String>
+    <sys:String x:Key="Msg.CaseSensitiveOffBlocked">暫時無法為 {0} 關閉檔名區分大小寫：磁碟中有僅大小寫不同的檔名，關閉後它們會被合併。請先重新命名或刪除每對中的一個，或保持該選項開啟。未做任何變更。&#x0a;&#x0a;{1}</sys:String>
+    <sys:String x:Key="Msg.CaseSensitiveOffRemountFailed">無法為 {0} 關閉檔名區分大小寫：磁碟中新出現了僅大小寫不同的檔名，關閉後它們會被合併。磁碟已依原設定重新掛載，未做任何變更。&#x0a;&#x0a;{1}</sys:String>
     <sys:String x:Key="Msg.TempDirWillBeReset">此磁碟目前是您的 Windows 暫存資料夾。卸載前將自動還原為原本的設定。</sys:String>
     <sys:String x:Key="Msg.ExitTempDirWillBeReset">您的 Windows 暫存資料夾目前設定在記憶體磁碟上，結束前將自動還原為原本的設定。</sys:String>
     <sys:String x:Key="Msg.TrayExitTempResetTitle">使用者暫存資料夾位於記憶體磁碟</sys:String>

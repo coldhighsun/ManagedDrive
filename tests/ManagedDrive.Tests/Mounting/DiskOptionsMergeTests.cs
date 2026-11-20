@@ -52,6 +52,21 @@ public sealed class DiskOptionsMergeTests
     }
 
     /// <summary>
+    /// Turning case sensitivity on in the edit is taken over, and left alone when the edit did not touch it.
+    /// </summary>
+    [Fact]
+    public void MergeEdit_CaseSensitiveChangedByEdit_TakesEditedValue()
+    {
+        var edited = Baseline with { CaseSensitive = true };
+
+        var merged = DiskOptionsMerge.MergeEdit(Baseline, edited, Baseline);
+        var untouched = DiskOptionsMerge.MergeEdit(Baseline, Baseline, Baseline with { CaseSensitive = true });
+
+        Assert.True(merged.CaseSensitive);
+        Assert.True(untouched.CaseSensitive);
+    }
+
+    /// <summary>
     /// Lists are compared by content: an edit that rebuilt an equal list does not replace the
     /// folders another change added meanwhile.
     /// </summary>
@@ -200,6 +215,54 @@ public sealed class DiskOptionsMergeTests
     }
 
     /// <summary>
+    /// Only the mount point, the read-only flag and case sensitivity are fixed while mounted.
+    /// </summary>
+    /// <param name="field">Which option the edit changes.</param>
+    /// <param name="expected">Whether a remount is needed.</param>
+    [Theory]
+    [InlineData("MountPoint", true)]
+    [InlineData("ReadOnly", true)]
+    [InlineData("CaseSensitive", true)]
+    [InlineData("VolumeLabel", false)]
+    [InlineData("CapacityBytes", false)]
+    [InlineData("AutoSave", false)]
+    [InlineData("None", false)]
+    public void RequiresRemount_ChangedField_NeedsRemountOnlyForFixedOnes(string field, bool expected)
+    {
+        var edited = field switch
+        {
+            "MountPoint" => Baseline with { MountPoint = "S:" },
+            "ReadOnly" => Baseline with { ReadOnly = true },
+            "CaseSensitive" => Baseline with { CaseSensitive = true },
+            "VolumeLabel" => Baseline with { VolumeLabel = "Other" },
+            "CapacityBytes" => Baseline with { CapacityBytes = 2 * 1024 * 1024 },
+            "AutoSave" => Baseline with { AutoSaveIntervalMinutes = 30 },
+            _ => Baseline,
+        };
+
+        Assert.Equal(expected, DiskOptionsMerge.RequiresRemount(Baseline, edited));
+    }
+
+    /// <summary>
+    /// Only the on-to-off direction needs the collision check; turning it on cannot merge names.
+    /// </summary>
+    /// <param name="current">Case sensitivity before the edit.</param>
+    /// <param name="edited">Case sensitivity the edit asks for.</param>
+    /// <param name="expected">Whether the collision check is needed.</param>
+    [Theory]
+    [InlineData(true, false, true)]
+    [InlineData(false, true, false)]
+    [InlineData(true, true, false)]
+    [InlineData(false, false, false)]
+    public void TurnsOffCaseSensitivity_Direction_OnlyOnToOffCounts(bool current, bool edited, bool expected)
+    {
+        var before = Baseline with { CaseSensitive = current };
+        var after = Baseline with { CaseSensitive = edited };
+
+        Assert.Equal(expected, DiskOptionsMerge.TurnsOffCaseSensitivity(before, after));
+    }
+
+    /// <summary>
     /// Guards against a new <see cref="DiskOptions"/> property that <see cref="DiskOptionsMerge.MergeEdit"/>
     /// does not merge: it would silently always keep the current value, dropping the user's edit.
     /// </summary>
@@ -214,7 +277,7 @@ public sealed class DiskOptionsMergeTests
 
         Assert.Equal(
             [
-                "AutoMount", "AutoSaveIntervalMinutes", "CapacityBytes", "CompressionLevel", "EnvRedirects",
+                "AutoMount", "AutoSaveIntervalMinutes", "CapacityBytes", "CaseSensitive", "CompressionLevel", "EnvRedirects",
                 "Folders", "HighUsageWarnPercent", "MaxSnapshotCount", "MaxSnapshotSizeBytes", "MountPoint",
                 "PersistImagePath", "ReadOnly", "SaveImageOnExit", "SourceArchivePath", "VolumeLabel",
             ],

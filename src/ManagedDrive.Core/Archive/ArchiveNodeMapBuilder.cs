@@ -34,13 +34,20 @@ public static class ArchiveNodeMapBuilder
     /// unreliable ad-hoc total would be misleading) — only a final 1.0 report is made.
     /// </param>
     /// <param name="progress">Optional progress reporter, updated with a fraction in [0, 1].</param>
+    /// <param name="caseSensitive">
+    /// <c>true</c> to keep entries whose names differ only by case apart; otherwise they are merged
+    /// the way a case-insensitive disk would.
+    /// </param>
+    /// <param name="report">
+    /// Optional; receives what the import noticed, e.g. entries merged because they differ only by case.
+    /// </param>
     /// <returns>A populated node map, including the root directory entry.</returns>
     /// <exception cref="InvalidDataException">
     /// The file is not a format SharpCompress can read, or the archive is otherwise invalid.
     /// </exception>
-    public static FileNodeMap BuildNodeMap(string archivePath, long? totalBytes = null, IProgress<double>? progress = null)
+    public static FileNodeMap BuildNodeMap(string archivePath, long? totalBytes = null, IProgress<double>? progress = null, bool caseSensitive = false, ArchiveImportReport? report = null)
     {
-        var nodeMap = new FileNodeMap();
+        var nodeMap = new FileNodeMap(caseSensitive);
         var now = (ulong)DateTimeOffset.UtcNow.ToFileTime();
         var reportProgress = totalBytes is > 0;
         var processedBytes = 0L;
@@ -75,6 +82,15 @@ public static class ArchiveNodeMapBuilder
                 {
                     EnsureDirectory(nodeMap, path, timestamp);
                     return;
+                }
+
+                if (report is not null &&
+                    !nodeMap.CaseSensitive &&
+                    nodeMap.TryGet(path, out var existing) &&
+                    existing is { IsDirectory: false } &&
+                    !string.Equals(existing.FilePath, path, StringComparison.Ordinal))
+                {
+                    report.AddCaseMerge(existing.FilePath, path);
                 }
 
                 AddFile(nodeMap, path, openEntryStream, entry, timestamp);

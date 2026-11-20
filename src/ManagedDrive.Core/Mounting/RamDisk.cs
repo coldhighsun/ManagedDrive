@@ -273,6 +273,17 @@ public sealed class RamDisk : IDisposable
     }
 
     /// <summary>
+    /// Gets what the import of the source archive noticed (entries merged because their names
+    /// differ only by case), or <c>null</c> when the disk was not made from an archive. A one-time
+    /// snapshot taken during <see cref="Create"/>.
+    /// </summary>
+    public ArchiveImportReport? ArchiveCaseMerges
+    {
+        get;
+        private set;
+    }
+
+    /// <summary>
     /// Gets the total configured capacity of this RAM disk in bytes.
     /// </summary>
     public ulong TotalBytes => Options.CapacityBytes;
@@ -298,6 +309,15 @@ public sealed class RamDisk : IDisposable
     /// Gets the number of items (files, folders and streams, not the root) on this RAM disk.
     /// </summary>
     public int ItemCount => _fs.NodeMap.ItemCount;
+
+    /// <summary>
+    /// Finds pairs of names on this disk that differ only by case, which turning case sensitivity
+    /// off would merge. Empty when the disk is not case-sensitive or holds no such pair.
+    /// </summary>
+    /// <param name="maxExamples">The most pairs to return; the scan stops once it has that many.</param>
+    /// <returns>The colliding (first, second) path pairs.</returns>
+    public IReadOnlyList<(string First, string Second)> FindCaseCollisions(int maxExamples) =>
+        _fs.NodeMap.FindCaseCollisions(maxExamples);
 
     /// <summary>
     /// Creates and mounts a new RAM disk according to the supplied options.
@@ -349,6 +369,7 @@ public sealed class RamDisk : IDisposable
     {
         MemoryFileSystem fs;
         ulong? originalCapacity = null;
+        ArchiveImportReport? archiveCaseMerges = null;
         byte[]? cek = null;
         var loadedFromPersistImagePath = false;
         var cancellableProgress = CancellableProgress.Wrap(progress, cancellationToken);
@@ -371,7 +392,21 @@ public sealed class RamDisk : IDisposable
         if (options.SourceArchivePath != null)
         {
             ArchiveNodeMapBuilder.PeekArchive(options.SourceArchivePath, out var totalBytes, out _);
-            var nodeMap = ArchiveNodeMapBuilder.BuildNodeMap(options.SourceArchivePath, (long)totalBytes, cancellableProgress);
+            var importReport = new ArchiveImportReport();
+            var nodeMap = ArchiveNodeMapBuilder.BuildNodeMap(
+                options.SourceArchivePath,
+                (long)totalBytes,
+                cancellableProgress,
+                options.CaseSensitive,
+                importReport);
+            archiveCaseMerges = importReport;
+
+            if (importReport.FirstCaseMerge is var (firstMerged, secondMerged))
+            {
+                Logger.LogWarning(
+                    "{Count} archive entries of {ArchivePath} were merged because their names differ only by case, e.g. '{First}' and '{Second}'; mount with case-sensitive names to keep them apart.",
+                    importReport.CaseMergedCount, options.SourceArchivePath, firstMerged, secondMerged);
+            }
 
             // The two paths are documented as mutually exclusive. Left set, the auto-save and
             // exit save would treat this read-only archive copy as unsaved and overwrite the
@@ -393,13 +428,25 @@ public sealed class RamDisk : IDisposable
             File.Exists(options.PersistImagePath))
         {
             loadedFromPersistImagePath = true;
-            var nodeMap = DiskImageSerializer.Load(
-                options.PersistImagePath,
-                out var savedCapacity,
-                out var savedLabel,
-                password,
-                out cek,
-                cancellableProgress);
+            FileNodeMap nodeMap;
+            ulong savedCapacity;
+            string savedLabel;
+            try
+            {
+                nodeMap = DiskImageSerializer.Load(
+                    options.PersistImagePath,
+                    out savedCapacity,
+                    out savedLabel,
+                    password,
+                    out cek,
+                    cancellableProgress,
+                    options.CaseSensitive);
+            }
+            catch (InvalidDataException ex) when (!options.CaseSensitive && CaseCollision.IsCaseCollision(ex))
+            {
+                throw CaseCollision.CreateException(
+                    $"{ex.Message} The image was probably saved from a case-sensitive disk: turn on case-sensitive names for this disk and mount it again.", ex);
+            }
 
             var configuredCapacity = savedCapacity > 0 ? savedCapacity : options.CapacityBytes;
             var label = string.IsNullOrEmpty(savedLabel) ? options.VolumeLabel : savedLabel;
@@ -410,11 +457,11 @@ public sealed class RamDisk : IDisposable
         }
         else
         {
-            fs = new(options.CapacityBytes, options.VolumeLabel, options.ReadOnly);
+            fs = new(options.CapacityBytes, options.VolumeLabel, options.ReadOnly, caseSensitive: options.CaseSensitive);
         }
 
         var host = new FileSystemHost(fs);
-        ConfigureHost(host);
+        ConfigureHost(host, options.CaseSensitive);
 
         var status = host.Mount(options.MountPoint);
         if (status != FileSystemBase.STATUS_SUCCESS)
@@ -444,6 +491,7 @@ public sealed class RamDisk : IDisposable
         var disk = new RamDisk(fs, host, options)
         {
             OriginalCapacityBytesOnLoad = originalCapacity,
+            ArchiveCaseMerges = archiveCaseMerges,
         };
 
         if (loadedFromPersistImagePath)
@@ -548,7 +596,7 @@ public sealed class RamDisk : IDisposable
         lock (_autoSaveLock)
         {
             ThrowIfDisposed();
-            nodeMap = SnapshotManager.LoadSnapshot(snapshotPath, out _, out _, _cek);
+            nodeMap = SnapshotManager.LoadSnapshot(snapshotPath, out _, out _, _cek, Options.CaseSensitive);
         }
 
         using (nodeMap)
@@ -1391,6 +1439,14 @@ public sealed class RamDisk : IDisposable
                 return false;
             }
 
+            // The name comparison is built into the node map and the mounted volume, so it cannot
+            // follow an option change; the caller remounts instead.
+            if (newOptions.CaseSensitive != oldOptions.CaseSensitive)
+            {
+                error = "Changing case sensitivity requires remounting the disk.";
+                return false;
+            }
+
             var capacityChanged = newOptions.CapacityBytes != oldOptions.CapacityBytes;
 
             // Phase 1: the in-memory capacity change, deliberately outside _autoSaveLock. A save
@@ -1685,7 +1741,7 @@ public sealed class RamDisk : IDisposable
             try
             {
                 // The loaded map is ours alone, so its nodes are adopted rather than copied again.
-                var nodeMap = SnapshotManager.LoadSnapshot(snapshotPath, out _, out _, _cek);
+                var nodeMap = SnapshotManager.LoadSnapshot(snapshotPath, out _, out _, _cek, Options.CaseSensitive);
                 if (!_fs.TryReplaceContents(nodeMap, out error, adoptNodes: true))
                 {
                     return false;
@@ -1693,6 +1749,11 @@ public sealed class RamDisk : IDisposable
 
                 NotifyVolumeContentsChanged();
                 return true;
+            }
+            catch (InvalidDataException ex) when (!Options.CaseSensitive && CaseCollision.IsCaseCollision(ex))
+            {
+                error = $"{ex.Message} Turn on case-sensitive names for this disk and try again.";
+                return false;
             }
             catch (Exception ex)
             {
@@ -1729,14 +1790,22 @@ public sealed class RamDisk : IDisposable
     /// </summary>
     private const string DisposedError = "The disk is no longer mounted.";
 
-    private static void ConfigureHost(FileSystemHost host)
+    /// <summary>
+    /// Sets the WinFsp volume parameters shared by every disk.
+    /// </summary>
+    /// <param name="host">The host to configure before it is mounted.</param>
+    /// <param name="caseSensitive">
+    /// Whether the volume treats names that differ only by case as different files; must match the
+    /// file system's node map.
+    /// </param>
+    private static void ConfigureHost(FileSystemHost host, bool caseSensitive)
     {
         host.SectorSize = (ushort)FileNode.AllocationUnit;
         host.SectorsPerAllocationUnit = 1;
         host.MaxComponentLength = 255;
         host.FileSystemName = "NTFS";
         host.CasePreservedNames = true;
-        host.CaseSensitiveSearch = false;
+        host.CaseSensitiveSearch = caseSensitive;
         host.UnicodeOnDisk = true;
         host.PersistentAcls = true;
         // Symbolic links and junctions: WinFsp resolves them against MemoryFileSystem's reparse

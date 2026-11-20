@@ -153,11 +153,16 @@ public static class DiffTreeBuilder
     /// changed paths as container nodes. All nodes start collapsed.
     /// </summary>
     /// <param name="rows">The changed paths.</param>
+    /// <param name="caseSensitive">
+    /// <c>true</c> when names that differ only by case are different entries, as on a case-sensitive
+    /// disk; otherwise they are taken to be the same folder or file.
+    /// </param>
     /// <returns>The top-level nodes, sorted folders first and then by name.</returns>
-    public static IReadOnlyList<DiffTreeNode> Build(IEnumerable<DiffRow> rows)
+    public static IReadOnlyList<DiffTreeNode> Build(IEnumerable<DiffRow> rows, bool caseSensitive = false)
     {
+        var comparer = caseSensitive ? StringComparer.Ordinal : StringComparer.OrdinalIgnoreCase;
         var roots = new List<DiffTreeNode>();
-        var byPath = new Dictionary<string, DiffTreeNode>(StringComparer.OrdinalIgnoreCase);
+        var byPath = new Dictionary<string, DiffTreeNode>(comparer);
 
         foreach (var row in rows)
         {
@@ -185,7 +190,7 @@ public static class DiffTreeBuilder
             }
         }
 
-        Sort(roots);
+        Sort(roots, comparer);
         return roots;
     }
 
@@ -213,17 +218,18 @@ public static class DiffTreeBuilder
     /// Sorts nodes folders first and then by name, recursively.
     /// </summary>
     /// <param name="nodes">The siblings to sort.</param>
-    private static void Sort(List<DiffTreeNode> nodes)
+    /// <param name="comparer">Compares names the way the disk does.</param>
+    private static void Sort(List<DiffTreeNode> nodes, StringComparer comparer)
     {
-        nodes.Sort(static (a, b) =>
+        nodes.Sort((a, b) =>
         {
             var byKind = b.IsDirectory.CompareTo(a.IsDirectory);
-            return byKind != 0 ? byKind : StringComparer.OrdinalIgnoreCase.Compare(a.Name, b.Name);
+            return byKind != 0 ? byKind : comparer.Compare(a.Name, b.Name);
         });
 
         foreach (var node in nodes)
         {
-            Sort(node.Children);
+            Sort(node.Children, comparer);
         }
     }
 

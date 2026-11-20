@@ -188,7 +188,7 @@ public partial class RestoreSnapshotDialog
         {
             var snapshotPath = item.Path;
             var diffTask = Task.Run(() => _target.Disk.DiffAgainstSnapshot(snapshotPath));
-            var dialog = new SnapshotDiffDialog(item.Display, diffTask)
+            var dialog = new SnapshotDiffDialog(item.Display, diffTask, _target.Disk.Options.CaseSensitive)
             {
                 Owner = this
             };

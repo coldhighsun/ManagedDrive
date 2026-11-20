@@ -257,6 +257,26 @@ public sealed class CreateDiskOptionsBuilderTests
         Assert.Equal(8UL * 1024 * 1024, result.Options.CapacityBytes);
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void Build_ArchiveImport_CarriesCaseSensitivity(bool caseSensitive)
+    {
+        var input = ValidCreateInput() with
+        {
+            Mode = CreateDiskMode.ImportArchive,
+            ImportArchivePath = @"C:\datarchive.zip",
+            ImportCapacityBytes = 8UL * 1024 * 1024,
+            ImportVolumeLabel = "Archive",
+            CaseSensitive = caseSensitive,
+        };
+
+        var result = CreateDiskOptionsBuilder.Build(input);
+
+        Assert.True(result.Success);
+        Assert.Equal(caseSensitive, result.Options!.CaseSensitive);
+    }
+
     [Fact]
     public void Build_BadImagePath_ReturnsBadImagePath()
     {

@@ -113,6 +113,7 @@ public sealed partial class MainViewModel
         MaxSnapshotSizeBytes = options.MaxSnapshotSizeBytes,
         HighUsageWarnPercent = options.HighUsageWarnPercent,
         SaveImageOnExit = options.SaveImageOnExit,
+        CaseSensitive = options.CaseSensitive,
         PresetIds = stored.PresetIds.Count == 0 ? null : stored.PresetIds,
         Folders = stored.PresetIds.Count == 0 ? options.Folders : (stored.Folders.Count == 0 ? null : stored.Folders),
         EnvRedirects = stored.PresetIds.Count == 0 ? options.EnvRedirects : (stored.EnvRedirects.Count == 0 ? null : stored.EnvRedirects),
@@ -302,6 +303,7 @@ public sealed partial class MainViewModel
         MaxSnapshotSizeBytes = p.MaxSnapshotSizeBytes,
         HighUsageWarnPercent = p.HighUsageWarnPercent,
         SaveImageOnExit = p.SaveImageOnExit,
+        CaseSensitive = p.CaseSensitive,
         Folders = expanded.PresetIds.Count == 0 ? p.Folders : expanded.Folders,
         EnvRedirects = expanded.PresetIds.Count == 0 ? p.EnvRedirects : expanded.EnvRedirects,
     };

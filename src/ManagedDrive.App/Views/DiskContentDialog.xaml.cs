@@ -26,6 +26,11 @@ public partial class DiskContentDialog
     private readonly List<DiskContentNode> _rootNodes = [];
     private readonly ObservableCollection<DiskContentRow> _rows = [];
     private readonly DiskViewModel _target;
+
+    /// <summary>
+    /// How this disk compares names: ordinal when it is case-sensitive, otherwise ignoring case.
+    /// </summary>
+    private readonly StringComparison _pathComparison;
     private CancellationTokenSource? _busyCts;
     private readonly DispatcherTimer _filterDebounceTimer;
     private string _filterText = string.Empty;
@@ -74,7 +79,8 @@ public partial class DiskContentDialog
         CloseOnDisposing(target);
 
         var nodes = target.Disk.GetAllNodes();
-        var root = BuildTree(nodes);
+        _pathComparison = target.Disk.Options.CaseSensitive ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;
+        var root = BuildTree(nodes, _pathComparison);
         _rootNodes = root.Children.Values.Select(child => ToNode(child, "\\" + child.Name)).ToList();
 
         UpdateSummaryText();
@@ -122,9 +128,14 @@ public partial class DiskContentDialog
     /// Nests every node's full path into a directory tree rooted at <c>\</c>, computing each
     /// directory's size as the sum of its descendant files' <see cref="Fsp.Interop.FileInfo.FileSize"/>.
     /// </summary>
-    private static TreeBuilder BuildTree(IReadOnlyList<KeyValuePair<string, FileNode>> nodes)
+    /// <param name="nodes">The disk's nodes keyed by path.</param>
+    /// <param name="comparison">
+    /// How names are compared: ordinal on a case-sensitive disk, otherwise ignoring case.
+    /// </param>
+    /// <returns>The root of the tree.</returns>
+    private static TreeBuilder BuildTree(IReadOnlyList<KeyValuePair<string, FileNode>> nodes, StringComparison comparison)
     {
-        var root = new TreeBuilder("\\", isDirectory: true);
+        var root = new TreeBuilder("\\", isDirectory: true, comparison);
 
         foreach (var (path, node) in nodes)
         {
@@ -141,7 +152,7 @@ public partial class DiskContentDialog
                 var segment = segments[i];
                 if (!current.Children.TryGetValue(segment, out var child))
                 {
-                    child = new(segment, isDirectory: true);
+                    child = new(segment, isDirectory: true, comparison);
                     current.Children[segment] = child;
                 }
 
@@ -166,16 +177,16 @@ public partial class DiskContentDialog
     /// single filtered list, since a match nested several levels deep would otherwise be hidden
     /// by its collapsed ancestors.
     /// </summary>
-    private static void CollectMatching(IEnumerable<DiskContentNode> nodes, string pattern, List<DiskContentNode> results)
+    private static void CollectMatching(IEnumerable<DiskContentNode> nodes, string pattern, bool ignoreCase, List<DiskContentNode> results)
     {
         foreach (var node in nodes)
         {
-            if (WildcardMatcher.Matches(pattern, node.Name))
+            if (WildcardMatcher.Matches(pattern, node.Name, ignoreCase))
             {
                 results.Add(node);
             }
 
-            CollectMatching(node.Children, pattern, results);
+            CollectMatching(node.Children, pattern, ignoreCase, results);
         }
     }
 
@@ -225,13 +236,18 @@ public partial class DiskContentDialog
     /// containing both a folder and its own descendants doesn't attempt to delete the descendant
     /// a second time after the folder's recursive delete already removed it.
     /// </summary>
-    private static List<DiskContentNode> ExcludeDescendantsOfSelectedDirectories(List<DiskContentNode> nodes)
+    /// <param name="nodes">The selected nodes.</param>
+    /// <param name="comparison">
+    /// How paths are compared: ordinal on a case-sensitive disk, otherwise ignoring case.
+    /// </param>
+    /// <returns>The nodes that are not inside another selected directory.</returns>
+    internal static List<DiskContentNode> ExcludeDescendantsOfSelectedDirectories(List<DiskContentNode> nodes, StringComparison comparison)
     {
         var selectedDirectoryPaths = nodes.Where(n => n.IsDirectory).Select(n => n.FullPath).ToList();
 
         return nodes.Where(node => !selectedDirectoryPaths.Any(dirPath =>
-            !string.Equals(dirPath, node.FullPath, StringComparison.OrdinalIgnoreCase) &&
-            node.FullPath.StartsWith(dirPath + "\\", StringComparison.OrdinalIgnoreCase))).ToList();
+            !string.Equals(dirPath, node.FullPath, comparison) &&
+            node.FullPath.StartsWith(dirPath + "\\", comparison))).ToList();
     }
 
     /// <summary>
@@ -625,7 +641,7 @@ public partial class DiskContentDialog
             selectedNodes = [fallbackRow.Node];
         }
 
-        return ExcludeDescendantsOfSelectedDirectories(selectedNodes);
+        return ExcludeDescendantsOfSelectedDirectories(selectedNodes, _pathComparison);
     }
 
     /// <summary>
@@ -677,7 +693,7 @@ public partial class DiskContentDialog
         {
             var pattern = _filterText.Contains('*') || _filterText.Contains('?') ? _filterText : $"*{_filterText}*";
             var matches = new List<DiskContentNode>();
-            CollectMatching(_rootNodes, pattern, matches);
+            CollectMatching(_rootNodes, pattern, ignoreCase: true, matches);
             matches.Sort(BuildComparer(_sortKey, _sortAscending));
 
             foreach (var node in matches)
@@ -837,9 +853,12 @@ public partial class DiskContentDialog
             ByteFormatter.Format(_target.Disk.UsedBytes),
             ByteFormatter.Format(_target.Disk.TotalBytes));
 
-    private sealed class TreeBuilder(string name, bool isDirectory)
+    private sealed class TreeBuilder(string name, bool isDirectory, StringComparison comparison)
     {
-        public SortedDictionary<string, TreeBuilder> Children { get; } = new(StringComparer.OrdinalIgnoreCase);
+        /// <summary>
+        /// Gets the children by name, compared the way the disk compares names.
+        /// </summary>
+        public SortedDictionary<string, TreeBuilder> Children { get; } = new(StringComparer.FromComparison(comparison));
         public bool IsDirectory { get; set; } = isDirectory;
         public string Name { get; } = name;
 

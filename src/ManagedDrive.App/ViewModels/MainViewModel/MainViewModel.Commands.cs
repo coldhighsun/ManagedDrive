@@ -158,6 +158,70 @@ public sealed partial class MainViewModel
         }
     }
 
+    /// <summary>
+    /// How many colliding name pairs <see cref="RefuseCaseSensitiveOffAsync"/> lists in its message.
+    /// </summary>
+    private const int CaseCollisionExamples = 5;
+
+    /// <summary>
+    /// Checks whether the case-sensitive disk <paramref name="vm"/> holds names that differ only by
+    /// case and, if so, tells the user why case sensitivity cannot be turned off yet. The scan runs
+    /// off the UI thread.
+    /// </summary>
+    /// <param name="vm">The disk being edited.</param>
+    /// <returns>
+    /// <c>true</c> when the edit must be abandoned: colliding names exist, or the disk was
+    /// unmounted while the scan ran. <c>false</c> when it is safe to continue.
+    /// </returns>
+    private async Task<bool> RefuseCaseSensitiveOffAsync(DiskViewModel vm)
+    {
+        var collisions = await Task.Run(() => vm.Disk.FindCaseCollisions(CaseCollisionExamples));
+        if (!IsStillMounted(vm))
+        {
+            return true;
+        }
+
+        if (collisions.Count == 0)
+        {
+            return false;
+        }
+
+        _logger.LogWarning(
+            "Turning off case sensitivity refused for {MountPoint}: names collide, e.g. {First} and {Second}.",
+            vm.MountPoint, collisions[0].First, collisions[0].Second);
+
+        var examples = string.Join(Environment.NewLine, collisions.Select(c => $"{c.First}  =  {c.Second}"));
+        AppMessageBox.Show(
+            Loc.Format("Msg.CaseSensitiveOffBlocked", vm.MountPoint, examples),
+            Loc.Get("Msg.EditDiskConfirmTitle"),
+            MessageBoxButton.OK,
+            MessageBoxImage.Warning);
+        return true;
+    }
+
+    /// <summary>
+    /// Mounts a disk again with the options it had before a failed edit.
+    /// </summary>
+    /// <param name="previous">The options the disk had before the edit.</param>
+    /// <param name="password">The password of the disk's image, or <c>null</c> when it has none.</param>
+    /// <returns><c>true</c> when the disk is mounted again; <c>false</c> when this failed too.</returns>
+    private async Task<bool> TryRemountPreviousAsync(DiskOptions previous, string? password)
+    {
+        try
+        {
+            var disk = await Task.Run(() => _mountManager.Mount(previous, password));
+            AddDiskSorted(new(disk));
+            SaveSettings();
+            StatusText = Loc.Format("Status.Mounted", disk.MountPoint, previous.VolumeLabel);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Remounting {MountPoint} with its previous options failed.", previous.MountPoint);
+            return false;
+        }
+    }
+
     private async Task ExecuteEditDiskAsync(DiskViewModel? vm)
     {
         if (vm == null)
@@ -184,9 +248,17 @@ public sealed partial class MainViewModel
         var edited = dialog.Result!;
         var old = vm.Disk.Options;
         var newOptions = DiskOptionsMerge.MergeEdit(opened, edited, old);
-        var needsRemount = newOptions.MountPoint != old.MountPoint || newOptions.ReadOnly != old.ReadOnly;
+        var needsRemount = DiskOptionsMerge.RequiresRemount(old, newOptions);
 
         _logger.LogInformation("Edit disk requested: {MountPoint} (remount: {NeedsRemount}).", vm.MountPoint, needsRemount);
+
+        // Before anything is confirmed or unmounted: turning case sensitivity off would merge names
+        // that differ only by case, so the remount would fail and leave the disk unmounted.
+        if (DiskOptionsMerge.TurnsOffCaseSensitivity(old, newOptions) && await RefuseCaseSensitiveOffAsync(vm))
+        {
+            return;
+        }
+
         string? movedPresets = null;
 
         if (dialog.PasswordChanged && dialog.Password is null && vm.Disk.IsPasswordProtected)
@@ -243,6 +315,14 @@ public sealed partial class MainViewModel
             };
 
             if (confirm.ShowDialog() != true || !IsStillMounted(vm))
+            {
+                return;
+            }
+
+            // The dialogs above can stay open as long as the user likes while the disk stays
+            // writable, so a pair of names differing only by case may have appeared since the first
+            // check; one more scan (milliseconds) is cheaper than a remount that fails.
+            if (DiskOptionsMerge.TurnsOffCaseSensitivity(old, newOptions) && await RefuseCaseSensitiveOffAsync(vm))
             {
                 return;
             }
@@ -317,6 +397,17 @@ public sealed partial class MainViewModel
                 _logger.LogError(ex, "Edit disk remount failed: {OldMountPoint} -> {NewMountPoint}.", oldMountPoint, newOptions.MountPoint);
                 vm.Dispose();
                 Disks.Remove(vm);
+
+                // A name pair differing only by case can appear after the last check, while the disk
+                // was still writable; the new mount then refuses the image. Put the disk back with
+                // its previous options instead of leaving it unmounted.
+                if (CaseCollision.IsCaseCollision(ex) &&
+                    DiskOptionsMerge.TurnsOffCaseSensitivity(old, newOptions) &&
+                    await TryRemountPreviousAsync(old, currentPassword))
+                {
+                    ShowError(Loc.Format("Msg.CaseSensitiveOffRemountFailed", oldMountPoint, ex.Message));
+                    return;
+                }
 
                 // Keep the disk's profile (with its pre-edit options, which still match the image
                 // on disk — the new drive letter may be the very reason the mount failed) so it is
