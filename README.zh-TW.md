@@ -114,7 +114,7 @@ ZIP 中還包含 `mdrive.exe`（配套的命令列工具，見下方[命令列�
 | 需求 | 說明 |
 |---|---|
 | **Windows 10 / 11（64 位元）** | 尚未測試 ARM64 |
-| **[WinFsp 2.2.26286（2026 Beta5）](https://github.com/winfsp/winfsp/releases/tag/v2.2B5)** | 安裝程式已內建，應用程式偵測到缺少或版本過舊時也會提示自動下載安裝（較新的版本可直接使用），可攜版壓縮檔的 `prerequisites\` 資料夾同樣附有安裝套件。如需手動安裝，請直接下載安裝套件：[winfsp-2.2.26286.msi](https://github.com/winfsp/winfsp/releases/download/v2.2B5/winfsp-2.2.26286.msi)——請不要使用 `winget install WinFsp.WinFsp` 安裝，因為該 winget 套件更新不及時，落後於最新發行版本。受控組件 `winfsp-msil.dll` 會安裝至 `C:\Program Files (x86)\WinFsp\bin\`，專案會自動參考。 |
+| **[WinFsp 2.2.26323（2026）](https://github.com/winfsp/winfsp/releases/tag/v2.2)** | 安裝程式已內建，應用程式偵測到缺少或版本過舊時也會提示自動下載安裝（較新的版本可直接使用），可攜版壓縮檔的 `prerequisites\` 資料夾同樣附有安裝套件。如需手動安裝，請直接下載安裝套件：[winfsp-2.2.26323.msi](https://github.com/winfsp/winfsp/releases/download/v2.2/winfsp-2.2.26323.msi)——請不要使用 `winget install WinFsp.WinFsp` 安裝，因為該 winget 套件更新不及時，落後於最新發行版本。受控組件 `winfsp-msil.dll` 會安裝至 `C:\Program Files (x86)\WinFsp\bin\`，專案會自動參考。 |
 | **[.NET 10 桌面執行階段](https://dotnet.microsoft.com/download/dotnet/10.0)** | 「免安裝版」（相依於 Framework）ZIP 需要。 |
 | **.NET 10 SDK** | 編譯所需。 |
 

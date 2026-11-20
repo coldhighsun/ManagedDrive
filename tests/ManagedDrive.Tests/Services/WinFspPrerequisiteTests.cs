@@ -19,7 +19,7 @@ public sealed class WinFspPrerequisiteTests
     /// </summary>
     [Fact]
     public void Evaluate_RequiredVersion_IsOk() =>
-        Assert.Equal(WinFspStatus.Ok, WinFspPrerequisite.Evaluate(new Version(2, 2, 26286)));
+        Assert.Equal(WinFspStatus.Ok, WinFspPrerequisite.Evaluate(new Version(2, 2, 26323)));
 
     /// <summary>
     /// The previous beta, other builds and other minor/major versions are mismatches.
@@ -27,7 +27,7 @@ public sealed class WinFspPrerequisiteTests
     [Theory]
     [InlineData(2, 2, 26215)]
     [InlineData(2, 1, 25156)]
-    [InlineData(2, 2, 26285)]
+    [InlineData(2, 2, 26322)]
     public void Evaluate_OlderVersion_IsMismatch(int major, int minor, int build) =>
         Assert.Equal(WinFspStatus.VersionMismatch, WinFspPrerequisite.Evaluate(new Version(major, minor, build)));
 
@@ -35,7 +35,7 @@ public sealed class WinFspPrerequisiteTests
     /// Newer installs are reported as such, so no downgrade is offered.
     /// </summary>
     [Theory]
-    [InlineData(2, 2, 26287)]
+    [InlineData(2, 2, 26324)]
     [InlineData(2, 3, 100)]
     [InlineData(3, 0, 1)]
     public void Evaluate_NewerVersion_IsNewer(int major, int minor, int build) =>

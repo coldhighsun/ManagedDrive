@@ -33,15 +33,15 @@ public readonly record struct WinFspCheckResult(WinFspStatus Status, Version? In
 public static class WinFspPrerequisite
 {
     /// <summary>
-    /// The WinFsp version ManagedDrive requires (2026 Beta5). Keep in step with <c>winfsp.net</c> in
+    /// The WinFsp version ManagedDrive requires (2026). Keep in step with <c>winfsp.net</c> in
     /// <c>Directory.Packages.props</c> and <c>installer/ManagedDrive.iss</c>.
     /// </summary>
-    public static readonly Version RequiredVersion = new(2, 2, 26286);
+    public static readonly Version RequiredVersion = new(2, 2, 26323);
 
     /// <summary>
     /// GitHub release tag of <see cref="RequiredVersion"/> (it differs from the file version).
     /// </summary>
-    private const string ReleaseTag = "v2.2B5";
+    private const string ReleaseTag = "v2.2";
 
     /// <summary>
     /// Display text of <see cref="RequiredVersion"/>.
@@ -62,7 +62,7 @@ public static class WinFspPrerequisite
     /// <summary>
     /// SHA256 (hex) of the installer at <see cref="MsiDownloadUrl"/>; the downloaded file is rejected unless it matches.
     /// </summary>
-    public const string MsiSha256 = "293FFB9BCC0B625C85079FE85FA77F8FE98170ABA51A02AC9C83D58F6C3B0E2F";
+    public const string MsiSha256 = "36CE01F9EEDBBE6842B7FB4BEDC79D7D4F71983E8ACEB6877B46A07B331C7E19";
 
     /// <summary>
     /// The release page, opened when the installer cannot be fetched or run automatically.

@@ -160,9 +160,9 @@ jobs:
         # Single source of the bundled WinFsp release for the steps below; bump alongside
         # WinFspPrerequisite.cs, installer/ManagedDrive.iss and Directory.Packages.props.
         env:
-          WINFSP_TAG: v2.2B5
-          WINFSP_MSI: winfsp-2.2.26286.msi
-          WINFSP_SHA256: 293FFB9BCC0B625C85079FE85FA77F8FE98170ABA51A02AC9C83D58F6C3B0E2F
+          WINFSP_TAG: v2.2
+          WINFSP_MSI: winfsp-2.2.26323.msi
+          WINFSP_SHA256: 36CE01F9EEDBBE6842B7FB4BEDC79D7D4F71983E8ACEB6877B46A07B331C7E19
         run: |
           "WINFSP_MSI=$env:WINFSP_MSI" >> $env:GITHUB_ENV
           "WINFSP_SHA256=$env:WINFSP_SHA256" >> $env:GITHUB_ENV
