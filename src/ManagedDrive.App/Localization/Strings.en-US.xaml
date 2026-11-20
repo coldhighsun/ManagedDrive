@@ -48,6 +48,7 @@
     <sys:String x:Key="CreateDisk.DriveLetter">Drive Letter:</sys:String>
     <sys:String x:Key="CreateDisk.VolumeLabel">Volume Label:</sys:String>
     <sys:String x:Key="CreateDisk.Capacity">Capacity:</sys:String>
+    <sys:String x:Key="CreateDisk.CaseSensitive">Case-sensitive file names</sys:String>
     <sys:String x:Key="CreateDisk.ReadOnly">Read Only</sys:String>
     <sys:String x:Key="CreateDisk.AutoMount">Auto-mount</sys:String>
     <sys:String x:Key="CreateDisk.ImageFile">Image File</sys:String>
@@ -56,6 +57,7 @@
     <sys:String x:Key="Tip.Capacity">Disk size (select unit: MB or GB)</sys:String>
     <sys:String x:Key="Tip.CapacityIncrease">Increase (Shift: by 10; also Up arrow or mouse wheel)</sys:String>
     <sys:String x:Key="Tip.CapacityDecrease">Decrease (Shift: by 10; also Down arrow or mouse wheel)</sys:String>
+    <sys:String x:Key="Tip.CaseSensitive">Treat names that differ only by case (A.txt and a.txt) as different files, as WSL and git expect. Programs that assume case-insensitive names may be confused by such pairs. Changing it later remounts the disk.</sys:String>
     <sys:String x:Key="Tip.ReadOnly">Prevent all writes to this disk (also disables auto-save, since a read-only disk never changes)</sys:String>
     <sys:String x:Key="Tip.AutoMount">Re-mount this disk automatically on next application start</sys:String>
     <sys:String x:Key="CreateDisk.HighUsageWarn">Warn when usage reaches this percentage:</sys:String>
@@ -404,6 +406,7 @@
     <sys:String x:Key="Status.AvailableMemory">{0} system memory available</sys:String>
     <sys:String x:Key="Status.Mounted">Mounted {0} ({1})</sys:String>
     <sys:String x:Key="Status.MountedWithCapacity">Mounted {0} ({1}, {2} MB)</sys:String>
+    <sys:String x:Key="Status.ArchiveCaseMerged">{0} archive entries were merged because their names differ only by case (e.g. {1} and {2}); mount with case-sensitive names to keep them apart.</sys:String>
     <sys:String x:Key="Status.AutoMountFailed">Auto-mount '{0}' failed: {1}</sys:String>
     <sys:String x:Key="Status.MountFailed">Mount failed</sys:String>
     <sys:String x:Key="Status.ImageSaved">Image saved for {0}</sys:String>
@@ -471,6 +474,8 @@
     <sys:String x:Key="Msg.ExportNodeFailed">Failed to export "{0}":&#x0a;{1}</sys:String>
     <sys:String x:Key="Msg.EditDiskConfirmTitle">Edit Disk</sys:String>
     <sys:String x:Key="Msg.EditDiskConfirmBody">Edit {0} ({1})?&#x0a;&#x0a;The disk will be unmounted and remounted with the new settings. All data currently in memory will be lost.</sys:String>
+    <sys:String x:Key="Msg.CaseSensitiveOffBlocked">Case-sensitive names cannot be turned off for {0} yet: it holds names that differ only by case, and they would be merged. Rename or delete one of each pair, or keep the option on. Nothing was changed.&#x0a;&#x0a;{1}</sys:String>
+    <sys:String x:Key="Msg.CaseSensitiveOffRemountFailed">Case-sensitive names could not be turned off for {0}: the disk gained names that differ only by case, and they would be merged. The disk was mounted again with its previous settings; nothing was changed.&#x0a;&#x0a;{1}</sys:String>
     <sys:String x:Key="Msg.TempDirWillBeReset">This disk is currently your Windows Temp directory. It will be automatically restored to its previous setting before unmounting.</sys:String>
     <sys:String x:Key="Msg.ExitTempDirWillBeReset">Your Windows Temp directory is currently set to a RAM disk. It will be automatically restored to its previous setting before exiting.</sys:String>
     <sys:String x:Key="Msg.TrayExitTempResetTitle">Temp Directory on RAM Disk</sys:String>

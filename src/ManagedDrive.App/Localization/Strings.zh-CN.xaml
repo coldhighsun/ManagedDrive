@@ -48,6 +48,7 @@
     <sys:String x:Key="CreateDisk.DriveLetter">驱动器号：</sys:String>
     <sys:String x:Key="CreateDisk.VolumeLabel">卷标：</sys:String>
     <sys:String x:Key="CreateDisk.Capacity">容量：</sys:String>
+    <sys:String x:Key="CreateDisk.CaseSensitive">文件名区分大小写</sys:String>
     <sys:String x:Key="CreateDisk.ReadOnly">只读</sys:String>
     <sys:String x:Key="CreateDisk.AutoMount">自动挂载</sys:String>
     <sys:String x:Key="CreateDisk.ImageFile">镜像文件</sys:String>
@@ -56,6 +57,7 @@
     <sys:String x:Key="Tip.Capacity">磁盘大小（选择单位：MB 或 GB）</sys:String>
     <sys:String x:Key="Tip.CapacityIncrease">增加（按住 Shift：每次 10；也可用向上键或鼠标滚轮）</sys:String>
     <sys:String x:Key="Tip.CapacityDecrease">减少（按住 Shift：每次 10；也可用向下键或鼠标滚轮）</sys:String>
+    <sys:String x:Key="Tip.CaseSensitive">将仅大小写不同的文件名（A.txt 与 a.txt）视为不同文件，符合 WSL、git 的预期。假定文件名不区分大小写的程序可能会被这类同名文件搞混。之后更改会重新挂载磁盘。</sys:String>
     <sys:String x:Key="Tip.ReadOnly">禁止对此磁盘的所有写入操作（同时会禁用自动保存，因为只读磁盘的内容不会变化）</sys:String>
     <sys:String x:Key="Tip.AutoMount">下次启动时自动重新挂载此磁盘</sys:String>
     <sys:String x:Key="CreateDisk.HighUsageWarn">使用率达到该百分比时告警：</sys:String>
@@ -404,6 +406,7 @@
     <sys:String x:Key="Status.AvailableMemory">系统内存可用 {0}</sys:String>
     <sys:String x:Key="Status.Mounted">已挂载 {0}（{1}）</sys:String>
     <sys:String x:Key="Status.MountedWithCapacity">已挂载 {0}（{1}，{2} MB）</sys:String>
+    <sys:String x:Key="Status.ArchiveCaseMerged">{0} 个归档条目因名称仅大小写不同而被合并（如 {1} 与 {2}）；开启区分大小写后挂载可保留它们。</sys:String>
     <sys:String x:Key="Status.AutoMountFailed">自动挂载"{0}"失败：{1}</sys:String>
     <sys:String x:Key="Status.MountFailed">挂载失败</sys:String>
     <sys:String x:Key="Status.ImageSaved">已保存 {0} 的镜像</sys:String>
@@ -471,6 +474,8 @@
     <sys:String x:Key="Msg.ExportNodeFailed">导出"{0}"失败：&#x0a;{1}</sys:String>
     <sys:String x:Key="Msg.EditDiskConfirmTitle">编辑磁盘</sys:String>
     <sys:String x:Key="Msg.EditDiskConfirmBody">确认编辑 {0}（{1}）？&#x0a;&#x0a;磁盘将以新参数重新挂载，内存中的所有数据将丢失。</sys:String>
+    <sys:String x:Key="Msg.CaseSensitiveOffBlocked">暂时无法为 {0} 关闭文件名区分大小写：磁盘中有仅大小写不同的文件名，关闭后它们会被合并。请先重命名或删除每对中的一个，或保持该选项开启。未做任何更改。&#x0a;&#x0a;{1}</sys:String>
+    <sys:String x:Key="Msg.CaseSensitiveOffRemountFailed">无法为 {0} 关闭文件名区分大小写：磁盘中新出现了仅大小写不同的文件名，关闭后它们会被合并。磁盘已按原设置重新挂载，未做任何更改。&#x0a;&#x0a;{1}</sys:String>
     <sys:String x:Key="Msg.TempDirWillBeReset">此磁盘当前是您的 Windows 临时文件夹。卸载前将自动恢复为原来的设置。</sys:String>
     <sys:String x:Key="Msg.ExitTempDirWillBeReset">您的 Windows 临时文件夹当前设置在内存盘上，退出前将自动恢复为原来的设置。</sys:String>
     <sys:String x:Key="Msg.TrayExitTempResetTitle">用户临时文件夹在内存盘</sys:String>

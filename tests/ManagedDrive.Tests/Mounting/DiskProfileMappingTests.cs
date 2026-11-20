@@ -23,6 +23,7 @@ public sealed class DiskProfileMappingTests
             MaxSnapshotSizeBytes = 999_000_000UL,
             HighUsageWarnPercent = 85.5,
             SaveImageOnExit = false,
+            CaseSensitive = true,
         };
 
         var profile = MainViewModel.ToProfile(options);

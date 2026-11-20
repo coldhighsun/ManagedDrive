@@ -290,4 +290,51 @@ public sealed class SnapshotExtractorTests : IDisposable
         },
         FileData = content.IsEmpty ? null : FileContent.FromSpan(content, FileNode.AlignToAllocationUnit((ulong)content.Length)),
     };
+
+    [Fact]
+    public void Extract_CaseVariantNamesInCaseSensitiveSnapshot_RefusesBeforeWritingAnything()
+    {
+        var map = new FileNodeMap(caseSensitive: true);
+        map.Add("\\", MakeDir());
+        map.Add("\\Dir", MakeDir());
+        map.Add("\\Dir\\A.txt", MakeFile("upper"u8));
+        map.Add("\\Dir\\a.txt", MakeFile("lower"u8));
+        var output = Path.Combine(_dir, "out");
+
+        var ex = Assert.Throws<IOException>(() => SnapshotExtractor.Extract(map, "\\Dir", output, overwrite: true));
+
+        Assert.Contains("differ only by case", ex.Message);
+        Assert.False(Directory.Exists(output));
+    }
+
+    [Fact]
+    public void Extract_FileAndFolderDifferingOnlyByCase_RefusesBeforeWritingAnything()
+    {
+        var map = new FileNodeMap(caseSensitive: true);
+        map.Add("\\", MakeDir());
+        map.Add("\\Dir", MakeDir());
+        map.Add("\\Dir\\Item", MakeFile("file"u8));
+        map.Add("\\Dir\\item", MakeDir());
+        var output = Path.Combine(_dir, "out");
+
+        Assert.Throws<IOException>(() => SnapshotExtractor.Extract(map, "\\Dir", output, overwrite: true));
+
+        Assert.False(Directory.Exists(output));
+    }
+
+    [Fact]
+    public void Extract_CaseSensitiveSnapshotWithoutCollisions_ExtractsEverything()
+    {
+        var map = new FileNodeMap(caseSensitive: true);
+        map.Add("\\", MakeDir());
+        map.Add("\\Dir", MakeDir());
+        map.Add("\\Dir\\A.txt", MakeFile("upper"u8));
+        map.Add("\\Dir\\b.txt", MakeFile("lower"u8));
+        var output = Path.Combine(_dir, "out");
+
+        var result = SnapshotExtractor.Extract(map, "\\Dir", output, overwrite: false);
+
+        Assert.Equal(2, result.Files);
+        Assert.Equal("upper"u8.ToArray(), File.ReadAllBytes(Path.Combine(output, "A.txt")));
+    }
 }

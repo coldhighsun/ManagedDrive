@@ -119,6 +119,22 @@ public interface ICliDiskController
             : Task.FromResult((false, "Presets are not supported."));
 
     /// <summary>
+    /// Creates a brand-new disk whose file names are case-sensitive (names that differ only by case
+    /// are different files), optionally from presets as <see cref="CreateWithPresetsAsync"/> does.
+    /// The default implementation refuses, so controllers that predate the option keep working.
+    /// </summary>
+    /// <param name="mountPoint">The mount point of the new disk.</param>
+    /// <param name="capacityBytes">The capacity in bytes, or <c>null</c> to take it from the presets.</param>
+    /// <param name="volumeLabel">The volume label, or <c>null</c> to take it from the presets.</param>
+    /// <param name="imagePath">Optional path to persist the disk to.</param>
+    /// <param name="password">Optional password to encrypt <paramref name="imagePath"/> with.</param>
+    /// <param name="presets">Ids of the presets to combine; may be empty.</param>
+    /// <returns><c>(true, message)</c> on success; <c>(false, message)</c> with the reason otherwise.</returns>
+    Task<(bool Success, string Message)> CreateCaseSensitiveAsync(
+        string mountPoint, ulong? capacityBytes, string? volumeLabel, string? imagePath, string? password, IReadOnlyList<string> presets) =>
+        Task.FromResult((false, "Case-sensitive disks are not supported."));
+
+    /// <summary>
     /// Lists the presets a new disk can be created from: the built-in ones and the user's own.
     /// </summary>
     /// <returns>The presets, built-in first. Empty when the controller has none.</returns>
@@ -365,6 +381,7 @@ public sealed record CliDiskInfo(string MountPoint, string VolumeLabel, ulong Us
 /// <param name="MaxSnapshotSizeBytes">The snapshot total-size limit in bytes, or <c>null</c> for none.</param>
 /// <param name="SnapshotCount">How many snapshots exist, or <c>null</c> when the disk has no image to hold them.</param>
 /// <param name="LastSaveTime">When the image was last written, or <c>null</c> if it has not been this session.</param>
+/// <param name="CaseSensitive">Whether names that differ only by case are different files.</param>
 public sealed record CliDiskDetails(
     string MountPoint,
     string VolumeLabel,
@@ -379,7 +396,8 @@ public sealed record CliDiskDetails(
     uint? MaxSnapshotCount,
     ulong? MaxSnapshotSizeBytes,
     int? SnapshotCount,
-    DateTimeOffset? LastSaveTime);
+    DateTimeOffset? LastSaveTime,
+    bool CaseSensitive = false);
 
 /// <summary>
 /// A disk preset as listed by <c>preset list</c>.

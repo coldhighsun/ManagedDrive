@@ -152,6 +152,40 @@ public sealed class DiffTreeBuilderTests
     }
 
     /// <summary>
+    /// On a case-insensitive disk paths that differ only by case are the same folder.
+    /// </summary>
+    [Fact]
+    public void Build_CaseInsensitive_MergesFoldersDifferingByCase()
+    {
+        var roots = DiffTreeBuilder.Build(
+        [
+            File(DiffKind.Restored, @"\Dir\a.txt"),
+            File(DiffKind.Restored, @"\dir\b.txt"),
+        ]);
+
+        var dir = Assert.Single(roots);
+        Assert.Equal(["a.txt", "b.txt"], dir.Children.Select(n => n.Name));
+    }
+
+    /// <summary>
+    /// On a case-sensitive disk <c>\Dir</c> and <c>\dir</c> are two folders, each with its own children.
+    /// </summary>
+    [Fact]
+    public void Build_CaseSensitive_KeepsFoldersDifferingByCaseApart()
+    {
+        var roots = DiffTreeBuilder.Build(
+        [
+            File(DiffKind.Restored, @"\dir\b.txt"),
+            File(DiffKind.Restored, @"\Dir\a.txt"),
+        ],
+        caseSensitive: true);
+
+        Assert.Equal(["Dir", "dir"], roots.Select(n => n.Name));
+        Assert.Equal(["a.txt"], roots[0].Children.Select(n => n.Name));
+        Assert.Equal(["b.txt"], roots[1].Children.Select(n => n.Name));
+    }
+
+    /// <summary>
     /// Under a filter an expanded folder lists only its matching children.
     /// </summary>
     [Fact]

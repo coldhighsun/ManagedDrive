@@ -115,6 +115,14 @@ public sealed record DiskOptions
     public bool SaveImageOnExit { get; init; } = true;
 
     /// <summary>
+    /// When <c>true</c> names that differ only by case (<c>A.txt</c> and <c>a.txt</c>) are different
+    /// files, for Win32 programs and WSL alike (checked on a real mount). Programs that assume
+    /// case-insensitive names may be confused by such pairs. Fixed while the disk is mounted:
+    /// changing it needs a remount.
+    /// </summary>
+    public bool CaseSensitive { get; init; }
+
+    /// <summary>
     /// Folders, relative to the disk's root, created after every mount. A disk without an image
     /// starts empty each time, so these are recreated rather than stored in the disk. <c>null</c>
     /// or empty creates none.

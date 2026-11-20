@@ -156,7 +156,7 @@ public sealed partial class MainViewModel
 
         var options = MountOptionsFactory.BuildArchiveOptions(
             savedProfile != null ? ProfileToOptions(savedProfile) : null,
-            mountPoint, archivePath, capacityBytes, volumeLabel, overrides.AutoMount);
+            mountPoint, archivePath, capacityBytes, volumeLabel, overrides.AutoMount, overrides.CaseSensitive);
 
         try
         {
@@ -164,6 +164,7 @@ public sealed partial class MainViewModel
             AddDiskSorted(new(disk));
             SaveSettings();
             StatusText = Loc.Format("Status.MountedWithCapacity", disk.MountPoint, options.VolumeLabel, options.CapacityBytes / (1024 * 1024));
+            AppendArchiveCaseMergeNote(disk);
             _logger.LogInformation("CLI mount-archive succeeded: {ArchivePath} -> {MountPoint}.", archivePath, disk.MountPoint);
             TryOpenInExplorer(disk.MountPoint);
             return (true, StatusText);
@@ -257,6 +258,7 @@ public sealed partial class MainViewModel
             {
                 ReadOnly = overrides.ReadOnly,
                 AutoMount = overrides.AutoMount,
+                CaseSensitive = overrides.CaseSensitive,
                 AutoSaveIntervalMinutes = overrides.AutoSaveIntervalMinutes,
                 CompressionLevel = overrides.CompressionLevel,
                 MaxSnapshotCount = overrides.MaxSnapshotCount,
@@ -302,13 +304,17 @@ public sealed partial class MainViewModel
     /// memory-only disk that is discarded on unmount.
     /// </param>
     /// <param name="password">Optional password to encrypt <paramref name="imagePath"/> with.</param>
+    /// <param name="preset">The merged presets the disk is built from, or <c>null</c> for none.</param>
+    /// <param name="caseSensitive">
+    /// <c>true</c> to make names that differ only by case different files.
+    /// </param>
     /// <returns>
     /// <c>(true, message)</c> on success; <c>(false, message)</c> with a human-readable reason
     /// otherwise (mount point already in use, invalid capacity, or image path collision).
     /// </returns>
     public async Task<(bool Success, string Message)> CreateByOptionsAsync(
         string mountPoint, ulong capacityBytes, string? volumeLabel, string? imagePath, string? password,
-        PresetComposition? preset = null)
+        PresetComposition? preset = null, bool caseSensitive = false)
     {
         _logger.LogInformation("CLI create requested: {MountPoint}, capacity {CapacityBytes} bytes.", mountPoint, capacityBytes);
 
@@ -356,6 +362,7 @@ public sealed partial class MainViewModel
             VolumeLabel = string.IsNullOrWhiteSpace(volumeLabel) ? "RAM Disk" : volumeLabel.Trim(),
             CapacityBytes = capacityBytes,
             PersistImagePath = imagePath,
+            CaseSensitive = caseSensitive,
             CompressionLevel = preset?.CompressionLevel ?? ZstdLevels.Default,
             Folders = preset is { Folders.Count: > 0 } ? preset.Folders : null,
             EnvRedirects = preset is { EnvRedirects.Count: > 0 } ? preset.EnvRedirects : null,
@@ -393,9 +400,13 @@ public sealed partial class MainViewModel
     /// <param name="imagePath">Optional image path.</param>
     /// <param name="password">Optional image password.</param>
     /// <param name="presetNames">Ids of the presets to combine.</param>
+    /// <param name="caseSensitive">
+    /// <c>true</c> to make names that differ only by case different files.
+    /// </param>
     /// <returns><c>(true, message)</c> on success; <c>(false, message)</c> with the reason otherwise.</returns>
     public async Task<(bool Success, string Message)> CreateWithPresetsByOptionsAsync(
-        string mountPoint, ulong? capacityBytes, string? volumeLabel, string? imagePath, string? password, IReadOnlyList<string> presetNames)
+        string mountPoint, ulong? capacityBytes, string? volumeLabel, string? imagePath, string? password, IReadOnlyList<string> presetNames,
+        bool caseSensitive = false)
     {
         var chosen = new List<DiskPreset>();
         foreach (var name in presetNames)
@@ -416,7 +427,7 @@ public sealed partial class MainViewModel
         }
 
         return await CreateByOptionsAsync(
-            mountPoint, capacityBytes ?? merged.CapacityBytes, volumeLabel ?? merged.VolumeLabel, imagePath, password, merged);
+            mountPoint, capacityBytes ?? merged.CapacityBytes, volumeLabel ?? merged.VolumeLabel, imagePath, password, merged, caseSensitive);
     }
 
     /// <summary>
@@ -729,7 +740,8 @@ public sealed partial class MainViewModel
             options.MaxSnapshotCount,
             options.MaxSnapshotSizeBytes,
             snapshotCount,
-            disk.LastSaveTime));
+            disk.LastSaveTime,
+            options.CaseSensitive));
     }
 
     /// <summary>
@@ -753,7 +765,7 @@ public sealed partial class MainViewModel
         }
 
         var disk = vm.Disk;
-        var report = await Task.Run(() => SpaceUsageAnalyzer.Analyze(disk.GetAllNodes(), top));
+        var report = await Task.Run(() => SpaceUsageAnalyzer.Analyze(disk.GetAllNodes(), top, disk.Options.CaseSensitive));
 
         static CliSpaceEntry ToEntry(SpaceUsageEntry e) => new(e.Path, e.Allocated, e.Logical, e.FileCount);
 
@@ -796,15 +808,19 @@ public sealed partial class MainViewModel
         var normalizedPath = NormalizeListPath(path);
         var nodes = vm.Disk.GetAllNodes();
 
+        // Paths are compared the way the disk compares names, so \A and \a stay apart when it is
+        // case-sensitive.
+        var comparison = vm.Disk.Options.CaseSensitive ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;
+
         if (normalizedPath != "\\" && !nodes.Any(n =>
-            string.Equals(n.Key, normalizedPath, StringComparison.OrdinalIgnoreCase) && n.Value.IsDirectory))
+            string.Equals(n.Key, normalizedPath, comparison) && n.Value.IsDirectory))
         {
             return Task.FromResult<(bool, string, IReadOnlyList<CliFileEntry>?)>((false, Loc.Format("Msg.CliPathNotFound", normalizedPath), null));
         }
 
         var entries = nodes
             .Where(n => n.Key != "\\" && !n.Value.IsStream &&
-                string.Equals(GetParentPath(n.Key), normalizedPath, StringComparison.OrdinalIgnoreCase))
+                string.Equals(GetParentPath(n.Key), normalizedPath, comparison))
             .Select(n => new CliFileEntry(n.Value.LeafName, n.Value.IsDirectory, n.Value.FileInfo.FileSize))
             .ToList();
 

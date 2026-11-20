@@ -74,7 +74,7 @@ public sealed class MemoryFileSystem : FileSystemBase
     /// The directories the app is creating itself while a scope from <see cref="BeginAppFolders"/>
     /// is open.
     /// </summary>
-    private readonly AppFolderRegistry _appFolders = new();
+    private readonly AppFolderRegistry _appFolders;
 
     /// <summary>
     /// Initializes a new, empty in-memory file system.
@@ -88,13 +88,17 @@ public sealed class MemoryFileSystem : FileSystemBase
     /// <see cref="SystemMemoryInfo.GetAvailablePhysicalBytes"/> via the process-wide
     /// <see cref="MemoryHeadroomBudget.Shared"/>.
     /// </param>
-    public MemoryFileSystem(ulong maxCapacity, string volumeLabel, bool readOnly = false, Func<ulong>? availableMemoryProvider = null)
+    /// <param name="caseSensitive">
+    /// When <c>true</c>, names that differ only by case are different entries.
+    /// </param>
+    public MemoryFileSystem(ulong maxCapacity, string volumeLabel, bool readOnly = false, Func<ulong>? availableMemoryProvider = null, bool caseSensitive = false)
     {
         _readOnly = readOnly;
         _maxCapacity = maxCapacity;
         _volumeLabel = volumeLabel;
         _memoryBudget = availableMemoryProvider == null ? MemoryHeadroomBudget.Shared : new(availableMemoryProvider);
-        NodeMap = new();
+        NodeMap = new(caseSensitive);
+        _appFolders = new(caseSensitive);
     }
 
     /// <summary>
@@ -118,6 +122,7 @@ public sealed class MemoryFileSystem : FileSystemBase
         _volumeLabel = volumeLabel;
         _memoryBudget = availableMemoryProvider == null ? MemoryHeadroomBudget.Shared : new(availableMemoryProvider);
         NodeMap = existingNodeMap;
+        _appFolders = new(existingNodeMap.CaseSensitive);
     }
 
     /// <summary>
@@ -1075,14 +1080,14 @@ public sealed class MemoryFileSystem : FileSystemBase
             (newIsStream && !string.Equals(
                 AlternateStreamName.OwnerOf(fileName),
                 AlternateStreamName.OwnerOf(newFileName),
-                StringComparison.OrdinalIgnoreCase)))
+                NodeMap.Comparison)))
         {
             return STATUS_OBJECT_NAME_INVALID;
         }
 
         if (node.IsDirectory &&
             newFileName.Length > fileName.Length &&
-            newFileName.StartsWith(fileName, StringComparison.OrdinalIgnoreCase) &&
+            newFileName.StartsWith(fileName, NodeMap.Comparison) &&
             newFileName[fileName.Length] == '\\')
         {
             // Can't move a directory into its own subtree.
@@ -1472,6 +1477,22 @@ public sealed class MemoryFileSystem : FileSystemBase
 
         var nodes = sourceMap.GetAllNodes();
 
+        // Checked on the snapshot just taken, before any content is copied, so a source that holds
+        // names differing only by case is refused with a message instead of failing the swap later.
+        // A case-insensitive source cannot hold such names, so only a case-sensitive one is scanned.
+        if (sourceMap.CaseSensitive && !NodeMap.CaseSensitive)
+        {
+            try
+            {
+                FileNodeMap.ThrowIfCaseCollision(nodes);
+            }
+            catch (InvalidDataException ex)
+            {
+                error = ex.Message;
+                return false;
+            }
+        }
+
         if (!adoptNodes)
         {
             // The copy materializes every chunk the source has written, all at once, so it goes
@@ -1499,7 +1520,7 @@ public sealed class MemoryFileSystem : FileSystemBase
         // Checked again under the map's write lock: the check above is only an early exit, and a
         // capacity change (TryUpdateCapacity) does not wait for the caller's locks, so it may have
         // lowered the ceiling since.
-        if (!NodeMap.TryReplaceAll(replacement, needed, MaxCapacityProvider, out var capacity))
+        if (!NodeMap.TryReplaceAll(replacement, needed, MaxCapacityProvider, out var capacity, checkCaseCollisions: false))
         {
             error = $"Source disk uses {needed:N0} bytes, which exceeds the target disk's capacity ({capacity:N0} bytes).";
             return false;

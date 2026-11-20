@@ -126,6 +126,14 @@
                             <TextBlock Text="{DynamicResource Tip.ReadOnly}"
                                        Tag="{Binding IsEnabled, ElementName=ReadOnlyBox}"
                                        Style="{StaticResource CheckCaptionStyle}"/>
+
+                            <CheckBox x:Name="CaseSensitiveBox" Margin="0,10,0,0"
+                                      Content="{DynamicResource CreateDisk.CaseSensitive}"
+                                      Foreground="{DynamicResource AppForeground}"
+                                      ToolTip="{DynamicResource Tip.CaseSensitive}"/>
+                            <TextBlock Text="{DynamicResource Tip.CaseSensitive}"
+                                       Tag="{Binding IsEnabled, ElementName=CaseSensitiveBox}"
+                                       Style="{StaticResource CheckCaptionStyle}"/>
                         </StackPanel>
                     </Border>
 

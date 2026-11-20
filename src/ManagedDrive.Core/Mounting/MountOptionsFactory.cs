@@ -14,6 +14,11 @@ public sealed record MountOverrides
     /// <summary>Overrides the auto-mount flag when non-null.</summary>
     public bool? AutoMount { get; init; }
 
+    /// <summary>
+    /// Overrides the case-sensitive file names flag when non-null.
+    /// </summary>
+    public bool? CaseSensitive { get; init; }
+
     /// <summary>Overrides the auto-save interval when non-null.</summary>
     public uint? AutoSaveIntervalMinutes { get; init; }
 
@@ -85,6 +90,7 @@ public static class MountOptionsFactory
         {
             ReadOnly = overrides.ReadOnly ?? baseOptions.ReadOnly,
             AutoMount = overrides.AutoMount ?? baseOptions.AutoMount,
+            CaseSensitive = overrides.CaseSensitive ?? baseOptions.CaseSensitive,
             AutoSaveIntervalMinutes = overrides.AutoSaveIntervalMinutes ?? baseOptions.AutoSaveIntervalMinutes,
             CompressionLevel = overrides.CompressionLevel ?? baseOptions.CompressionLevel,
             MaxSnapshotCount = overrides.MaxSnapshotCount ?? baseOptions.MaxSnapshotCount,
@@ -95,8 +101,8 @@ public static class MountOptionsFactory
 
     /// <summary>
     /// Builds options for mounting an archive's contents. The disk is always read-only (no
-    /// supported archive format allows writing changes back), so only the auto-mount flag is
-    /// overridable.
+    /// supported archive format allows writing changes back), so only the auto-mount and
+    /// case-sensitivity flags are overridable.
     /// </summary>
     /// <param name="savedProfile">
     /// The saved profile for this archive path (already mapped to <see cref="DiskOptions"/>), or
@@ -107,6 +113,7 @@ public static class MountOptionsFactory
     /// <param name="capacityBytes">The uncompressed size derived from the archive.</param>
     /// <param name="volumeLabel">The volume label derived from the archive.</param>
     /// <param name="autoMountOverride">Overrides the auto-mount flag when non-null.</param>
+    /// <param name="caseSensitiveOverride">Overrides the case-sensitive file names flag when non-null.</param>
     /// <returns>
     /// The merged, read-only options ready to mount.
     /// </returns>
@@ -116,7 +123,8 @@ public static class MountOptionsFactory
         string archivePath,
         ulong capacityBytes,
         string volumeLabel,
-        bool? autoMountOverride)
+        bool? autoMountOverride,
+        bool? caseSensitiveOverride = null)
     {
         var baseOptions = savedProfile != null
             ? savedProfile with
@@ -143,6 +151,7 @@ public static class MountOptionsFactory
             // saved profile never having one.
             PersistImagePath = null,
             AutoMount = autoMountOverride ?? baseOptions.AutoMount,
+            CaseSensitive = caseSensitiveOverride ?? baseOptions.CaseSensitive,
         }).WithoutReadOnlyExtras();
     }
 }

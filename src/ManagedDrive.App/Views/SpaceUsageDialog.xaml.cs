@@ -141,7 +141,7 @@ public partial class SpaceUsageDialog
         {
             var (report, root, categories) = await Task.Run(() =>
             {
-                var report = SpaceUsageAnalyzer.Analyze(disk.GetAllNodes(), size, out var root);
+                var report = SpaceUsageAnalyzer.Analyze(disk.GetAllNodes(), size, out var root, disk.Options.CaseSensitive);
                 return (report, root, SumCategories(root));
             }, token);
 
@@ -274,12 +274,13 @@ public partial class SpaceUsageDialog
     /// <param name="root">The root of the tree.</param>
     /// <param name="path">A disk path such as <c>\Folder\a.txt</c>.</param>
     /// <returns>The node, or <c>null</c> if the path does not exist.</returns>
-    private static SpaceNode? FindNode(SpaceNode root, string path)
+    private SpaceNode? FindNode(SpaceNode root, string path)
     {
+        var comparison = _target.Disk.Options.CaseSensitive ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;
         var current = root;
         foreach (var segment in path.Split('\\', StringSplitOptions.RemoveEmptyEntries))
         {
-            current = current.Children.FirstOrDefault(child => string.Equals(child.Name, segment, StringComparison.OrdinalIgnoreCase));
+            current = current.Children.FirstOrDefault(child => string.Equals(child.Name, segment, comparison));
             if (current is null)
             {
                 return null;

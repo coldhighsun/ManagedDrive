@@ -123,6 +123,10 @@ public static class CliCommandProcessor
         {
             Description = "Re-mount this disk automatically on next app startup. If omitted, keeps the saved profile's value (or the default: off).",
         };
+        var mountCaseSensitiveOption = new Option<bool?>("--case-sensitive")
+        {
+            Description = "Treat names that differ only by case as different files, as WSL and git expect. If omitted, keeps the saved profile's value (or the default: off). Fails if the image holds names that collide once case is ignored.",
+        };
         var mountAutoSaveMinutesOption = new Option<uint?>("--auto-save-minutes")
         {
             Description = "Auto-save interval in minutes. If omitted, keeps the saved profile's value (or the default: disabled).",
@@ -157,6 +161,7 @@ public static class CliCommandProcessor
         mountCommand.Arguments.Add(mountDriveArgument);
         mountCommand.Options.Add(mountReadOnlyOption);
         mountCommand.Options.Add(mountAutoMountOption);
+        mountCommand.Options.Add(mountCaseSensitiveOption);
         mountCommand.Options.Add(mountAutoSaveMinutesOption);
         mountCommand.Options.Add(mountCompressionOption);
         mountCommand.Options.Add(mountMaxSnapshotCountOption);
@@ -201,6 +206,7 @@ public static class CliCommandProcessor
             {
                 ReadOnly = parseResult.GetValue(mountReadOnlyOption),
                 AutoMount = parseResult.GetValue(mountAutoMountOption),
+                CaseSensitive = parseResult.GetValue(mountCaseSensitiveOption),
                 AutoSaveIntervalMinutes = parseResult.GetValue(mountAutoSaveMinutesOption),
                 CompressionLevel = compressionLevel,
                 MaxSnapshotCount = parseResult.GetValue(mountMaxSnapshotCountOption),
@@ -377,8 +383,14 @@ public static class CliCommandProcessor
             Description = $"Path to a file whose first line is the password to encrypt --image with {NewPasswordLengthNote}. Mutually exclusive with --password.",
         };
 
+        var createCaseSensitiveOption = new Option<bool>("--case-sensitive")
+        {
+            Description = "Treat names that differ only by case as different files, as WSL and git expect. Fixed once the disk is created; changing it later remounts the disk.",
+        };
+
         var createCommand = new Command("create", "Creates a brand-new, empty RAM disk.");
         createCommand.Arguments.Add(createDriveArgument);
+        createCommand.Options.Add(createCaseSensitiveOption);
         createCommand.Options.Add(createCapacityMbOption);
         createCommand.Options.Add(createPresetOption);
         createCommand.Options.Add(createLabelOption);
@@ -426,6 +438,7 @@ public static class CliCommandProcessor
                 parseResult.GetValue(createLabelOption),
                 imagePath,
                 password,
+                parseResult.GetValue(createCaseSensitiveOption),
                 diskController,
                 o => outcome = o);
             return exitCode;
@@ -829,15 +842,17 @@ public static class CliCommandProcessor
 
     private static async Task<int> CreateAsync(
         string driveLetter, ulong? capacityBytes, IReadOnlyList<string> presets, string? volumeLabel, string? imagePath, string? password,
-        ICliDiskController diskController, Action<CliOutcome> setOutcome)
+        bool caseSensitive, ICliDiskController diskController, Action<CliOutcome> setOutcome)
     {
         driveLetter = NormalizeDriveLetter(driveLetter);
 
-        // Without presets this is the plain create, so controllers that know nothing of presets
-        // are called exactly as before.
-        var (success, message) = presets.Count == 0
-            ? await diskController.CreateAsync(driveLetter, capacityBytes!.Value, volumeLabel, imagePath, password)
-            : await diskController.CreateWithPresetsAsync(driveLetter, capacityBytes, volumeLabel, imagePath, password, presets);
+        // Without presets or --case-sensitive this is the plain create, so controllers that know
+        // nothing of either are called exactly as before.
+        var (success, message) = caseSensitive
+            ? await diskController.CreateCaseSensitiveAsync(driveLetter, capacityBytes, volumeLabel, imagePath, password, presets)
+            : presets.Count == 0
+                ? await diskController.CreateAsync(driveLetter, capacityBytes!.Value, volumeLabel, imagePath, password)
+                : await diskController.CreateWithPresetsAsync(driveLetter, capacityBytes, volumeLabel, imagePath, password, presets);
         setOutcome(new(success, message, null, success ? 0 : 1));
         return success ? 0 : 1;
     }
@@ -1009,6 +1024,7 @@ public static class CliCommandProcessor
             ("Label", details.VolumeLabel),
             ("Used", $"{ByteFormatter.Format(details.UsedBytes)} of {ByteFormatter.Format(details.TotalBytes)} ({usedPercent:0.#}%)"),
             ("Read-only", details.ReadOnly ? "yes" : "no"),
+            ("Case-sensitive", details.CaseSensitive ? "yes" : "no"),
             ("Image", details.ImagePath ?? "(memory only)"),
             ("Source archive", details.SourceArchivePath ?? "(none)"),
             ("Encrypted", details.PasswordProtected ? "yes" : "no"),

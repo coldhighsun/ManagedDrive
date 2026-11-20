@@ -163,6 +163,29 @@ public static class SnapshotExtractor
             }
         }
 
+        // A case-sensitive snapshot may hold names that differ only by case, which the host (NTFS,
+        // case-insensitive by default) treats as one file: the later write would silently replace the
+        // earlier one, whatever --force says, so refuse before anything is written.
+        var plannedPaths = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var (hostPath, node) in files)
+        {
+            if (plannedPaths.TryGetValue(hostPath, out var firstSource))
+            {
+                throw new IOException(
+                    $"'{firstSource}' and '{node.FilePath}' differ only by case and would be written to the same host file '{hostPath}'.");
+            }
+
+            plannedPaths.Add(hostPath, node.FilePath);
+        }
+
+        foreach (var directory in directories)
+        {
+            if (plannedPaths.TryGetValue(directory, out var fileSource))
+            {
+                throw new IOException($"'{fileSource}' is a file but a folder of the same name (ignoring case) is also being extracted.");
+            }
+        }
+
         var existing = new List<string>();
         foreach (var (hostPath, _) in files)
         {

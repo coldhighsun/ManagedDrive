@@ -319,7 +319,10 @@ public static partial class SnapshotManager
     public static SnapshotDiffResult DiffAgainstCurrent(string indexPath, FileNodeMap currentMap)
     {
         var snapshotEntries = SnapshotStore.ReadEntries(indexPath);
-        var snapshotByPath = new Dictionary<string, SnapshotStore.SnapshotEntry>(StringComparer.OrdinalIgnoreCase);
+        // Paths are compared the way the disk compares names: on a case-sensitive disk \A.txt and
+        // \a.txt are two files and must not be folded into one entry.
+        var pathComparer = currentMap.CaseSensitive ? StringComparer.Ordinal : StringComparer.OrdinalIgnoreCase;
+        var snapshotByPath = new Dictionary<string, SnapshotStore.SnapshotEntry>(pathComparer);
         foreach (var entry in snapshotEntries)
         {
             snapshotByPath[entry.Path] = entry;
@@ -329,8 +332,8 @@ public static partial class SnapshotManager
         var addedDirectories = new List<string>();
         var modifiedFiles = new List<string>();
         var unchangedFileCount = 0;
-        var seenPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var typeChangedPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var seenPaths = new HashSet<string>(pathComparer);
+        var typeChangedPaths = new HashSet<string>(pathComparer);
 
         foreach (var kvp in currentMap.GetAllNodes())
         {
@@ -587,10 +590,15 @@ public static partial class SnapshotManager
     /// </summary>
     /// <exception cref="InvalidDataException">
     /// Thrown when the index is not a valid snapshot, its version is unsupported, or a
-    /// referenced blob is missing or corrupt.
+    /// referenced blob is missing or corrupt, or two names differ only by case while
+    /// <paramref name="caseSensitive"/> is <c>false</c>.
     /// </exception>
-    public static FileNodeMap LoadSnapshot(string indexPath, out ulong capacityBytes, out string volumeLabel, byte[]? cek = null) =>
-        SnapshotStore.Load(indexPath, BlobDirectoryFromSnapshotPath(indexPath), out capacityBytes, out volumeLabel, cek);
+    /// <param name="caseSensitive">
+    /// <c>true</c> to build a map in which names that differ only by case are different entries,
+    /// as on a case-sensitive disk.
+    /// </param>
+    public static FileNodeMap LoadSnapshot(string indexPath, out ulong capacityBytes, out string volumeLabel, byte[]? cek = null, bool caseSensitive = false) =>
+        SnapshotStore.Load(indexPath, BlobDirectoryFromSnapshotPath(indexPath), out capacityBytes, out volumeLabel, cek, caseSensitive);
 
     /// <summary>
     /// Deletes the oldest snapshots of <paramref name="mainImagePath"/> until <paramref name="maxCount"/>

@@ -22,6 +22,14 @@ public sealed record CliMountOverrides
     }
 
     /// <summary>
+    /// If <c>true</c>, names that differ only by case are different files. If <c>false</c>, they are not.
+    /// </summary>
+    public bool? CaseSensitive
+    {
+        get; init;
+    }
+
+    /// <summary>
     /// Gets the auto-save interval in minutes.
     /// </summary>
     public uint? AutoSaveIntervalMinutes

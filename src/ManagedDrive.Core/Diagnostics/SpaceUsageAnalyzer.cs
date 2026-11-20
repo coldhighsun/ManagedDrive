@@ -78,37 +78,51 @@ public static class SpaceUsageAnalyzer
     /// Builds the directory tree with every node's sizes filled in and every child list sorted.
     /// </summary>
     /// <param name="nodes">The disk's nodes keyed by path, e.g. from <c>RamDisk.GetAllNodes()</c>.</param>
+    /// <param name="caseSensitive">
+    /// <c>true</c> when names that differ only by case are different entries, as on a case-sensitive
+    /// disk; otherwise they are taken to be the same path.
+    /// </param>
     /// <returns>The root node (<c>\</c>), which exists even if the input is empty.</returns>
-    public static SpaceNode BuildTree(IReadOnlyList<KeyValuePair<string, FileNode>> nodes) => Build(nodes).Root;
+    public static SpaceNode BuildTree(IReadOnlyList<KeyValuePair<string, FileNode>> nodes, bool caseSensitive = false) =>
+        Build(nodes, caseSensitive).Root;
 
     /// <summary>
     /// Summarises the disk: totals, the biggest directories and files, and space per extension.
     /// </summary>
     /// <param name="nodes">The disk's nodes keyed by path, e.g. from <c>RamDisk.GetAllNodes()</c>.</param>
     /// <param name="top">How many entries each top list holds, 1 to <see cref="MaxTop"/>.</param>
+    /// <param name="caseSensitive">
+    /// <c>true</c> when names that differ only by case are different entries, as on a case-sensitive
+    /// disk; otherwise they are taken to be the same path.
+    /// </param>
     /// <returns>The report.</returns>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="top"/> is out of range.</exception>
-    public static SpaceUsageReport Analyze(IReadOnlyList<KeyValuePair<string, FileNode>> nodes, int top) =>
-        Analyze(nodes, top, out _);
+    public static SpaceUsageReport Analyze(IReadOnlyList<KeyValuePair<string, FileNode>> nodes, int top, bool caseSensitive = false) =>
+        Analyze(nodes, top, out _, caseSensitive);
 
     /// <summary>
-    /// Like <see cref="Analyze(IReadOnlyList{KeyValuePair{string, FileNode}}, int)"/>, and also hands
+    /// Like <see cref="Analyze(IReadOnlyList{KeyValuePair{string, FileNode}}, int, bool)"/>, and also hands
     /// back the tree the report was made from, so a caller needing both builds it only once.
     /// </summary>
     /// <param name="nodes">The disk's nodes keyed by path, e.g. from <c>RamDisk.GetAllNodes()</c>.</param>
     /// <param name="top">How many entries each top list holds, 1 to <see cref="MaxTop"/>.</param>
     /// <param name="root">Receives the root of the tree (see <see cref="BuildTree"/>).</param>
+    /// <param name="caseSensitive">
+    /// <c>true</c> when names that differ only by case are different entries, as on a case-sensitive
+    /// disk; otherwise they are taken to be the same path.
+    /// </param>
     /// <returns>The report.</returns>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="top"/> is out of range.</exception>
-    public static SpaceUsageReport Analyze(IReadOnlyList<KeyValuePair<string, FileNode>> nodes, int top, out SpaceNode root)
+    public static SpaceUsageReport Analyze(IReadOnlyList<KeyValuePair<string, FileNode>> nodes, int top, out SpaceNode root, bool caseSensitive = false)
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(top, 1);
         ArgumentOutOfRangeException.ThrowIfGreaterThan(top, MaxTop);
 
-        var tree = Build(nodes);
+        var tree = Build(nodes, caseSensitive);
         root = tree.Root;
-        var files = new TopList(top);
-        var directories = new TopList(top);
+        var nameComparison = caseSensitive ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;
+        var files = new TopList(top, nameComparison);
+        var directories = new TopList(top, nameComparison);
         var extensions = new Dictionary<string, (int Files, ulong Allocated, ulong Logical)>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var node in tree.All)
@@ -180,11 +194,15 @@ public static class SpaceUsageAnalyzer
     /// Builds the tree and counts what it holds.
     /// </summary>
     /// <param name="nodes">The disk's nodes keyed by path.</param>
+    /// <param name="caseSensitive">
+    /// <c>true</c> when names that differ only by case are different entries, as on a case-sensitive
+    /// disk; otherwise they are taken to be the same path.
+    /// </param>
     /// <returns>The tree, its nodes in input order, and the counts.</returns>
-    private static BuiltTree Build(IReadOnlyList<KeyValuePair<string, FileNode>> nodes)
+    private static BuiltTree Build(IReadOnlyList<KeyValuePair<string, FileNode>> nodes, bool caseSensitive)
     {
         var root = new SpaceNode { Name = "\\", Path = "\\", IsDirectory = true };
-        var byPath = new Dictionary<string, SpaceNode>(StringComparer.OrdinalIgnoreCase) { ["\\"] = root };
+        var byPath = new Dictionary<string, SpaceNode>(caseSensitive ? StringComparer.Ordinal : StringComparer.OrdinalIgnoreCase) { ["\\"] = root };
         var all = new List<SpaceNode>(nodes.Count);
         var streams = new List<(string Owner, ulong Allocated, ulong Logical)>();
         var directories = 0;
@@ -258,9 +276,10 @@ public static class SpaceUsageAnalyzer
             parent.FileCount += node.FileCount;
         }
 
+        var nameComparison = caseSensitive ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;
         foreach (var node in all.Append(root))
         {
-            node.ChildList.Sort(CompareBySize);
+            node.ChildList.Sort((left, right) => CompareBySize(left, right, nameComparison));
         }
 
         return new(root, all, directories, links, streamCount);
@@ -271,11 +290,12 @@ public static class SpaceUsageAnalyzer
     /// </summary>
     /// <param name="left">The first node.</param>
     /// <param name="right">The second node.</param>
+    /// <param name="comparison">How names are compared: ordinal on a case-sensitive disk.</param>
     /// <returns>A negative number when <paramref name="left"/> comes first.</returns>
-    private static int CompareBySize(SpaceNode left, SpaceNode right)
+    private static int CompareBySize(SpaceNode left, SpaceNode right, StringComparison comparison)
     {
         var bySize = right.Allocated.CompareTo(left.Allocated);
-        return bySize != 0 ? bySize : string.Compare(left.Name, right.Name, StringComparison.OrdinalIgnoreCase);
+        return bySize != 0 ? bySize : string.Compare(left.Name, right.Name, comparison);
     }
 
     /// <summary>
@@ -292,7 +312,8 @@ public static class SpaceUsageAnalyzer
     /// Keeps the <c>capacity</c> largest nodes offered to it, preferring earlier ones on ties.
     /// </summary>
     /// <param name="capacity">How many nodes to keep.</param>
-    private sealed class TopList(int capacity)
+    /// <param name="pathComparison">How paths are compared when breaking ties.</param>
+    private sealed class TopList(int capacity, StringComparison pathComparison)
     {
         /// <summary>
         /// A min-heap on size, so the smallest kept node is the one to replace. The sequence number
@@ -334,7 +355,7 @@ public static class SpaceUsageAnalyzer
         public List<SpaceUsageEntry> ToEntries() => _heap.UnorderedItems
             .Select(item => item.Element)
             .OrderByDescending(node => node.Allocated)
-            .ThenBy(node => node.Path, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(node => node.Path, StringComparer.FromComparison(pathComparison))
             .Select(node => new SpaceUsageEntry(node.Path, node.Allocated, node.Logical, node.FileCount))
             .ToList();
     }

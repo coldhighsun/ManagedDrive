@@ -4,6 +4,62 @@ namespace ManagedDrive.Tests;
 
 public sealed class ArchiveNodeMapBuilderTests
 {
+    /// <summary>
+    /// Entries whose names differ only by case are merged on a case-insensitive disk, and the report says so.
+    /// </summary>
+    [Fact]
+    public void BuildNodeMap_NamesDifferingByCase_ReportsMergeOnCaseInsensitiveMap()
+    {
+        var path = CreateZip(entries =>
+        {
+            entries.Add("A.txt", new byte[10]);
+            entries.Add("a.txt", new byte[20]);
+        });
+
+        try
+        {
+            var report = new ArchiveImportReport();
+
+            var nodeMap = ArchiveNodeMapBuilder.BuildNodeMap(path, report: report);
+
+            Assert.Equal(1, report.CaseMergedCount);
+            Assert.Equal(("\\A.txt", "\\a.txt"), report.FirstCaseMerge);
+            Assert.Equal(1, nodeMap.ItemCount);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    /// <summary>
+    /// A case-sensitive import keeps both entries and reports no merge.
+    /// </summary>
+    [Fact]
+    public void BuildNodeMap_NamesDifferingByCase_ReportsNothingOnCaseSensitiveMap()
+    {
+        var path = CreateZip(entries =>
+        {
+            entries.Add("A.txt", new byte[10]);
+            entries.Add("a.txt", new byte[20]);
+        });
+
+        try
+        {
+            var report = new ArchiveImportReport();
+
+            var nodeMap = ArchiveNodeMapBuilder.BuildNodeMap(path, caseSensitive: true, report: report);
+
+            Assert.Equal(0, report.CaseMergedCount);
+            Assert.Null(report.FirstCaseMerge);
+            Assert.Equal(2, nodeMap.ItemCount);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
     [Fact]
     public void BuildNodeMap_ComputesTotalAllocatedFromExtractedContent()
     {

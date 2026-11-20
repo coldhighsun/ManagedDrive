@@ -62,7 +62,7 @@ internal static class DirectoryEnumeration
         foreach (var kvp in children)
         {
             var childName = kvp.Value.LeafName;
-            if (WildcardMatcher.Matches(pattern, childName))
+            if (WildcardMatcher.Matches(pattern, childName, ignoreCase: !nodeMap.CaseSensitive))
             {
                 entries.Add((childName, kvp.Value.FileInfo));
             }

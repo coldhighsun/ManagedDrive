@@ -40,6 +40,7 @@ public static class DiskOptionsMerge
             MaxSnapshotSizeBytes = Pick(baseline.MaxSnapshotSizeBytes, edited.MaxSnapshotSizeBytes, current.MaxSnapshotSizeBytes),
             HighUsageWarnPercent = Pick(baseline.HighUsageWarnPercent, edited.HighUsageWarnPercent, current.HighUsageWarnPercent),
             SaveImageOnExit = Pick(baseline.SaveImageOnExit, edited.SaveImageOnExit, current.SaveImageOnExit),
+            CaseSensitive = Pick(baseline.CaseSensitive, edited.CaseSensitive, current.CaseSensitive),
             // A folder's edit is detected case-sensitively, so renaming "Cache" to "cache" counts,
             // but the entry it replaces is matched in the current list the way Windows matches
             // paths, ignoring case.
@@ -53,6 +54,39 @@ public static class DiskOptionsMerge
                 EqualityComparer<EnvRedirect>.Default,
                 keyOf: r => r.Variable),
         };
+    }
+
+    /// <summary>
+    /// Tells whether applying <paramref name="edited"/> to a mounted disk with <paramref name="current"/>
+    /// options needs the disk to be unmounted and mounted again: the mount point, the read-only flag
+    /// and the case sensitivity are built into the mounted volume and cannot change live.
+    /// </summary>
+    /// <param name="current">The disk's options now.</param>
+    /// <param name="edited">The options the edit would apply.</param>
+    /// <returns><c>true</c> if a remount is needed.</returns>
+    public static bool RequiresRemount(DiskOptions current, DiskOptions edited)
+    {
+        ArgumentNullException.ThrowIfNull(current);
+        ArgumentNullException.ThrowIfNull(edited);
+
+        return edited.MountPoint != current.MountPoint ||
+            edited.ReadOnly != current.ReadOnly ||
+            edited.CaseSensitive != current.CaseSensitive;
+    }
+
+    /// <summary>
+    /// Tells whether the edit turns case sensitivity off on a disk that has it on, which merges
+    /// names that differ only by case and so must first check that the disk holds none.
+    /// </summary>
+    /// <param name="current">The disk's options now.</param>
+    /// <param name="edited">The options the edit would apply.</param>
+    /// <returns><c>true</c> if case sensitivity goes from on to off.</returns>
+    public static bool TurnsOffCaseSensitivity(DiskOptions current, DiskOptions edited)
+    {
+        ArgumentNullException.ThrowIfNull(current);
+        ArgumentNullException.ThrowIfNull(edited);
+
+        return current.CaseSensitive && !edited.CaseSensitive;
     }
 
     /// <summary>

@@ -33,6 +33,11 @@ public partial class SnapshotDiffDialog
     private readonly Task<SnapshotManager.SnapshotDiffResult> _diffTask;
 
     /// <summary>
+    /// Whether the disk treats names that differ only by case as different files.
+    /// </summary>
+    private readonly bool _caseSensitive;
+
+    /// <summary>
     /// Whether the dialog has been closed, so a late result is dropped.
     /// </summary>
     private bool _closed;
@@ -42,9 +47,15 @@ public partial class SnapshotDiffDialog
     /// at once with a loading animation and shows the result when <paramref name="diffTask"/>
     /// completes; if that fails, the error is shown and the dialog closes.
     /// </summary>
-    public SnapshotDiffDialog(string snapshotLabel, Task<SnapshotManager.SnapshotDiffResult> diffTask)
+    /// <param name="snapshotLabel">The label of the snapshot, shown in the description.</param>
+    /// <param name="diffTask">The comparison of the snapshot with the disk.</param>
+    /// <param name="caseSensitive">
+    /// <c>true</c> when the disk treats names that differ only by case as different files.
+    /// </param>
+    public SnapshotDiffDialog(string snapshotLabel, Task<SnapshotManager.SnapshotDiffResult> diffTask, bool caseSensitive = false)
     {
         _diffTask = diffTask;
+        _caseSensitive = caseSensitive;
         InitializeComponent();
         SourceDescriptionText.Text = Loc.Format("SnapshotDiff.Description", snapshotLabel);
 
@@ -110,7 +121,7 @@ public partial class SnapshotDiffDialog
         rows.AddRange(ToRows(DiffKind.Reverted, diff.ModifiedFiles, isDirectory: false));
         rows.AddRange(ToRows(DiffKind.Removed, diff.AddedDirectories, isDirectory: true));
         rows.AddRange(ToRows(DiffKind.Removed, diff.AddedFiles, isDirectory: false));
-        _roots = DiffTreeBuilder.Build(rows);
+        _roots = DiffTreeBuilder.Build(rows, _caseSensitive);
 
         var restored = rows.Count(r => r.Kind == DiffKind.Restored);
         var removed = rows.Count(r => r.Kind == DiffKind.Removed);
@@ -154,8 +165,8 @@ public partial class SnapshotDiffDialog
     /// <param name="paths">The absolute paths.</param>
     /// <param name="isDirectory">Whether the paths are folders.</param>
     /// <returns>The rows.</returns>
-    private static IEnumerable<DiffRow> ToRows(DiffKind kind, IEnumerable<string> paths, bool isDirectory) =>
-        paths.Order(StringComparer.OrdinalIgnoreCase).Select(p => DiffRow.Create(kind, p, isDirectory));
+    private IEnumerable<DiffRow> ToRows(DiffKind kind, IEnumerable<string> paths, bool isDirectory) =>
+        paths.Order(_caseSensitive ? StringComparer.Ordinal : StringComparer.OrdinalIgnoreCase).Select(p => DiffRow.Create(kind, p, isDirectory));
 
     /// <summary>
     /// Applies the filter of the filter card that was selected and rebuilds the list.

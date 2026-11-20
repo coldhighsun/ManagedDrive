@@ -864,6 +864,7 @@ public sealed partial class MainViewModel
             AddDiskSorted(new(disk));
             SaveSettings();
             StatusText = Loc.Format("Status.MountedWithCapacity", disk.MountPoint, options.VolumeLabel, options.CapacityBytes / (1024 * 1024));
+            AppendArchiveCaseMergeNote(disk);
             _logger.LogInformation("Disk mounted: {MountPoint}, label {VolumeLabel}.", disk.MountPoint, options.VolumeLabel);
         }
         catch (OperationCanceledException)
@@ -876,6 +877,19 @@ public sealed partial class MainViewModel
             _logger.LogError(ex, "Mount failed for {MountPoint}.", options.MountPoint);
             ShowError(Loc.Format("Msg.MountFailed", ex.Message));
             StatusText = Loc.Get("Status.MountFailed");
+        }
+    }
+
+    /// <summary>
+    /// Appends a note to <see cref="StatusText"/> when the archive the disk was made from held
+    /// entries whose names differ only by case and were merged.
+    /// </summary>
+    /// <param name="disk">The disk that was just mounted.</param>
+    private void AppendArchiveCaseMergeNote(RamDisk disk)
+    {
+        if (disk.ArchiveCaseMerges is { FirstCaseMerge: var (first, second) } report)
+        {
+            StatusText = $"{StatusText} {Loc.Format("Status.ArchiveCaseMerged", report.CaseMergedCount, first, second)}";
         }
     }
 

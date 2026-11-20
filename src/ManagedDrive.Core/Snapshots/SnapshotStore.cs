@@ -103,14 +103,19 @@ internal static class SnapshotStore
     /// </summary>
     /// <exception cref="InvalidDataException">
     /// Thrown when the index file is not a valid snapshot, its version is unsupported, or a
-    /// referenced blob is missing or corrupt.
+    /// referenced blob is missing or corrupt, or the snapshot holds two names that differ only by
+    /// case and <paramref name="caseSensitive"/> is <c>false</c>.
     /// </exception>
+    /// <param name="caseSensitive">
+    /// <c>true</c> to build a map in which names that differ only by case are different entries.
+    /// </param>
     internal static FileNodeMap Load(
         string indexPath,
         string blobDirectory,
         out ulong capacityBytes,
         out string volumeLabel,
-        byte[]? cek)
+        byte[]? cek,
+        bool caseSensitive = false)
     {
         using var stream = new FileStream(indexPath, FileMode.Open, FileAccess.Read);
         using var reader = new BinaryReader(stream, System.Text.Encoding.UTF8, leaveOpen: false);
@@ -120,7 +125,7 @@ internal static class SnapshotStore
         capacityBytes = reader.ReadUInt64();
         volumeLabel = reader.ReadString();
 
-        var nodeMap = new FileNodeMap();
+        var nodeMap = new FileNodeMap(caseSensitive);
         var count = reader.ReadInt32();
 
         // A negative count would restore a corrupt index as an empty disk, wiping the live one.
@@ -173,7 +178,7 @@ internal static class SnapshotStore
                 }
             }
 
-            nodeMap.Add(path, node);
+            nodeMap.AddLoaded(path, node);
         }
 
         foreach (var path in nodeMap.RemoveInvalidStreams())

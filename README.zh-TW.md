@@ -6,7 +6,7 @@
 
 [![CI / Release](https://github.com/coldhighsun/ManagedDrive/actions/workflows/ci.yml/badge.svg)](https://github.com/coldhighsun/ManagedDrive/actions/workflows/ci.yml)
 [![Coverage](https://codecov.io/gh/coldhighsun/ManagedDrive/branch/main/graph/badge.svg)](https://codecov.io/gh/coldhighsun/ManagedDrive)
-[![Tests](https://img.shields.io/badge/tests-2605-brightgreen?logo=xunit)](tests/ManagedDrive.Tests)
+[![Tests](https://img.shields.io/badge/tests-2686-brightgreen?logo=xunit)](tests/ManagedDrive.Tests)
 [![Latest Release](https://img.shields.io/github/v/release/coldhighsun/ManagedDrive)](https://github.com/coldhighsun/ManagedDrive/releases/latest)
 [![Latest Pre-release](https://img.shields.io/github/v/release/coldhighsun/ManagedDrive?include_prereleases&label=pre-release)](https://github.com/coldhighsun/ManagedDrive/releases)
 [![WinGet](https://img.shields.io/winget/v/coldhighsun.ManagedDrive?logo=windowsterminal&label=winget)](https://github.com/microsoft/winget-pkgs/tree/master/manifests/c/coldhighsun/ManagedDrive)
@@ -56,7 +56,7 @@
 **核心功能**
 - 同時掛載多個 RAM 磁碟，各自擁有獨立的磁碟機代號、容量、磁碟區標籤和唯讀旗標
 - 動態記憶體配置——容量為上限而非預先配置；當真正需要配置記憶體的操作（寫入資料、掛載時載入映像檔或壓縮檔、還原快照、複製磁碟）會導致主機實體記憶體嚴重不足時，即使磁碟本身設定的容量還有餘裕，也會被拒絕
-- 即時編輯已掛載的磁碟（磁碟區標籤、容量、自動掛載、映像檔路徑）；變更磁碟機代號或唯讀旗標會自動重新掛載
+- 即時編輯已掛載的磁碟（磁碟區標籤、容量、自動掛載、映像檔路徑）；變更磁碟機代號、唯讀旗標或檔名大小寫敏感會自動重新掛載
 - 相容 NTFS，可作為需要 NTFS 磁碟區的工具（WinGet、Windows Update 暫存、BITS）的目標路徑
 - 支援符號連結和目錄連接點（pnpm、`git worktree`、建置快取會用到）以及 `Zone.Identifier` 這類替代資料流；兩者都會隨映像檔和快照一併儲存。不支援硬連結（WinFsp 沒有對應的回呼）
 - 啟動時自動掛載已儲存的磁碟設定
@@ -154,11 +154,11 @@ mdrive exit
 
 | 命令 | 說明 |
 |---|---|
-| `create <磁碟機代號> [--capacity-mb <數值>] [--preset <id>]... [選項]` | 建立一個全新的空白 RAM 磁碟。未指定任何 `--preset` 時必須給定 `--capacity-mb`；重複 `--preset` 可在同一個磁碟上疊加多個預設（容量相加，資料夾和環境變數合併，明確指定的 `--capacity-mb`/`--label` 優先）。可用選項：`--label`（預設 "RAM Disk"）、`--image`（持久化映像檔路徑；省略則為僅存在於記憶體的磁碟，卸載後即捨棄）、`--password`、`--password-file`（為 `--image` 加密；需搭配 `--image` 使用；兩者互斥）。`temp` 預設還會把您的使用者 TEMP/TMP 指向該磁碟的 `Temp` 資料夾；會修改環境變數的預設會從原本使用它的磁碟上取消。 |
+| `create <磁碟機代號> [--capacity-mb <數值>] [--preset <id>]... [選項]` | 建立一個全新的空白 RAM 磁碟。未指定任何 `--preset` 時必須給定 `--capacity-mb`；重複 `--preset` 可在同一個磁碟上疊加多個預設（容量相加，資料夾和環境變數合併，明確指定的 `--capacity-mb`/`--label` 優先）。可用選項：`--label`（預設 "RAM Disk"）、`--case-sensitive`（將僅大小寫不同的檔名視為不同檔案）、`--image`（持久化映像檔路徑；省略則為僅存在於記憶體的磁碟，卸載後即捨棄）、`--password`、`--password-file`（為 `--image` 加密；需搭配 `--image` 使用；兩者互斥）。`temp` 預設還會把您的使用者 TEMP/TMP 指向該磁碟的 `Temp` 資料夾；會修改環境變數的預設會從原本使用它的磁碟上取消。 |
 | `preset list` | 列出 `create --preset` 可用的預設：id、名稱、容量以及各自設定的環境變數。支援 `--json`。 |
 | `clone <來源磁碟機代號> <目標磁碟機代號>` | 以來源磁碟目前的內容取代目標磁碟的內容。目標磁碟必須已掛載且可寫入，容量須不小於來源磁碟已使用的位元組數。若主機可用記憶體不足以容納複製的資料，複製會失敗，目標磁碟保持不變。 |
-| `edit <磁碟機代號> [選項]` | 對已掛載的磁碟套用非破壞性的變更。可用選項：`--capacity-mb`、`--label`、`--auto-save-minutes`、`--disable-auto-save`（與 `--auto-save-minutes` 互斥）。至少須指定一項。磁碟機代號或唯讀旗標的變更需要完整重新掛載，本命令不支援。 |
-| `mount <映像檔路徑> <磁碟機代號> [選項]` | 掛載現有的 `.mdr` 映像檔。`磁碟機代號`可以是一個磁碟機代號（`R:`），也可以是一個已存在的空資料夾路徑。可用選項：`--read-only`、`--auto-mount`、`--auto-save-minutes`、`--compression <0-22>`（Zstd 等級，`0` 為不壓縮，`1` 最快、`22` 最小，預設 `1`）、`--max-snapshot-count`、`--max-snapshot-size-mb`、`--high-usage-warn-percent`、`--password`、`--password-file`（兩者互斥；僅在映像檔已加密時需要——建議使用 `--password-file`（讀取檔案第一行作為密碼）而非 `--password`，以避免密碼出現在 shell 歷程或處理序清單中）。未指定的選項沿用該映像檔已儲存的設定值（或其預設值）。 |
+| `edit <磁碟機代號> [選項]` | 對已掛載的磁碟套用非破壞性的變更。可用選項：`--capacity-mb`、`--label`、`--auto-save-minutes`、`--disable-auto-save`（與 `--auto-save-minutes` 互斥）。至少須指定一項。磁碟機代號、唯讀旗標或大小寫敏感的變更需要完整重新掛載，本命令不支援。 |
+| `mount <映像檔路徑> <磁碟機代號> [選項]` | 掛載現有的 `.mdr` 映像檔。`磁碟機代號`可以是一個磁碟機代號（`R:`），也可以是一個已存在的空資料夾路徑。可用選項：`--read-only`、`--case-sensitive [true|false]`、`--auto-mount`、`--auto-save-minutes`、`--compression <0-22>`（Zstd 等級，`0` 為不壓縮，`1` 最快、`22` 最小，預設 `1`）、`--max-snapshot-count`、`--max-snapshot-size-mb`、`--high-usage-warn-percent`、`--password`、`--password-file`（兩者互斥；僅在映像檔已加密時需要——建議使用 `--password-file`（讀取檔案第一行作為密碼）而非 `--password`，以避免密碼出現在 shell 歷程或處理序清單中）。未指定的選項沿用該映像檔已儲存的設定值（或其預設值）。 |
 | `mount-archive <壓縮檔路徑> [磁碟機代號]` | 將壓縮檔（zip/7z/rar/tar 等）匯入並掛載為唯讀磁碟，掛載完成後會自動在檔案總管中開啟該磁碟機。`磁碟機代號`可以是一個磁碟機代號，也可以是一個已存在的空資料夾路徑；完全省略時會自動從 `Z:` 往下尋找第一個可用的磁碟機代號。檔案總管的右鍵選單項目內部即呼叫此命令。 |
 | `unmount <磁碟機代號>` | 卸載已掛載的磁碟。 |
 | `format <磁碟機代號> --yes` | 清空已掛載磁碟上的所有檔案，並刪除其映像檔和全部快照（若映像檔路徑在上次儲存後改過，也會刪除上次儲存的映像檔，除非另一個已掛載的磁碟或已儲存的磁碟設定正在使用它），輸出中會說明哪些映像檔被重設或刪除，須加上 `--yes`/`-y` 確認。 |
@@ -167,7 +167,7 @@ mdrive exit
 | `export <磁碟機代號> <輸出路徑> [選項]` | 將已掛載的磁碟匯出為獨立的 `.mdr` 映像檔或壓縮檔，不影響該磁碟本身的持久化設定。可用選項：`--format <Zip\|SevenZip>`（匯出為壓縮檔而非 `.mdr` 映像檔）、`--compression <等級>`（`0` 為不壓縮；`.mdr` 為 Zstd `1`-`22`，`--format` 壓縮檔為 `1`-`9`；預設 `1`）、`--password`、`--password-file`（為匯出的 `.mdr` 映像檔加密；與 `--format` 互斥，因為壓縮檔格式不支援加密）、`--force`/`-f`（覆寫已存在的輸出檔案；未加時目標檔案已存在會回報錯誤）。輸出路徑不能是已掛載磁碟本身的映像檔、快照檔名，也不能位於 RAM 磁碟上。 |
 | `list` | 列出目前已掛載的磁碟及其用量與容量。 |
 | `ls <磁碟機代號> [路徑]` | 列出已掛載磁碟上某資料夾的直接子項目（名稱、類型、大小）。`路徑`（如 `\Folder`）省略時列出根目錄。 |
-| `info <磁碟機代號>` | 顯示已掛載磁碟的設定與狀態：用量、是否唯讀、映像檔路徑、是否加密、自動儲存間隔、壓縮等級、快照上限與數量、上次儲存時間。 |
+| `info <磁碟機代號>` | 顯示已掛載磁碟的設定與狀態：用量、是否唯讀、檔名是否區分大小寫、映像檔路徑、是否加密、自動儲存間隔、壓縮等級、快照上限與數量、上次儲存時間。 |
 | `usage <磁碟機代號> [--top N] [--by dir\|file\|ext]` | 顯示已掛載磁碟的記憶體都用在哪裡：占用最大的資料夾（含其下全部內容）、最大的檔案（替代資料流計入所屬檔案）和占用最大的副檔名，並給出各自占已使用記憶體的比例。`--top`（1-1000，預設 10）設定清單長度；`--by` 只輸出其中一個清單；加上 `--json` 時輸出全部三個清單。 |
 | `watch` | 即時輸出磁碟事件——`mounted`、`unmounted`、`save-completed`、`save-failed`、`high-usage`——直到按 Ctrl+C 中斷。不會阻擋其他 `mdrive` 命令；同時最多執行兩個 watch。加上 `--json` 時每行輸出一個 JSON 物件。 |
 | `snapshot create <磁碟機代號>` | 立即為已掛載的磁碟寫入一個附有時間戳記的快照，獨立於一般儲存。需要該磁碟已設定映像檔路徑及快照保留原則（`--max-snapshot-count`/`--max-snapshot-size-mb`）。 |
@@ -222,6 +222,10 @@ WinFsp 把磁碟機代號掛載在**目前登入工作階段（logon session）*
 **MSI 安裝的解決辦法：** 安裝 MSI 類軟體前，先按工具列的**還原環境變數**按鈕並選擇**暫存資料夾**來還原 TEMP（或在該磁碟右鍵選單的**暫存與快取**裡取消勾選**暫存資料夾**）再重試；或直接前往官方網站下載安裝套件手動安裝；也可以用 [`wingetx`](#wingetx-wrapper-zh-tw) 取代 `winget`——它不需要重設 TEMP 就能避開上述兩種失敗模式。
 
 ManagedDrive 會在 TEMP 被設為記憶體磁碟時提示一次，此後只要 TEMP 仍指向記憶體磁碟，每次啟動都會再次提示——還原為預設值即可停止。
+
+#### 檔名區分大小寫可能讓假設不區分的程式出錯
+
+每個磁碟的**檔名區分大小寫**選項（`--case-sensitive`）允許 `A.txt` 和 `a.txt` 同時存在。Windows 程式和 WSL 都會把它們視為兩個檔案，但假設檔名不區分大小寫的程式可能會被這類同名檔案搞混。若映像檔中含有僅大小寫不同的檔名，再把該選項關閉，磁碟會掛載失敗（映像檔本身不會被變更），而不是悄悄丟掉其中一個檔案。
 
 ### 設定與持久化
 

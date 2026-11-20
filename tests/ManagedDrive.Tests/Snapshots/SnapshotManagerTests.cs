@@ -270,6 +270,74 @@ public sealed class SnapshotManagerTests : IDisposable
     }
 
     [Fact]
+    public void LoadSnapshot_CaseVariantNamesCaseSensitive_KeepsBoth()
+    {
+        var snapshot = WriteCaseVariantSnapshot();
+
+        var loaded = SnapshotManager.LoadSnapshot(snapshot.Path, out _, out _, caseSensitive: true);
+
+        Assert.True(loaded.TryGet("\\A.txt", out _));
+        Assert.True(loaded.TryGet("\\a.txt", out _));
+    }
+
+    [Fact]
+    public void LoadSnapshot_CaseVariantNamesCaseInsensitive_Throws()
+    {
+        var snapshot = WriteCaseVariantSnapshot();
+
+        Assert.Throws<InvalidDataException>(() => SnapshotManager.LoadSnapshot(snapshot.Path, out _, out _));
+    }
+
+    [Fact]
+    public void LoadSnapshot_DefaultMode_LooksUpIgnoringCase()
+    {
+        var nodeMap = new FileNodeMap();
+        nodeMap.Add("\\", MakeDir());
+        nodeMap.Add("\\Folder", MakeDir());
+        nodeMap.Add("\\Folder\\Readme.TXT", MakeFile([1, 2, 3]));
+        SnapshotManager.WriteSnapshot(nodeMap, 1024, "Label", _mainImagePath,
+            new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), 0);
+        var snapshot = Assert.Single(SnapshotManager.ListSnapshots(_mainImagePath));
+
+        var loaded = SnapshotManager.LoadSnapshot(snapshot.Path, out _, out _);
+
+        Assert.True(loaded.TryGet("\\folder\\readme.txt", out _));
+    }
+
+    [Fact]
+    public void DiffAgainstCurrent_CaseSensitiveDiskWithCaseVariantNames_ComparesEachFileOnItsOwn()
+    {
+        var snapshot = WriteCaseVariantSnapshot();
+        var current = new FileNodeMap(caseSensitive: true);
+        current.Add("\\", MakeDir());
+        current.Add("\\A.txt", MakeFile([1, 1, 1]));
+        current.Add("\\a.txt", MakeFile([9, 9, 9]));
+
+        var diff = SnapshotManager.DiffAgainstCurrent(snapshot.Path, current);
+
+        Assert.Equal(["\\a.txt"], diff.ModifiedFiles);
+        Assert.Empty(diff.AddedFiles);
+        Assert.Empty(diff.RemovedFiles);
+        Assert.Equal(1, diff.UnchangedFileCount);
+    }
+
+    /// <summary>
+    /// Writes a snapshot of a case-sensitive disk holding <c>\A.txt</c> and <c>\a.txt</c> with
+    /// different content.
+    /// </summary>
+    /// <returns>The snapshot that was written.</returns>
+    private SnapshotManager.SnapshotInfo WriteCaseVariantSnapshot()
+    {
+        var nodeMap = new FileNodeMap(caseSensitive: true);
+        nodeMap.Add("\\", MakeDir());
+        nodeMap.Add("\\A.txt", MakeFile([1, 1, 1]));
+        nodeMap.Add("\\a.txt", MakeFile([2, 2, 2]));
+        SnapshotManager.WriteSnapshot(nodeMap, 1024, "Label", _mainImagePath,
+            new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), 0);
+        return Assert.Single(SnapshotManager.ListSnapshots(_mainImagePath));
+    }
+
+    [Fact]
     public void DiffAgainstCurrent_AnyChangeKind_HasChangesIsTrue()
     {
         WriteSnapshotWithFile(new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), "\\a.txt", [1, 2, 3]);

@@ -74,6 +74,23 @@ internal sealed class MainViewModelCliDiskController(MainViewModel mainViewModel
         string mountPoint, ulong? capacityBytes, string? volumeLabel, string? imagePath, string? password, IReadOnlyList<string> presets) =>
         mainViewModel.CreateWithPresetsByOptionsAsync(mountPoint, capacityBytes, volumeLabel, imagePath, password, presets);
 
+    /// <summary>
+    /// Creates a case-sensitive disk. Without presets and with an explicit capacity it takes the plain
+    /// create path; otherwise the presets supply whatever the caller left out.
+    /// </summary>
+    /// <param name="mountPoint">The mount point of the new disk.</param>
+    /// <param name="capacityBytes">The capacity in bytes, or <c>null</c> to take it from the presets.</param>
+    /// <param name="volumeLabel">The volume label, or <c>null</c> to take it from the presets.</param>
+    /// <param name="imagePath">Optional path to persist the disk to.</param>
+    /// <param name="password">Optional password to encrypt the image with.</param>
+    /// <param name="presets">Ids of the presets to combine; may be empty.</param>
+    /// <returns><c>(true, message)</c> on success; <c>(false, message)</c> with the reason otherwise.</returns>
+    public Task<(bool Success, string Message)> CreateCaseSensitiveAsync(
+        string mountPoint, ulong? capacityBytes, string? volumeLabel, string? imagePath, string? password, IReadOnlyList<string> presets) =>
+        presets.Count == 0 && capacityBytes is { } capacity
+            ? mainViewModel.CreateByOptionsAsync(mountPoint, capacity, volumeLabel, imagePath, password, caseSensitive: true)
+            : mainViewModel.CreateWithPresetsByOptionsAsync(mountPoint, capacityBytes, volumeLabel, imagePath, password, presets, caseSensitive: true);
+
     public Task<IReadOnlyList<CliPreset>> GetPresetsAsync() => Task.FromResult(mainViewModel.GetCliPresets());
 
     public Task<(bool Success, string Message, CliSpaceUsage? Usage)> GetSpaceUsageAsync(string mountPoint, int top) =>

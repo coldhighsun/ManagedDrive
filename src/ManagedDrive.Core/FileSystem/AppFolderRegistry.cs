@@ -18,10 +18,27 @@ internal sealed class AppFolderRegistry
     private readonly Lock _gate = new();
 
     /// <summary>
-    /// Keys of the registered directories, with how many open scopes list each. Case-insensitive,
-    /// like the file names.
+    /// Compares directory keys the way the disk compares names.
     /// </summary>
-    private readonly Dictionary<string, int> _counts = new(StringComparer.OrdinalIgnoreCase);
+    private readonly StringComparer _comparer;
+
+    /// <summary>
+    /// Keys of the registered directories, with how many open scopes list each. Compared like the
+    /// file names of the disk.
+    /// </summary>
+    private readonly Dictionary<string, int> _counts;
+
+    /// <summary>
+    /// Creates an empty registry.
+    /// </summary>
+    /// <param name="caseSensitive">
+    /// <c>true</c> when names that differ only by case are different directories.
+    /// </param>
+    internal AppFolderRegistry(bool caseSensitive = false)
+    {
+        _comparer = caseSensitive ? StringComparer.Ordinal : StringComparer.OrdinalIgnoreCase;
+        _counts = new(_comparer);
+    }
 
     /// <summary>
     /// Number of entries in <see cref="_counts"/>, readable without the lock so that checking a
@@ -37,7 +54,7 @@ internal sealed class AppFolderRegistry
     /// <returns>A scope that removes the registration when disposed.</returns>
     internal IDisposable Begin(IEnumerable<string> subPaths)
     {
-        var keys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var keys = new HashSet<string>(_comparer);
         foreach (var subPath in subPaths)
         {
             AddKeys(keys, subPath);
