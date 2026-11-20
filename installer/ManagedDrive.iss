@@ -16,7 +16,7 @@
   #define AppVersionTag "v" + AppVersion
 #endif
 
-#define WinFspBuild "26286"
+#define WinFspBuild "26323"
 #define WinFspVersion "2.2." + WinFspBuild
 #define WinFspMsiName "winfsp-" + WinFspVersion + ".msi"
 #define HelperServiceName "ManagedDriveHelper"
