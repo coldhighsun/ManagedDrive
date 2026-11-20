@@ -19,31 +19,6 @@ namespace ManagedDrive.App.Services;
 public sealed class UpdateCheckService : IUpdatePresenter, IDisposable
 {
     /// <summary>
-    /// GitHub owner of the repository releases are read from.
-    /// </summary>
-    private const string RepoOwner = "coldhighsun";
-
-    /// <summary>
-    /// GitHub repository releases are read from.
-    /// </summary>
-    private const string RepoName = "ManagedDrive";
-
-    /// <summary>
-    /// Web address of the repository.
-    /// </summary>
-    internal const string RepositoryUrl = $"https://github.com/{RepoOwner}/{RepoName}";
-
-    /// <summary>
-    /// Web address of the owner's GitHub Sponsors page.
-    /// </summary>
-    internal const string SponsorsUrl = $"https://github.com/sponsors/{RepoOwner}";
-
-    /// <summary>
-    /// Releases page, for when a release carries no address of its own.
-    /// </summary>
-    internal const string ReleasesUrl = RepositoryUrl + "/releases/latest";
-
-    /// <summary>
     /// Matches the Inno Setup installer asset (<c>ManagedDrive-Setup-v1.2.3.exe</c>) and not the portable zip.
     /// </summary>
     internal const string InstallerAssetPattern = "ManagedDrive-Setup-{tag}.exe";
@@ -153,8 +128,8 @@ public sealed class UpdateCheckService : IUpdatePresenter, IDisposable
 
         var updater = new ReleaseUpdater(new()
         {
-            Owner = RepoOwner,
-            Repo = RepoName,
+            Owner = ProjectLinks.RepoOwner,
+            Repo = ProjectLinks.RepoName,
             CurrentVersion = version,
             AssetSelector = new PatternAssetSelector(InstallerAssetPattern),
             LastCheckStore = new SettingsLastCheckStore(settings),

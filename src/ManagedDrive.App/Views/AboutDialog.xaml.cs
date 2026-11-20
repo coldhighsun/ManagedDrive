@@ -7,14 +7,6 @@ namespace ManagedDrive.App.Views;
 /// </summary>
 public partial class AboutDialog
 {
-    private const string GitHubUrl = UpdateCheckService.RepositoryUrl;
-    private const string ThirdPartyNoticesUrl = GitHubUrl + "/blob/main/docs/THIRD-PARTY-NOTICES.md";
-
-    /// <summary>
-    /// The GitHub Sponsors page the "support the project" link opens.
-    /// </summary>
-    private const string DonateUrl = UpdateCheckService.SponsorsUrl;
-
     /// <summary>
     /// The update service whose automatic check result this dialog shows.
     /// </summary>
@@ -30,9 +22,10 @@ public partial class AboutDialog
         _updateCheckService = updateCheckService;
 
         VersionText.Text = UpdateCheckService.GetRunningVersion();
-        GitHubLink.NavigateUri = new(GitHubUrl);
-        ThirdPartyNoticesLink.NavigateUri = new(ThirdPartyNoticesUrl);
-        DonateLink.NavigateUri = new(DonateUrl);
+        GitHubLink.NavigateUri = new(ProjectLinks.RepositoryUrl);
+        FeedbackLink.NavigateUri = new(ProjectLinks.IssuesUrl);
+        ThirdPartyNoticesLink.NavigateUri = new(ProjectLinks.ThirdPartyNoticesUrl);
+        DonateLink.NavigateUri = new(ProjectLinks.SponsorsUrl);
 
         if (updateCheckService != null)
         {

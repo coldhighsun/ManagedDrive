@@ -307,5 +307,5 @@ public partial class UpdateDialog
     /// Opens the release page in the browser, for a manual download.
     /// </summary>
     private void ViewReleaseButton_Click(object sender, RoutedEventArgs e) =>
-        Process.Start(new ProcessStartInfo(_update.Release.HtmlUrl ?? UpdateCheckService.ReleasesUrl) { UseShellExecute = true });
+        Process.Start(new ProcessStartInfo(_update.Release.HtmlUrl ?? ProjectLinks.ReleasesUrl) { UseShellExecute = true });
 }

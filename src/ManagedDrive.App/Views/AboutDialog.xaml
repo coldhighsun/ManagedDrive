@@ -7,74 +7,106 @@
         Width="460" SizeToContent="Height"
         WindowStartupLocation="CenterOwner">
 
-        <Grid>
-            <Grid.RowDefinitions>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="16"/>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="24"/>
-                <RowDefinition Height="Auto"/>
-            </Grid.RowDefinitions>
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
 
-            <!-- Icon + app name -->
-            <StackPanel Grid.Row="0" Orientation="Horizontal" VerticalAlignment="Center">
-                <Image Source="pack://application:,,,/ManagedDrive.ico"
-                       Width="64" Height="64"
-                       VerticalAlignment="Center"
-                       RenderOptions.BitmapScalingMode="HighQuality"/>
-                <StackPanel Margin="14,0,0,0" VerticalAlignment="Center">
-                    <TextBlock Text="ManagedDrive"
-                               FontSize="{DynamicResource FontSizeDisplay}" FontWeight="Medium"/>
-                    <TextBlock x:Name="VersionText"
-                               FontSize="{DynamicResource FontSizeCaption}"
-                               Foreground="{DynamicResource AppForeground}"
-                               Margin="0,2,0,0"/>
-                    <TextBlock x:Name="UpdateStatusText"
-                               FontSize="{DynamicResource FontSizeCaption}"
-                               Margin="0,4,0,0"
-                               Visibility="Collapsed">
-                        <Hyperlink x:Name="UpdateLink" Click="UpdateLink_Click">
-                            <Run x:Name="UpdateLinkRun"/>
+        <!-- Icon + app name + version + update link -->
+        <StackPanel Grid.Row="0" Orientation="Horizontal" VerticalAlignment="Center">
+            <Image Source="pack://application:,,,/ManagedDrive.ico"
+                   Width="64" Height="64"
+                   VerticalAlignment="Center"
+                   RenderOptions.BitmapScalingMode="HighQuality"/>
+            <StackPanel Margin="16,0,0,0" VerticalAlignment="Center">
+                <TextBlock Text="ManagedDrive"
+                           FontSize="{DynamicResource FontSizeDisplay}" FontWeight="Medium"/>
+                <TextBlock x:Name="VersionText"
+                           FontSize="{DynamicResource FontSizeCaption}"
+                           Foreground="{DynamicResource AppForeground}"
+                           Margin="0,2,0,0"/>
+                <TextBlock x:Name="UpdateStatusText"
+                           FontSize="{DynamicResource FontSizeCaption}"
+                           Margin="0,4,0,0"
+                           Visibility="Collapsed">
+                    <Hyperlink x:Name="UpdateLink" Click="UpdateLink_Click">
+                        <Run x:Name="UpdateLinkRun"/>
+                    </Hyperlink>
+                </TextBlock>
+            </StackPanel>
+        </StackPanel>
+
+        <!-- Description -->
+        <TextBlock Grid.Row="1"
+                   Text="{DynamicResource About.Description}"
+                   TextWrapping="Wrap"
+                   Foreground="{DynamicResource AppForeground}"
+                   LineHeight="20"
+                   Margin="0,16,0,16"/>
+
+        <!-- Links -->
+        <Border Grid.Row="2"
+                BorderBrush="{DynamicResource AppDivider}"
+                BorderThickness="0,1,0,1"
+                Padding="0,12">
+            <StackPanel>
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="&#xE774;" FontFamily="Segoe Fluent Icons"
+                               Width="24" VerticalAlignment="Center"/>
+                    <TextBlock>
+                        <Hyperlink x:Name="GitHubLink" RequestNavigate="Hyperlink_RequestNavigate">
+                            <Run Text="{DynamicResource About.ViewOnGitHub}"/>
+                        </Hyperlink>
+                    </TextBlock>
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                    <TextBlock Text="&#xE939;" FontFamily="Segoe Fluent Icons"
+                               Width="24" VerticalAlignment="Center"/>
+                    <TextBlock>
+                        <Hyperlink x:Name="FeedbackLink" RequestNavigate="Hyperlink_RequestNavigate">
+                            <Run Text="{DynamicResource About.Feedback}"/>
+                        </Hyperlink>
+                    </TextBlock>
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                    <TextBlock Text="&#xE8A5;" FontFamily="Segoe Fluent Icons"
+                               Width="24" VerticalAlignment="Center"/>
+                    <TextBlock>
+                        <Hyperlink x:Name="ThirdPartyNoticesLink" RequestNavigate="Hyperlink_RequestNavigate">
+                            <Run Text="{DynamicResource About.ViewThirdPartyNotices}"/>
+                        </Hyperlink>
+                    </TextBlock>
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                    <TextBlock Text="&#xEB51;" FontFamily="Segoe Fluent Icons"
+                               Width="24" VerticalAlignment="Center"/>
+                    <TextBlock>
+                        <Hyperlink x:Name="DonateLink" RequestNavigate="Hyperlink_RequestNavigate">
+                            <Run Text="{DynamicResource About.Donate}"/>
                         </Hyperlink>
                     </TextBlock>
                 </StackPanel>
             </StackPanel>
+        </Border>
 
-            <!-- Description + copyright + link -->
-            <StackPanel Grid.Row="2" Margin="0">
-                <TextBlock Text="{DynamicResource About.Description}"
-                           TextWrapping="Wrap"
-                           Foreground="{DynamicResource AppForeground}"
-                           LineHeight="20"
-                           Margin="0,0,0,10"/>
-                <TextBlock Text="{DynamicResource About.Copyright}"
-                           FontSize="{DynamicResource FontSizeCaption}"
-                           Foreground="{DynamicResource AppForeground}"
-                           Margin="0,0,0,6"/>
-                <TextBlock FontSize="{DynamicResource FontSizeCaption}">
-                    <Hyperlink x:Name="GitHubLink" RequestNavigate="Hyperlink_RequestNavigate">
-                        <Run Text="{DynamicResource About.ViewOnGitHub}"/>
-                    </Hyperlink>
-                </TextBlock>
-                <TextBlock FontSize="{DynamicResource FontSizeCaption}" Margin="0,4,0,0">
-                    <Hyperlink x:Name="ThirdPartyNoticesLink" RequestNavigate="Hyperlink_RequestNavigate">
-                        <Run Text="{DynamicResource About.ViewThirdPartyNotices}"/>
-                    </Hyperlink>
-                </TextBlock>
-                <TextBlock FontSize="{DynamicResource FontSizeCaption}" Margin="0,4,0,0">
-                    <Hyperlink x:Name="DonateLink" RequestNavigate="Hyperlink_RequestNavigate">
-                        <Run Text="{DynamicResource About.Donate}"/>
-                    </Hyperlink>
-                </TextBlock>
-            </StackPanel>
-
-            <!-- OK button -->
-            <Button Grid.Row="4"
-                    Content="{DynamicResource Btn.Ok}"
+        <!-- Copyright + OK button -->
+        <Grid Grid.Row="4" Margin="0,16,0,0">
+            <TextBlock Text="{DynamicResource About.Copyright}"
+                       FontSize="{DynamicResource FontSizeCaption}"
+                       Foreground="{DynamicResource AppForeground}"
+                       Opacity="0.7"
+                       VerticalAlignment="Center"
+                       HorizontalAlignment="Left"/>
+            <Button Content="{DynamicResource Btn.Ok}"
                     Width="80"
                     IsDefault="True"
                     IsCancel="True"
                     HorizontalAlignment="Right"
                     Style="{StaticResource RaisedButton}"/>
         </Grid>
+    </Grid>
 </views:DialogWindowBase>
