@@ -151,14 +151,39 @@ end;
 
 procedure InstallWinFspSilently();
 var
-  MsiPath: string;
+  MsiPath, LogDir, LogPath, UiSwitch: string;
   ResultCode: Integer;
+  ShowMsiUi: Boolean;
 begin
   ExtractTemporaryFile('{#WinFspMsiName}');
   MsiPath := ExpandConstant('{tmp}\{#WinFspMsiName}');
 
-  if not Exec('msiexec.exe', Format('/i "%s" /qn /norestart', [MsiPath]), '',
-    SW_HIDE, ewWaitUntilTerminated, ResultCode) then
+  // Verbose MSI log kept outside {tmp} (which Setup deletes) so a slow or failed driver
+  // install can be diagnosed afterwards.
+  LogDir := ExpandConstant('{localappdata}\ManagedDrive');
+  ForceDirectories(LogDir);
+  LogPath := AddBackslash(LogDir) + 'winfsp-install.log';
+
+  // Interactive: basic UI (progress bar, no prompts; "!" hides Cancel so the driver is never
+  // left half-installed). The upgrade can take a while and Explorer may briefly hang while the
+  // file system driver reloads, so the user should see that something is happening.
+  // Silent (winget/CI): no UI at all.
+  ShowMsiUi := not WizardSilent();
+  if ShowMsiUi then
+  begin
+    UiSwitch := '/qb!';
+    if ActiveLanguage() = 'chinesesimplified' then
+      WizardForm.StatusLabel.Caption := '正在安装 WinFsp 驱动，可能需要一会儿，任务栏可能会短暂消失，请稍候...'
+    else if ActiveLanguage() = 'chinesetraditional' then
+      WizardForm.StatusLabel.Caption := '正在安裝 WinFsp 驅動程式，可能需要一會兒，工作列可能會短暫消失，請稍候...'
+    else
+      WizardForm.StatusLabel.Caption := 'Installing the WinFsp driver. This may take a moment and the taskbar may briefly disappear...';
+  end
+  else
+    UiSwitch := '/qn';
+
+  if not Exec('msiexec.exe', Format('/i "%s" %s /norestart /l*v "%s"', [MsiPath, UiSwitch, LogPath]), '',
+    SW_SHOWNORMAL, ewWaitUntilTerminated, ResultCode) then
   begin
     Log('Failed to launch msiexec for WinFsp: ' + SysErrorMessage(ResultCode));
     exit;
