@@ -503,6 +503,7 @@
     <sys:String x:Key="About.Description">An in-memory RAM disk for Windows.</sys:String>
     <sys:String x:Key="About.Copyright">© 2026 coldhighsun</sys:String>
     <sys:String x:Key="About.ViewOnGitHub">View on GitHub</sys:String>
+    <sys:String x:Key="About.Feedback">Report an issue / give feedback</sys:String>
     <sys:String x:Key="About.ViewThirdPartyNotices">Third-Party Notices</sys:String>
     <sys:String x:Key="About.Donate">Support the project (GitHub Sponsors)</sys:String>
     <sys:String x:Key="About.OpenLinkFailed">The link could not be opened in your browser. You can open it manually:&#10;{0}</sys:String>

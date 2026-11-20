@@ -503,6 +503,7 @@
     <sys:String x:Key="About.Description">Windows 内存虚拟磁盘工具。</sys:String>
     <sys:String x:Key="About.Copyright">© 2026 coldhighsun</sys:String>
     <sys:String x:Key="About.ViewOnGitHub">在 GitHub 上查看</sys:String>
+    <sys:String x:Key="About.Feedback">反馈问题 / 提出建议</sys:String>
     <sys:String x:Key="About.ViewThirdPartyNotices">第三方声明</sys:String>
     <sys:String x:Key="About.Donate">支持本项目（GitHub Sponsors）</sys:String>
     <sys:String x:Key="About.OpenLinkFailed">无法在浏览器中打开该链接，你可以手动打开：&#10;{0}</sys:String>
