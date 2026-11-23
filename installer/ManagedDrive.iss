@@ -43,7 +43,8 @@ ArchitecturesInstallIn64BitMode=x64compatible
 PrivilegesRequired=admin
 UninstallDisplayIcon={app}\ManagedDrive.exe
 SetupIconFile=..\src\ManagedDrive.App\ManagedDrive.ico
-WizardStyle=modern
+; "dynamic" follows the Windows app theme (light/dark) when Setup starts.
+WizardStyle=modern dynamic
 ; Restrict Restart Manager's file-in-use detection to our own exe rather than every
 ; *.exe/*.dll/*.chm file Setup installs (the default filter). Must be a bare filename
 ; wildcard, not a path — {app} cannot be used here since this is evaluated before the
