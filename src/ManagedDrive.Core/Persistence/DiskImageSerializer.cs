@@ -1597,8 +1597,9 @@ public static class DiskImageSerializer
 
         try
         {
-            Parallel.For(0, chunks.Count, i =>
+            Parallel.For(0, chunks.Count, SaveParallelism.Options, i =>
             {
+                using var lowPriority = SaveParallelism.EnterWorker();
                 var chunk = chunks[i];
                 var (finalPayload, contentHash, nonce, tag) = BuildSegmentPayload(
                     chunk,
@@ -1937,8 +1938,9 @@ public static class DiskImageSerializer
 
             try
             {
-                Parallel.For(0, poolChunks.Count, i =>
+                Parallel.For(0, poolChunks.Count, SaveParallelism.Options, i =>
                 {
+                    using var lowPriority = SaveParallelism.EnterWorker();
                     var chunkPositions = poolChunks[i];
                     var (finalPayload, contentHash, nonce, tag) = BuildSegmentPayload(
                         chunkPositions.Select(pos => nodes[pos]),
@@ -2434,9 +2436,9 @@ public static class DiskImageSerializer
                 // Nothing to weight progress by (e.g. all-empty-directories case) — fall back to
                 // a simple per-node fraction so progress still reaches 1.0 deterministically.
                 var written = 0;
+                var throttle = new ProgressThrottle();
                 foreach (var kvp in nodes)
                 {
-                var throttle = new ProgressThrottle();
                     WriteNode(payloadWriter, kvp.Key, kvp.Value, includeReparse);
                     written++;
                     throttle.Report(progress, (double)written / nodes.Count);
@@ -2450,19 +2452,19 @@ public static class DiskImageSerializer
             else
             {
                 ulong writtenBytes = 0;
+                var throttle = new ProgressThrottle();
                 foreach (var kvp in nodes)
                 {
-                var throttle = new ProgressThrottle();
                     WriteNode(payloadWriter, kvp.Key, kvp.Value, includeReparse);
                     writtenBytes += kvp.Value.FileInfo.AllocationSize;
                     throttle.Report(progress, (double)writtenBytes / totalBytes);
                 }
-            }
-
 
                 // The sizes summed above can differ from the total read earlier (the disk stays
                 // mounted), so the last throttled fraction may fall short of 1.0.
                 progress?.Report(1.0);
+            }
+
             payloadWriter.Flush();
             succeeded = true;
         }

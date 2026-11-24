@@ -93,9 +93,11 @@ internal static class ParallelZstd
             Parallel.For(
                 0,
                 chunkCount,
+                SaveParallelism.Options,
                 () => new ZstdSharp.Compressor(level),
                 (i, _, compressor) =>
                 {
+                    using var lowPriority = SaveParallelism.EnterWorker();
                     var offset = i * size;
                     var (buffer, written) = CompressToBound(compressor, data.AsSpan(offset, Math.Min(size, length - offset)));
 
@@ -494,7 +496,7 @@ internal static class ParallelZstd
     /// </summary>
     internal sealed class WriteStream(Stream target, int level, int? maxDegreeOfParallelism = null, int? chunkSize = null) : Stream
     {
-        private readonly int _maxDegreeOfParallelism = Math.Max(1, maxDegreeOfParallelism ?? Environment.ProcessorCount);
+        private readonly int _maxDegreeOfParallelism = Math.Max(1, maxDegreeOfParallelism ?? SaveParallelism.Max);
         private readonly int _chunkSize = chunkSize ?? ChunkSize;
 
         // The compressor and buffers are tracked alongside their task (rather than only inside the
@@ -706,7 +708,11 @@ internal static class ParallelZstd
             var compressor = RentOrCreate(_freeCompressors, level, static lvl => new ZstdSharp.Compressor(lvl));
             var output = RentOrCreate(_freeOutputs, _chunkSize, static size => new byte[ZstdSharp.Compressor.GetCompressBound(size)]);
 
-            var task = Task.Run(() => Compress(compressor, chunk, length, output));
+            var task = Task.Run(() =>
+            {
+                using var lowPriority = SaveParallelism.EnterWorker();
+                return Compress(compressor, chunk, length, output);
+            });
             _pending.Enqueue((task, compressor, chunk, output));
         }
 
