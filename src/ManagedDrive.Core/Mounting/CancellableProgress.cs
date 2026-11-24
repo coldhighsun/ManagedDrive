@@ -7,13 +7,14 @@ namespace ManagedDrive.Core.Mounting;
 /// write) already report progress at roughly the granularity a user would want to cancel at (per
 /// node/chunk), so checking cancellation at every <see cref="Report"/> call gets responsive
 /// cancellation without threading a <see cref="CancellationToken"/> through every stream and loop
-/// individually. The cost is that an operation with no (or very coarse) progress reporting — e.g.
-/// a disk holding one huge file as a single node — only notices cancellation at the next report,
-/// not sooner.
+/// individually. Loops that throttle their reports (<see cref="ProgressThrottle"/>) still check
+/// cancellation on every iteration through <see cref="ICancellationCheck"/>. The cost is that an
+/// operation with no (or very coarse) progress reporting — e.g. a disk holding one huge file as a
+/// single node — only notices cancellation at the next report or check, not sooner.
 /// </summary>
 /// <param name="inner">The progress reporter to forward to, or <see langword="null"/> for none.</param>
 /// <param name="cancellationToken">The token checked on every <see cref="Report"/> call.</param>
-internal sealed class CancellableProgress(IProgress<double>? inner, CancellationToken cancellationToken) : IProgress<double>
+internal sealed class CancellableProgress(IProgress<double>? inner, CancellationToken cancellationToken) : IProgress<double>, ICancellationCheck
 {
     /// <summary>
     /// Wraps <paramref name="progress"/> so reporting also checks <paramref name="cancellationToken"/>,
@@ -40,4 +41,19 @@ internal sealed class CancellableProgress(IProgress<double>? inner, Cancellation
         cancellationToken.ThrowIfCancellationRequested();
         inner?.Report(value);
     }
+
+    /// <inheritdoc />
+    public void ThrowIfCancellationRequested() => cancellationToken.ThrowIfCancellationRequested();
+}
+
+/// <summary>
+/// Implemented by a progress reporter that can also check for cancellation without reporting, so a
+/// loop that reports only now and then can still stop promptly.
+/// </summary>
+internal interface ICancellationCheck
+{
+    /// <summary>
+    /// Throws <see cref="OperationCanceledException"/> when the operation was canceled.
+    /// </summary>
+    void ThrowIfCancellationRequested();
 }

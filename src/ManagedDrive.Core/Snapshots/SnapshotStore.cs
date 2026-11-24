@@ -314,11 +314,12 @@ internal static class SnapshotStore
                     else
                     {
                         var written = 0;
+                        var throttle = new ProgressThrottle();
                         foreach (var kvp in nodes)
                         {
                             WriteNode(writer, kvp.Key, kvp.Value, blobDirectory, level, cek);
                             written++;
-                            progress?.Report((double)written / nodes.Count);
+                            throttle.Report(progress, (double)written / nodes.Count);
                         }
                     }
 
