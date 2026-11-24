@@ -11,7 +11,7 @@
         </Grid.ColumnDefinitions>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
-            <RowDefinition Height="120"/>
+            <RowDefinition Height="180"/>
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
@@ -35,8 +35,8 @@
             <TextBlock x:Name="AxisBottomLabel" FontSize="10" HorizontalAlignment="Right" VerticalAlignment="Bottom"
                        Foreground="{DynamicResource AppForegroundLight}"/>
         </Grid>
-        <Grid x:Name="ChartArea" Grid.Row="1" Grid.Column="1" ClipToBounds="True"
-              SizeChanged="ChartArea_SizeChanged">
+        <Grid x:Name="ChartArea" Grid.Row="1" Grid.Column="1" ClipToBounds="True" Background="Transparent"
+              SizeChanged="ChartArea_SizeChanged" MouseMove="ChartArea_MouseMove" MouseLeave="ChartArea_MouseLeave">
             <Line x:Name="TopGridLine" Stroke="{DynamicResource AppDivider}" StrokeThickness="1" StrokeDashArray="2,2"/>
             <Line x:Name="BottomGridLine" Stroke="{DynamicResource AppDivider}" StrokeThickness="1" StrokeDashArray="2,2"/>
             <Polygon x:Name="ReadArea" Fill="{DynamicResource AppPrimary}" Opacity="0.25"/>
@@ -47,6 +47,37 @@
                       StrokeLineJoin="Round"/>
             <Polyline x:Name="WriteLine" Stroke="{DynamicResource AppChartWrite}" StrokeThickness="2"
                       StrokeLineJoin="Round"/>
+
+            <!-- Hover crosshair: a vertical dashed line at the hovered sample, a horizontal one at each series' value,
+                 a dot on each curve and an info box with the time and speeds. Hidden until the mouse is over the plot. -->
+            <Line x:Name="HoverVLine" Stroke="{DynamicResource AppForegroundLight}" StrokeThickness="1"
+                  StrokeDashArray="3,3" Opacity="0.7" Visibility="Collapsed" IsHitTestVisible="False"/>
+            <Line x:Name="HoverReadLine" Stroke="{DynamicResource AppPrimary}" StrokeThickness="1"
+                  StrokeDashArray="3,3" Visibility="Collapsed" IsHitTestVisible="False"/>
+            <Line x:Name="HoverWriteLine" Stroke="{DynamicResource AppChartWrite}" StrokeThickness="1"
+                  StrokeDashArray="3,3" Visibility="Collapsed" IsHitTestVisible="False"/>
+            <Ellipse x:Name="HoverReadDot" Width="7" Height="7" Fill="{DynamicResource AppPrimary}"
+                     HorizontalAlignment="Left" VerticalAlignment="Top" Visibility="Collapsed" IsHitTestVisible="False"/>
+            <Ellipse x:Name="HoverWriteDot" Width="7" Height="7" Fill="{DynamicResource AppChartWrite}"
+                     HorizontalAlignment="Left" VerticalAlignment="Top" Visibility="Collapsed" IsHitTestVisible="False"/>
+            <Border x:Name="HoverInfo" Background="{DynamicResource AppSurface}" BorderBrush="{DynamicResource AppDivider}"
+                    BorderThickness="1" CornerRadius="{DynamicResource PopupCornerRadius}" Padding="6,4"
+                    HorizontalAlignment="Left" VerticalAlignment="Top" Visibility="Collapsed" IsHitTestVisible="False">
+                <StackPanel>
+                    <TextBlock x:Name="HoverTimeText" FontSize="{DynamicResource FontSizeSmall}"
+                               Foreground="{DynamicResource AppForegroundLight}"/>
+                    <StackPanel Orientation="Horizontal" Margin="0,2,0,0">
+                        <Rectangle Width="8" Height="8" Fill="{DynamicResource AppPrimary}" Margin="0,0,4,0"/>
+                        <TextBlock x:Name="HoverReadText" FontSize="{DynamicResource FontSizeSmall}"
+                                   Foreground="{DynamicResource AppForegroundLight}"/>
+                    </StackPanel>
+                    <StackPanel x:Name="HoverWriteRow" Orientation="Horizontal" Margin="0,2,0,0">
+                        <Rectangle Width="8" Height="8" Fill="{DynamicResource AppChartWrite}" Margin="0,0,4,0"/>
+                        <TextBlock x:Name="HoverWriteText" FontSize="{DynamicResource FontSizeSmall}"
+                                   Foreground="{DynamicResource AppForegroundLight}"/>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
         </Grid>
 
         <Grid Grid.Row="2" Grid.Column="1" Margin="0,2,0,0">
