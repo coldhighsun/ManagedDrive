@@ -6,7 +6,7 @@
 
 [![CI / Release](https://github.com/coldhighsun/ManagedDrive/actions/workflows/ci.yml/badge.svg)](https://github.com/coldhighsun/ManagedDrive/actions/workflows/ci.yml)
 [![Coverage](https://codecov.io/gh/coldhighsun/ManagedDrive/branch/main/graph/badge.svg)](https://codecov.io/gh/coldhighsun/ManagedDrive)
-[![Tests](https://img.shields.io/badge/tests-2713-brightgreen?logo=xunit)](tests/ManagedDrive.Tests)
+[![Tests](https://img.shields.io/badge/tests-2721-brightgreen?logo=xunit)](tests/ManagedDrive.Tests)
 [![Latest Release](https://img.shields.io/github/v/release/coldhighsun/ManagedDrive)](https://github.com/coldhighsun/ManagedDrive/releases/latest)
 [![Latest Pre-release](https://img.shields.io/github/v/release/coldhighsun/ManagedDrive?include_prereleases&label=pre-release)](https://github.com/coldhighsun/ManagedDrive/releases)
 [![WinGet](https://img.shields.io/winget/v/coldhighsun.ManagedDrive?logo=windowsterminal&label=winget)](https://github.com/microsoft/winget-pkgs/tree/master/manifests/c/coldhighsun/ManagedDrive)

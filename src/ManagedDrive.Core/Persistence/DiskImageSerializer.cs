@@ -2436,9 +2436,10 @@ public static class DiskImageSerializer
                 var written = 0;
                 foreach (var kvp in nodes)
                 {
+                var throttle = new ProgressThrottle();
                     WriteNode(payloadWriter, kvp.Key, kvp.Value, includeReparse);
                     written++;
-                    progress?.Report(nodes.Count == 0 ? 1.0 : (double)written / nodes.Count);
+                    throttle.Report(progress, (double)written / nodes.Count);
                 }
 
                 if (nodes.Count == 0)
@@ -2451,12 +2452,17 @@ public static class DiskImageSerializer
                 ulong writtenBytes = 0;
                 foreach (var kvp in nodes)
                 {
+                var throttle = new ProgressThrottle();
                     WriteNode(payloadWriter, kvp.Key, kvp.Value, includeReparse);
                     writtenBytes += kvp.Value.FileInfo.AllocationSize;
-                    progress?.Report((double)writtenBytes / totalBytes);
+                    throttle.Report(progress, (double)writtenBytes / totalBytes);
                 }
             }
 
+
+                // The sizes summed above can differ from the total read earlier (the disk stays
+                // mounted), so the last throttled fraction may fall short of 1.0.
+                progress?.Report(1.0);
             payloadWriter.Flush();
             succeeded = true;
         }
