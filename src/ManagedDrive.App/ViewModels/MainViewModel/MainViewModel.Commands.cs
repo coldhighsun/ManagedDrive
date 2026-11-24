@@ -100,9 +100,9 @@ public sealed partial class MainViewModel
                 return;
             }
 
+            var progress = CreateOverlayProgress();
             try
             {
-                var progress = new Progress<double>(BusyOverlay.Report);
                 if (dialog.ExportArchiveFormat is { } archiveFormat)
                 {
                     await Task.Run(() => vm.Disk.ExportToArchive(exportPath, archiveFormat, dialog.ExportCompressionLevel, progress, cts.Token));
@@ -126,6 +126,7 @@ public sealed partial class MainViewModel
             }
             finally
             {
+                progress.Complete();
                 BusyOverlay.Stop();
             }
         }
@@ -654,13 +655,14 @@ public sealed partial class MainViewModel
             return;
         }
 
+        var progress = CreateOverlayProgress();
         try
         {
-            var progress = new Progress<double>(BusyOverlay.Report);
             await MountAndAddAsync(dialog.Result!, progress: progress, cancellationToken: cts.Token);
         }
         finally
         {
+            progress.Complete();
             BusyOverlay.Stop();
         }
     }
@@ -715,13 +717,14 @@ public sealed partial class MainViewModel
             return;
         }
 
+        var progress = CreateOverlayProgress();
         try
         {
-            var progress = new Progress<double>(BusyOverlay.Report);
             await MountAndAddAsync(dialog.Result!, progress: progress, cancellationToken: cts.Token);
         }
         finally
         {
+            progress.Complete();
             BusyOverlay.Stop();
         }
     }

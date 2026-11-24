@@ -79,9 +79,9 @@ public sealed partial class MainViewModel
             return;
         }
 
+        var progress = CreateOverlayProgress();
         try
         {
-            var progress = new Progress<double>(BusyOverlay.Report);
             await Task.Run(() => vm.Disk.SaveToImageWithSnapshot(progress, cts.Token));
             StatusText = Loc.Format("Status.ImageSaved", vm.MountPoint);
             _logger.LogInformation("Save image completed for {MountPoint}.", vm.MountPoint);
@@ -99,6 +99,7 @@ public sealed partial class MainViewModel
         }
         finally
         {
+            progress.Complete();
             BusyOverlay.Stop();
         }
     }

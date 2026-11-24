@@ -787,6 +787,23 @@ public sealed partial class MainViewModel
     }
 
     /// <summary>
+    /// Creates the progress reporter for an operation shown in the busy overlay. Reports are merged
+    /// and delivered to <see cref="BusyOverlayViewModel.Report"/> at <see cref="DispatcherPriority.Background"/>,
+    /// so a flood of reports from the worker thread (one per node or segment) cannot starve the
+    /// dispatcher and freeze the overlay's animation, unlike <see cref="Progress{T}"/>, which posts
+    /// one normal-priority item per report. The caller must call <see cref="CoalescingProgress.Complete"/>
+    /// on the UI thread before <see cref="BusyOverlayViewModel.Stop"/>.
+    /// </summary>
+    /// <returns>The coalescing progress reporter bound to the busy overlay.</returns>
+    private CoalescingProgress CreateOverlayProgress()
+    {
+        // Read once, like the context Progress<T> captures: Application.Current can be gone by the
+        // time a worker thread reports during shutdown.
+        var dispatcher = Application.Current.Dispatcher;
+        return new(BusyOverlay.Report, action => dispatcher.BeginInvoke(DispatcherPriority.Background, action));
+    }
+
+    /// <summary>
     /// Resolves the disk a command targets (its parameter, else <see cref="SelectedDisk"/>), or
     /// <c>null</c> when that disk is being remounted by an edit — its RamDisk is already
     /// unmounted/disposed then. Used by both the execute and can-execute side of every per-disk
