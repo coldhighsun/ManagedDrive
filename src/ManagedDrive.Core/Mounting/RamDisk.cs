@@ -886,6 +886,7 @@ public sealed class RamDisk : IDisposable
             // written: the export holds no lock that a capacity change waits for, and a node a
             // grown capacity let in would exceed the capacity read at the start and fail to load.
             using var capacityWatch = _capacityPeak.Start(() => Options.CapacityBytes);
+            using var interactive = SaveParallelism.BeginInteractive();
             DiskImageSerializer.Save(
                 nodeMap,
                 capacityWatch.Peak,
@@ -1248,6 +1249,8 @@ public sealed class RamDisk : IDisposable
     /// </param>
     public void SaveToImageWithSnapshot(IProgress<double>? progress = null, CancellationToken cancellationToken = default)
     {
+        // A save the user asked for while the app is up: leaves cores free for the UI.
+        using var interactive = SaveParallelism.BeginInteractive();
         lock (_autoSaveLock)
         {
             // MappedProgress forwards straight into the caller's IProgress<double> instead of
@@ -1982,6 +1985,8 @@ public sealed class RamDisk : IDisposable
         {
             if (NeedsSave())
             {
+                // Runs while the user may be working in the app, so it leaves cores free for the UI.
+                using var interactive = SaveParallelism.BeginInteractive();
                 SaveToImage();
                 TryWriteSnapshot();
             }
